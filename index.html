@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>内勤共通ログイン</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body {
+    font-family: sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+    background: #f5f5f5;
+  }
+  .box {
+    background: #fff;
+    padding: 32px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    width: 300px;
+  }
+  input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px;
+    margin-bottom: 12px;
+  }
+  button {
+    width: 100%;
+    padding: 8px;
+    cursor: pointer;
+  }
+  #result {
+    margin-top: 16px;
+    text-align: center;
+    font-weight: bold;
+  }
+  #appView {
+    display: none;
+    text-align: center;
+  }
+  #appView.box {
+    width: 300px;
+  }
+  #appView.wide {
+    width: 420px;
+  }
+  .operator-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .operator-btn {
+    padding: 10px;
+  }
+  .operator-btn.selected {
+    background: #4caf50;
+    color: #fff;
+    font-weight: bold;
+  }
+  #currentOperator {
+    margin-top: 16px;
+    font-weight: bold;
+    color: #333;
+  }
+  #logoutBtn {
+    margin-top: 24px;
+    background: #eee;
+  }
+  .menu-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 20px;
+  }
+  .menu-tile {
+    background: #f0f0f0;
+    border: none;
+    border-radius: 8px;
+    padding: 20px 8px;
+    cursor: pointer;
+    color: #333;
+    font: inherit;
+    width: 100%;
+  }
+  .menu-tile:hover {
+    background: #e2f3e4;
+  }
+  .menu-tile:disabled {
+    cursor: wait;
+    opacity: 0.6;
+  }
+  #changeOperatorBtn {
+    margin-top: 8px;
+    background: none;
+    border: none;
+    color: #4caf50;
+    text-decoration: underline;
+    width: auto;
+  }
+  #expiryInfo {
+    margin-top: 16px;
+    font-size: 0.8em;
+    color: #999;
+  }
+  .menu-tile .tile-name {
+    font-weight: bold;
+  }
+  .menu-tile .tile-status {
+    margin-top: 8px;
+    font-size: 0.8em;
+    color: #999;
+  }
+</style>
+</head>
+<body>
+
+<div class="box" id="loginView">
+  <h2>内勤ログイン</h2>
+  <input id="email" type="email" placeholder="メールアドレス" value="naikin@sakuramoong.internal">
+  <input id="password" type="password" placeholder="パスワード">
+  <button id="loginBtn">ログイン</button>
+  <div id="result"></div>
+</div>
+
+<div class="box" id="appView">
+  <div id="successMsg" style="color: green; font-weight: bold;">ログイン成功</div>
+
+  <div id="operatorSection">
+    <p>今、操作しているのはどなたですか？</p>
+    <div class="operator-grid">
+      <button class="operator-btn" data-name="すや">すや</button>
+      <button class="operator-btn" data-name="らん">らん</button>
+      <button class="operator-btn" data-name="わか">わか</button>
+      <button class="operator-btn" data-name="かみ">かみ</button>
+      <button class="operator-btn" data-name="きゃ">きゃ</button>
+    </div>
+  </div>
+
+  <div id="menuSection" style="display: none;">
+    <div id="currentOperator"></div>
+    <button id="changeOperatorBtn">担当者を変える</button>
+    <div class="menu-grid">
+      <button class="menu-tile" data-app="shift">
+        <div class="tile-name">サクラシフト</div>
+      </button>
+      <button class="menu-tile" data-app="prof">
+        <div class="tile-name">キャストプロフ</div>
+      </button>
+      <button class="menu-tile" data-app="naikin">
+        <div class="tile-name">内勤カレンダー</div>
+      </button>
+      <button class="menu-tile" data-app="room">
+        <div class="tile-name">在籍作成ルーム</div>
+      </button>
+    </div>
+  </div>
+
+  <div id="expiryInfo"></div>
+  <button id="logoutBtn">ログアウト</button>
+</div>
+
+<script>
+  const SUPABASE_URL = "https://tuxqpqokbvkrckgxcfdn.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_PyvCZHSzYlaqauYbdZybng_zbftghak";
+  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  const OPERATOR_STORAGE_KEY = "currentOperator";
+  const loginView = document.getElementById("loginView");
+  const appView = document.getElementById("appView");
+  const operatorSection = document.getElementById("operatorSection");
+  const menuSection = document.getElementById("menuSection");
+  const currentOperatorEl = document.getElementById("currentOperator");
+
+  function showAppView() {
+    loginView.style.display = "none";
+    appView.style.display = "block";
+    renderOperator();
+  }
+
+  function showLoginView() {
+    appView.style.display = "none";
+    appView.classList.remove("wide");
+    loginView.style.display = "block";
+  }
+
+  function renderOperator() {
+    const saved = localStorage.getItem(OPERATOR_STORAGE_KEY);
+    if (saved) {
+      operatorSection.style.display = "none";
+      menuSection.style.display = "block";
+      appView.classList.add("wide");
+      currentOperatorEl.textContent = "現在の担当者：" + saved;
+    } else {
+      operatorSection.style.display = "block";
+      menuSection.style.display = "none";
+      appView.classList.remove("wide");
+    }
+  }
+
+  document.querySelectorAll(".operator-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      localStorage.setItem(OPERATOR_STORAGE_KEY, btn.dataset.name);
+      renderOperator();
+    });
+  });
+
+  document.getElementById("loginBtn").addEventListener("click", async () => {
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
+    const resultEl = document.getElementById("result");
+    resultEl.style.color = "black";
+    resultEl.textContent = "確認中...";
+
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      resultEl.style.color = "red";
+      resultEl.textContent = "ログイン失敗: " + error.message;
+    } else {
+      resultEl.textContent = "";
+      showAppView();
+      checkExpiry();
+    }
+  });
+
+  document.getElementById("changeOperatorBtn").addEventListener("click", () => {
+    localStorage.removeItem(OPERATOR_STORAGE_KEY);
+    renderOperator();
+  });
+
+  // ---------- 各アプリを開く ----------
+  // 開く直前に refreshSession() で「毎回新しい」トークンを取り、# 以降に付けて開く。
+  // （アプリのGASは同じトークンの2回目を拒否する。# 以降はサーバーに送られない）
+  const APP_LINKS = {
+    shift:  "https://sakuramoong-app.github.io/sakurashift-staff/index.html",
+    prof:   "https://sakuramoong-app.github.io/cast-sakura-profile/staff.html",
+    naikin: "https://sakuramoong-app.github.io/naikin-shift/index.html",
+    room:   "https://sakuramoong-app.github.io/sakura-newcast/staff.html",
+  };
+
+  async function openApp(key, tile) {
+    // タブはクリック直後に先に開いておく（await の後に開くと iPhone の Safari がブロックする）
+    const win = window.open("", "_blank");
+    tile.disabled = true;
+    try {
+      if (!(await checkExpiry())) { if (win) win.close(); return; }
+      const { data } = await supabaseClient.auth.refreshSession();
+      const token = data.session && data.session.access_token;
+      const operator = localStorage.getItem(OPERATOR_STORAGE_KEY) || "";
+      if (!token || !operator) { if (win) win.close(); return; }
+      const url = APP_LINKS[key] + "#portalSso=" + encodeURIComponent(token)
+                + "&operator=" + encodeURIComponent(operator);
+      if (win) win.location.href = url; else location.href = url;
+    } finally {
+      tile.disabled = false;
+    }
+  }
+
+  document.querySelectorAll(".menu-tile").forEach((tile) => {
+    tile.addEventListener("click", () => openApp(tile.dataset.app, tile));
+  });
+
+  // ---------- ログアウト ----------
+  // 各アプリがこのブラウザに覚えているログイン（同じ sakuramoong-app.github.io なのでここから消せる）
+  const APP_SESSION_KEYS = ["portalStaffSession", "naikinSession", "naikinSessionExp", "profPortalSession", "roomPortalSession"];
+  function clearAppSessions() {
+    APP_SESSION_KEYS.forEach((k) => { try { localStorage.removeItem(k); } catch (e) {} });
+  }
+
+  async function logout() {
+    clearAppSessions();
+    await supabaseClient.auth.signOut();
+    localStorage.removeItem(OPERATOR_STORAGE_KEY);
+    document.getElementById("password").value = "";
+    document.getElementById("result").textContent = "";
+    document.getElementById("expiryInfo").textContent = "";
+    showLoginView();
+  }
+  document.getElementById("logoutBtn").addEventListener("click", logout);
+
+  // ---------- ログインしてから20時間で自動ログアウト ----------
+  // トークンの amr に「最初にログインした時刻」が入っている（トークンを更新しても変わらない）。
+  // アプリ側（GAS）も同じ時刻を使って、同じ時刻にログインを切る。
+  const SESSION_HOURS = 20;
+  function loginAtSec(accessToken) {
+    try {
+      let p = accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      while (p.length % 4) p += "=";
+      const amr = JSON.parse(atob(p)).amr || [];
+      const pw = amr.filter((a) => a.method === "password").map((a) => a.timestamp);
+      const all = amr.map((a) => a.timestamp).filter(Boolean);
+      return pw.length ? Math.max(...pw) : (all.length ? Math.min(...all) : 0);
+    } catch (e) { return 0; }
+  }
+  async function checkExpiry() {
+    const { data } = await supabaseClient.auth.getSession();
+    if (!data.session) return false;
+    const at = loginAtSec(data.session.access_token);
+    const expiresAt = (at + SESSION_HOURS * 3600) * 1000;
+    if (!at || Date.now() >= expiresAt) {
+      await logout();
+      document.getElementById("result").style.color = "black";
+      document.getElementById("result").textContent =
+        "ログインしてから" + SESSION_HOURS + "時間たったので、ログアウトしました。もう一度ログインしてください。";
+      return false;
+    }
+    document.getElementById("expiryInfo").textContent =
+      "自動ログアウト：" + new Date(expiresAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    return true;
+  }
+  // スリープ中に時刻を過ぎることもあるので、1分ごとと画面に戻ったときに確かめる
+  setInterval(checkExpiry, 60 * 1000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") checkExpiry();
+  });
+
+  (async () => {
+    if (await checkExpiry()) showAppView();
+  })();
+</script>
+</body>
+</html>
