@@ -3,135 +3,165 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>内勤共通ログイン</title>
+<title>内勤ポータル│サクラG</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  body {
-    font-family: sans-serif;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    margin: 0;
-    background: #f5f5f5;
+  /* サクラシフトと同じ色・丸ゴシック */
+  :root{
+    --mint:#A7E8C8; --mint-deep:#5FD0A0; --pink:#FFC9DD; --pink-deep:#FF9EC0;
+    --lav:#D9CCFF; --lav-deep:#A88BFF; --peach:#FFDCC2; --peach-deep:#FFAE7A;
+    --sky:#CDEBFF; --sky-deep:#7CC4F5; --lemon:#FFF1B8; --lemon-deep:#F2C94C;
+    --text:#4A5560; --text2:#9CAAB5; --line:#E4F4EC; --shadow:rgba(95,208,160,.25);
   }
-  .box {
-    background: #fff;
-    padding: 32px;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    width: 300px;
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'Hiragino Maru Gothic ProN','Hiragino Sans','Noto Sans JP',sans-serif;
+    background:radial-gradient(circle at 15% 10%,#FFE4F0 0%,transparent 30%),
+               radial-gradient(circle at 85% 15%,#DCF3FF 0%,transparent 28%),
+               linear-gradient(170deg,#F0FBF4,#F6FBFF);
+    min-height:100vh;color:var(--text);
+    display:flex;align-items:center;justify-content:center;
+    padding:24px 16px;overflow-x:hidden;
   }
-  input {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 8px;
-    margin-bottom: 12px;
+
+  /* ===== ログイン・担当者選び（カード） ===== */
+  .card{
+    background:#fff;border-radius:24px;padding:32px 28px;width:100%;max-width:380px;
+    box-shadow:0 12px 48px var(--shadow);border:2px solid var(--line);text-align:center;
   }
-  button {
-    width: 100%;
-    padding: 8px;
-    cursor: pointer;
+  .logo{
+    width:56px;height:56px;border-radius:50% 50% 50% 18px;margin:0 auto 14px;
+    background:linear-gradient(135deg,var(--mint),var(--mint-deep));
+    display:flex;align-items:center;justify-content:center;font-size:26px;
+    box-shadow:0 6px 20px rgba(95,208,160,.4);
   }
-  #result {
-    margin-top: 16px;
-    text-align: center;
-    font-weight: bold;
+  h1{font-size:20px;font-weight:800;margin-bottom:4px;}
+  .sub{font-size:13px;color:var(--text2);margin-bottom:22px;}
+  input{
+    width:100%;padding:13px 16px;margin-bottom:12px;border-radius:14px;border:2px solid var(--line);
+    font-family:inherit;font-size:15px;color:var(--text);background:#F8FBF9;
   }
-  #appView {
-    display: none;
-    text-align: center;
+  input:focus{outline:none;border-color:var(--mint-deep);}
+  .btn{
+    width:100%;padding:14px;border:none;border-radius:14px;cursor:pointer;font-family:inherit;
+    background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;font-weight:800;font-size:16px;
+    box-shadow:0 4px 16px rgba(95,208,160,.35);
   }
-  #appView.box {
-    width: 300px;
+  .btn:active{transform:scale(.97);}
+  #result{margin-top:14px;font-size:13px;font-weight:700;line-height:1.6;}
+  #outage{
+    display:none;background:#FFF8D6;border:2px solid #F0C040;border-radius:14px;
+    padding:12px;margin-bottom:18px;color:#5A4500;line-height:1.7;font-size:14px;text-align:left;
   }
-  #appView.wide {
-    width: 420px;
+
+  #appView{display:none;}
+  .operator-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px;}
+  .operator-btn{
+    padding:14px 6px;border-radius:14px;border:2px solid var(--line);background:#F8FBF9;
+    font-family:inherit;font-size:16px;font-weight:800;color:var(--text);cursor:pointer;
   }
-  .operator-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-    margin-top: 16px;
+  .operator-btn:hover{border-color:var(--mint-deep);color:var(--mint-deep);}
+
+  /* ===== アプリを選ぶ画面（円形メニュー） ===== */
+  #menuSection{display:none;flex-direction:column;align-items:center;gap:14px;width:100%;}
+  .who{font-size:15px;font-weight:800;}
+  .who span{color:var(--mint-deep);}
+  .link-btn{
+    background:none;border:none;font-family:inherit;font-size:12px;font-weight:700;
+    color:var(--text2);text-decoration:underline;cursor:pointer;
   }
-  .operator-btn {
-    padding: 10px;
+  .ring{
+    --size:min(400px, 92vw);
+    --btn:clamp(64px, 20vw, 84px);
+    position:relative;width:var(--size);height:var(--size);
   }
-  .operator-btn.selected {
-    background: #4caf50;
-    color: #fff;
-    font-weight: bold;
+  /* 開いたときにうっすら出る輪 */
+  .ring::before{
+    content:"";position:absolute;inset:12%;border-radius:50%;
+    border:2px dashed var(--line);opacity:0;transform:scale(.6);
+    transition:opacity .3s, transform .3s;
   }
-  #currentOperator {
-    margin-top: 16px;
-    font-weight: bold;
-    color: #333;
+  .ring.open::before{opacity:1;transform:scale(1);}
+  /* まんなかのボタン */
+  .hub{
+    position:absolute;left:50%;top:50%;width:calc(var(--btn) * 1.45);height:calc(var(--btn) * 1.45);
+    transform:translate(-50%,-50%);border-radius:50%;border:none;cursor:pointer;
+    background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;
+    box-shadow:0 10px 30px var(--shadow);font-family:inherit;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    transition:background .25s;z-index:2;
   }
-  #logoutBtn {
-    margin-top: 24px;
-    background: #eee;
+  .hub .icon{font-size:calc(var(--btn) * .42);line-height:1;transition:transform .3s;}
+  .hub .label{font-size:12px;font-weight:800;letter-spacing:.1em;}
+  .ring.open .hub{background:linear-gradient(135deg,#fff,#F3FBF7);color:var(--text2);}
+  .ring.open .hub .icon{transform:rotate(90deg);}
+  /* まわりのアプリ */
+  .app{
+    position:absolute;left:50%;top:50%;width:var(--btn);
+    transform:translate(-50%,-50%) translate(0,0) scale(.3);
+    opacity:0;pointer-events:none;
+    transition:transform .35s cubic-bezier(.34,1.56,.64,1), opacity .25s;
+    transition-delay:calc(var(--i) * 35ms);
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+    color:var(--text);cursor:pointer;background:none;border:none;font-family:inherit;
   }
-  .menu-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-top: 20px;
+  .ring.open .app{
+    opacity:1;pointer-events:auto;
+    transform:translate(-50%,-50%) translate(var(--x),var(--y)) scale(1);
   }
-  .menu-tile {
-    background: #f0f0f0;
-    border: none;
-    border-radius: 8px;
-    padding: 20px 8px;
-    cursor: pointer;
-    color: #333;
-    font: inherit;
-    width: 100%;
+  .app .circle{
+    width:var(--btn);height:var(--btn);border-radius:50%;
+    background:#fff;border:3px solid var(--c);
+    display:flex;align-items:center;justify-content:center;
+    font-size:calc(var(--btn) * .42);
+    box-shadow:0 6px 18px rgba(0,0,0,.08);
+    transition:transform .2s, background .2s, box-shadow .2s;
   }
-  .menu-tile:hover {
-    background: #e2f3e4;
+  .app .name{
+    font-size:12px;font-weight:800;white-space:nowrap;
+    background:rgba(255,255,255,.9);padding:2px 8px;border-radius:10px;
   }
-  .menu-tile:disabled {
-    cursor: wait;
-    opacity: 0.6;
+  .app:hover .circle, .app:focus-visible .circle{
+    transform:scale(1.14);background:var(--c);box-shadow:0 8px 24px var(--cs);
   }
-  #changeOperatorBtn {
-    margin-top: 8px;
-    background: none;
-    border: none;
-    color: #4caf50;
-    text-decoration: underline;
-    width: auto;
+  .app:focus-visible{outline:none;}
+  .app:disabled{cursor:wait;opacity:.6;}
+
+  .foot{display:flex;flex-direction:column;align-items:center;gap:6px;}
+  #expiryInfo{font-size:12px;color:var(--text2);}
+  #logoutBtn{
+    font-family:inherit;font-size:13px;font-weight:700;color:var(--text2);cursor:pointer;
+    background:#fff;border:2px solid var(--line);border-radius:12px;padding:6px 16px;
   }
-  #expiryInfo {
-    margin-top: 16px;
-    font-size: 0.8em;
-    color: #999;
-  }
-  .menu-tile .tile-name {
-    font-weight: bold;
-  }
-  .menu-tile .tile-status {
-    margin-top: 8px;
-    font-size: 0.8em;
-    color: #999;
-  }
+  #logoutBtn:hover{color:#E05260;border-color:#FFB9B9;}
 </style>
 </head>
 <body>
 
-<div class="box" id="loginView">
-  <h2>内勤ログイン</h2>
+<!-- ===== ログイン ===== -->
+<div class="card" id="loginView">
+  <!-- ★ Supabase が止まっている（休止など）ときだけ出す -->
+  <div id="outage">
+    ⚠️ <b>ただいまログインのしくみが止まっています</b><br>
+    アプリに入れないため、<b>店長のLINE</b>に連絡してください。<br>
+    復旧するまでお待ちください。ご不便をおかけしてすみません。<br>
+    <small>（すでにアプリを開いている人は、そのまま使えます）</small>
+  </div>
+  <div class="logo">🌸</div>
+  <h1>内勤ポータル</h1>
+  <div class="sub">サクラムーングループ 内勤専用</div>
   <input id="email" type="email" placeholder="メールアドレス" value="naikin@sakuramoong.internal">
-  <input id="password" type="password" placeholder="パスワード">
-  <button id="loginBtn">ログイン</button>
+  <input id="password" type="password" placeholder="パスワード" autocomplete="current-password">
+  <button class="btn" id="loginBtn">ログイン</button>
   <div id="result"></div>
 </div>
 
-<div class="box" id="appView">
-  <div id="successMsg" style="color: green; font-weight: bold;">ログイン成功</div>
-
-  <div id="operatorSection">
-    <p>今、操作しているのはどなたですか？</p>
+<div id="appView">
+  <!-- ===== 担当者を選ぶ ===== -->
+  <div class="card" id="operatorSection">
+    <div class="logo">🌸</div>
+    <h1>どなたが操作しますか？</h1>
+    <div class="sub">担当者を選んでください</div>
     <div class="operator-grid">
       <button class="operator-btn" data-name="すや">すや</button>
       <button class="operator-btn" data-name="らん">らん</button>
@@ -139,29 +169,27 @@
       <button class="operator-btn" data-name="かみ">かみ</button>
       <button class="operator-btn" data-name="きゃ">きゃ</button>
     </div>
+    <button class="link-btn" id="logoutBtn2" style="margin-top:18px">ログアウト</button>
   </div>
 
-  <div id="menuSection" style="display: none;">
-    <div id="currentOperator"></div>
-    <button id="changeOperatorBtn">担当者を変える</button>
-    <div class="menu-grid">
-      <button class="menu-tile" data-app="shift">
-        <div class="tile-name">サクラシフト</div>
-      </button>
-      <button class="menu-tile" data-app="prof">
-        <div class="tile-name">キャストプロフ</div>
-      </button>
-      <button class="menu-tile" data-app="naikin">
-        <div class="tile-name">内勤カレンダー</div>
-      </button>
-      <button class="menu-tile" data-app="room">
-        <div class="tile-name">在籍作成ルーム</div>
+  <!-- ===== アプリを選ぶ（円形メニュー） ===== -->
+  <div id="menuSection">
+    <div class="who">担当：<span id="currentOperator"></span>
+      <button class="link-btn" id="changeOperatorBtn">変える</button>
+    </div>
+
+    <div class="ring" id="ring">
+      <button class="hub" id="hub" aria-expanded="false" aria-label="アプリを選ぶ">
+        <span class="icon" id="hubIcon">🌸</span>
+        <span class="label" id="hubLabel">MENU</span>
       </button>
     </div>
-  </div>
 
-  <div id="expiryInfo"></div>
-  <button id="logoutBtn">ログアウト</button>
+    <div class="foot">
+      <div id="expiryInfo"></div>
+      <button id="logoutBtn">ログアウト</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -184,7 +212,6 @@
 
   function showLoginView() {
     appView.style.display = "none";
-    appView.classList.remove("wide");
     loginView.style.display = "block";
   }
 
@@ -192,13 +219,12 @@
     const saved = localStorage.getItem(OPERATOR_STORAGE_KEY);
     if (saved) {
       operatorSection.style.display = "none";
-      menuSection.style.display = "block";
-      appView.classList.add("wide");
-      currentOperatorEl.textContent = "現在の担当者：" + saved;
+      menuSection.style.display = "flex";
+      currentOperatorEl.textContent = saved;
     } else {
       operatorSection.style.display = "block";
       menuSection.style.display = "none";
-      appView.classList.remove("wide");
+      setOpen(false);
     }
   }
 
@@ -209,23 +235,34 @@
     });
   });
 
-  document.getElementById("loginBtn").addEventListener("click", async () => {
+  async function doLogin() {
     const email = document.getElementById("email").value;
     const password = document.getElementById("password").value;
     const resultEl = document.getElementById("result");
-    resultEl.style.color = "black";
+    resultEl.style.color = "var(--text2)";
     resultEl.textContent = "確認中...";
 
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
+    if (error && !(await isSupabaseUp())) {
+      // パスワード違いではなく、Supabase そのものが止まっている
+      resultEl.textContent = "";
+      showOutage(true);
+      return;
+    }
     if (error) {
-      resultEl.style.color = "red";
-      resultEl.textContent = "ログイン失敗: " + error.message;
+      resultEl.style.color = "#E05260";
+      resultEl.textContent = "ログインできませんでした。パスワードを確かめてください";
     } else {
       resultEl.textContent = "";
+      showOutage(false);
       showAppView();
       checkExpiry();
     }
+  }
+  document.getElementById("loginBtn").addEventListener("click", doLogin);
+  document.getElementById("password").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doLogin();
   });
 
   document.getElementById("changeOperatorBtn").addEventListener("click", () => {
@@ -233,37 +270,84 @@
     renderOperator();
   });
 
+  // ---------- アプリの一覧（円形メニュー） ----------
+  // ★ アプリを増やすときは、ここに1行足すだけ（円は自動で等分される）
+  const APPS = [
+    { key: "shift",  name: "サクラシフト",   icon: "📅", color: "--mint",
+      url: "https://sakuramoong-app.github.io/sakurashift-staff/index.html" },
+    { key: "prof",   name: "キャストプロフ", icon: "📝", color: "--pink",
+      url: "https://sakuramoong-app.github.io/cast-sakura-profile/staff.html" },
+    { key: "naikin", name: "内勤カレンダー", icon: "🗓️", color: "--sky",
+      url: "https://sakuramoong-app.github.io/naikin-shift/index.html" },
+    { key: "room",   name: "在籍作成ルーム", icon: "🚪", color: "--lav",
+      url: "https://sakuramoong-app.github.io/sakura-newcast/staff.html" },
+  ];
+
+  const ring = document.getElementById("ring");
+  const hub = document.getElementById("hub");
+
+  function renderRing() {
+    const css = getComputedStyle(document.documentElement);
+    const n = APPS.length;
+    APPS.forEach((a, i) => {
+      // 12時の位置から時計回りに、等分した角度に置く
+      const angle = (-90 + (360 / n) * i) * Math.PI / 180;
+      const r = 37;   // 円の半径（全体の大きさに対する％）
+      const el = document.createElement("button");
+      el.className = "app";
+      el.style.setProperty("--i", i);
+      el.style.setProperty("--x", `calc(var(--size) * ${(Math.cos(angle) * r / 100).toFixed(4)})`);
+      el.style.setProperty("--y", `calc(var(--size) * ${(Math.sin(angle) * r / 100).toFixed(4)})`);
+      el.style.setProperty("--c", `var(${a.color})`);
+      el.style.setProperty("--cs", css.getPropertyValue(a.color + "-deep").trim() + "66");
+      el.innerHTML = `<span class="circle">${a.icon}</span><span class="name">${a.name}</span>`;
+      el.addEventListener("click", (e) => { e.stopPropagation(); openApp(a, el); });
+      ring.appendChild(el);
+    });
+  }
+
+  function setOpen(on) {
+    ring.classList.toggle("open", on);
+    hub.setAttribute("aria-expanded", on);
+    document.getElementById("hubIcon").textContent = on ? "✕" : "🌸";
+    document.getElementById("hubLabel").textContent = on ? "とじる" : "MENU";
+  }
+
+  // パソコン：まんなかにマウスを当てると開き、円の外に出ると少し待って閉じる
+  let closeTimer = null;
+  if (matchMedia("(hover: hover)").matches) {
+    hub.addEventListener("mouseenter", () => { clearTimeout(closeTimer); setOpen(true); });
+    ring.addEventListener("mouseenter", () => clearTimeout(closeTimer));
+    ring.addEventListener("mouseleave", () => { closeTimer = setTimeout(() => setOpen(false), 400); });
+  }
+  // スマホ（とキーボード）：まんなかを押すと開く・閉じる
+  hub.addEventListener("click", () => setOpen(!ring.classList.contains("open")));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") setOpen(false); });
+  document.addEventListener("click", (e) => { if (!ring.contains(e.target)) setOpen(false); });
+
+  renderRing();
+
   // ---------- 各アプリを開く ----------
   // 開く直前に refreshSession() で「毎回新しい」トークンを取り、# 以降に付けて開く。
   // （アプリのGASは同じトークンの2回目を拒否する。# 以降はサーバーに送られない）
-  const APP_LINKS = {
-    shift:  "https://sakuramoong-app.github.io/sakurashift-staff/index.html",
-    prof:   "https://sakuramoong-app.github.io/cast-sakura-profile/staff.html",
-    naikin: "https://sakuramoong-app.github.io/naikin-shift/index.html",
-    room:   "https://sakuramoong-app.github.io/sakura-newcast/staff.html",
-  };
-
-  async function openApp(key, tile) {
+  async function openApp(app, el) {
     // タブはクリック直後に先に開いておく（await の後に開くと iPhone の Safari がブロックする）
     const win = window.open("", "_blank");
-    tile.disabled = true;
+    el.disabled = true;
     try {
       if (!(await checkExpiry())) { if (win) win.close(); return; }
       const { data } = await supabaseClient.auth.refreshSession();
       const token = data.session && data.session.access_token;
       const operator = localStorage.getItem(OPERATOR_STORAGE_KEY) || "";
       if (!token || !operator) { if (win) win.close(); return; }
-      const url = APP_LINKS[key] + "#portalSso=" + encodeURIComponent(token)
+      const url = app.url + "#portalSso=" + encodeURIComponent(token)
                 + "&operator=" + encodeURIComponent(operator);
       if (win) win.location.href = url; else location.href = url;
+      setOpen(false);
     } finally {
-      tile.disabled = false;
+      el.disabled = false;
     }
   }
-
-  document.querySelectorAll(".menu-tile").forEach((tile) => {
-    tile.addEventListener("click", () => openApp(tile.dataset.app, tile));
-  });
 
   // ---------- ログアウト ----------
   // 各アプリがこのブラウザに覚えているログイン（同じ sakuramoong-app.github.io なのでここから消せる）
@@ -279,9 +363,11 @@
     document.getElementById("password").value = "";
     document.getElementById("result").textContent = "";
     document.getElementById("expiryInfo").textContent = "";
+    setOpen(false);
     showLoginView();
   }
   document.getElementById("logoutBtn").addEventListener("click", logout);
+  document.getElementById("logoutBtn2").addEventListener("click", logout);
 
   // ---------- ログインしてから20時間で自動ログアウト ----------
   // トークンの amr に「最初にログインした時刻」が入っている（トークンを更新しても変わらない）。
@@ -304,7 +390,7 @@
     const expiresAt = (at + SESSION_HOURS * 3600) * 1000;
     if (!at || Date.now() >= expiresAt) {
       await logout();
-      document.getElementById("result").style.color = "black";
+      document.getElementById("result").style.color = "var(--text2)";
       document.getElementById("result").textContent =
         "ログインしてから" + SESSION_HOURS + "時間たったので、ログアウトしました。もう一度ログインしてください。";
       return false;
@@ -319,8 +405,29 @@
     if (document.visibilityState === "visible") checkExpiry();
   });
 
+  // ---------- Supabase が止まっていないか（無料プランの休止・障害） ----------
+  async function isSupabaseUp() {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const res = await fetch(SUPABASE_URL + "/auth/v1/health", {
+        headers: { apikey: SUPABASE_PUBLISHABLE_KEY },
+        signal: ctrl.signal,
+      });
+      return res.ok;
+    } catch (e) {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  function showOutage(on) {
+    document.getElementById("outage").style.display = on ? "block" : "none";
+  }
+
   (async () => {
     if (await checkExpiry()) showAppView();
+    else showOutage(!(await isSupabaseUp()));
   })();
 </script>
 </body>
