@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>キャスト台帳│記録簿</title>
+<link rel="icon" type="image/png" href="../favicon.png?v=3">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    color-scheme: light;
+    --bg:#FBF7F8; --card:#fff; --ink:#5C4B4F; --sub:#9C8B8F; --line:#F1E3E7;
+    --pink:#FF9EC0; --pink-deep:#e5638c; --pink-soft:#FFF0F5;
+    --lav:#A88BFF; --lav-soft:#F1EAFA; --mint:#5FD0A0; --mint-soft:#E6F6EE;
+    --lemon:#F2C94C; --lemon-soft:#FFF6D6; --gray-soft:#F1ECEA;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:"Hiragino Maru Gothic ProN","M PLUS Rounded 1c","Yu Gothic",sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;}
+  .wrap{max-width:980px;margin:0 auto;padding:16px 16px 60px;}
+  header{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+  header h1{font-size:19px;font-weight:800;color:var(--pink-deep);}
+  header .sub{font-size:12px;color:var(--sub);font-weight:700;}
+  header .spacer{flex:1;}
+  .btn{border:none;border-radius:99px;padding:9px 16px;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;}
+  .btn-primary{background:linear-gradient(135deg,#ff9fb8,#e5638c);color:#fff;box-shadow:0 4px 12px rgba(229,99,140,.3);}
+  .btn-ghost{background:#fff;border:1.5px solid var(--line);color:var(--ink);}
+  .btn-danger{background:#fff;border:1.5px solid #ffd3de;color:#e05c7a;}
+  .btn-sm{padding:6px 12px;font-size:12px;}
+
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+  .search{flex:1;min-width:180px;padding:10px 14px;border:1.5px solid var(--line);border-radius:99px;font-family:inherit;font-size:14px;background:#fff;color:var(--ink);}
+  .search:focus{outline:none;border-color:var(--pink);}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+  .tab{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:6px 12px;font-family:inherit;font-size:12.5px;font-weight:800;color:var(--sub);cursor:pointer;}
+  .tab.on{background:var(--pink);border-color:var(--pink);color:#fff;}
+  .tab .n{opacity:.8;margin-left:3px;font-weight:700;}
+
+  .list{display:flex;flex-direction:column;gap:8px;}
+  .row{background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:11px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;flex-wrap:wrap;}
+  .row:hover{border-color:var(--pink);box-shadow:0 4px 12px rgba(229,99,140,.1);}
+  .row .id{font-size:11px;color:var(--sub);font-weight:800;width:46px;}
+  .row .nm{font-size:15px;font-weight:800;min-width:110px;}
+  .row .nm small{display:block;font-size:11px;color:var(--sub);font-weight:700;}
+  .row .badges{display:flex;gap:4px;flex-wrap:wrap;flex:1;}
+  .bd{font-size:11px;font-weight:800;border-radius:99px;padding:2px 8px;background:var(--gray-soft);color:var(--sub);white-space:nowrap;}
+  .bd.rank{background:var(--lav-soft);color:#6c5896;}
+  .bd.link{background:var(--mint-soft);color:#1a7a5e;}
+  .st{font-size:11px;font-weight:800;border-radius:99px;padding:3px 9px;white-space:nowrap;}
+  .st.active{background:var(--mint-soft);color:#1a7a5e;}
+  .st.new,.st.interview{background:var(--lemon-soft);color:#9a7000;}
+  .st.break{background:var(--lav-soft);color:#6c5896;}
+  .st.left{background:var(--gray-soft);color:#999;}
+  .empty{text-align:center;color:var(--sub);font-weight:700;padding:30px 0;}
+
+  /* 小窓 */
+  .modal-bg{display:none;position:fixed;inset:0;z-index:50;background:rgba(92,75,79,.45);overflow:auto;padding:24px 14px;}
+  .modal-bg.show{display:block;}
+  .modal{position:relative;background:#fff;border-radius:20px;max-width:640px;margin:0 auto;padding:22px 20px 20px;box-shadow:0 14px 40px rgba(92,75,79,.3);}
+  .x{position:absolute;top:12px;right:14px;width:34px;height:34px;border:none;border-radius:99px;background:var(--pink-soft);color:var(--pink-deep);font-size:18px;font-weight:800;cursor:pointer;}
+  .modal h2{font-size:17px;font-weight:800;margin:0 40px 4px 0;}
+  .modal .hint{font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.6;}
+  .sec{font-size:13px;font-weight:800;color:var(--pink-deep);margin:16px 0 8px;padding-top:12px;border-top:2px dashed var(--line);}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  @media (max-width:560px){ .grid{grid-template-columns:1fr;} }
+  .f label{display:block;font-size:11.5px;font-weight:800;color:var(--sub);margin-bottom:4px;}
+  .f input,.f select,.f textarea{width:100%;font-family:inherit;font-size:14px;color:var(--ink);padding:9px 12px;border:1.5px solid #eee;border-radius:11px;background:#FAF8F6;}
+  .f textarea{min-height:64px;resize:vertical;}
+  .f input:focus,.f select:focus,.f textarea:focus{outline:none;border-color:var(--pink);background:#fff;}
+  .stores{display:flex;flex-direction:column;gap:6px;}
+  .store-row{display:grid;grid-template-columns:24px 140px 1fr 1fr;gap:6px;align-items:center;font-size:13px;}
+  @media (max-width:560px){ .store-row{grid-template-columns:24px 1fr;} .store-row input[type=text]{grid-column:2;} }
+  .store-row input[type=text]{padding:6px 10px;font-size:13px;border:1.5px solid #eee;border-radius:9px;background:#FAF8F6;font-family:inherit;color:var(--ink);}
+  .links{display:flex;flex-direction:column;gap:5px;font-size:13px;}
+  .links .lk{background:var(--mint-soft);border-radius:10px;padding:7px 10px;}
+  .links .lk.none{background:var(--gray-soft);color:var(--sub);}
+  .actions{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;}
+  .actions .btn{flex:1;}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#5C4B4F;color:#fff;border-radius:99px;padding:10px 18px;font-size:13px;font-weight:800;opacity:0;transition:opacity .2s;z-index:99;pointer-events:none;}
+  .toast.show{opacity:1;}
+  .gate{text-align:center;padding:80px 20px;color:var(--sub);font-weight:800;}
+  .wip{background:var(--lemon-soft);border:1.5px solid #f2d27a;color:#8a6500;border-radius:14px;padding:10px 14px;font-size:13px;line-height:1.6;margin-bottom:14px;}
+  .wip span{font-size:12px;}
+  body.readonly .edit-only{display:none !important;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>📒 キャスト台帳</h1>
+    <span class="sub">全アプリ共通のキャスト名簿（記録簿）</span>
+    <span class="spacer"></span>
+    <button class="btn btn-primary edit-only" onclick="openEdit(null)">＋ キャストを追加</button>
+  </header>
+
+  <div class="wip">🚧 <b>作成中です。触らないでください。</b><br><span id="wipSub">店長（きゃ）が準備中のページです。</span></div>
+
+  <div id="gate" class="gate">読み込み中…</div>
+  <div id="main" style="display:none">
+    <div class="toolbar">
+      <input class="search" id="q" placeholder="🔍 名前・読み・別名で検索" oninput="render()">
+    </div>
+    <div class="tabs" id="tabs"></div>
+    <div class="list" id="list"></div>
+  </div>
+</div>
+
+<!-- 編集の小窓 -->
+<div class="modal-bg" id="editBg">
+  <div class="modal">
+    <button class="x" onclick="closeEdit()" aria-label="閉じる">×</button>
+    <h2 id="editTitle">キャスト</h2>
+    <div class="hint" id="editHint"></div>
+
+    <div class="grid">
+      <div class="f"><label>正式な名前（公式HPの書き方）</label><input id="e_official" maxlength="60"></div>
+      <div class="f"><label>読み（ひらがな）</label><input id="e_kana" maxlength="60"></div>
+      <div class="f"><label>仮の名前（源氏名が決まる前）</label><input id="e_temp" maxlength="60"></div>
+      <div class="f"><label>状態</label>
+        <select id="e_status">
+          <option value="interview">面接中</option><option value="new">入店前</option>
+          <option value="active">在籍</option><option value="break">お休み中</option><option value="left">退店</option>
+        </select></div>
+      <div class="f"><label>入店日</label><input type="date" id="e_join"></div>
+      <div class="f"><label>退店日</label><input type="date" id="e_leave"></div>
+    </div>
+    <div class="f" style="margin-top:10px"><label>別名（ほかのアプリ・お店での書き方。「、」で区切る）</label><input id="e_aliases"></div>
+    <div class="f" style="margin-top:10px"><label>記録簿の集計名（空ならキャスト名と同じ）</label><input id="e_agg" maxlength="60"></div>
+
+    <div class="sec">🏪 在籍店舗</div>
+    <div class="hint" style="margin:-4px 0 8px">チェック＝在籍している店舗。その店での名前・公式HPの在籍番号も入れられます（あとで公式HPへの自動反映に使います）。</div>
+    <div class="stores" id="e_stores"></div>
+
+    <div class="sec">⭐ ランク</div>
+    <div class="grid">
+      <div class="f"><label>サクラナ通常</label><input id="e_r_sakurana" maxlength="30"></div>
+      <div class="f"><label>CC（キューティ）</label><input id="e_r_cutie" maxlength="30"></div>
+      <div class="f"><label>極門</label><input id="e_r_gokumon" maxlength="30"></div>
+      <div class="f"><label>イベ（特別フリー）</label><input id="e_r_event" maxlength="30"></div>
+    </div>
+
+    <div class="sec">📝 特記事項・NG・メモ</div>
+    <div class="f"><label>特記事項</label><textarea id="e_special"></textarea></div>
+    <div class="f" style="margin-top:10px"><label>NG</label><textarea id="e_ng"></textarea></div>
+    <div class="f" style="margin-top:10px"><label>メモ</label><textarea id="e_note"></textarea></div>
+
+    <div class="sec">🔗 つながっているアプリのデータ</div>
+    <div class="links" id="e_links"></div>
+
+    <div class="actions">
+      <button class="btn btn-danger edit-only" id="delBtn" onclick="removeCast()">🗑 削除</button>
+      <button class="btn btn-ghost" onclick="closeEdit()">キャンセル</button>
+      <button class="btn btn-primary edit-only" onclick="saveCast()">💾 保存する</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   キャスト台帳（記録簿の最初のページ）
+   ・全アプリ共通のキャスト名簿（Supabase の master_casts）を見る・直す
+   ・ポータルと同じ場所にあるので、ポータルのログイン（内勤・20時間）をそのまま使う
+   ============================================================ */
+const SUPABASE_URL = "https://tuxqpqokbvkrckgxcfdn.supabase.co";
+const SUPABASE_KEY = "sb_publishable_PyvCZHSzYlaqauYbdZybng_zbftghak";
+const STAFF_EMAIL = "naikin@sakuramoong.internal";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
+
+const STATUS = { interview:"面接中", new:"入店前", active:"在籍", break:"お休み中", left:"退店" };
+const TABS = [["active","在籍"],["new","入店前"],["interview","面接中"],["break","お休み中"],["left","退店"],["all","全部"]];
+const RANK_KEYS = [["sakurana","サクラナ"],["cutie","CC"],["gokumon","極門"],["event","イベ"]];
+
+let casts = [], stores = [], tab = "active", editingId = null;
+
+// 作成中は、ポータルの担当者が店長（きゃ）のときだけ直せる。ほかの内勤は見るだけ
+// ※ 内勤は共通アカウントなので、画面の上での分け方（あとで「Googleでログイン」にすると本当に分けられる）
+const MANAGER_NAME = "きゃ";
+function operatorName(){ try{ return localStorage.getItem("currentOperator") || ""; }catch(e){ return ""; } }
+const CAN_EDIT = operatorName() === MANAGER_NAME;
+if(!CAN_EDIT) document.body.classList.add("readonly");
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function toast(m){ const t = $("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), 2200); }
+function nameOf(c){ return c.official_name || c.temp_name || "（名前未定）"; }
+// 比べる用：空白を消す・カタカナ→ひらがな・小文字
+function key(s){ return String(s||"").replace(/[\s　・]/g,"").replace(/[ァ-ヶ]/g, ch=>String.fromCharCode(ch.charCodeAt(0)-0x60)).toLowerCase(); }
+
+/* ---------- ログインの確かめ（ポータルと同じ：naikin@ で 20 時間以内） ---------- */
+function loginAt(s){
+  try{
+    const p = JSON.parse(decodeURIComponent(escape(atob(s.access_token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")))));
+    let t = 0; (p.amr || []).forEach(a=>{ if(a && Number(a.timestamp) > t) t = Number(a.timestamp); });
+    return t;
+  }catch(e){ return 0; }
+}
+async function staffSession(){
+  const { data } = await sb.auth.getSession();
+  const s = data && data.session;
+  if(!s || String(s.user.email||"").toLowerCase() !== STAFF_EMAIL) return null;
+  return Date.now() < (loginAt(s) + 20*3600) * 1000 ? s : null;
+}
+function q(res){ if(res.error) throw res.error; return res.data; }
+
+async function load(){
+  if(location.hash) history.replaceState(null, "", location.pathname + location.search);   // ポータルからの印は読んだら消す
+  if(!(await staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
+  try{
+    const [c, s] = await Promise.all([
+      sb.from("master_casts").select("*").order("id"),
+      sb.from("master_stores").select("*").order("sort"),
+    ]);
+    casts = q(c) || []; stores = q(s) || [];
+  }catch(e){
+    $("gate").textContent = "読み込みに失敗しました：" + (e.message || e);
+    return;
+  }
+  $("gate").style.display = "none"; $("main").style.display = "";
+  $("wipSub").textContent = CAN_EDIT ? "👑 店長として開いています（直せます）。" : "店長（きゃ）が準備中のページです。見るだけで、直すことはできません。";
+  render();
+}
+
+function render(){
+  const word = key($("q").value);
+  const hit = c => !word || [c.official_name, c.temp_name, c.kana, c.agg_name, ...(c.aliases||[])].some(n => key(n).includes(word));
+  $("tabs").innerHTML = TABS.map(([k, label])=>{
+    const n = casts.filter(c => (k === "all" || c.status === k) && hit(c)).length;
+    return `<button class="tab ${tab===k?"on":""}" onclick="tab='${k}';render()">${label}<span class="n">${n}</span></button>`;
+  }).join("");
+  const list = casts.filter(c => (tab === "all" || c.status === tab) && hit(c))
+    .sort((a,b)=> key(a.kana || nameOf(a)).localeCompare(key(b.kana || nameOf(b)), "ja"));
+  $("list").innerHTML = list.length ? list.map(c=>{
+    const ranks = RANK_KEYS.filter(([k])=>c.ranks && c.ranks[k]).map(([k,l])=>`<span class="bd rank">${l} ${esc(c.ranks[k])}</span>`).join("");
+    const links = (c.shift_name?'<span class="bd link">📅シフト</span>':"") + (c.prof_id?'<span class="bd link">📝プロフ</span>':"") + ((c.room_ids||[]).length?'<span class="bd link">🚪ルーム</span>':"");
+    return `<div class="row" onclick="openEdit('${c.id}')">
+      <span class="id">${c.id}</span>
+      <span class="nm">${esc(nameOf(c))}<small>${esc(c.kana || (c.official_name ? "" : "仮の名前"))}</small></span>
+      <span class="badges">${ranks}${links}</span>
+      <span class="st ${c.status}">${STATUS[c.status]||c.status}</span>
+    </div>`;
+  }).join("") : `<div class="empty">このタブにはキャストがいません</div>`;
+}
+
+/* ---------- 編集 ---------- */
+function openEdit(id){
+  editingId = id;
+  const c = id ? casts.find(x=>x.id===id) : { status:"interview", aliases:[], stores:{}, ranks:{}, room_ids:[] };
+  $("editTitle").textContent = id ? `${nameOf(c)}（${id}）` : "＋ キャストを追加";
+  $("editHint").textContent = id ? "直したら「保存する」を押してください。" : "名前が決まっていなければ、仮の名前だけでOKです。";
+  $("e_official").value = c.official_name || ""; $("e_kana").value = c.kana || ""; $("e_temp").value = c.temp_name || "";
+  $("e_status").value = c.status || "active"; $("e_join").value = c.join_date || ""; $("e_leave").value = c.leave_date || "";
+  $("e_aliases").value = (c.aliases || []).join("、"); $("e_agg").value = c.agg_name || "";
+  RANK_KEYS.forEach(([k])=> $("e_r_"+k).value = (c.ranks||{})[k] || "");
+  $("e_special").value = c.special_notes || ""; $("e_ng").value = c.ng_notes || ""; $("e_note").value = c.note || "";
+  const st = c.stores || {};
+  $("e_stores").innerHTML = stores.map(s=>{
+    const v = st[s.key];
+    return `<div class="store-row">
+      <input type="checkbox" id="es_${s.key}" ${v?"checked":""}>
+      <label for="es_${s.key}" style="font-weight:800">${esc(s.label)}</label>
+      <input type="text" id="esn_${s.key}" placeholder="その店での名前" value="${esc(v&&v.name||"")}">
+      <input type="text" id="esno_${s.key}" placeholder="公式HPの在籍番号" value="${esc(v&&v.siteNo||"")}">
+    </div>`;
+  }).join("");
+  $("e_links").innerHTML = [
+    c.shift_name ? `<div class="lk">📅 サクラシフト：「${esc(c.shift_name)}」</div>` : `<div class="lk none">📅 サクラシフト：つながっていません</div>`,
+    c.prof_id ? `<div class="lk">📝 キャストプロフ：ID ${esc(c.prof_id)}</div>` : `<div class="lk none">📝 キャストプロフ：つながっていません</div>`,
+    (c.room_ids||[]).length ? `<div class="lk">🚪 在籍作成ルーム：${c.room_ids.length}件</div>` : `<div class="lk none">🚪 在籍作成ルーム：つながっていません</div>`,
+  ].join("");
+  $("delBtn").style.display = id ? "" : "none";
+  // 店長以外は見るだけ（入力できないようにする）
+  document.querySelectorAll("#editBg input, #editBg select, #editBg textarea").forEach(el=>{ el.disabled = !CAN_EDIT; });
+  $("editHint").textContent = CAN_EDIT ? $("editHint").textContent : "🚧 作成中のため、見るだけです（直せるのは店長だけ）。";
+  $("editBg").classList.add("show");
+}
+function closeEdit(){ $("editBg").classList.remove("show"); }
+// 外側を押したら閉じる（中で押し始めて外で離したときは閉じない）
+(function(){ let down = false; const bg = $("editBg");
+  bg.addEventListener("mousedown", e=>{ down = e.target === bg; });
+  bg.addEventListener("click", e=>{ if(e.target === bg && down) closeEdit(); }); })();
+
+async function saveCast(){
+  if(!CAN_EDIT){ toast("作成中のため、直せるのは店長だけです"); return; }
+  const official = $("e_official").value.trim(), temp = $("e_temp").value.trim();
+  if(!official && !temp){ toast("正式な名前か仮の名前を入れてね"); return; }
+  const aliases = $("e_aliases").value.split(/[、,，]/).map(s=>s.trim()).filter(Boolean).filter(a=>a!==official && a!==temp);
+  const st = {};
+  stores.forEach(s=>{
+    if(!$("es_"+s.key).checked) return;
+    const o = {}; const n = $("esn_"+s.key).value.trim(), no = $("esno_"+s.key).value.trim();
+    if(n) o.name = n; if(no) o.siteNo = no;
+    st[s.key] = o;
+  });
+  const ranks = {}; RANK_KEYS.forEach(([k])=>{ const v = $("e_r_"+k).value.trim(); if(v) ranks[k] = v; });
+  const row = {
+    official_name: official, temp_name: temp, kana: $("e_kana").value.trim(), status: $("e_status").value,
+    join_date: $("e_join").value || null, leave_date: $("e_leave").value || null,
+    aliases: [...new Set(aliases)], agg_name: $("e_agg").value.trim(), stores: st, ranks,
+    special_notes: $("e_special").value, ng_notes: $("e_ng").value, note: $("e_note").value,
+  };
+  try{
+    if(!(await staffSession())){ toast("ログインの期限が切れました。ポータルから開き直してください"); return; }
+    if(editingId){
+      const r = q(await sb.from("master_casts").update(row).eq("id", editingId).select().single());
+      casts = casts.map(c => c.id === editingId ? r : c);
+    }else{
+      const r = q(await sb.from("master_casts").insert(row).select().single());
+      casts.push(r);
+    }
+    closeEdit(); render(); toast("保存しました🌸");
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+
+async function removeCast(){
+  if(!CAN_EDIT){ toast("作成中のため、消せるのは店長だけです"); return; }
+  const c = casts.find(x=>x.id===editingId);
+  if(!c) return;
+  const linked = c.shift_name || c.prof_id || (c.room_ids||[]).length;
+  const msg = linked
+    ? `「${nameOf(c)}」は、ほかのアプリのデータとつながっています。\n台帳から消しても、シフト・プロフ・ルームのデータは消えません。\n\n退店した人なら「状態」を「退店」にするのがおすすめです。\nそれでも台帳から削除しますか？`
+    : `「${nameOf(c)}」を台帳から削除しますか？（元に戻せません）`;
+  if(!confirm(msg)) return;
+  try{
+    q(await sb.from("master_casts").delete().eq("id", editingId));
+    casts = casts.filter(x=>x.id!==editingId);
+    closeEdit(); render(); toast("削除しました");
+  }catch(e){ toast("削除できませんでした：" + (e.message || e)); }
+}
+
+load();
+</script>
+</body>
+</html>
