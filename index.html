@@ -190,7 +190,7 @@
     <div class="foot">
       <div id="expiryInfo"></div>
       <button id="logoutBtn">ログアウト</button>
-      <a href="iken.html" style="font-size:13px;font-weight:800;color:#e5638c;text-decoration:none;margin-top:4px;">📮 意見箱（アプリへの意見・要望）</a>
+      <a href="iken.html" style="font-size:13px;font-weight:800;color:#e5638c;text-decoration:none;margin-top:4px;">📮 意見箱（アプリへの意見・要望）<span id="fbBadge" style="display:none;margin-left:6px;background:#E05260;color:#fff;border-radius:99px;padding:1px 8px;font-size:12px;"></span></a>
       <a href="worklog.html" style="font-size:12px;font-weight:700;color:var(--text2);text-decoration:none;">🛠 店長作業ログ</a>
     </div>
   </div>
@@ -225,11 +225,24 @@
       operatorSection.style.display = "none";
       menuSection.style.display = "flex";
       currentOperatorEl.textContent = saved;
+      updateFbBadge(saved);
     } else {
       operatorSection.style.display = "block";
       menuSection.style.display = "none";
       setOpen(false);
     }
+  }
+
+  // 意見箱の未読の数（店長「きゃ」のときだけ出す。中身は合言葉のページでしか読めない）
+  async function updateFbBadge(operator) {
+    const el = document.getElementById("fbBadge");
+    if (!el) return;
+    el.style.display = "none";
+    if (operator !== "きゃ") return;
+    try {
+      const { data, error } = await supabaseClient.rpc("fb_unread_count");
+      if (!error && Number(data) > 0) { el.textContent = "未読 " + data; el.style.display = "inline-block"; }
+    } catch (e) {}
   }
 
   document.querySelectorAll(".operator-btn").forEach((btn) => {
