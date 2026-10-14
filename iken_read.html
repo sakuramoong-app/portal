@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>意見箱（店長用）│サクラG</title>
+<link rel="icon" type="image/png" href="favicon.png?v=3">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{ color-scheme: light; --bg:#FBF7F8; --ink:#5C4B4F; --sub:#9C8B8F; --line:#F1E3E7; --pink:#FF9EC0; --pink-deep:#e5638c; --pink-soft:#FFF0F5; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:"Hiragino Maru Gothic ProN","M PLUS Rounded 1c","Yu Gothic",sans-serif;background:var(--bg);color:var(--ink);}
+  .wrap{max-width:760px;margin:0 auto;padding:18px 16px 80px;}
+  h1{font-size:20px;font-weight:800;color:var(--pink-deep);}
+  .lock{background:#fff;border:1.5px solid var(--line);border-radius:18px;padding:18px;margin-top:14px;}
+  .lock input{width:100%;font-family:inherit;font-size:15px;border:1.5px solid var(--line);border-radius:12px;padding:11px 12px;margin-top:8px;}
+  .btn{border:none;border-radius:99px;padding:10px 18px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;background:var(--pink-deep);color:#fff;}
+  .btn.sub{background:#F1ECEA;color:var(--sub);font-size:12px;padding:6px 12px;}
+  .btn.danger{background:var(--pink-soft);color:#c9556a;font-size:12px;padding:6px 12px;}
+  .msg{margin-top:10px;font-size:13px;font-weight:800;color:#d9534f;}
+  .filters{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0;}
+  .chip{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:6px 12px;font-family:inherit;font-size:12.5px;font-weight:800;color:var(--sub);cursor:pointer;}
+  .chip.on{background:var(--pink);border-color:var(--pink);color:#fff;}
+  .post{background:#fff;border:1.5px solid var(--line);border-left:5px solid var(--pink);border-radius:14px;padding:12px 14px;margin-bottom:10px;}
+  .post.read{border-left-color:#ddd;opacity:.8;}
+  .head{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11.5px;font-weight:800;color:var(--sub);}
+  .tag{border-radius:99px;padding:2px 8px;background:var(--pink-soft);color:#c9556a;}
+  .tag.cast{background:#E6F6EE;color:#2c7a55;}
+  .body{font-size:14px;line-height:1.7;margin:8px 0;white-space:pre-wrap;word-break:break-word;}
+  .memo{width:100%;font-family:inherit;font-size:12.5px;border:1.5px dashed var(--line);border-radius:10px;padding:6px 10px;min-height:34px;}
+  .acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+  .empty{text-align:center;color:var(--sub);font-weight:800;padding:40px 0;}
+  .back{position:fixed;left:12px;bottom:12px;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔑 意見箱（店長用）</h1>
+  <div class="lock" id="lock">
+    <div style="font-size:13px;line-height:1.7;">店長だけが知っている<b>合言葉</b>を入れてください。<br><small style="color:var(--sub)">5回まちがえると、15分使えなくなります。</small></div>
+    <input type="password" id="pass" autocomplete="off" placeholder="合言葉">
+    <div style="margin-top:10px;"><button class="btn" id="open">開く</button></div>
+    <div class="msg" id="msg"></div>
+  </div>
+  <div id="main" style="display:none">
+    <div class="filters" id="filters"></div>
+    <div id="list"></div>
+  </div>
+</div>
+<a class="back" href="iken.html">📮 意見箱にもどる</a>
+
+<script>
+const SUPABASE_URL = "https://tuxqpqokbvkrckgxcfdn.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_PyvCZHSzYlaqauYbdZybng_zbftghak";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+const KIND = { good:"😊 良いところ", bad:"😣 直してほしい", idea:"💡 こうしたら便利", bug:"🐞 うまく動かない", other:"💬 そのほか" };
+const ERR = { unauthorized:"ポータルのログインが切れています。ポータルからログインし直してください。", no_pass:"合言葉がまだ決まっていません。",
+              wrong_pass:"合言葉がちがいます。", locked:"まちがいが多いため、15分ほど使えません。" };
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let pass = "", posts = [], filter = "unread";
+// 合言葉は、このタブを閉じるまでだけ覚えておく
+try{ pass = sessionStorage.getItem("fbPass") || ""; }catch(e){}
+
+async function load(){
+  const { data, error } = await sb.rpc("fb_read", { p_pass: pass });
+  if(error || !data || data.error){
+    pass = ""; try{ sessionStorage.removeItem("fbPass"); }catch(e){}
+    document.getElementById("lock").style.display = ""; document.getElementById("main").style.display = "none";
+    document.getElementById("msg").textContent = error ? "読めませんでした（通信エラー）" : (ERR[data && data.error] || ("読めませんでした：" + (data && data.error)));
+    return;
+  }
+  try{ sessionStorage.setItem("fbPass", pass); }catch(e){}
+  posts = data.posts || [];
+  document.getElementById("lock").style.display = "none"; document.getElementById("main").style.display = "";
+  render();
+}
+function render(){
+  const unread = posts.filter(p=>!p.readAt).length;
+  const F = [["unread","未読（" + unread + "）"],["all","すべて（" + posts.length + "）"],["staff","内勤から"],["cast","キャストから"]];
+  document.getElementById("filters").innerHTML = F.map(f=>`<button class="chip ${filter===f[0]?"on":""}" onclick="filter='${f[0]}';render()">${f[1]}</button>`).join("")
+    + `<button class="chip" onclick="load()">🔄 読み直す</button>`;
+  const list = posts.filter(p=> filter === "all" ? true : filter === "unread" ? !p.readAt : p.source === filter);
+  if(!list.length){ document.getElementById("list").innerHTML = `<div class="empty">${filter === "unread" ? "未読の意見はありません" : "意見はありません"}</div>`; return; }
+  document.getElementById("list").innerHTML = list.map(p=>{
+    const d = new Date(p.createdAt);
+    const when = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    return `<div class="post ${p.readAt ? "read" : ""}">
+      <div class="head"><span>${when}</span>
+        <span class="tag ${p.source}">${p.source === "cast" ? "キャスト" : "内勤"}</span>
+        <span class="tag">${esc(KIND[p.kind] || p.kind)}</span>${p.app ? `<span class="tag">${esc(p.app)}</span>` : ""}
+        <span>${p.author ? "👤 " + esc(p.author) : "名前なし"}</span></div>
+      <div class="body">${esc(p.body)}</div>
+      <textarea class="memo" placeholder="自分用のメモ（対応したこと など）" onchange="act(${p.id},'memo',this.value)">${esc(p.memo)}</textarea>
+      <div class="acts">
+        <button class="btn sub" onclick="act(${p.id},'${p.readAt ? "unread" : "read"}')">${p.readAt ? "未読にもどす" : "✓ 既読にする"}</button>
+        <button class="btn danger" onclick="if(confirm('この意見を消しますか？（もどせません）'))act(${p.id},'delete')">🗑 消す</button>
+      </div></div>`;
+  }).join("");
+}
+async function act(id, action, memo){
+  const { data, error } = await sb.rpc("fb_update", { p_pass: pass, p_id: id, p_action: action, p_memo: memo || "" });
+  if(error || (data && data.error)){ alert(error ? "保存できませんでした（通信エラー）" : (ERR[data.error] || data.error)); return; }
+  if(action !== "memo") load();
+  else { const p = posts.find(x=>x.id === id); if(p) p.memo = memo; }
+}
+document.getElementById("open").addEventListener("click", ()=>{ pass = document.getElementById("pass").value; document.getElementById("msg").textContent = ""; load(); });
+document.getElementById("pass").addEventListener("keydown", e=>{ if(e.key === "Enter") document.getElementById("open").click(); });
+if(pass) load();
+</script>
+</body>
+</html>
