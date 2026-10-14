@@ -28,6 +28,7 @@
   .st{font-size:11px;font-weight:800;border-radius:99px;padding:3px 9px;white-space:nowrap;}
   .st.done{background:var(--mint-soft);color:#1a7a5e;}
   .st.checking,.st.pre_call,.st.hour_call{background:var(--lemon-soft);color:#9a7000;}
+  .st.wait_hotel,.st.wait_guest,.st.wait_cast{background:var(--lav-soft);color:#6c5896;}
   .st.cancel,.st.tobi{background:var(--gray-soft);color:#999;}
   .money{text-align:right;white-space:nowrap;font-weight:800;}
   .form-cols{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;}
@@ -83,6 +84,7 @@
           <div class="f"><label>状態</label>
             <select id="f_status">
               <option value="checking">確認中</option><option value="pre_call">前日確電</option><option value="hour_call">1H前確電</option>
+              <option value="wait_hotel">ホテル連絡待ち</option><option value="wait_guest">客入室待ち</option><option value="wait_cast">キャスト入室待ち</option>
               <option value="done">終了</option><option value="cancel">キャンセル</option><option value="tobi">トビ</option>
             </select></div>
         </div>
@@ -171,7 +173,7 @@
 const { sb, q, esc, yen, toast } = KB;
 const $ = id => document.getElementById(id);
 const DOW = ["日","月","火","水","木","金","土"];
-const STATUS = { checking:"確認中", pre_call:"前日確電", hour_call:"1H前確電", done:"終了", cancel:"キャンセル", tobi:"トビ" };
+const STATUS = { checking:"確認中", pre_call:"前日確電", hour_call:"1H前確電", wait_hotel:"ホテル連絡待ち", wait_guest:"客入室待ち", wait_cast:"キャスト入室待ち", done:"終了", cancel:"キャンセル", tobi:"トビ" };
 const VISIT = [["new","新規"],["repeat","店リピ"],["honshi","本指名"]];
 const FREE_SUFFIX = { "":"", free:"フリー", special_free:"特別フリー", event_free:"イベフリー" };
 
@@ -560,5 +562,6 @@ async function loadLog(id){
 
 init();
 </script>
+<!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
 </html>
