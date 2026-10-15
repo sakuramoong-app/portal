@@ -533,7 +533,7 @@ async function paintAreaInfo(){
   if(hotels.length){
     html += `<details class="info" style="margin:0 0 6px"><summary style="cursor:pointer;font-weight:800">🏨 ${esc(area)}のホテル（${hotels.length}件・押すと地図）</summary>`
       + hotels.map(h=>`<div style="font-size:12.5px;padding:2px 0">${h.store_status === "ok" ? "✅" : h.store_status === "ng" ? "🚫" : "・"} ${esc(h.hotel_name)}`
-        + (h.map_url ? ` <a href="${esc(h.map_url)}" target="_blank" rel="noopener">📍地図</a>` : "") + (h.note ? `<small style="color:var(--sub)"> ${esc(h.note)}</small>` : "") + `</div>`).join("")
+        + ` <a href="${esc(mapLink(h))}" target="_blank" rel="noopener">📍地図</a>` + (h.note ? `<small style="color:var(--sub)"> ${esc(h.note)}</small>` : "") + `</div>`).join("")
       + `</details>`;
   }
   // 交通費のめやす（受付の記録＋提案額の記録）
@@ -557,14 +557,20 @@ async function paintAreaInfo(){
   }catch(e){ html += `<div class="warn">交通費の記録を読めませんでした：${esc(e.message || e)}</div>`; }
   el.innerHTML = html;
 }
+// ホテルの地図のリンク。正しいアドレス（https://〜）がなければ、ホテル名＋エリアで Google マップを検索するリンクにする
+function mapLink(h){
+  const u = String(h.map_url || "").trim();
+  if(/^https?:\/\//i.test(u)) return u;
+  return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent((h.area || "") + " " + (h.hotel_name || "") + " ホテル");
+}
 // ホテル・自宅の欄に書いたホテルの地図（ホテル一覧の名前が入っていれば。長い名前を先に探す）
 function hotelMapUrl(){
   const area = $("f_area").value.trim(), addr = $("f_address").value.replace(/\s/g, "");
   if(!addr) return "";
-  const list = (M.hotels || []).filter(h=>h.map_url && (!area || h.area === area))
+  const list = (M.hotels || []).filter(h=>!area || h.area === area)
     .sort((a, b)=>String(b.hotel_name).length - String(a.hotel_name).length);
   const h = list.find(x=>addr.includes(String(x.hotel_name).replace(/\s/g, "")));
-  return h ? h.map_url : "";
+  return h ? mapLink(h) : "";
 }
 async function saveAreaFee(){
   const place = $("f_area").value.trim(), fee = Math.max(0, +$("f_transport").value || 0);
