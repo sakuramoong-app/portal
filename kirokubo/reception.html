@@ -129,23 +129,38 @@
             <div style="display:flex;gap:6px"><input type="number" id="f_ext" min="0" value="0" oninput="recalc()"><input type="number" id="f_date" min="0" value="0" oninput="recalc()"></div></div>
         </div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;font-size:13px;font-weight:800">
-          <label><input type="checkbox" id="f_nh" onchange="recalc()"> キューティ：NH料金で取った</label>
-          <label><input type="checkbox" id="f_adm" onchange="recalc()"> 入会金あり（極門の新規）</label>
+          <label id="nhWrap"><input type="checkbox" id="f_nh" onchange="recalc()"> キューティ：NH料金で取った</label>
+          <label id="admWrap"><input type="checkbox" id="f_adm" onchange="recalc()"> 入会金あり（極門の新規）</label>
         </div>
         <div id="courseInfo"></div>
 
         <div class="sec">✨ オプション</div>
-        <div id="f_opts"></div>
-        <div class="opt" style="margin-top:4px">
-          <span></span><input type="text" id="f_xop_label" placeholder="ほかのOP（自由入力）" oninput="recalc()">
-          <span></span><input type="number" id="f_xop_price" placeholder="料金" oninput="recalc()"><input type="number" id="f_xop_back" placeholder="バック" oninput="recalc()">
+        <!-- AF・逆AF の希望は必ず聞く -->
+        <div style="background:#FFF4E5;border:2px solid #FFB547;border-radius:12px;padding:8px 10px;margin-bottom:8px">
+          <div style="font-weight:800;font-size:13px;color:#a35a00;margin-bottom:4px">🔸 AF・逆AF のご希望（必ず聞く）</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13.5px;font-weight:700">
+            <span>AF：<label><input type="radio" name="f_afw" value="yes" onchange="onAfWish()"> 希望あり</label> <label><input type="radio" name="f_afw" value="no" onchange="onAfWish()"> なし</label></span>
+            <span>逆AF：<label><input type="radio" name="f_rafw" value="yes" onchange="onAfWish()"> 希望あり</label> <label><input type="radio" name="f_rafw" value="no" onchange="onAfWish()"> なし</label></span>
+          </div>
         </div>
+        <details id="optDetails">
+          <summary style="cursor:pointer;font-weight:800;font-size:13px;padding:4px 0">そのほかのオプション（有料OPなど）<span id="optCount"></span></summary>
+          <div id="f_opts"></div>
+          <div class="opt" style="margin-top:4px">
+            <span></span><input type="text" id="f_xop_label" placeholder="ほかのOP（自由入力）" oninput="recalc()">
+            <span></span><input type="number" id="f_xop_price" placeholder="料金" oninput="recalc()"><input type="number" id="f_xop_back" placeholder="バック" oninput="recalc()">
+          </div>
+        </details>
 
         <div class="sec">📍 場所・媒体・お支払い</div>
         <div class="grid2">
-          <div class="f"><label>エリア</label><input id="f_area" maxlength="60" placeholder="例：池袋"></div>
-          <div class="f"><label>ホテル・自宅（住所・部屋番号）</label><input id="f_address" maxlength="200"></div>
-          <div class="f"><label>交通費（お客さんから）</label><input type="number" id="f_transport" min="0" value="0" oninput="recalc()"></div>
+          <div class="f"><label>エリア</label>
+            <select id="f_areaSel" onchange="onAreaSel()"></select>
+            <input id="f_area" maxlength="60" placeholder="場所（駅・地名など。例：川崎）" style="display:none;margin-top:4px" oninput="showAreaFee()"></div>
+          <div class="f"><label>ホテル・自宅（住所・部屋番号）</label><input id="f_address" maxlength="200" list="hotelList"><datalist id="hotelList"></datalist></div>
+          <div class="f" style="grid-column:1/-1"><div id="areaInfo"></div></div>
+          <div class="f"><label>交通費（お客さんから）</label><input type="number" id="f_transport" min="0" value="0" oninput="recalc()">
+            <button type="button" class="btn btn-ghost btn-sm" style="margin-top:4px" onclick="saveAreaFee()">💾 この場所の提案額として記録</button></div>
           <div class="f"><label>割引（円）・割引の名前</label>
             <div style="display:flex;gap:6px"><input type="number" id="f_discount" min="0" value="0" oninput="recalc()"><input id="f_discnote" placeholder="例：口コミ割" maxlength="60"></div></div>
           <div class="f"><label>お支払い</label>
@@ -213,9 +228,10 @@ async function init(){
       sb.from("kb_rank_history").select("cast_id,grp,rank,valid_from,id,hearing_text,by_name,at"),
       sb.from("kb_dummy_names").select("*").eq("active", true).order("sort").order("id"),
       sb.from("kb_cast_checks").select("id,cast_id,text,sort").eq("active", true).order("sort").order("id"),
+      sb.from("prof_hotels").select("area,hotel_name,map_url,store_status,note").order("seq"),
     ]);
-    const [stores, casts, prices, back, options, rules, settings, media, courseInfo, rankHist, dummies, castChecks] = r.map(q);
-    M = { stores, casts, prices, options, rules, media, courseInfo, rankHist: rankHist || [], dummies: dummies || [], castChecks: castChecks || [], back: {}, set: {} };
+    const [stores, casts, prices, back, options, rules, settings, media, courseInfo, rankHist, dummies, castChecks, hotels] = r.map(q);
+    M = { stores, casts, prices, options, rules, media, courseInfo, rankHist: rankHist || [], dummies: dummies || [], castChecks: castChecks || [], hotels: hotels || [], back: {}, set: {} };
     back.forEach(b=>{ M.back[b.rank + "|" + b.course] = b.amount; });
     settings.forEach(s=>{ M.set[s.key] = s.value; });
     M.casts.sort((a,b)=> String(a.kana || a.official_name || a.temp_name).localeCompare(String(b.kana || b.official_name || b.temp_name), "ja"));
@@ -293,7 +309,9 @@ function openForm(id){
   $("f_free").value = r.free_kind || "";
   $("f_ext").value = r.extension_count || 0; $("f_date").value = r.date_count || 0;
   $("f_nh").checked = !!r.nh_rate; $("f_adm").checked = (r.admission || 0) > 0;
-  $("f_area").value = r.area || ""; $("f_address").value = r.address || "";
+  fillAreaSel(r.area || ""); $("f_address").value = r.address || "";
+  setRadio("f_afw", r.af_wish || ""); setRadio("f_rafw", r.rev_af_wish || "");
+  $("optDetails").open = false;
   $("f_transport").value = r.transport || 0; $("f_discount").value = r.discount || 0; $("f_discnote").value = r.discount_note || "";
   $("f_pay").value = r.payment || "cash"; $("f_confirm").value = r.confirm_call || ""; $("f_note").value = r.note || "";
   visit = r.visit_kind || "new"; mediaSel = (r.media || []).slice();
@@ -337,6 +355,8 @@ function onStore(r){
   // 媒体・新規リピ
   $("f_media").innerHTML = M.media.map(m=>`<button type="button" class="chip ${mediaSel.includes(m.code)?"on":""}" onclick="toggleMedia('${m.code}')">${esc(m.label)}</button>`).join("");
   $("f_visit").innerHTML = VISIT.map(([k,l])=>`<button type="button" class="chip ${visit===k?"on":""}" onclick="setVisit('${k}')">${l}</button>`).join("");
+  storeOnlyFields();
+  optSummary();
   // ダミーのお店：ダミー名を選ぶ
   renderDummy(r ? (r.dummy_name || "") : undefined);
   // コースの説明（極門）
@@ -457,6 +477,95 @@ async function saveDummyData(id){
     Object.assign(M.dummies.find(x=>x.id === id), u);
     toast("ダミーのデータを保存しました"); renderDummyEdit(); renderDummyMatch();
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+
+/* ---------- お店で出る欄（NH料金はキューティだけ・入会金は極門だけ） ---------- */
+function storeOnlyFields(){
+  const store = $("f_store").value;
+  const nh = store === "cutie", adm = store === "gokumon";
+  $("nhWrap").style.display = nh ? "" : "none"; if(!nh) $("f_nh").checked = false;
+  $("admWrap").style.display = adm ? "" : "none"; if(!adm) $("f_adm").checked = false;
+}
+
+/* ---------- AF・逆AF の希望（必ず聞く） ---------- */
+function radioVal(name){ const el = document.querySelector('input[name="' + name + '"]:checked'); return el ? el.value : ""; }
+function setRadio(name, v){ document.querySelectorAll('input[name="' + name + '"]').forEach(el=>{ el.checked = el.value === v; }); }
+// 希望ありなら、そのお店の AF／逆AF のオプションにチェックを入れる（サクラナは「AF・逆AF」1つ・極門は別々）
+function onAfWish(){
+  const g = storeGroup($("f_store").value), af = radioVal("f_afw") === "yes", raf = radioVal("f_rafw") === "yes";
+  const has = code => !!$("o_" + code) && M.options.some(o=>o.store_group === g && o.code === code);
+  if(has("gyakuaf")){ if(has("af")) $("o_af").checked = af; $("o_gyakuaf").checked = raf; }
+  else if(has("af")) $("o_af").checked = af || raf;
+  recalc();
+}
+function optSummary(){
+  const n = [...document.querySelectorAll("#f_opts input[type=checkbox]:checked")].length + ($("f_xop_label").value.trim() ? 1 : 0);
+  $("optCount").textContent = n ? `（${n}件 選択中）` : "";
+  if(n) $("optDetails").open = true;
+}
+
+/* ---------- エリア：ホテル一覧（地図つき）・交通費のめやす ---------- */
+const AREA_OTHER = "__other";
+function areaList(){ return [...new Set((M.hotels || []).map(h=>h.area).filter(Boolean))]; }
+function fillAreaSel(area){
+  const list = areaList();
+  $("f_areaSel").innerHTML = `<option value="">（エリアを選ぶ）</option>` + list.map(a=>`<option>${esc(a)}</option>`).join("") + `<option value="${AREA_OTHER}">そのほか（場所を入力）</option>`;
+  if(!area){ $("f_areaSel").value = ""; $("f_area").value = ""; $("f_area").style.display = "none"; }
+  else if(list.includes(area)){ $("f_areaSel").value = area; $("f_area").value = area; $("f_area").style.display = "none"; }
+  else { $("f_areaSel").value = AREA_OTHER; $("f_area").value = area; $("f_area").style.display = ""; }
+  showAreaFee();
+}
+function onAreaSel(){
+  const v = $("f_areaSel").value;
+  if(v === AREA_OTHER){ $("f_area").value = ""; $("f_area").style.display = ""; $("f_area").focus(); }
+  else { $("f_area").value = v; $("f_area").style.display = "none"; }
+  showAreaFee();
+}
+let areaTimer = null;
+function showAreaFee(){ clearTimeout(areaTimer); areaTimer = setTimeout(paintAreaInfo, 300); }
+async function paintAreaInfo(){
+  const area = $("f_area").value.trim(), el = $("areaInfo");
+  const hotels = (M.hotels || []).filter(h=>h.area === area);
+  $("hotelList").innerHTML = hotels.map(h=>`<option value="${esc(h.hotel_name)}">`).join("");
+  if(!area){ el.innerHTML = ""; return; }
+  let html = "";
+  if(hotels.length){
+    html += `<details class="info" style="margin:0 0 6px"><summary style="cursor:pointer;font-weight:800">🏨 ${esc(area)}のホテル（${hotels.length}件・押すと地図）</summary>`
+      + hotels.map(h=>`<div style="font-size:12.5px;padding:2px 0">${h.store_status === "ok" ? "✅" : h.store_status === "ng" ? "🚫" : "・"} ${esc(h.hotel_name)}`
+        + (h.map_url ? ` <a href="${esc(h.map_url)}" target="_blank" rel="noopener">📍地図</a>` : "") + (h.note ? `<small style="color:var(--sub)"> ${esc(h.note)}</small>` : "") + `</div>`).join("")
+      + `</details>`;
+  }
+  // 交通費のめやす（受付の記録＋提案額の記録）
+  try{
+    const like = "%" + area.replace(/[%_]/g, "") + "%";
+    const [rs, fs] = await Promise.all([
+      sb.from("kb_reservations").select("store_key,transport,biz_date").ilike("area", like).gt("transport", 0).eq("deleted", false).order("biz_date", { ascending: false }).limit(300),
+      sb.from("kb_area_fees").select("place,store_key,fee,note,by_name,at").ilike("place", like).order("at", { ascending: false }).limit(100),
+    ]);
+    if($("f_area").value.trim() !== area) return;   // 入力が変わった
+    const fees = (q(rs) || []).map(r=>({ fee: r.transport, store: r.store_key, when: r.biz_date, kind: "受付" }))
+      .concat((q(fs) || []).map(f=>({ fee: f.fee, store: f.store_key, when: String(f.at).slice(0, 10), kind: "提案", note: f.note })));
+    if(fees.length){
+      const avg = Math.round(fees.reduce((a, b)=>a + b.fee, 0) / fees.length / 100) * 100;
+      const min = Math.min(...fees.map(f=>f.fee)), max = Math.max(...fees.map(f=>f.fee));
+      html += `<div class="info">🚕 <b>${esc(area)}</b> の交通費：平均 <b>${yen(avg)}</b>（${fees.length}件・${yen(min)}〜${yen(max)}）<br>`
+        + `<small>最近：${fees.slice(0, 4).map(f=>`${f.when.slice(5).replace("-", "/")} ${esc(storeLabel(f.store) || "")} ${yen(f.fee)}${f.kind === "提案" ? "（提案）" : ""}`).join("、")}</small></div>`;
+    } else if(!hotels.length){
+      html += `<div class="warn">🚕 「${esc(area)}」の交通費の記録はまだありません。提案した金額を入れて「💾 この場所の提案額として記録」を押すと、次から平均が出ます。</div>`;
+    }
+  }catch(e){ html += `<div class="warn">交通費の記録を読めませんでした：${esc(e.message || e)}</div>`; }
+  el.innerHTML = html;
+}
+async function saveAreaFee(){
+  const place = $("f_area").value.trim(), fee = Math.max(0, +$("f_transport").value || 0);
+  if(!place){ toast("エリア（場所）を入れてください"); return; }
+  if(!fee){ toast("交通費の金額を入れてください"); return; }
+  const note = prompt("メモ（例：お客さんに提案・成約しなかった など。空でもOK）", "") ;
+  if(note === null) return;
+  try{
+    q(await sb.from("kb_area_fees").insert({ place, store_key: $("f_store").value || null, fee, note: note.trim(), by_name: KB.operatorName() }));
+    toast("この場所の提案額を記録しました"); paintAreaInfo();
+  }catch(e){ toast("記録できませんでした：" + (e.message || e)); }
 }
 
 function isDummyStore(store){ const s = M.stores.find(x=>x.key===store); return !!(s && s.dummy); }
@@ -673,6 +782,7 @@ function calc(){
 let last = null;
 function recalc(){
   if(!$("f_store").value) return;
+  optSummary();
   const c = last = calc();
   const ov = editing && editing.back_override != null ? editing.back_override : "";
   const back = c.courseBack + c.optionBack + c.extra;
@@ -741,6 +851,7 @@ async function saveRes(){
   const cancelLike = ["cancel", "tobi"].includes($("f_status").value);
   const checks = checksForSave();
   if(!checks && !cancelLike){ toast("📣 必ず案内することに、まだチェックがついていません"); $("castChecks").scrollIntoView({ block: "center" }); return; }
+  if(!cancelLike && (!radioVal("f_afw") || !radioVal("f_rafw"))){ toast("🔸 AF・逆AF のご希望を聞いて、選んでください"); $("optDetails").scrollIntoView({ block: "center" }); return; }
   if(!$("f_course").value){ toast("コースを選んでください"); return; }
   if(!(await KB.staffSession())){ toast("ログインの期限が切れました。ポータルから開き直してください"); return; }
   const c = calc(), by = KB.operatorName();
@@ -765,6 +876,7 @@ async function saveRes(){
       biz_date: day, store_key: c.store, cast_id: $("f_cast").value, customer_id: customerId,
       dummy_name: isDummyStore(c.store) ? $("f_dummy").value : "",
       checks: checks || (editing ? (editing.checks || []) : []),
+      af_wish: radioVal("f_afw"), rev_af_wish: radioVal("f_rafw"),
       visit_kind: visit, free_kind: c.free, nh_rate: $("f_nh").checked,
       start_at: s ? s.toISOString() : null, end_at: s ? new Date(s.getTime() + mins*60000).toISOString() : null,
       area: $("f_area").value.trim(), address: $("f_address").value.trim(), course: c.course,
