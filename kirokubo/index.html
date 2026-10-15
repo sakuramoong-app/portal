@@ -394,7 +394,9 @@ function termsKindFields(){
   const days = ["日","月","火","水","木","金","土"];
   const opts = [...new Map(kbOptions.map(o=>[o.code, o.label])).entries()];
   const F = {
-    transport_back: `<div class="f"><label>どれだけバック？</label><select id="tk_rate"><option value="1">全部</option><option value="0.5">半分</option></select></div>`,
+    transport_back: `<div class="f"><label>どれだけバック？</label><select id="tk_rate" onchange="$('tk_tamt_wrap').style.display=this.value==='amount'?'':'none'">
+                       <option value="1">全額</option><option value="0.5">半額</option><option value="amount">金額を決める</option></select></div>
+                     <div class="f" id="tk_tamt_wrap" style="display:none"><label>バックする金額（円）</label><input id="tk_tamt" type="number" min="0" step="100"></div>`,
     back_add: `<div class="f"><label>上乗せの金額（円）</label><input id="tk_amount" type="number" min="0" step="500"></div>
                <div class="f"><label>何分以上のとき（空ならいつも）</label><input id="tk_min" type="number" min="0" step="30"></div>
                <div class="f"><label>どの店のとき（空ならどこでも）</label><select id="tk_store"><option value="">どこでも</option>${stores.map(s=>`<option value="${s.key}">${esc(s.label)}</option>`).join("")}</select></div>`,
@@ -412,7 +414,11 @@ function termsAddRule(){
   if(!note){ toast("条件の説明を書いてください"); return; }
   const num = id => Number(($(id) || {}).value || 0);
   let params = {};
-  if(k === "transport_back") params = { rate: Number($("tk_rate").value) };
+  if(k === "transport_back"){
+    // 全額（rate 1）・半額（rate 0.5）・金額を決める（amount 円）
+    if($("tk_rate").value === "amount"){ if(!num("tk_tamt")){ toast("バックする金額を入れてください"); return; } params = { amount: num("tk_tamt") }; }
+    else params = { rate: Number($("tk_rate").value) };
+  }
   if(k === "back_add"){ if(!num("tk_amount")){ toast("上乗せの金額を入れてください"); return; }
     params = { amount: num("tk_amount") }; if(num("tk_min")) params.min_minutes = num("tk_min"); if($("tk_store").value) params.store = $("tk_store").value; }
   if(k === "nomination_fee"){ if(!num("tk_amount")){ toast("指名料を入れてください"); return; } params = { amount: num("tk_amount") }; }
