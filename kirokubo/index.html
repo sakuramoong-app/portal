@@ -136,6 +136,10 @@
     <div id="e_terms"></div>
     <button class="btn btn-ghost edit-only" id="termsBtn" style="width:100%;margin-top:8px" onclick="openTerms()">🔁 バック・条件を変える（ヒアリング必須）</button>
 
+    <div class="sec">✅ 受付で必ず案内すること（確認事項）</div>
+    <div class="hint" style="margin:-4px 0 8px">キャストに「必ず案内してほしい」と言われていること。受付でこのキャストを選ぶと出て、<b>全部チェックしないと受付を保存できません。</b>ここは足したり消したりするとすぐ保存されます。</div>
+    <div id="e_checks"></div>
+
     <div class="sec">📝 特記事項・NG・メモ</div>
     <div class="f"><label>特記事項</label><textarea id="e_special"></textarea></div>
     <div class="f" style="margin-top:10px"><label>NG</label><textarea id="e_ng"></textarea></div>
@@ -225,7 +229,7 @@ const TABS = [["active","在籍"],["new","入店前"],["interview","面接中"],
 const RANK_KEYS = [["sakurana","サクラナ"],["cutie","CC"],["gokumon","極門"],["event","イベ"]];
 
 let casts = [], stores = [], tab = "active", editingId = null;
-let rankHist = [], castRules = [], kbOptions = [];   // ランクの移り変わり・キャストごとの条件・オプション
+let rankHist = [], castRules = [], kbOptions = [], castChecks = [];   // ランクの移り変わり・キャストごとの条件・オプション
 
 // 作成中は、ポータルの担当者が店長（きゃ）のときだけ直せる。ほかの内勤は見るだけ
 // ※ 内勤は共通アカウントなので、画面の上での分け方（あとで「Googleでログイン」にすると本当に分けられる）
@@ -260,15 +264,16 @@ async function load(){
   if(location.hash) history.replaceState(null, "", location.pathname + location.search);   // ポータルからの印は読んだら消す
   if(!(await staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
   try{
-    const [c, s, rh, cr, op] = await Promise.all([
+    const [c, s, rh, cr, op, ck] = await Promise.all([
       sb.from("master_casts").select("*").order("id"),
       sb.from("master_stores").select("*").order("sort"),
       sb.from("kb_rank_history").select("*").order("valid_from").order("id"),
       sb.from("kb_cast_rules").select("*").order("id"),
       sb.from("kb_options").select("store_group,code,label").order("sort"),
+      sb.from("kb_cast_checks").select("*").eq("active", true).order("sort").order("id"),
     ]);
     casts = q(c) || []; stores = q(s) || [];
-    rankHist = q(rh) || []; castRules = q(cr) || []; kbOptions = q(op) || [];
+    rankHist = q(rh) || []; castRules = q(cr) || []; kbOptions = q(op) || []; castChecks = q(ck) || [];
   }catch(e){
     $("gate").textContent = "読み込みに失敗しました：" + (e.message || e);
     return;
@@ -462,6 +467,47 @@ async function saveTerms(){
   bg.addEventListener("mousedown", e=>{ down = e.target === bg; });
   bg.addEventListener("click", e=>{ if(e.target === bg && down) bg.classList.remove("show"); }); }); })();
 
+/* ---------- 受付で必ず案内すること（キャストごとの確認事項） ---------- */
+function renderChecks(id){
+  if(!id){ $("e_checks").innerHTML = `<div class="hint">キャストを保存してから入れられます。</div>`; return; }
+  const list = castChecks.filter(x=>x.cast_id === id);
+  $("e_checks").innerHTML = (list.length ? list.map((x, i)=>`<div style="display:flex;gap:6px;align-items:center;padding:4px 0;border-bottom:1px dashed #F1E3E7">
+      <span style="font-size:12px;color:#9C8B8F;min-width:18px">${i + 1}</span>
+      <span style="flex:1;font-size:13.5px">${esc(x.text)}</span>
+      ${CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="editCheck(${x.id})">✏️</button><button class="btn btn-ghost btn-sm" onclick="removeCheck(${x.id})">🗑</button>` : ""}
+    </div>`).join("") : `<div class="hint">まだありません</div>`)
+    + (CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:6px"><input id="newCheck" maxlength="300" placeholder="例：女装NGです／射精は有料オプションです（ご希望はご予約時に）" style="flex:1"
+        onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addCheck();}">
+        <button class="btn btn-primary btn-sm" onclick="addCheck()">足す</button></div>` : "");
+}
+async function addCheck(){
+  const t = $("newCheck").value.trim();
+  if(!t || !editingId) return;
+  try{
+    const sort = castChecks.filter(x=>x.cast_id === editingId).length + 1;
+    const row = q(await sb.from("kb_cast_checks").insert({ cast_id: editingId, text: t, sort, created_by: operatorName(), updated_by: operatorName() }).select().single());
+    castChecks.push(row); renderChecks(editingId); toast("確認事項を足しました");
+    setTimeout(()=>{ const el = $("newCheck"); if(el) el.focus(); }, 0);
+  }catch(e){ toast("足せませんでした：" + (e.message || e)); }
+}
+async function editCheck(cid){
+  const x = castChecks.find(c=>c.id === cid); if(!x) return;
+  const t = prompt("確認事項を直す", x.text);
+  if(t === null || !t.trim() || t.trim() === x.text) return;
+  try{
+    q(await sb.from("kb_cast_checks").update({ text: t.trim(), updated_at: new Date().toISOString(), updated_by: operatorName() }).eq("id", cid));
+    x.text = t.trim(); renderChecks(editingId); toast("直しました");
+  }catch(e){ toast("直せませんでした：" + (e.message || e)); }
+}
+async function removeCheck(cid){
+  const x = castChecks.find(c=>c.id === cid); if(!x) return;
+  if(!confirm("「" + x.text + "」を消しますか？（今までの受付の記録はそのまま）")) return;
+  try{
+    q(await sb.from("kb_cast_checks").update({ active: false, updated_at: new Date().toISOString(), updated_by: operatorName() }).eq("id", cid));
+    castChecks = castChecks.filter(c=>c.id !== cid); renderChecks(editingId); toast("消しました");
+  }catch(e){ toast("消せませんでした：" + (e.message || e)); }
+}
+
 /* ---------- 編集 ---------- */
 function openEdit(id){
   editingId = id;
@@ -473,6 +519,7 @@ function openEdit(id){
   $("e_aliases").value = (c.aliases || []).join("、"); $("e_agg").value = c.agg_name || "";
   $("e_terms").innerHTML = id ? termsHtml(c) : `<div class="hint">キャストを保存してから、ランク・条件を入れられます（面接の内容をヒアリングとして書いてください）。</div>`;
   $("termsBtn").style.display = id && CAN_EDIT ? "" : "none";
+  renderChecks(id);
   $("e_special").value = c.special_notes || ""; $("e_ng").value = c.ng_notes || ""; $("e_note").value = c.note || "";
   const st = c.stores || {};
   $("e_stores").innerHTML = stores.map(s=>{
