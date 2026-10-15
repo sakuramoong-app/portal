@@ -156,8 +156,8 @@
         <div class="grid2">
           <div class="f"><label>エリア</label>
             <select id="f_areaSel" onchange="onAreaSel()"></select>
-            <input id="f_area" maxlength="60" placeholder="場所（駅・地名など。例：川崎）" style="display:none;margin-top:4px" oninput="showAreaFee()"></div>
-          <div class="f"><label>ホテル・自宅（住所・部屋番号）</label><input id="f_address" maxlength="200" list="hotelList"><datalist id="hotelList"></datalist></div>
+            <input id="f_area" maxlength="60" placeholder="場所（駅・地名など。例：川崎）" style="display:none;margin-top:4px" oninput="showAreaFee();recalc()"></div>
+          <div class="f"><label>ホテル・自宅（住所・部屋番号）</label><input id="f_address" maxlength="200" list="hotelList" oninput="recalc()"><datalist id="hotelList"></datalist></div>
           <div class="f" style="grid-column:1/-1"><div id="areaInfo"></div></div>
           <div class="f"><label>交通費（お客さんから）</label><input type="number" id="f_transport" min="0" value="0" oninput="recalc()">
             <button type="button" class="btn btn-ghost btn-sm" style="margin-top:4px" onclick="saveAreaFee()">💾 この場所の提案額として記録</button></div>
@@ -520,6 +520,7 @@ function onAreaSel(){
   if(v === AREA_OTHER){ $("f_area").value = ""; $("f_area").style.display = ""; $("f_area").focus(); }
   else { $("f_area").value = v; $("f_area").style.display = "none"; }
   showAreaFee();
+  recalc();   // キャストへの予約連絡も新しい場所に
 }
 let areaTimer = null;
 function showAreaFee(){ clearTimeout(areaTimer); areaTimer = setTimeout(paintAreaInfo, 300); }
@@ -555,6 +556,15 @@ async function paintAreaInfo(){
     }
   }catch(e){ html += `<div class="warn">交通費の記録を読めませんでした：${esc(e.message || e)}</div>`; }
   el.innerHTML = html;
+}
+// ホテル・自宅の欄に書いたホテルの地図（ホテル一覧の名前が入っていれば。長い名前を先に探す）
+function hotelMapUrl(){
+  const area = $("f_area").value.trim(), addr = $("f_address").value.replace(/\s/g, "");
+  if(!addr) return "";
+  const list = (M.hotels || []).filter(h=>h.map_url && (!area || h.area === area))
+    .sort((a, b)=>String(b.hotel_name).length - String(a.hotel_name).length);
+  const h = list.find(x=>addr.includes(String(x.hotel_name).replace(/\s/g, "")));
+  return h ? h.map_url : "";
 }
 async function saveAreaFee(){
   const place = $("f_area").value.trim(), fee = Math.max(0, +$("f_transport").value || 0);
@@ -826,7 +836,7 @@ ${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st||"--:--"}〜$
 【店名】${storeLabel(c.store)}
 【名前】${$("f_name").value || "お客"}様 ${VISIT.find(v=>v[0]===visit)[1]}
 【コース】${c.course}${/^\d+$/.test(c.course)?"分":""}${c.free?"（"+FREE_SUFFIX[c.free]+"）":""}${c.ext?"＋延長"+c.ext*30+"分":""}
-【ホテル・自宅】${$("f_area").value} ${$("f_address").value}
+【ホテル・自宅】${$("f_area").value} ${$("f_address").value}${hotelMapUrl() ? "\n【地図】" + hotelMapUrl() : ""}
 【バック有OP】${backOps}
 【バック無OP】${noBackOps}
 【料金総額】${c.total.toLocaleString("ja-JP")}円
