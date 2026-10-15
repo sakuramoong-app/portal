@@ -200,9 +200,10 @@ async function init(){
       sb.from("kb_settings").select("*"),
       sb.from("kb_media").select("*").eq("active", true).order("sort"),
       sb.from("kb_course_info").select("*"),
+      sb.from("kb_rank_history").select("cast_id,grp,rank,valid_from,id,hearing_text,by_name,at"),
     ]);
-    const [stores, casts, prices, back, options, rules, settings, media, courseInfo] = r.map(q);
-    M = { stores, casts, prices, options, rules, media, courseInfo, back: {}, set: {} };
+    const [stores, casts, prices, back, options, rules, settings, media, courseInfo, rankHist] = r.map(q);
+    M = { stores, casts, prices, options, rules, media, courseInfo, rankHist: rankHist || [], back: {}, set: {} };
     back.forEach(b=>{ M.back[b.rank + "|" + b.course] = b.amount; });
     settings.forEach(s=>{ M.set[s.key] = s.value; });
     M.casts.sort((a,b)=> String(a.kana || a.official_name || a.temp_name).localeCompare(String(b.kana || b.official_name || b.temp_name), "ja"));
@@ -330,16 +331,50 @@ function onStore(r){
 function toggleMedia(code){ mediaSel = mediaSel.includes(code) ? mediaSel.filter(x=>x!==code) : [...mediaSel, code];
   document.querySelectorAll("#f_media .chip").forEach((b,i)=>b.classList.toggle("on", mediaSel.includes(M.media[i].code))); }
 
+/* ---------- その日に効いているランク・条件（台帳の「適用開始日つき」の履歴から） ---------- */
+function rankRowsOn(cast){
+  const out = {};
+  M.rankHist.forEach(r=>{
+    if(r.cast_id !== cast.id || r.valid_from > day) return;
+    const b = out[r.grp];
+    if(!b || r.valid_from > b.valid_from || (r.valid_from === b.valid_from && r.id > b.id)) out[r.grp] = r;
+  });
+  return out;
+}
+function ranksOn(cast){
+  const rows = rankRowsOn(cast), o = {};
+  if(!Object.keys(rows).length) return cast.ranks || {};   // 履歴がまだ無いキャストは台帳の値
+  Object.keys(rows).forEach(g=>{ if(rows[g].rank) o[g] = rows[g].rank; });
+  return o;
+}
+function rulesOn(castId){
+  return M.rules.filter(r=>r.cast_id === castId && (r.valid_from || "2000-01-01") <= day && (!r.valid_to || r.valid_to > day));
+}
+// ヒアリングを見る
+let hearings = [];
+function hearLink(text, by, at){
+  hearings.push({ text, by, at });
+  return ` <a href="javascript:void(0)" onclick="showHear(${hearings.length - 1})" style="color:#c9556a;font-weight:800">🔗ヒアリング</a>`;
+}
+function showHear(i){
+  const h = hearings[i]; if(!h) return;
+  const d = h.at ? new Date(h.at) : null;
+  alert("💬 ヒアリング" + (h.by ? "（" + h.by + (d ? "　" + (d.getMonth()+1) + "/" + d.getDate() : "") + "）" : "") + "\n\n" + (h.text || "（記録がありません）"));
+}
+
 function onCast(){
   const c = M.casts.find(x=>x.id===$("f_cast").value);
   if(!c){ $("castInfo").innerHTML = ""; recalc(); return; }
-  const rk = Object.entries(c.ranks||{}).map(([k,v])=>`${{sakurana:"サクラナ",cutie:"CC",gokumon:"極門",event:"イベ"}[k]||k} ${v}`).join("　");
-  const rules = M.rules.filter(r=>r.cast_id===c.id).map(r=>"・"+r.note).join("\n");
+  hearings = [];
+  const GL = {sakurana:"サクラナ",cutie:"CC",gokumon:"極門",event:"イベ"};
+  const rr = rankRowsOn(c), rks = ranksOn(c);
+  const rk = Object.entries(rks).map(([k,v])=>`${GL[k]||k} ${esc(v)}` + (rr[k] ? hearLink(rr[k].hearing_text, rr[k].by_name, rr[k].at) : "")).join("　");
+  const rules = rulesOn(c.id).map(r=>"・" + esc(r.note) + hearLink(r.hearing_text, r.by_name, r.created_at)).join("<br>");
   $("castInfo").innerHTML =
-    (rk ? `<div class="info">⭐ ランク：${esc(rk)}</div>` : `<div class="warn">ランクが台帳に入っていません（バックは手で入れてください）</div>`) +
+    (rk ? `<div class="info">⭐ ランク：${rk}</div>` : `<div class="warn">ランクが台帳に入っていません（バックは手で入れてください）</div>`) +
     (c.special_notes ? `<div class="info">📝 特記事項：${esc(c.special_notes)}</div>` : "") +
     (c.ng_notes ? `<div class="warn">🚫 NG：${esc(c.ng_notes)}</div>` : "") +
-    (rules ? `<div class="info">🧮 自動で計算する特例：\n${esc(rules)}</div>` : "");
+    (rules ? `<div class="info">🧮 このキャストの条件：<br>${rules}</div>` : "");
   recalc();
 }
 
@@ -379,7 +414,7 @@ function calc(){
   let nomination = 0;
   if(!free){
     nomination = (M.set.nomination || {}).default || 2000;
-    const nr = cast && M.rules.find(r=>r.cast_id===cast.id && r.kind==="nomination_fee");
+    const nr = cast && rulesOn(cast.id).find(r=>r.kind==="nomination_fee");
     if(nr){ nomination = nr.params.amount; why.push(`指名料：特例 ${yen(nomination)}`); }
     if(g === "cutie" && $("f_nh").checked){ nomination += 3000; why.push("NH料金：指名料＋3,000円"); }
   }
@@ -392,7 +427,7 @@ function calc(){
   M.options.filter(o=>o.store_group===g).forEach(o=>{
     if(!$("o_"+o.code) || !$("o_"+o.code).checked) return;
     let p = +$("op_"+o.code).value||0, b = +$("ob_"+o.code).value||0;
-    const special = cast && M.rules.find(r=>r.cast_id===cast.id && r.kind==="op_price" && r.params.op===o.code && (!r.params.group || r.params.group===g));
+    const special = cast && rulesOn(cast.id).find(r=>r.kind==="op_price" && r.params.op===o.code && (!r.params.group || r.params.group===g));
     if(special){ p = special.params.price; b = special.params.back; why.push(`${o.label}：特例 ${yen(p)}（バック${yen(b)}）`); }
     const qty = o.unit === "once" ? 1 : Math.max(1, +$("oq_"+o.code).value||1);
     opts.push({ group:g, code:o.code, label:o.label, qty, price:p, back:b, manual:o.manual });
@@ -410,7 +445,7 @@ function calc(){
   // バック：店舗のグループのランク（特別フリー・イベフリーは「イベ」のランク）＋コース＋（本指／フリー…）
   let courseBack = 0, rank = "", key = "";
   if(cast){
-    rank = (free === "special_free" || free === "event_free") ? (cast.ranks||{}).event : (cast.ranks||{})[g];
+    rank = (free === "special_free" || free === "event_free") ? ranksOn(cast).event : ranksOn(cast)[g];
     const suffix = free ? FREE_SUFFIX[free] : (visit === "honshi" ? "本指" : "");
     if(rank){
       let r2 = rank;
@@ -427,7 +462,7 @@ function calc(){
   if(date) why.push(`デート ${date}回：バック ${yen(date*dateSet.back)}`);
   if(admission){ extra += admSet.back_add; why.push(`入会金あり：報酬＋${yen(admSet.back_add)}`); }
   if(cast){
-    M.rules.filter(r=>r.cast_id===cast.id && r.kind==="back_add").forEach(r=>{
+    rulesOn(cast.id).filter(r=>r.kind==="back_add").forEach(r=>{
       const p = r.params || {};
       const okStore = !p.store || p.store === store, okCourse = !p.course || p.course === course;
       const okMin = !p.min_minutes || minutesOf(course) >= p.min_minutes;

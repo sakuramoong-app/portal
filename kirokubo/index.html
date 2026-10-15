@@ -131,13 +131,10 @@
     <div class="hint" style="margin:-4px 0 8px">チェック＝在籍している店舗。その店での名前・公式HPの在籍番号も入れられます（あとで公式HPへの自動反映に使います）。</div>
     <div class="stores" id="e_stores"></div>
 
-    <div class="sec">⭐ ランク</div>
-    <div class="grid">
-      <div class="f"><label>サクラナ通常</label><input id="e_r_sakurana" maxlength="30"></div>
-      <div class="f"><label>CC（キューティ）</label><input id="e_r_cutie" maxlength="30"></div>
-      <div class="f"><label>極門</label><input id="e_r_gokumon" maxlength="30"></div>
-      <div class="f"><label>イベ（特別フリー）</label><input id="e_r_event" maxlength="30"></div>
-    </div>
+    <div class="sec">⭐ バック（ランク）・条件</div>
+    <div class="hint" style="margin:-4px 0 8px">変えるときは「🔁 バック・条件を変える」から。<b>ヒアリング内容がないと変えられません。</b></div>
+    <div id="e_terms"></div>
+    <button class="btn btn-ghost edit-only" id="termsBtn" style="width:100%;margin-top:8px" onclick="openTerms()">🔁 バック・条件を変える（ヒアリング必須）</button>
 
     <div class="sec">📝 特記事項・NG・メモ</div>
     <div class="f"><label>特記事項</label><textarea id="e_special"></textarea></div>
@@ -152,6 +149,61 @@
       <button class="btn btn-ghost" onclick="closeEdit()">キャンセル</button>
       <button class="btn btn-primary edit-only" onclick="saveCast()">💾 保存する</button>
     </div>
+  </div>
+</div>
+
+<!-- バック・条件を変える（ヒアリング必須） -->
+<div class="modal-bg" id="termsBg">
+  <div class="modal">
+    <h2 id="termsTitle">🔁 バック・条件を変える</h2>
+    <div class="hint">ヒアリングとセットで変えます。<b>ヒアリング内容がないと保存できません。</b>変えたことは、だれが・いつ・どのヒアリングで、が残ります。</div>
+
+    <div class="sec">💬 ヒアリング（必須）</div>
+    <div class="f"><label><input type="radio" name="t_hmode" value="new" checked onchange="termsHMode()"> 新しく書く（キャストプロフの記録にも入ります）</label></div>
+    <div class="f" id="t_hnew_wrap"><textarea id="t_htext" placeholder="例：10/20 面談。指名が増えてきたのでランクアップ希望。交通費は全額バックで合意。"></textarea></div>
+    <div class="f" style="margin-top:6px"><label><input type="radio" name="t_hmode" value="pick" onchange="termsHMode()"> キャストプロフにあるヒアリングから選ぶ</label></div>
+    <div class="f" id="t_hpick_wrap" style="display:none"><select id="t_hpick"></select></div>
+
+    <div class="sec">📅 いつから変わる？</div>
+    <div class="f"><label>適用開始日（この日の予約から新しいバック・条件で計算）</label><input type="date" id="t_eff"></div>
+
+    <div class="sec">⭐ ランク（変えるところだけ直す）</div>
+    <div class="grid" id="t_ranks"></div>
+
+    <div class="sec">🧮 今の条件（終わらせるものにチェック）</div>
+    <div id="t_rules"></div>
+
+    <div class="sec">＋ 条件を足す</div>
+    <div class="grid">
+      <div class="f"><label>種類</label>
+        <select id="t_kind" onchange="termsKindFields()">
+          <option value="transport_back">交通費をバック</option>
+          <option value="back_add">バックの上乗せ</option>
+          <option value="nomination_fee">指名料</option>
+          <option value="op_price">オプションの料金・バック</option>
+          <option value="zappi_exempt">雑費なし</option>
+          <option value="memo">そのほか（計算しない・受付で表示だけ）</option>
+        </select></div>
+    </div>
+    <div id="t_kindFields" class="grid" style="margin-top:6px"></div>
+    <div class="f" style="margin-top:6px"><label>条件の説明（受付で表示されます）</label><input id="t_note" maxlength="300" placeholder="例：交通費は全額バック"></div>
+    <button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="termsAddRule()">＋ この条件を足す</button>
+    <div id="t_newRules" style="margin-top:6px"></div>
+
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="closeTerms()">キャンセル</button>
+      <button class="btn btn-primary" id="t_save" onclick="saveTerms()">💾 ヒアリングとセットで保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ヒアリングを見る -->
+<div class="modal-bg" id="hearBg">
+  <div class="modal">
+    <h2>💬 ヒアリング</h2>
+    <div class="hint" id="hearMeta"></div>
+    <div id="hearText" style="white-space:pre-wrap;line-height:1.7;font-size:14px;background:#FFF8FA;border-radius:12px;padding:12px"></div>
+    <div class="actions"><button class="btn btn-primary" onclick="$('hearBg').classList.remove('show')">閉じる</button></div>
   </div>
 </div>
 
@@ -173,6 +225,7 @@ const TABS = [["active","在籍"],["new","入店前"],["interview","面接中"],
 const RANK_KEYS = [["sakurana","サクラナ"],["cutie","CC"],["gokumon","極門"],["event","イベ"]];
 
 let casts = [], stores = [], tab = "active", editingId = null;
+let rankHist = [], castRules = [], kbOptions = [];   // ランクの移り変わり・キャストごとの条件・オプション
 
 // 作成中は、ポータルの担当者が店長（きゃ）のときだけ直せる。ほかの内勤は見るだけ
 // ※ 内勤は共通アカウントなので、画面の上での分け方（あとで「Googleでログイン」にすると本当に分けられる）
@@ -207,11 +260,15 @@ async function load(){
   if(location.hash) history.replaceState(null, "", location.pathname + location.search);   // ポータルからの印は読んだら消す
   if(!(await staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
   try{
-    const [c, s] = await Promise.all([
+    const [c, s, rh, cr, op] = await Promise.all([
       sb.from("master_casts").select("*").order("id"),
       sb.from("master_stores").select("*").order("sort"),
+      sb.from("kb_rank_history").select("*").order("valid_from").order("id"),
+      sb.from("kb_cast_rules").select("*").order("id"),
+      sb.from("kb_options").select("store_group,code,label").order("sort"),
     ]);
     casts = q(c) || []; stores = q(s) || [];
+    rankHist = q(rh) || []; castRules = q(cr) || []; kbOptions = q(op) || [];
   }catch(e){
     $("gate").textContent = "読み込みに失敗しました：" + (e.message || e);
     return;
@@ -231,7 +288,9 @@ function render(){
   const list = casts.filter(c => (tab === "all" || c.status === tab) && hit(c))
     .sort((a,b)=> key(a.kana || nameOf(a)).localeCompare(key(b.kana || nameOf(b)), "ja"));
   $("list").innerHTML = list.length ? list.map(c=>{
-    const ranks = RANK_KEYS.filter(([k])=>c.ranks && c.ranks[k]).map(([k,l])=>`<span class="bd rank">${l} ${esc(c.ranks[k])}</span>`).join("");
+    // 今日効いているランク（適用開始日つきの履歴から。履歴がまだ無ければ台帳の値）
+    const rnow = {}; RANK_KEYS.forEach(([k])=>{ const r = rankRowOn(c.id, k, todayYmd()); rnow[k] = r ? r.rank : ((c.ranks || {})[k] || ""); });
+    const ranks = RANK_KEYS.filter(([k])=>rnow[k]).map(([k,l])=>`<span class="bd rank">${l} ${esc(rnow[k])}</span>`).join("");
     const links = (c.shift_name?'<span class="bd link">📅シフト</span>':"") + (c.prof_id?'<span class="bd link">📝プロフ</span>':"") + ((c.room_ids||[]).length?'<span class="bd link">🚪ルーム</span>':"");
     return `<div class="row" onclick="openEdit('${c.id}')">
       <span class="id">${c.id}</span>
@@ -242,6 +301,161 @@ function render(){
   }).join("") : `<div class="empty">このタブにはキャストがいません</div>`;
 }
 
+/* ---------- バック（ランク）・条件（ヒアリングとセットで変える） ---------- */
+const KIND_LABEL = { nomination_fee:"指名料", op_price:"オプション", back_add:"バック上乗せ", zappi_exempt:"雑費なし", transport_back:"交通費バック", memo:"そのほか" };
+const GRP_LABEL = { sakurana:"サクラナ通常", cutie:"CC（キューティ）", gokumon:"極門", event:"イベ（特別フリー）" };
+function todayYmd(){ const d = new Date(Date.now() + 9*3600*1000); return d.toISOString().slice(0, 10); }
+function md(ymd){ if(!ymd || ymd <= "2000-01-01") return ""; const p = String(ymd).slice(0, 10).split("-"); return Number(p[1]) + "/" + Number(p[2]); }
+function mdt(at){ const d = new Date(at); return (d.getMonth()+1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); }
+// その日に効いているランク
+function rankRowOn(castId, grp, day){
+  let best = null;
+  rankHist.forEach(r=>{ if(r.cast_id === castId && r.grp === grp && r.valid_from <= day && (!best || r.valid_from > best.valid_from || (r.valid_from === best.valid_from && r.id > best.id))) best = r; });
+  return best;
+}
+function ruleOn(r, day){ return r.active !== false && r.valid_from <= day && (!r.valid_to || r.valid_to > day); }
+// ヒアリングを見るリンク
+let hearList = [];
+function hearLink(text, by, at, label){
+  hearList.push({ text, by, at });
+  return `<a href="javascript:void(0)" onclick="showHearing(${hearList.length - 1})" style="color:#c9556a;font-weight:800;font-size:12px">🔗${label || "ヒアリング"}</a>`;
+}
+function showHearing(i){
+  const h = hearList[i]; if(!h) return;
+  $("hearMeta").textContent = (h.by ? h.by + "　" : "") + (h.at ? mdt(h.at) : "");
+  $("hearText").textContent = h.text || "（ヒアリングの記録がありません）";
+  $("hearBg").classList.add("show");
+}
+function termsHtml(c){
+  hearList = [];
+  const day = todayYmd();
+  let h = `<div style="font-size:13px;line-height:1.9">`;
+  RANK_KEYS.forEach(([g, l])=>{
+    const r = rankRowOn(c.id, g, day);
+    const future = rankHist.filter(x=>x.cast_id === c.id && x.grp === g && x.valid_from > day);
+    if(!r && !future.length) return;
+    h += `<div>⭐ <b>${l}</b>：${r && r.rank ? esc(r.rank) : "なし"}`;
+    if(r) h += `　<span style="color:#9C8B8F;font-size:12px">${md(r.valid_from) ? md(r.valid_from) + "から" : ""}</span> ` + hearLink(r.hearing_text, r.by_name, r.at);
+    future.forEach(f=>{ h += `<br><span style="color:#e5638c;font-size:12px">　→ ${md(f.valid_from)}から「${esc(f.rank || "なし")}」の予定</span> ` + hearLink(f.hearing_text, f.by_name, f.at); });
+    h += `</div>`;
+  });
+  const rules = castRules.filter(r=>r.cast_id === c.id);
+  const now = rules.filter(r=>ruleOn(r, day) || r.valid_from > day);
+  if(now.length) h += now.map(r=>`<div>🧮 <b>${KIND_LABEL[r.kind] || r.kind}</b>：${esc(r.note)}　<span style="color:#9C8B8F;font-size:12px">${r.valid_from > day ? md(r.valid_from) + "から（予定）" : (md(r.valid_from) ? md(r.valid_from) + "から" : "")}${r.valid_to ? "・" + md(r.valid_to) + "で終わり" : ""}</span> ${hearLink(r.hearing_text, r.by_name, r.created_at)}</div>`).join("");
+  else h += `<div style="color:#9C8B8F">🧮 キャストごとの条件：なし</div>`;
+  // 変更の履歴
+  const ev = rankHist.filter(r=>r.cast_id === c.id).map(r=>({ at: r.at, by: r.by_name, text: `ランク（${GRP_LABEL[r.grp] || r.grp}）→ ${r.rank || "なし"}${md(r.valid_from) ? "（" + md(r.valid_from) + "から）" : ""}`, h: r.hearing_text }))
+    .concat(rules.map(r=>({ at: r.created_at, by: r.by_name, text: `条件を追加：${r.note}${md(r.valid_from) ? "（" + md(r.valid_from) + "から）" : ""}`, h: r.hearing_text })))
+    .concat(rules.filter(r=>r.valid_to).map(r=>({ at: r.valid_to + "T00:00:00+09:00", by: "", text: `条件を終了：${r.note}（${md(r.valid_to)}から）`, h: r.end_hearing_text })))
+    .sort((a, b)=>String(b.at).localeCompare(String(a.at)));
+  if(ev.length) h += `<details style="margin-top:6px"><summary style="cursor:pointer;font-weight:800;font-size:12.5px;color:#9C8B8F">🕘 バック・条件の変更の履歴（${ev.length}）</summary>`
+    + ev.map(e=>`<div style="font-size:12px;border-top:1px dashed #F1E3E7;padding:4px 0">${esc(mdt(e.at))}　${esc(e.by || "")}<br>${esc(e.text)} ${hearLink(e.h, e.by, e.at)}</div>`).join("") + `</details>`;
+  return h + `</div>`;
+}
+
+let termsCast = null, termsNewRules = [];
+async function openTerms(){
+  const c = casts.find(x=>x.id === editingId);
+  if(!c) return;
+  if(!operatorName()){ toast("ポータルで担当者を選んでから開いてください"); return; }
+  termsCast = c; termsNewRules = [];
+  $("termsTitle").textContent = "🔁 " + nameOf(c) + " のバック・条件を変える";
+  $("t_eff").value = todayYmd();
+  $("t_htext").value = "";
+  document.querySelector('input[name=t_hmode][value=new]').checked = true;
+  termsHMode();
+  const day = todayYmd();
+  $("t_ranks").innerHTML = RANK_KEYS.map(([g])=>{
+    const r = rankRowOn(c.id, g, day);
+    return `<div class="f"><label>${GRP_LABEL[g]}</label><input id="t_r_${g}" maxlength="20" value="${esc(r ? r.rank : "")}" data-was="${esc(r ? r.rank : "")}" placeholder="なし"></div>`;
+  }).join("");
+  const active = castRules.filter(r=>r.cast_id === c.id && (ruleOn(r, day) || r.valid_from > day));
+  $("t_rules").innerHTML = active.length ? active.map(r=>`<label style="display:block;font-size:13px;padding:3px 0"><input type="checkbox" class="t_end" value="${r.id}"> 終わらせる：<b>${KIND_LABEL[r.kind] || r.kind}</b> ${esc(r.note)}</label>`).join("")
+    : `<div class="hint">今の条件はありません</div>`;
+  $("t_kind").value = "transport_back"; termsKindFields(); $("t_note").value = "";
+  renderNewRules();
+  // キャストプロフにあるヒアリング
+  $("t_hpick").innerHTML = `<option value="">読み込み中…</option>`;
+  try{
+    const logs = c.prof_id ? (q(await sb.from("prof_logs").select("log_id,date,content,author").eq("cast_id", c.prof_id).eq("type", "ヒアリング").order("date", { ascending: false }).limit(30)) || []) : [];
+    $("t_hpick").innerHTML = logs.length ? logs.map(l=>`<option value="${esc(l.log_id)}">${esc(l.date)} ${esc(l.author || "")}：${esc(String(l.content).slice(0, 40))}</option>`).join("")
+      : `<option value="">（キャストプロフにヒアリングがありません${c.prof_id ? "" : "：プロフとつながっていません"}）</option>`;
+  }catch(e){ $("t_hpick").innerHTML = `<option value="">読み込めませんでした</option>`; }
+  $("termsBg").classList.add("show");
+}
+function closeTerms(){ $("termsBg").classList.remove("show"); }
+function termsHMode(){
+  const pick = document.querySelector('input[name=t_hmode]:checked').value === "pick";
+  $("t_hnew_wrap").style.display = pick ? "none" : "";
+  $("t_hpick_wrap").style.display = pick ? "" : "none";
+}
+function termsKindFields(){
+  const k = $("t_kind").value;
+  const days = ["日","月","火","水","木","金","土"];
+  const opts = [...new Map(kbOptions.map(o=>[o.code, o.label])).entries()];
+  const F = {
+    transport_back: `<div class="f"><label>どれだけバック？</label><select id="tk_rate"><option value="1">全部</option><option value="0.5">半分</option></select></div>`,
+    back_add: `<div class="f"><label>上乗せの金額（円）</label><input id="tk_amount" type="number" min="0" step="500"></div>
+               <div class="f"><label>何分以上のとき（空ならいつも）</label><input id="tk_min" type="number" min="0" step="30"></div>
+               <div class="f"><label>どの店のとき（空ならどこでも）</label><select id="tk_store"><option value="">どこでも</option>${stores.map(s=>`<option value="${s.key}">${esc(s.label)}</option>`).join("")}</select></div>`,
+    nomination_fee: `<div class="f"><label>指名料（円）</label><input id="tk_amount" type="number" min="0" step="500"></div>`,
+    op_price: `<div class="f"><label>オプション</label><select id="tk_op">${opts.map(([code, label])=>`<option value="${esc(code)}">${esc(label)}</option>`).join("")}</select></div>
+               <div class="f"><label>料金（円）</label><input id="tk_price" type="number" min="0" step="500"></div>
+               <div class="f"><label>バック（円）</label><input id="tk_back" type="number" min="0" step="500"></div>`,
+    zappi_exempt: `<div class="f" style="grid-column:1/-1"><label>雑費なしの曜日</label><div>${days.map((d, i)=>`<label style="margin-right:8px"><input type="checkbox" class="tk_day" value="${i}" checked> ${d}</label>`).join("")}</div></div>`,
+    memo: `<div class="hint" style="grid-column:1/-1">計算はしません。受付の画面に、下の説明が表示されます。</div>`,
+  };
+  $("t_kindFields").innerHTML = F[k] || "";
+}
+function termsAddRule(){
+  const k = $("t_kind").value, note = $("t_note").value.trim();
+  if(!note){ toast("条件の説明を書いてください"); return; }
+  const num = id => Number(($(id) || {}).value || 0);
+  let params = {};
+  if(k === "transport_back") params = { rate: Number($("tk_rate").value) };
+  if(k === "back_add"){ if(!num("tk_amount")){ toast("上乗せの金額を入れてください"); return; }
+    params = { amount: num("tk_amount") }; if(num("tk_min")) params.min_minutes = num("tk_min"); if($("tk_store").value) params.store = $("tk_store").value; }
+  if(k === "nomination_fee"){ if(!num("tk_amount")){ toast("指名料を入れてください"); return; } params = { amount: num("tk_amount") }; }
+  if(k === "op_price") params = { group: "sakurana", op: $("tk_op").value, price: num("tk_price"), back: num("tk_back") };
+  if(k === "zappi_exempt"){ params = { days: [...document.querySelectorAll(".tk_day:checked")].map(x=>Number(x.value)) }; if(!params.days.length){ toast("曜日を選んでください"); return; } }
+  termsNewRules.push({ kind: k, params, note });
+  $("t_note").value = "";
+  renderNewRules();
+}
+function renderNewRules(){
+  $("t_newRules").innerHTML = termsNewRules.map((r, i)=>`<div style="font-size:13px;background:#F0FBF5;border-radius:10px;padding:6px 10px;margin-bottom:4px">
+    ＋ <b>${KIND_LABEL[r.kind]}</b>：${esc(r.note)} <a href="javascript:void(0)" onclick="termsNewRules.splice(${i},1);renderNewRules()" style="color:#c9556a;font-size:12px">取り消す</a></div>`).join("");
+}
+async function saveTerms(){
+  const c = termsCast; if(!c) return;
+  const pick = document.querySelector('input[name=t_hmode]:checked').value === "pick";
+  const p = { cast_id: c.id, effective: $("t_eff").value, by: operatorName(), ranks: {}, add_rules: termsNewRules, end_rules: [] };
+  if(pick){ p.hearing_log_id = $("t_hpick").value; if(!p.hearing_log_id){ toast("ヒアリングを選んでください"); return; } }
+  else { p.hearing_text = $("t_htext").value.trim(); if(p.hearing_text.length < 5){ toast("ヒアリング内容を書いてください（ないと変えられません）"); $("t_htext").focus(); return; } }
+  RANK_KEYS.forEach(([g])=>{ const el = $("t_r_" + g); if(el.value.trim() !== el.dataset.was) p.ranks[g] = el.value.trim(); });
+  document.querySelectorAll(".t_end:checked").forEach(x=>p.end_rules.push(Number(x.value)));
+  if(!Object.keys(p.ranks).length && !p.add_rules.length && !p.end_rules.length){ toast("変える内容がありません"); return; }
+  if($("t_note").value.trim() && !confirm("「条件を足す」の欄に書いたまま、まだ足していません。このまま保存しますか？")) return;
+  $("t_save").disabled = true;
+  try{
+    const r = q(await sb.rpc("kb_change_terms", { p }));
+    if(r && r.error){ toast(r.error); return; }
+    closeTerms(); toast("ヒアリングとセットで保存しました🌸");
+    const [c2, rh, cr] = await Promise.all([
+      sb.from("master_casts").select("*").eq("id", c.id).single(),
+      sb.from("kb_rank_history").select("*").order("valid_from").order("id"),
+      sb.from("kb_cast_rules").select("*").order("id"),
+    ]);
+    const nc = q(c2); casts = casts.map(x=>x.id === nc.id ? nc : x);
+    rankHist = q(rh) || []; castRules = q(cr) || [];
+    render(); openEdit(c.id);
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+  finally{ $("t_save").disabled = false; }
+}
+(function(){ ["termsBg","hearBg"].forEach(id=>{ let down = false; const bg = $(id);
+  bg.addEventListener("mousedown", e=>{ down = e.target === bg; });
+  bg.addEventListener("click", e=>{ if(e.target === bg && down) bg.classList.remove("show"); }); }); })();
+
 /* ---------- 編集 ---------- */
 function openEdit(id){
   editingId = id;
@@ -251,7 +465,8 @@ function openEdit(id){
   $("e_official").value = c.official_name || ""; $("e_kana").value = c.kana || ""; $("e_temp").value = c.temp_name || "";
   $("e_status").value = c.status || "active"; $("e_join").value = c.join_date || ""; $("e_leave").value = c.leave_date || "";
   $("e_aliases").value = (c.aliases || []).join("、"); $("e_agg").value = c.agg_name || "";
-  RANK_KEYS.forEach(([k])=> $("e_r_"+k).value = (c.ranks||{})[k] || "");
+  $("e_terms").innerHTML = id ? termsHtml(c) : `<div class="hint">キャストを保存してから、ランク・条件を入れられます（面接の内容をヒアリングとして書いてください）。</div>`;
+  $("termsBtn").style.display = id && CAN_EDIT ? "" : "none";
   $("e_special").value = c.special_notes || ""; $("e_ng").value = c.ng_notes || ""; $("e_note").value = c.note || "";
   const st = c.stores || {};
   $("e_stores").innerHTML = stores.map(s=>{
@@ -292,11 +507,10 @@ async function saveCast(){
     if(n) o.name = n; if(no) o.siteNo = no;
     st[s.key] = o;
   });
-  const ranks = {}; RANK_KEYS.forEach(([k])=>{ const v = $("e_r_"+k).value.trim(); if(v) ranks[k] = v; });
   const row = {
     official_name: official, temp_name: temp, kana: $("e_kana").value.trim(), status: $("e_status").value,
     join_date: $("e_join").value || null, leave_date: $("e_leave").value || null,
-    aliases: [...new Set(aliases)], agg_name: $("e_agg").value.trim(), stores: st, ranks,
+    aliases: [...new Set(aliases)], agg_name: $("e_agg").value.trim(), stores: st,
     special_notes: $("e_special").value, ng_notes: $("e_ng").value, note: $("e_note").value,
   };
   try{
