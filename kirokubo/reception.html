@@ -93,9 +93,10 @@
         <!-- ダミーのお店（極門・エイティーン）だけ：お客さんに伝えるダミー名 -->
         <div id="dummyWrap" style="display:none;background:#F6F2FE;border-radius:12px;padding:8px 10px;margin-bottom:8px">
           <div class="f"><label>🎭 ダミー名（お客さんに伝える名前）</label>
-            <div style="display:flex;gap:6px"><select id="f_dummy" style="flex:1" onchange="recalc()"></select>
+            <div style="display:flex;gap:6px"><select id="f_dummy" style="flex:1" onchange="recalc();renderDummyMatch()"></select>
               <button type="button" class="btn btn-ghost btn-sm" onclick="toggleDummyEdit()">⚙️ 一覧</button></div></div>
           <div id="dummyEdit" style="display:none;margin-top:6px"></div>
+          <div id="dummyMatch"></div>
           <div style="font-size:11.5px;color:var(--sub);margin-top:4px">↓ 下は「実際に行くキャスト」を選んでください（バックは実際に行くキャストで計算）</div>
         </div>
         <div class="f"><select id="f_cast" onchange="onCast()"></select></div>
@@ -201,7 +202,7 @@ async function init(){
   try{
     const r = await Promise.all([
       sb.from("master_stores").select("*").order("sort"),
-      sb.from("master_casts").select("id,official_name,temp_name,kana,status,ranks,special_notes,ng_notes,aliases").neq("status","left"),
+      sb.from("master_casts").select("id,official_name,temp_name,kana,status,ranks,special_notes,ng_notes,aliases,shift_name,prof_id").neq("status","left"),
       sb.from("kb_prices").select("*"),
       sb.from("kb_back").select("*"),
       sb.from("kb_options").select("*").order("sort"),
@@ -343,6 +344,121 @@ function onStore(r){
 }
 
 /* ---------- ダミー指名（極門・エイティーン） ---------- */
+/* ---------- ダミーキャストのデータ・マッチ率（極門・エイティーン） ----------
+   ダミーを選ぶと、その日出勤しているキャストを「近い順」に出す。
+   比べるもの：身長・カップ・Pサイズ（キャストプロフの「T158-B82(D)-W58-H85」「15、太め」から読む）、
+              AF・逆AF・射精の可否（キャストプロフのオプション ◎○△×）
+   出勤：サクラシフト（shift_weeks）のその日のシフト */
+const MARKS = ["", "◎", "○", "△", "×"];
+let profById = null;            // キャストプロフ（prof_id → data）
+const shiftCache = {};          // 営業日 → { シフト名: {start,end,confirmed} }
+async function loadProfs(){
+  if(profById) return profById;
+  const rows = q(await sb.from("prof_casts").select("id,data").eq("deleted", false)) || [];
+  profById = {}; rows.forEach(r=>{ profById[r.id] = r.data || {}; });
+  return profById;
+}
+function weekKeyOfYmd(s){
+  const [y, m, d] = s.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const dow = dt.getUTCDay(), diff = dow === 0 ? -6 : 1 - dow;
+  dt.setUTCDate(dt.getUTCDate() + diff);
+  return dt.toISOString().slice(0, 10);
+}
+async function loadShifts(ymd){
+  if(shiftCache[ymd]) return shiftCache[ymd];
+  const rows = q(await sb.from("shift_weeks").select("cast_name,data").eq("wk", weekKeyOfYmd(ymd))) || [];
+  const out = {};
+  rows.forEach(r=>{
+    const sh = r.data && r.data.shifts && r.data.shifts[ymd];
+    if(sh && sh.start != null && sh.end != null) out[r.cast_name] = { start: sh.start, end: sh.end, confirmed: ["confirmed", "change_confirmed"].includes(r.data.status) };
+  });
+  return (shiftCache[ymd] = out);
+}
+function hourLabel(h){ return h >= 24 ? "翌" + (h - 24) + ":00" : h + ":00"; }
+// キャストプロフから、身長・カップ・Pサイズ・AF など
+function specOfProf(d){
+  const sp = (d.storeProfiles && d.storeProfiles["サクラムーン"]) || {};
+  const size = String(sp.size || d.size || ""), ps = String(sp.psize || d.psize || "");
+  const opts = Object.assign({}, d.options || {}, sp.options || {});
+  const t = size.match(/T\s*(\d{3})/i), cup = size.match(/\(\s*([A-K])\s*\)/i) || size.match(/([A-K])\s*カップ/i), p = ps.match(/(\d+(?:\.\d+)?)/);
+  return { height: t ? Number(t[1]) : null, cup: cup ? cup[1].toUpperCase() : "", psize: p ? Number(p[1]) : null,
+           af: opts["AF"] || "", rev_af: opts["逆AF"] || "", shasei: opts["キャスト射精"] || "", size, psizeText: ps };
+}
+// 近さ（100 がいちばん近い）。比べられるものがなければ null
+function matchScore(dm, sp){
+  let s = 100, n = 0;
+  if(dm.height && sp.height){ s -= Math.min(40, Math.abs(dm.height - sp.height) * 2); n++; }
+  if(dm.cup && sp.cup){ s -= Math.min(30, Math.abs(dm.cup.charCodeAt(0) - sp.cup.charCodeAt(0)) * 8); n++; }
+  if(dm.psize && sp.psize){ s -= Math.min(30, Math.abs(Number(dm.psize) - sp.psize) * 6); n++; }
+  [["af", "AF"], ["rev_af", "逆AF"], ["shasei", "射精"]].forEach(([k])=>{
+    if(dm[k] === "◎" || dm[k] === "○"){ n++; if(sp[k] === "×") s -= 40; else if(sp[k] === "△") s -= 10; else if(!sp[k]) s -= 5; }
+  });
+  return n ? Math.max(0, Math.round(s)) : null;
+}
+async function renderDummyMatch(){
+  const el = $("dummyMatch");
+  const store = $("f_store").value, name = $("f_dummy").value;
+  if(!isDummyStore(store) || !name){ el.innerHTML = ""; return; }
+  const dm = M.dummies.find(d=>d.store_key === store && d.name === name) || {};
+  const spec = [dm.age ? dm.age + "歳" : "", dm.height ? "T" + dm.height : "", dm.weight ? dm.weight + "kg" : "", dm.cup ? dm.cup + "カップ" : "", dm.psize ? "P" + dm.psize : ""].filter(Boolean).join(" ");
+  const ops = [["AF", dm.af], ["逆AF", dm.rev_af], ["射精", dm.shasei]].filter(x=>x[1]).map(x=>x[0] + x[1]).join(" ");
+  el.innerHTML = `<div style="font-size:12.5px;margin-top:6px"><b>🎭 ${esc(name)}</b>：${esc(spec || "データなし")} ${esc(ops)}${dm.note ? `<br><small>${esc(dm.note)}</small>` : ""}</div>
+    <div style="font-size:12px;color:var(--sub);margin-top:4px">近いキャストを探しています…</div>`;
+  try{
+    const [profs, shifts] = await Promise.all([loadProfs(), loadShifts(day)]);
+    if($("f_dummy").value !== name) return;   // 選びなおされた
+    const rows = M.casts.map(c=>{
+      const sh = shifts[c.shift_name] || shifts[c.official_name];
+      if(!sh) return null;
+      const sp = specOfProf(profs[c.prof_id] || {});
+      return { c, sh, sp, score: matchScore(dm, sp) };
+    }).filter(Boolean).sort((a, b)=>(b.score == null ? -1 : b.score) - (a.score == null ? -1 : a.score));
+    const head = el.firstElementChild.outerHTML;
+    if(!rows.length){ el.innerHTML = head + `<div class="warn" style="margin-top:4px">この日（${esc(day)}）出勤のキャストが、サクラシフトに見つかりません</div>`; return; }
+    el.innerHTML = head + `<div style="font-size:12px;font-weight:800;margin:6px 0 2px">🎯 この日出勤しているキャスト（近い順）</div>`
+      + rows.map(x=>{
+        const op = [["AF", x.sp.af], ["逆AF", x.sp.rev_af], ["射精", x.sp.shasei]].map(o=>o[0] + (o[1] || "？")).join(" ");
+        return `<div style="display:flex;gap:6px;align-items:center;background:#fff;border-radius:10px;padding:6px 8px;margin-bottom:4px;font-size:12.5px">
+          <b style="min-width:42px;color:${x.score == null ? "#9C8B8F" : x.score >= 80 ? "#2f9e6e" : x.score >= 60 ? "#c98a00" : "#c9556a"}">${x.score == null ? "－" : x.score + "%"}</b>
+          <div style="flex:1"><b>${esc(x.c.official_name || x.c.temp_name)}</b> <small>${hourLabel(x.sh.start)}〜${hourLabel(x.sh.end)}${x.sh.confirmed ? "" : "（未確定）"}</small><br>
+            <small style="color:var(--sub)">${esc(x.sp.size || "サイズなし")} P${esc(x.sp.psizeText || "？")}　${esc(op)}</small></div>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="$('f_cast').value='${x.c.id}';onCast()">この人にする</button></div>`;
+      }).join("")
+      + `<div style="font-size:11px;color:var(--sub)">％は身長・カップ・Pサイズ・AF/逆AF/射精の近さの目安です（体重はキャストプロフにないので比べていません）</div>`;
+  }catch(e){ el.innerHTML = `<div class="warn">近いキャストを探せませんでした：${esc(e.message || e)}</div>`; }
+}
+
+// ダミーキャストのデータを入れる・直す
+function openDummyData(id){
+  const d = M.dummies.find(x=>x.id === id); if(!d) return;
+  const sel = (k)=>`<select id="dd_${k}">${MARKS.map(m=>`<option value="${m}" ${d[k] === m ? "selected" : ""}>${m || "－"}</option>`).join("")}</select>`;
+  $("dummyEdit").innerHTML = `<div style="font-size:12.5px;font-weight:800;margin-bottom:4px">🎭 ${esc(d.name)} のデータ</div>
+    <div class="grid3">
+      <div class="f"><label>年齢</label><input id="dd_age" type="number" value="${d.age ?? ""}"></div>
+      <div class="f"><label>身長（cm）</label><input id="dd_height" type="number" value="${d.height ?? ""}"></div>
+      <div class="f"><label>体重（kg）</label><input id="dd_weight" type="number" value="${d.weight ?? ""}"></div>
+      <div class="f"><label>カップ</label><input id="dd_cup" maxlength="5" value="${esc(d.cup || "")}" placeholder="C"></div>
+      <div class="f"><label>Pサイズ（cm）</label><input id="dd_psize" type="number" step="0.5" value="${d.psize ?? ""}"></div>
+      <div class="f"><label>AF</label>${sel("af")}</div>
+      <div class="f"><label>逆AF</label>${sel("rev_af")}</div>
+      <div class="f"><label>射精</label>${sel("shasei")}</div>
+    </div>
+    <div class="f"><label>メモ</label><input id="dd_note" maxlength="500" value="${esc(d.note || "")}"></div>
+    <div style="display:flex;gap:6px;margin-top:6px"><button type="button" class="btn btn-primary btn-sm" onclick="saveDummyData(${id})">保存</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="renderDummyEdit()">もどる</button></div>`;
+}
+async function saveDummyData(id){
+  const n = k => { const v = $("dd_" + k).value; return v === "" ? null : Number(v); };
+  const u = { age: n("age"), height: n("height"), weight: n("weight"), psize: n("psize"),
+              cup: $("dd_cup").value.trim().toUpperCase(), af: $("dd_af").value, rev_af: $("dd_rev_af").value, shasei: $("dd_shasei").value, note: $("dd_note").value.trim() };
+  try{
+    q(await sb.from("kb_dummy_names").update(u).eq("id", id));
+    Object.assign(M.dummies.find(x=>x.id === id), u);
+    toast("ダミーのデータを保存しました"); renderDummyEdit(); renderDummyMatch();
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+
 function isDummyStore(store){ const s = M.stores.find(x=>x.key===store); return !!(s && s.dummy); }
 function renderDummy(keep){
   const store = $("f_store").value, on = isDummyStore(store);
@@ -354,6 +470,7 @@ function renderDummy(keep){
     + (cur && !list.some(d=>d.name===cur) ? `<option>${esc(cur)}</option>` : "");
   $("f_dummy").value = cur || "";
   if($("dummyEdit").style.display !== "none") renderDummyEdit();
+  renderDummyMatch();
 }
 function toggleDummyEdit(){
   const el = $("dummyEdit");
@@ -364,7 +481,7 @@ function renderDummyEdit(){
   const store = $("f_store").value;
   const list = M.dummies.filter(d=>d.store_key===store);
   $("dummyEdit").innerHTML = `<div style="font-size:12px;font-weight:800;margin-bottom:4px">${esc(storeLabel(store))} のダミー名</div>`
-    + (list.length ? list.map(d=>`<span class="chip" style="cursor:default">${esc(d.name)} <a href="javascript:void(0)" onclick="removeDummy(${d.id})" style="color:#c9556a">×</a></span>`).join(" ") : `<span style="font-size:12px;color:var(--sub)">まだありません</span>`)
+    + (list.length ? list.map(d=>`<span class="chip" style="cursor:default"><a href="javascript:void(0)" onclick="openDummyData(${d.id})" title="データを入れる・直す">${esc(d.name)}${d.height || d.cup || d.psize ? "" : " ✏️"}</a> <a href="javascript:void(0)" onclick="removeDummy(${d.id})" style="color:#c9556a">×</a></span>`).join(" ") + `<div style="font-size:11px;color:var(--sub);margin-top:4px">名前を押すと、身長・カップなどのデータを入れられます（マッチ率に使います）</div>` : `<span style="font-size:12px;color:var(--sub)">まだありません</span>`)
     + `<div style="display:flex;gap:6px;margin-top:6px"><input id="dummyNew" maxlength="40" placeholder="ダミー名を足す" style="flex:1" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addDummy();}">
        <button type="button" class="btn btn-ghost btn-sm" onclick="addDummy()">足す</button></div>`;
 }
