@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>店長作業ログ│サクラG</title>
 <link rel="icon" type="image/png" href="favicon.png?v=3">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{ color-scheme: light; --bg:#FBF7F8; --ink:#5C4B4F; --sub:#9C8B8F; --line:#F1E3E7; --pink:#FF9EC0; --pink-deep:#e5638c; --pink-soft:#FFF0F5; }
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -23,16 +24,76 @@
   .item .app{font-size:11px;font-weight:800;border-radius:99px;padding:2px 8px;white-space:nowrap;}
   .item .msg{font-size:14px;line-height:1.6;flex:1;}
   .empty{text-align:center;color:var(--sub);font-weight:800;padding:40px 0;}
+  .tabs{display:flex;gap:6px;margin:12px 0 10px;}
+  .tab{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:9px;font-family:inherit;font-size:13.5px;font-weight:800;color:var(--sub);cursor:pointer;}
+  .tab.on{background:var(--pink-deep);border-color:var(--pink-deep);color:#fff;}
+  .quick{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:10px;margin-bottom:12px;}
+  .quick input{width:100%;font-family:inherit;font-size:14px;border:1.5px dashed var(--pink);border-radius:10px;padding:9px 11px;}
+  .quick-row{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;}
+  .quick-row select{flex:1;min-width:120px;}
+  select{font-family:inherit;font-size:12.5px;border:1.5px solid var(--line);border-radius:10px;padding:7px 8px;background:#fff;color:var(--ink);}
+  .btn{border:none;border-radius:99px;padding:8px 16px;background:var(--pink-deep);color:#fff;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;}
+  .card{background:#fff;border:1.5px solid var(--line);border-radius:16px;margin-bottom:10px;overflow:hidden;}
+  .card.vision{border-color:#D9CCF2;}
+  .card-h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;font-weight:800;font-size:14.5px;}
+  .card-h small{font-size:11.5px;color:var(--sub);font-weight:700;}
+  .card-b{display:none;padding:0 12px 12px;}
+  .card-b.show{display:block;}
+  .sec{font-size:12px;font-weight:800;color:var(--sub);margin:10px 0 4px;display:flex;justify-content:space-between;align-items:center;}
+  .row{display:flex;align-items:center;gap:6px;padding:6px 4px;border-radius:10px;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+  .row + .row{border-top:1px dashed var(--line);}
+  .row.dragging{background:var(--pink-soft);box-shadow:0 6px 16px rgba(229,99,140,.25);}
+  .row .num{font-size:11px;font-weight:800;color:var(--sub);min-width:18px;text-align:right;}
+  .row .t{flex:1;font-size:13.5px;line-height:1.5;word-break:break-word;}
+  .row .t.can{cursor:text;}
+  .row .t.can:hover{background:var(--pink-soft);border-radius:6px;}
+  .row.done .t{color:var(--sub);text-decoration:line-through;text-decoration-color:#ddd;}
+  .row .d{font-size:11px;color:var(--sub);white-space:nowrap;}
+  .ib{flex:0 0 auto;border:none;border-radius:99px;padding:4px 9px;font-family:inherit;font-size:11.5px;font-weight:800;cursor:pointer;background:#F1ECEA;color:var(--sub);}
+  .ib.ok{background:#E6F6EE;color:#2c7a55;}
+  .ib.go{background:#FFF0F5;color:#c9556a;}
+  .edit{width:100%;font-family:inherit;font-size:13.5px;padding:5px 8px;border:1.5px solid var(--pink);border-radius:8px;-webkit-user-select:text;user-select:text;}
+  .add{display:flex;gap:6px;margin:6px 0 2px;}
+  .add input{flex:1;font-family:inherit;font-size:13px;border:1.5px dashed var(--line);border-radius:10px;padding:7px 10px;}
+  .none{font-size:12px;color:var(--sub);padding:4px;}
   .back{position:fixed;left:12px;bottom:12px;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>🛠 店長作業ログ</h1>
-  <p class="lead">店長がアプリを直したり、新しい機能を足したりした記録です。<b>アプリを公開（アップロード）するたびに、自動でここに増えます。</b><br>
-  時刻は、その作業を公開した時刻です（日本時間）。</p>
-  <div class="filters" id="filters"></div>
-  <div id="list"><div class="empty">読み込み中…</div></div>
+  <div class="tabs">
+    <button class="tab on" id="tabBoard" onclick="showTab('board')">📋 ボード</button>
+    <button class="tab" id="tabLog" onclick="showTab('log')">🕒 作業ログ（自動）</button>
+  </div>
+
+  <!-- ===== ボード ===== -->
+  <div id="boardView">
+    <div id="boardNote" class="lead"></div>
+    <!-- 思いついたらすぐメモ -->
+    <div class="quick" id="quick" style="display:none">
+      <input type="text" id="qText" maxlength="300" placeholder="💡 思いついたことを、すぐメモ">
+      <div class="quick-row">
+        <select id="qApp"></select>
+        <select id="qKind"><option value="idea">💡 アイデア</option><option value="task">📋 やること</option></select>
+        <button class="btn" onclick="quickAdd()">メモする</button>
+      </div>
+    </div>
+    <!-- 全体像 -->
+    <div class="card vision">
+      <div class="card-h" onclick="toggleBox('vision')"><span>🗺 全体像（これから作るもの）</span><span class="caret" id="caret-vision">▾</span></div>
+      <div class="card-b" id="box-vision"></div>
+    </div>
+    <div id="apps"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <!-- ===== 作業ログ（GitHub の公開の記録） ===== -->
+  <div id="logView" style="display:none">
+    <p class="lead">店長がアプリを直したり、新しい機能を足したりした記録です。<b>アプリを公開（アップロード）するたびに、自動でここに増えます。</b><br>
+    時刻は、その作業を公開した時刻です（日本時間）。</p>
+    <div class="filters" id="filters"></div>
+    <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
 </div>
 <a class="back" href="./">🏠 ポータル</a>
 
@@ -91,7 +152,203 @@ function render(){
         <span class="msg">${esc(x.msg)}</span></div>`).join("") + `</div>`;
   }).join("");
 }
-load();
+// 作業ログは、タブを開いたときに1回だけ読む
+let logLoaded = false;
+function showTab(t){
+  document.getElementById("tabBoard").classList.toggle("on", t === "board");
+  document.getElementById("tabLog").classList.toggle("on", t === "log");
+  document.getElementById("boardView").style.display = t === "board" ? "" : "none";
+  document.getElementById("logView").style.display = t === "log" ? "" : "none";
+  if(t === "log" && !logLoaded){ logLoaded = true; load(); }
+}
+</script>
+
+<script>
+/* ============================================================
+   店長ボード
+   アプリごとに 💡アイデア／📋やること／✅完了。いちばん上に 🗺 全体像。
+   Supabase の mgr_items に入れる（内勤のログインで読める）。書きかえは担当「きゃ」のときだけ。
+   ・文章をクリック → その場で編集　・長押し → ドラッグで並べ替え
+   ============================================================ */
+const sb = supabase.createClient("https://tuxqpqokbvkrckgxcfdn.supabase.co", "sb_publishable_PyvCZHSzYlaqauYbdZybng_zbftghak");
+const APPS = ["ポータル","サクラシフト","内勤カレンダー","在籍作成ルーム","キャストプロフ","記録簿・キャスト台帳","公式HP連携・一括在籍登録","新しいアプリ・その他"];
+const operator = (()=>{ try{ return localStorage.getItem("currentOperator") || ""; }catch(e){ return ""; } })();
+const CAN = operator === "きゃ";
+let rows = [], open = {};
+try{ open = JSON.parse(localStorage.getItem("mgrOpen") || "{}"); }catch(e){ open = {}; }
+
+function appList(){
+  const extra = [...new Set(rows.filter(r=>r.app && !APPS.includes(r.app)).map(r=>r.app))];
+  return APPS.concat(extra);
+}
+async function loadBoard(){
+  const { data, error } = await sb.from("mgr_items").select("*").order("sort").order("id");
+  if(error){
+    document.getElementById("apps").innerHTML = `<div class="empty">読み込めませんでした。ポータルからログインし直してください。</div>`;
+    return;
+  }
+  rows = data || [];
+  renderBoard();
+}
+function list(app, kind){ return rows.filter(r=>r.kind === kind && (kind === "vision" || r.app === app)); }
+function fmt(d){ if(!d) return ""; const x = new Date(d); return (x.getMonth()+1) + "/" + x.getDate(); }
+
+function rowHtml(r, i, opts){
+  const isDone = r.kind === "done";
+  let h = `<div class="row ${isDone ? "done" : ""}" ${CAN && !isDone ? `data-id="${r.id}" data-group="${opts.group}"` : ""}>`;
+  if(opts.num) h += `<span class="num">${i + 1}</span>`;
+  h += `<span class="t ${CAN ? "can" : ""}" ${CAN ? `onclick="startEdit(this,${r.id})"` : ""}>${esc(r.title)}</span>`;
+  if(isDone && r.done_at) h += `<span class="d">✓ ${fmt(r.done_at)}</span>`;
+  if(CAN){
+    if(r.kind === "idea") h += `<button class="ib go" onclick="setKind(${r.id},'task')">→ やることへ</button>`;
+    if(r.kind === "task") h += `<button class="ib ok" onclick="setKind(${r.id},'done')">✓ 完了</button>`;
+    if(isDone) h += `<button class="ib" onclick="setKind(${r.id},'task')">戻す</button>`;
+    h += `<button class="ib" onclick="delItem(${r.id})" title="消す">🗑</button>`;
+  }
+  return h + `</div>`;
+}
+function addHtml(app, kind, ph){
+  if(!CAN) return "";
+  const id = "add_" + kind + "_" + btoa(unescape(encodeURIComponent(app))).replace(/[^a-z0-9]/gi, "");
+  return `<div class="add"><input id="${id}" maxlength="300" placeholder="${ph}"
+    onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addItem('${kind}',decodeURIComponent('${encodeURIComponent(app)}'),'${id}');}">
+    <button class="ib go" onclick="addItem('${kind}',decodeURIComponent('${encodeURIComponent(app)}'),'${id}')">追加</button></div>`;
+}
+function renderBoard(){
+  document.getElementById("boardNote").innerHTML = CAN
+    ? "文章をクリックで編集・<b>長押しで並べ替え</b>（やることは、上から完成させたい順に）。"
+    : "見るだけです（書きかえは、担当「きゃ」のときだけできます）。";
+  document.getElementById("quick").style.display = CAN ? "" : "none";
+  const qa = document.getElementById("qApp"), cur = qa.value;
+  qa.innerHTML = appList().map(a=>`<option>${esc(a)}</option>`).join("");
+  if(cur) qa.value = cur;
+
+  // 全体像
+  const vs = list("", "vision");
+  document.getElementById("box-vision").innerHTML =
+    (vs.length ? vs.map((r, i)=>rowHtml(r, i, { num: true, group: "vision" })).join("") : `<div class="none">（まだありません）</div>`)
+    + addHtml("", "vision", "＋ 全体像に足す");
+  document.getElementById("box-vision").classList.toggle("show", open.vision !== false);
+  document.getElementById("caret-vision").textContent = open.vision !== false ? "▴" : "▾";
+
+  // アプリごと
+  document.getElementById("apps").innerHTML = appList().map(app=>{
+    const ideas = list(app, "idea"), tasks = list(app, "task"), dones = list(app, "done").sort((a, b)=>String(b.done_at).localeCompare(String(a.done_at)));
+    const k = "app:" + app, isOpen = !!open[k];
+    const kEnc = encodeURIComponent(k);
+    let b = `<div class="sec"><span>📋 やること（完成させたい順）</span></div>`;
+    b += tasks.length ? tasks.map((r, i)=>rowHtml(r, i, { num: true, group: "task:" + app })).join("") : `<div class="none">（ありません）</div>`;
+    b += addHtml(app, "task", "＋ やることを足す");
+    b += `<div class="sec"><span>💡 アイデア</span></div>`;
+    b += ideas.length ? ideas.map((r, i)=>rowHtml(r, i, { group: "idea:" + app })).join("") : `<div class="none">（ありません）</div>`;
+    b += addHtml(app, "idea", "＋ アイデアを足す");
+    const dk = "done:" + app, dOpen = !!open[dk];
+    b += `<div class="sec" style="cursor:pointer" onclick="toggleKey(decodeURIComponent('${encodeURIComponent(dk)}'))"><span>✅ 完了（${dones.length}）</span><span>${dOpen ? "▴" : "▾"}</span></div>`;
+    if(dOpen) b += dones.length ? dones.map((r, i)=>rowHtml(r, i, {})).join("") : `<div class="none">（ありません）</div>`;
+    return `<div class="card"><div class="card-h" onclick="toggleKey(decodeURIComponent('${kEnc}'))">
+        <span>${esc(app)}</span><small>📋${tasks.length}　💡${ideas.length}　✅${dones.length} ${isOpen ? "▴" : "▾"}</small></div>
+      <div class="card-b ${isOpen ? "show" : ""}">${b}</div></div>`;
+  }).join("");
+}
+function toggleKey(k){ open[k] = !open[k]; try{ localStorage.setItem("mgrOpen", JSON.stringify(open)); }catch(e){} renderBoard(); }
+function toggleBox(k){ open[k] = open[k] === false; try{ localStorage.setItem("mgrOpen", JSON.stringify(open)); }catch(e){} renderBoard(); }
+
+function nextSort(kind, app){
+  const l = list(app, kind);
+  return l.length ? Math.max(...l.map(r=>Number(r.sort) || 0)) + 1 : 1;
+}
+async function save(p){
+  const { error } = await p;
+  if(error){ alert("保存できませんでした：" + (error.message || error)); }
+  await loadBoard();
+}
+function addItem(kind, app, inputId){
+  const el = document.getElementById(inputId), v = el ? el.value.trim() : "";
+  if(!v) return;
+  save(sb.from("mgr_items").insert({ kind, app: kind === "vision" ? "" : app, title: v, sort: nextSort(kind, kind === "vision" ? "" : app) }));
+}
+function quickAdd(){
+  const v = document.getElementById("qText").value.trim();
+  if(!v) return;
+  const app = document.getElementById("qApp").value, kind = document.getElementById("qKind").value;
+  document.getElementById("qText").value = "";
+  open["app:" + app] = true;
+  try{ localStorage.setItem("mgrOpen", JSON.stringify(open)); }catch(e){}
+  save(sb.from("mgr_items").insert({ kind, app, title: v, sort: nextSort(kind, app) }));
+}
+function setKind(id, kind){
+  const r = rows.find(x=>x.id === id);
+  if(!r) return;
+  save(sb.from("mgr_items").update({ kind, sort: nextSort(kind, r.app), done_at: kind === "done" ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq("id", id));
+}
+function delItem(id){
+  const r = rows.find(x=>x.id === id);
+  if(!r || !confirm("「" + r.title + "」を消しますか？（もどせません）")) return;
+  save(sb.from("mgr_items").delete().eq("id", id));
+}
+function startEdit(el, id){
+  if(dragging) return;
+  const r = rows.find(x=>x.id === id);
+  if(!r) return;
+  const inp = document.createElement("input");
+  inp.className = "edit"; inp.maxLength = 300; inp.value = r.title;
+  el.replaceWith(inp); inp.focus();
+  let done = false;
+  const finish = (ok)=>{
+    if(done) return; done = true;
+    const v = inp.value.trim();
+    if(!ok || !v || v === r.title){ renderBoard(); return; }
+    save(sb.from("mgr_items").update({ title: v, updated_at: new Date().toISOString() }).eq("id", id));
+  };
+  inp.addEventListener("keydown", e=>{ if(e.key === "Enter" && !e.isComposing){ e.preventDefault(); finish(true); } else if(e.key === "Escape") finish(false); });
+  inp.addEventListener("blur", ()=>finish(true));
+}
+
+// 長押しで並べ替え（0.45秒押したまま → ドラッグ）
+let dragging = false;
+(function(){
+  let timer = null, row = null, sx = 0, sy = 0, just = false;
+  const rowFrom = t => t && t.closest ? t.closest(".row[data-id]") : null;
+  function begin(x, y, target){
+    if(target.closest("input,button,select,a")) return;
+    const r = rowFrom(target); if(!r) return;
+    sx = x; sy = y; clearTimeout(timer);
+    timer = setTimeout(()=>{ row = r; dragging = true; row.classList.add("dragging"); try{ navigator.vibrate && navigator.vibrate(20); }catch(e){} }, 450);
+  }
+  function move(x, y){
+    if(!row){ if(timer && (Math.abs(x - sx) > 8 || Math.abs(y - sy) > 8)){ clearTimeout(timer); timer = null; } return false; }
+    const t = rowFrom(document.elementFromPoint(x, y));
+    if(t && t !== row && t.parentNode === row.parentNode && t.dataset.group === row.dataset.group){
+      const b = t.getBoundingClientRect();
+      t.parentNode.insertBefore(row, y < b.top + b.height / 2 ? t : t.nextSibling);
+    }
+    return true;
+  }
+  async function end(){
+    clearTimeout(timer); timer = null;
+    if(!row) return;
+    const r = row; row = null; r.classList.remove("dragging");
+    just = true; setTimeout(()=>{ just = false; dragging = false; }, 50);
+    const ids = [...r.parentNode.querySelectorAll('.row[data-group="' + r.dataset.group + '"]')].map(x=>Number(x.dataset.id));
+    const ups = ids.map((id, i)=>sb.from("mgr_items").update({ sort: i + 1 }).eq("id", id));
+    const res = await Promise.all(ups);
+    const bad = res.find(x=>x.error);
+    if(bad) alert("並びを保存できませんでした：" + bad.error.message);
+    loadBoard();
+  }
+  document.addEventListener("touchstart", e=>{ if(e.touches.length === 1) begin(e.touches[0].clientX, e.touches[0].clientY, e.target); }, { passive: true });
+  document.addEventListener("touchmove", e=>{ if(move(e.touches[0].clientX, e.touches[0].clientY)) e.preventDefault(); }, { passive: false });
+  document.addEventListener("touchend", end);
+  document.addEventListener("touchcancel", end);
+  document.addEventListener("mousedown", e=>{ if(e.button === 0) begin(e.clientX, e.clientY, e.target); });
+  document.addEventListener("mousemove", e=>{ if(move(e.clientX, e.clientY)) e.preventDefault(); });
+  document.addEventListener("mouseup", end);
+  document.addEventListener("contextmenu", e=>{ if(rowFrom(e.target) && (row || timer)) e.preventDefault(); });
+  document.addEventListener("click", e=>{ if(just && rowFrom(e.target)){ e.preventDefault(); e.stopPropagation(); } }, true);
+})();
+
+document.getElementById("qText").addEventListener("keydown", e=>{ if(e.key === "Enter" && !e.isComposing){ e.preventDefault(); quickAdd(); } });
+loadBoard();
 </script>
 </body>
 </html>
