@@ -144,6 +144,30 @@
   .slotcast{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:8px;}
   .slotcast .nm{font-size:16px;font-weight:800;margin-bottom:8px;}
   .slotcast .nm small{font-size:12px;color:var(--sub);font-weight:700;margin-left:8px;}
+  /* タブ：「この時これを見る」が分かるように2行 */
+  .tabs button,.tabs a{line-height:1.25;text-align:left;}
+  .tabs small{display:block;font-size:11px;font-weight:700;opacity:.85;}
+  /* 状態の色 */
+  .st.wait_cast_reply{background:#DCEBFF;color:#1f5fbf;}
+  .st.wait_guest_reply,.st.wait_foreign_call{background:#E4F6D6;color:#3f7d1e;}
+  .st.pre_call{background:#FFF1A8;color:#8a6d00;}
+  .st.hour_call{background:#FFD3E3;color:#c9356a;}
+  .st.wait_guest,.st.wait_cast{background:#fff;color:#555;border:1.5px solid #cfc7ca;}
+  .st.working{background:#EADCFB;color:#6c3fb5;}
+  .st.done{background:#E5E3E4;color:#777;}
+  .st.cancel{background:#FFE0C2;color:#c25e00;}
+  .st.tobi{background:#FFD0D0;color:#c62828;}
+  .st.checking,.st.wait_hotel{background:#F2F2F2;color:#999;}
+  /* 予約一覧 */
+  .told{border:1.5px solid #f3b4b4;background:#FFF5F5;color:#d9534f;border-radius:10px;padding:5px 9px;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer;text-align:left;line-height:1.25;}
+  .told.on{border-color:#9ad9bd;background:#F0FBF5;color:#1a7a5e;}
+  .told small{display:block;font-size:10.5px;font-weight:700;opacity:.85;}
+  .mlog{font-size:12px;line-height:1.5;min-width:220px;}
+  .mlog b{color:var(--sub);font-weight:800;}
+  .mlog .none,.mlog .more{color:var(--sub);}
+  .mlog.full{max-height:180px;overflow:auto;background:#FAF7F8;border-radius:10px;padding:8px 10px;}
+  .addlog{margin-top:3px;border:1.5px dashed var(--line);background:#fff;border-radius:99px;padding:2px 10px;font-family:inherit;font-size:11.5px;font-weight:800;color:var(--sub);cursor:pointer;}
+  .tel{font-size:12.5px;font-weight:800;color:#1f5fbf;white-space:nowrap;}
   /* 🗺 ボード */
   table.board{width:100%;min-width:900px;border-collapse:separate;border-spacing:0;background:#fff;border:1.5px solid var(--line);border-radius:14px;overflow:hidden;}
   table.board th{background:#FBF7F8;font-size:13px;font-weight:800;padding:8px;border-bottom:1.5px solid var(--line);}
@@ -204,19 +228,20 @@
     <div class="tax hide" id="tax"></div>
     <div class="notice"><textarea id="notice" placeholder="📢 本日のお知らせ" onchange="saveNotice()"></textarea></div>
     <div class="tabs" id="tabs">
-      <button data-v="slots" onclick="showView('slots')">🕐 空き枠</button>
-      <button data-v="tl" onclick="showView('tl')">⏱ タイムライン</button>
-      <button data-v="list" onclick="showView('list')">📋 予約一覧</button>
-      <a href="settle.html" title="精算は、ボードの札を押した「キャストの枠」でもできます">💴 精算（一覧）</a>
-      <button data-v="board" onclick="showView('board')">🗺 ボード</button>
+      <button data-v="slotsCast" onclick="showView('slotsCast')">💁 キャスト決まってる<small>「〇〇ちゃん何時空いてる？」</small></button>
+      <button data-v="slotsFree" onclick="showView('slotsFree')">🙋 誰が行ける？<small>「何時から誰か行ける？」</small></button>
+      <button data-v="board" onclick="showView('board')">🗺 今どこに誰が<small>待機中・仕事中・今いない</small></button>
+      <button data-v="tl" onclick="showView('tl')">⏱ 全体を見たい<small>全時刻のタイムライン</small></button>
+      <button data-v="list" onclick="showView('list')">📋 予約一覧<small>状態・伝えた・対応ログ</small></button>
+      <a href="settle.html">💴 精算（一覧）<small>キャストの枠でもできます</small></a>
     </div>
     <div class="sum" id="sum"></div>
 
     <!-- 🕐 空き枠 -->
     <div id="viewSlots" style="display:none">
       <div class="search">
-        <span class="lbl">🕐 空き枠</span>
-        <span class="chips" id="slotModes"><button type="button" class="chip" data-m="free" onclick="setSlotMode('free')">指名なし</button><button type="button" class="chip" data-m="cast" onclick="setSlotMode('cast')">キャスト指名</button></span>
+        <span class="lbl" id="slotTitle">🕐 空き枠</span>
+        <label>何時から <input type="time" id="sl_time" step="300" oninput="renderSlots()"></label>
         <label>何分 <select id="sl_min" onchange="renderSlots()"><option value="60">60分</option><option value="90" selected>90分</option><option value="120">120分</option><option value="150">150分</option><option value="180">180分</option><option value="240">240分</option></select></label>
       </div>
       <div class="castpick" id="slotPick" style="display:none"><div style="font-weight:800;font-size:13.5px;color:var(--sub)">👥 キャストを選ぶ（複数OK）</div><div class="chips" id="slotPickChips"></div></div>
@@ -373,6 +398,9 @@
       <div id="finalSummary" class="final"></div>
       <div class="row2" style="margin-top:10px">
         <div class="f"><label>状態</label><select id="f_status"></select></div>
+      </div>
+      <div class="f" style="margin:4px 0 8px"><label>📝 対応ログ（だれが・いつ・どんな対応）</label><div id="formLog"></div></div>
+      <div class="row2" style="display:none">
         <div></div>
       </div>
       <div class="f" style="margin-top:4px"><label>📨 キャストへの予約連絡（コピーして送る）</label></div>
@@ -417,7 +445,8 @@
 const { sb, q, esc, yen, toast } = KB;
 const $ = id => document.getElementById(id);
 const DOW = ["日","月","火","水","木","金","土"];
-const STATUS = { checking:"確認中", pre_call:"前日確認電話", hour_call:"1H前確認電話", wait_hotel:"ホテル連絡待ち", wait_guest:"客ホテル入室待ち", wait_cast:"キャストホテル入室待ち", working:"仕事中", done:"終了", cancel:"キャンセル", tobi:"トビ" };   // 並びが流れの順
+const STATUS = { wait_cast_reply:"キャスト返事待ち", wait_guest_reply:"お客様返事待ち", wait_foreign_call:"外国人1コール待ち", pre_call:"前日確認電話", hour_call:"1H前確認電話", wait_guest:"客ホテル入室待ち", wait_cast:"キャストホテル入室待ち", working:"仕事中", done:"終了", cancel:"キャンセル", tobi:"トビ", checking:"確認中（旧）", wait_hotel:"ホテル連絡待ち（旧）" };   // 並びが流れの順
+const STATUS_OLD = ["checking", "wait_hotel"];   // 今は選べない（前の予約のために残している）
 const VISIT = [["new","新規"],["repeat","店リピ"],["honshi","本指名"]];
 const FREE_SUFFIX = { "":"", free:"フリー", special_free:"特別フリー", event_free:"イベフリー" };
 
@@ -540,8 +569,8 @@ function openForm(id){
   }).join("");
   $("f_cast").value = r.cast_id || "";
   $("f_start").value = r.start_at ? hm(r.start_at) : "";
-  $("f_status").innerHTML = Object.keys(STATUS).map(k=>`<option value="${k}">${STATUS[k]}</option>`).join("");
-  $("f_status").value = r.status || "checking";
+  $("f_status").innerHTML = Object.keys(STATUS).filter(k=>!STATUS_OLD.includes(k) || k === r.status).map(k=>`<option value="${k}">${STATUS[k]}</option>`).join("");
+  $("f_status").value = r.status || "wait_cast_reply";
   // キャストに伝えたか
   $("f_notified").checked = !!r.cast_notified_at;
   $("notifiedInfo").textContent = r.cast_notified_at ? (r.cast_notified_by || "") + " " + new Date(r.cast_notified_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
@@ -1323,13 +1352,18 @@ recalc = function(){
    ・並び順：出勤が早い順／あいうえお順／退勤が早い順／退勤が遅い順
    ============================================================ */
 let castDays = {};
+var slotMode = "cast";
 let selCasts = new Set();
 function showView(v){
   try{ localStorage.setItem("kirokuView", v); }catch(e){}
-  ["tl", "list", "board", "slots"].forEach(k=>{ const el = $("view" + { tl: "TL", list: "List", board: "Board", slots: "Slots" }[k]); if(el) el.style.display = v === k ? "" : "none"; });
+  // 💁 キャスト決まってる／🙋 誰が行ける？ は、どちらも「空き枠」の画面（見せ方だけ変える）
+  if(v === "slots") v = "slotsCast";
+  const box = { tl: "viewTL", list: "viewList", board: "viewBoard", slotsCast: "viewSlots", slotsFree: "viewSlots" };
+  ["viewTL", "viewList", "viewBoard", "viewSlots"].forEach(id=>{ const el = $(id); if(el) el.style.display = box[v] === id ? "" : "none"; });
+  if(v === "slotsCast" || v === "slotsFree"){ slotMode = v === "slotsCast" ? "cast" : "free"; if(typeof renderSlots === "function") renderSlots(); }
   document.querySelectorAll("#tabs button[data-v]").forEach(b=>b.classList.toggle("on", b.dataset.v === v));
 }
-(function(){ let v = "slots"; try{ v = localStorage.getItem("kirokuView") || "slots"; }catch(e){} showView(v); })();
+(function(){ let v = "slotsCast"; try{ v = localStorage.getItem("kirokuView") || "slotsCast"; }catch(e){} setTimeout(()=>showView(v), 0); })();
 (function(){ try{ const s = localStorage.getItem("kirokuSort"); if(s && $("s_sort")) $("s_sort").value = s; }catch(e){} })();
 
 const __loadDay = loadDay;
@@ -1748,7 +1782,7 @@ function refreshCastSettle(id){
    ・キャスト指名：選んだキャスト（複数OK）ごとに、空いている開始時刻をボタンで
    ・行けるかどうかは、タイムラインと同じ（出勤時間・予約・予約の間・お茶／欠勤／精算済）
    ============================================================ */
-let slotMode = "free";
+
 let slotSel = new Set();
 function canGo(x, t, mins){
   if(!x.shift || !x.c) return false;
@@ -1757,10 +1791,15 @@ function canGo(x, t, mins){
   return t >= x.shift.start - 0.01 && e <= x.shift.end + 0.01 && !x.bks.some(b=>b.s - g < e && t < b.e + g);
 }
 function slotTimes(){
-  // 今日は今より後（30分きざみ）から。ほかの日は11時から。最後は翌6時半まで
+  // 「何時から」を入れたらその時刻から。入れていなければ、今日は今より後（30分きざみ）、ほかの日は11時から。最後は翌6時半まで
   let from = TL_FROM;
-  if(day === KB.bizDateOf()){ const n = nowHour(); from = Math.max(TL_FROM, Math.ceil(n * 2) / 2); }
-  const out = []; for(let t = from; t <= TL_TO - 0.5; t += 0.5) out.push(t);
+  const want = tlHour($("sl_time").value);
+  if(want != null) from = Math.max(TL_FROM, want);
+  else if(day === KB.bizDateOf()){
+    const n = nowHour();
+    if(n > TL_FROM && n < TL_TO) from = Math.ceil(n * 2) / 2;   // 朝（営業時間の前）は11時から
+  }
+  const out = []; for(let t = from; t <= TL_TO - 0.5 + 1e-6; t += 0.5) out.push(t);
   return out;
 }
 function setSlotMode(m){ slotMode = m; renderSlots(); }
@@ -1778,7 +1817,7 @@ function renderSlots(){
   if(!shiftCache[day]){ el.innerHTML = `<div class="gate">シフトを読み込み中…</div>`; return; }
   const mins = Number($("sl_min").value) || 90;
   const casts = sortRows(tlRows()).filter(x=>x.c && x.shift);
-  document.querySelectorAll("#slotModes .chip").forEach(b=>b.classList.toggle("on", b.dataset.m === slotMode));
+  if($("slotTitle")) $("slotTitle").textContent = slotMode === "cast" ? "💁 キャスト決まってる：空いている時間" : "🙋 誰が行ける？：時刻ごとに行ける人";
   $("slotPick").style.display = slotMode === "cast" ? "" : "none";
   $("slotPickChips").innerHTML = casts.map(x=>`<button type="button" class="chip ${slotSel.has(x.c.id) ? "on" : ""}" onclick="toggleSlotSel('${x.c.id}')">${esc(castLabel(x))}</button>`).join("") || `<span class="hist">この日のシフトがありません</span>`;
   const times = slotTimes();
@@ -1808,6 +1847,98 @@ function renderSlots(){
 }
 const __renderTL3 = renderTL;
 renderTL = function(){ __renderTL3(); renderSlots(); };
+
+/* ============================================================
+   📋 予約一覧（作り直し）＋ 対応ログ
+   ・店舗は最初の3文字、総額・報酬は出さない、電話番号を出す（こちらから電話するとき見るので）
+   ・状態はその場で変える（色つき）。キャストに伝えたかは、ボタンで切りかえ（だれ・いつが残る）
+   ・対応ログ：だれが・いつ・どんな対応をしたかを、予約ごとに時系列で（エクセルの備考欄の日付サインのかわり）
+     状態を変えた・キャストに伝えた、も自動でログに入る
+   ============================================================ */
+function statusKeys(cur){ return Object.keys(STATUS).filter(k=>!STATUS_OLD.includes(k) || k === cur); }
+function whenShort(t){ if(!t) return ""; const d = new Date(t); return (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+function logOf(r){ return Array.isArray(r.memo_log) ? r.memo_log : []; }
+async function pushLog(id, text, extra){
+  const r = rows.find(x=>x.id === id); if(!r) return false;
+  const log = logOf(r).concat([{ at: new Date().toISOString(), by: KB.operatorName() || "（担当者なし）", text }]);
+  try{
+    q(await sb.from("kb_reservations").update(Object.assign({ memo_log: log, updated_by: KB.operatorName() }, extra || {})).eq("id", id));
+    Object.assign(r, extra || {}, { memo_log: log, updated_by: KB.operatorName(), updated_at: new Date().toISOString() });
+    return true;
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); return false; }
+}
+// 一覧から状態を変える（ログにも残す）
+quickStatus = async function(id, st){
+  if(!KB.CAN_EDIT) return;
+  if(await pushLog(id, "状態 →「" + STATUS[st] + "」", { status: st })){ toast("状態を「" + STATUS[st] + "」にしました"); renderList(); if(editing && editing.id === id) renderFormLog(); }
+};
+// キャストに伝えた（切りかえ・ログにも残す）
+async function toggleNotified(id){
+  if(!KB.CAN_EDIT) return;
+  const r = rows.find(x=>x.id === id); if(!r) return;
+  if(r.cast_notified_at){
+    if(!confirm("「キャストに伝えた」を取り消しますか？")) return;
+    if(await pushLog(id, "キャストに伝えた を取り消し", { cast_notified_at: null, cast_notified_by: "" })) renderList();
+  } else {
+    if(await pushLog(id, "キャストに伝えた", { cast_notified_at: new Date().toISOString(), cast_notified_by: KB.operatorName() })){ toast("✅ キャストに伝えた、にしました"); renderList(); }
+  }
+}
+async function addLogPrompt(id){
+  if(!KB.CAN_EDIT) return;
+  const t = prompt("対応ログに書くこと（例：お客様に折り返し済み／キャストに場所変更を連絡）");
+  if(!t || !t.trim()) return;
+  if(await pushLog(id, t.trim())){ toast("ログに書きました"); renderList(); if(editing && editing.id === id) renderFormLog(); }
+}
+function renderListTable(){
+  const el = $("list"); if(!el) return;
+  el.innerHTML = rows.length ? `<tr><th>時間</th><th>キャスト</th><th>店舗</th><th>コース</th><th>お客さん・電話</th><th>状態</th><th>キャストに</th><th>対応ログ（新しい順）</th></tr>` +
+    rows.map(r=>{
+      const c = r.kb_customers || {};
+      const stSel = KB.CAN_EDIT
+        ? `<select class="stsel st ${r.status}" onclick="event.stopPropagation()" onchange="quickStatus(${r.id},this.value)">${statusKeys(r.status).map(k=>`<option value="${k}" ${k === r.status ? "selected" : ""}>${STATUS[k]}</option>`).join("")}</select>`
+        : `<span class="st ${r.status}">${STATUS[r.status] || r.status}</span>`;
+      const told = r.cast_notified_at
+        ? `<button class="told on" onclick="event.stopPropagation();toggleNotified(${r.id})" title="押すと取り消し">✅ 伝えた<small>${esc(r.cast_notified_by || "")} ${whenShort(r.cast_notified_at)}</small></button>`
+        : `<button class="told" onclick="event.stopPropagation();toggleNotified(${r.id})">⚠️ まだ<small>押すと「伝えた」</small></button>`;
+      const logs = logOf(r).slice().reverse();
+      const logHtml = `<div class="mlog">${logs.length
+          ? logs.slice(0, 3).map(l=>`<div><b>${esc(whenShort(l.at))} ${esc(l.by || "")}</b> ${esc(l.text)}</div>`).join("") + (logs.length > 3 ? `<div class="more">ほか ${logs.length - 3}件（予約を開くと全部）</div>` : "")
+          : `<div class="none">受付：${esc(r.created_by || "")} ${whenShort(r.created_at)}</div>`}
+        ${KB.CAN_EDIT ? `<button class="addlog" onclick="event.stopPropagation();addLogPrompt(${r.id})">＋ ログ</button>` : ""}</div>`;
+      return `<tr class="r" onclick="openForm(${r.id})">
+        <td><b>${hm(r.start_at)}</b>〜${hm(r.end_at)}</td>
+        <td>${r.dummy_name ? `<small style="color:#6c5896">🎭${esc(r.dummy_name)} →</small><br>` : ""}<b>${esc(castName(r.cast_id))}</b></td>
+        <td>${esc(String(storeLabel(r.store_key) || "").slice(0, 3))}</td>
+        <td>${esc(r.course)}${/^\d+$/.test(r.course) ? "分" : ""}${r.free_kind ? "・" + FREE_SUFFIX[r.free_kind] : ""}${r.extension_count ? " 延長" + r.extension_count : ""}${r.payment !== "cash" ? " 💳" : ""}</td>
+        <td>${c.ng ? "⚠️" : ""}${esc(c.name || "")}<small style="color:var(--sub)"> ${VISIT.find(v=>v[0] === r.visit_kind)?.[1] || ""}</small>${c.phone ? `<br><span class="tel">📞 ${esc(c.phone)}</span>` : ""}</td>
+        <td>${stSel}</td>
+        <td>${told}</td>
+        <td>${logHtml}</td></tr>`;
+    }).join("") : `<tr><td style="text-align:center;color:var(--sub);font-weight:800;padding:24px">この日の予約はまだありません</td></tr>`;
+}
+const __renderList3 = renderList;
+renderList = function(){ __renderList3(); renderListTable(); };
+
+/* ---------- 予約の入力 ⑥：対応ログ ---------- */
+function renderFormLog(){
+  const el = $("formLog"); if(!el) return;
+  if(!editing){ el.innerHTML = `<div class="hist" style="margin:0">登録したあとに、対応ログを書けます（予約一覧の「＋ ログ」からも書けます）</div>`; return; }
+  const r = rows.find(x=>x.id === editing.id) || editing;
+  const logs = logOf(r);
+  el.innerHTML = `<div class="mlog full">${logs.length ? logs.map(l=>`<div><b>${esc(whenShort(l.at))} ${esc(l.by || "")}</b> ${esc(l.text)}</div>`).join("") : `<div class="none">まだありません</div>`}</div>
+    ${KB.CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:6px"><input id="formLogText" maxlength="200" placeholder="例：お客様に折り返し済み" style="flex:1"
+      onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addFormLog();}"><button type="button" class="btn btn-ghost btn-sm" onclick="addFormLog()">＋ 書く</button></div>` : ""}`;
+}
+async function addFormLog(){
+  const t = $("formLogText").value.trim(); if(!t || !editing) return;
+  if(await pushLog(editing.id, t)){ $("formLogText").value = ""; renderFormLog(); renderList(); }
+}
+const __openForm2 = openForm;
+openForm = function(id){
+  __openForm2(id);
+  if(!id) $("f_status").value = "wait_cast_reply";   // 新しい予約は「キャスト返事待ち」から
+  renderFormLog();
+};
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
