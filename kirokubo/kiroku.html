@@ -96,25 +96,35 @@
   .search{display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:8px;font-size:13.5px;font-weight:800;color:var(--sub);}
   .search .lbl{color:#e5638c;}
   .search input,.search select{font-family:inherit;font-size:14px;padding:6px 8px;border:1.5px solid var(--line);border-radius:10px;}
-  .tlwrap{overflow-x:auto;background:#fff;border:1.5px solid var(--line);border-radius:14px;}
-  .tlg{min-width:1100px;}
+  .tlwrap{overflow:auto;max-height:74vh;background:#fff;border:1.5px solid var(--line);border-radius:14px;}
+  .tlg{min-width:1560px;}
   .tlg .hd,.tlg .r{display:grid;grid-template-columns:150px 1fr;}
-  .tlg .hd{position:sticky;top:0;background:#FBF7F8;z-index:2;border-bottom:1.5px solid var(--line);}
-  .tlg .hd .times{position:relative;height:28px;}
-  .tlg .hd .times span{position:absolute;top:6px;font-size:11px;color:var(--sub);font-weight:800;transform:translateX(-50%);}
-  .tlg .r{border-bottom:1px solid #F1E9EC;}
-  .tlg .nm{padding:7px 8px;font-size:13px;font-weight:800;line-height:1.3;border-right:1.5px solid var(--line);cursor:pointer;}
+  .tlg .hd{position:sticky;top:0;z-index:6;background:#FBF7F8;border-bottom:1.5px solid #E6DADE;}
+  .tlg .nm{position:sticky;left:0;z-index:5;background:#fff;padding:6px 8px;font-size:13px;font-weight:800;line-height:1.3;border-right:1.5px solid #E6DADE;cursor:pointer;}
   .tlg .nm small{display:block;font-size:11px;color:var(--sub);font-weight:700;}
+  .tlg .nm.corner{background:#FBF7F8;cursor:default;z-index:7;}
   .tlg .nm.ok{background:#E9F9F0;color:#1a7a5e;}
+  .tlg .r{border-bottom:1px solid #E6DADE;}
   .tlg .r.dim{opacity:.35;}
-  .tlg .tr{position:relative;height:44px;cursor:copy;background-image:repeating-linear-gradient(90deg,#F4EEF0 0 1px,transparent 1px calc(100%/36));}
-  .tlg .sh{position:absolute;top:0;bottom:0;background:#FFF8FB;border-left:2px solid #FFC2D1;border-right:2px solid #FFC2D1;}
-  .tlg .bk{position:absolute;top:5px;bottom:5px;border-radius:8px;font-size:11px;font-weight:800;padding:2px 5px;overflow:hidden;white-space:nowrap;line-height:1.3;cursor:pointer;color:#fff;background:#5b8def;}
-  .tlg .bk.working{background:#e5638c;} .tlg .bk.done{background:#b9b3b5;}
-  .tlg .want{position:absolute;top:2px;bottom:2px;border:2.5px dashed #2f9e6e;border-radius:8px;pointer-events:none;}
+  .tlg .cells{position:relative;display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));}
+  .tlg .hc{font-size:11.5px;font-weight:800;color:#7a6a6e;padding:7px 0 7px 4px;border-left:1px solid #D9CED2;white-space:nowrap;}
+  .tlg .hc.half{border-left:1px dashed #E8DFE2;}
+  .tlg .c{height:48px;background:#E9E6E7;border-left:1px solid #D2CACD;cursor:pointer;position:relative;}
+  .tlg .c.half{border-left:1px dashed #DDD5D8;}
+  .tlg .c.on{background:#fff;}
+  .tlg .c:hover{background:#FFE3EC;}
+  .tlg .c:hover::after{content:attr(data-t) " から";position:absolute;top:3px;left:3px;font-size:11.5px;font-weight:800;color:#fff;background:#e5638c;border-radius:6px;padding:2px 6px;z-index:8;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.2);pointer-events:none;}
+  .tlg .bk{position:absolute;top:5px;bottom:5px;z-index:2;border-radius:8px;font-size:11px;font-weight:800;padding:2px 5px;overflow:hidden;white-space:nowrap;line-height:1.3;cursor:pointer;color:#fff;background:#5b8def;}
+  .tlg .bk.working{background:#e5638c;} .tlg .bk.done{background:#9d9698;}
+  .tlg .gap{position:absolute;top:0;bottom:0;z-index:1;pointer-events:none;background:repeating-linear-gradient(45deg,rgba(110,100,104,.32) 0 5px,rgba(110,100,104,.12) 5px 10px);}
+  .tlg .want{position:absolute;top:2px;bottom:2px;z-index:3;border:2.5px dashed #2f9e6e;border-radius:8px;pointer-events:none;}
   .tlg .want.ng{border-color:#ef4444;}
-  .tlg .now{position:absolute;top:0;bottom:0;width:2px;background:#ef4444;pointer-events:none;}
-  .tlg .off{position:absolute;inset:0;background:repeating-linear-gradient(45deg,#f5f5f5 0 6px,#fff 6px 12px);}
+  .tlg .now{position:absolute;top:0;bottom:0;width:2px;z-index:3;background:#ef4444;pointer-events:none;}
+  .castpick{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:8px 12px;margin-bottom:8px;}
+  .castpick summary{cursor:pointer;font-weight:800;font-size:13.5px;color:var(--sub);}
+  .castpick .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+  .castpick .chip{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:6px 12px;font-family:inherit;font-size:13.5px;font-weight:800;color:var(--sub);cursor:pointer;}
+  .castpick .chip.on{background:#e5638c;border-color:#e5638c;color:#fff;}
   /* 🗺 ボード */
   table.board{width:100%;min-width:900px;border-collapse:separate;border-spacing:0;background:#fff;border:1.5px solid var(--line);border-radius:14px;overflow:hidden;}
   table.board th{background:#FBF7F8;font-size:13px;font-weight:800;padding:8px;border-bottom:1.5px solid var(--line);}
@@ -194,13 +204,14 @@
         <span class="lbl">🔍 探す</span>
         <label>何時から <input type="time" id="s_time" step="300" oninput="renderTL()"></label>
         <label>何分 <select id="s_min" onchange="renderTL()"><option value="60">60分</option><option value="90" selected>90分</option><option value="120">120分</option><option value="150">150分</option><option value="180">180分</option><option value="240">240分</option></select></label>
-        <label>キャスト <input id="s_cast" placeholder="名前で絞る" oninput="renderTL()" style="width:120px"></label>
         <label><input type="checkbox" id="s_free" onchange="renderTL()"> 行ける人だけ</label>
-        <button class="btn btn-ghost btn-sm" onclick="$('s_time').value='';$('s_cast').value='';$('s_free').checked=false;renderTL()">クリア</button>
+        <label>並び順 <select id="s_sort" onchange="setSort(this.value)"><option value="start">出勤が早い順</option><option value="kana">あいうえお順</option><option value="endEarly">退勤が早い順</option><option value="endLate">退勤が遅い順</option></select></label>
+        <button class="btn btn-ghost btn-sm" onclick="clearSearch()">クリア</button>
       </div>
+      <details class="castpick"><summary>👥 キャストで絞る（複数OK）<span id="s_castCount"></span></summary><div class="chips" id="s_castChips"></div></details>
       <div id="tlResult"></div>
       <div class="tlwrap"><div id="tlGrid"></div></div>
-      <div class="hint2" style="font-size:12px;color:var(--sub);margin-top:6px">空いているところを押すと、そのキャスト・その時間で予約の入力が開きます。予約の帯を押すと、その予約が開きます。</div>
+      <div class="hint2" style="font-size:12px;color:var(--sub);margin-top:6px">マスにマウスを乗せると時刻が出ます。押すと、そのキャスト・その時刻で予約の入力が開きます。白＝出勤時間、しま模様＝予約の前後のインターバル。予約の帯を押すと、その予約が開きます。</div>
     </div>
 
     <!-- 📋 予約一覧 -->
@@ -394,7 +405,7 @@ async function init(){
   try{
     const r = await Promise.all([
       sb.from("master_stores").select("*").order("sort"),
-      sb.from("master_casts").select("id,official_name,temp_name,kana,status,ranks,special_notes,ng_notes,aliases,shift_name,prof_id").neq("status","left"),
+      sb.from("master_casts").select("*").neq("status","left"),
       sb.from("kb_prices").select("*"),
       sb.from("kb_back").select("*"),
       sb.from("kb_options").select("*").order("sort"),
@@ -1201,8 +1212,8 @@ recalc = function(){
 };
 
 /* ---------- そのキャストの本日のタイムライン（11時〜翌5時） ---------- */
-const TL_FROM = 11, TL_TO = 29;
-function hourOf(iso){ const d = new Date(new Date(iso).getTime() + 9 * 3600 * 1000); let h = d.getUTCHours() + d.getUTCMinutes() / 60; if(h < 6) h += 24; return h; }
+const TL_FROM = 11, TL_TO = 31;   // 11時〜翌7時（残業で朝まで働く子もいるので）
+function hourOf(iso){ const d = new Date(new Date(iso).getTime() + 9 * 3600 * 1000); let h = d.getUTCHours() + d.getUTCMinutes() / 60; if(h < 8) h += 24; return h; }
 function pct(h){ return Math.max(0, Math.min(100, (h - TL_FROM) / (TL_TO - TL_FROM) * 100)); }
 function drawTimeline(){
   const el = $("castTimeline"); if(!el) return;
@@ -1217,14 +1228,15 @@ function drawTimeline(){
   const st = $("f_start").value;
   if(st && last){
     const [h, m] = st.split(":").map(Number);
-    let s = h + m / 60; if(s < 6) s += 24;
+    let s = h + m / 60; if(s < 8) s += 24;
     const e = s + (minutesOf(last.course) + last.ext * 30 + last.date * 30) / 60;
     cur = { s, e, label: st + "〜" + $("endView").textContent };
   }
-  const clash = cur && others.some(o=>o.s < cur.e && cur.s < o.e);
+  const gap = (c.interval_min || 0) / 60;   // キャストの「予約の間」
+  const clash = cur && others.some(o=>o.s - gap < cur.e && cur.s < o.e + gap);
   const outShift = cur && shift && (cur.s < shift.start || cur.e > shift.end);
-  $("footWarn").textContent = clash ? "⚠️ 予約が重なっています" : (outShift ? "⚠️ 出勤時間の外です" : "");
-  const ticks = [11, 14, 17, 20, 23, 26].map(h=>`<span>${h >= 24 ? "翌" + (h - 24) : h}時</span>`).join("");
+  $("footWarn").textContent = clash ? (gap ? "⚠️ 予約が重なっています（予約の間 " + c.interval_min + "分あけ）" : "⚠️ 予約が重なっています") : (outShift ? "⚠️ 出勤時間の外です" : "");
+  const ticks = [11, 14, 17, 20, 23, 26, 29].map(h=>`<span>${h >= 24 ? "翌" + (h - 24) : h}時</span>`).join("");
   el.innerHTML = `<div class="tl"><div class="ttl">📅 本日のタイムライン（${esc(c.official_name || c.temp_name)}）
       ${shift ? `<span style="font-weight:400;color:#c9cbe0">出勤 ${hourLabel(shift.start)}〜${hourLabel(shift.end)}${shift.confirmed ? "" : "（未確定）"}</span>` : `<span style="font-weight:400;color:#c9cbe0">${sh ? "シフトが見つかりません" : "シフトを読み込み中…"}</span>`}</div>
     <div class="axis">${ticks}</div>
@@ -1272,13 +1284,15 @@ recalc = function(){
 };
 
 /* ============================================================
-   ⏱ タイムライン＋🔍 探す
-   ・その日シフトのあるキャストを、出勤の早い順に1行ずつ。11時〜翌5時を横に並べる
-   ・予約は帯（押すと開く）。空いているところを押すと、そのキャスト・その時間で予約の入力が開く
-   ・「何時から・何分」を入れると、行けるキャストの名前が緑になる（出勤中で予約が重ならない人）
-   ・キャストの名前で絞れる。お茶・欠勤・精算済（キャストの1日の状態）は行けない扱い
+   ⏱ タイムライン＋🔍 探す（パソコン向け）
+   ・その日シフトのあるキャストを1行ずつ。11時〜翌7時を30分のマスで並べる
+   ・出勤時間のマスだけ白、それ以外はグレー。マウスを乗せるとそのマスの時刻が出る。押すとその時刻で予約の入力
+   ・予約は帯（押すと開く）。キャストごとの「予約の間（インターバル）」は、予約の前後をしま模様のグレーに
+   ・「何時から・何分」→ 行けるキャストが緑で上に。キャストは複数選んで絞れる（空き時間も出る）
+   ・並び順：出勤が早い順／あいうえお順／退勤が早い順／退勤が遅い順
    ============================================================ */
 let castDays = {};
+let selCasts = new Set();
 function showView(v){
   try{ localStorage.setItem("kirokuView", v); }catch(e){}
   $("viewTL").style.display = v === "tl" ? "" : "none";
@@ -1287,6 +1301,7 @@ function showView(v){
   document.querySelectorAll("#tabs button[data-v]").forEach(b=>b.classList.toggle("on", b.dataset.v === v));
 }
 (function(){ let v = "tl"; try{ v = localStorage.getItem("kirokuView") || "tl"; }catch(e){} showView(v); })();
+(function(){ try{ const s = localStorage.getItem("kirokuSort"); if(s && $("s_sort")) $("s_sort").value = s; }catch(e){} })();
 
 const __loadDay = loadDay;
 loadDay = async function(){
@@ -1300,12 +1315,13 @@ loadDay = async function(){
 const __renderList2 = renderList;
 renderList = function(){ __renderList2(); renderTL(); };
 
-function tlHour(s){ if(!s) return null; const [h, m] = s.split(":").map(Number); let v = h + m / 60; if(v < 6) v += 24; return v; }
-function tlLabel(v){ let h = Math.floor(v), m = Math.round((v - h) * 60); if(m === 60){ h++; m = 0; } return (h >= 24 ? "翌" + (h - 24) : h) + ":" + String(m).padStart(2, "0"); }
+function tlHour(s){ if(!s) return null; const [h, m] = s.split(":").map(Number); let v = h + m / 60; if(v < 8) v += 24; return v; }
+function tlLabel(v){ let h = Math.floor(v + 1e-6), m = Math.round((v - h) * 60); if(m === 60){ h++; m = 0; } return (h >= 24 ? "翌" + (h - 24) : h) + ":" + String(m).padStart(2, "0"); }
 function bookingsOf(castId){
   return rows.filter(r=>r.cast_id === castId && r.status !== "cancel" && r.status !== "tobi" && r.start_at && r.end_at)
-    .map(r=>({ id: r.id, s: hourOf(r.start_at), e: hourOf(r.end_at), r }));
+    .map(r=>{ const s = hourOf(r.start_at); let e = hourOf(r.end_at); if(e < s) e += 24; return { id: r.id, s, e, r }; });
 }
+function gapOf(x){ return ((x.c && x.c.interval_min) || 0) / 60; }   // インターバル（時間）
 function tlRows(){
   const sh = shiftCache[day] || {};
   const out = [];
@@ -1319,57 +1335,88 @@ function tlRows(){
     const c = M.casts.find(x=>x.id === r.cast_id);
     out.push({ name: c ? (c.official_name || c.temp_name) : r.cast_id, c, shift: null, bks: bookingsOf(r.cast_id), cd: castDays[r.cast_id] });
   });
-  return out.sort((a, b)=>(a.shift ? a.shift.start : 99) - (b.shift ? b.shift.start : 99));
+  return out;
 }
+function castLabel(x){ return x.c ? (x.c.official_name || x.c.temp_name) : x.name; }
+function castKey(x){ return x.c ? x.c.id : "n:" + x.name; }
 function freeSlots(x){
   if(!x.shift) return [];
-  const busy = x.bks.map(b=>[b.s, b.e]).sort((a, b)=>a[0] - b[0]);
+  const g = gapOf(x);
+  const busy = x.bks.map(b=>[b.s - g, b.e + g]).sort((a, b)=>a[0] - b[0]);
   const out = []; let t = x.shift.start;
   busy.forEach(([s, e])=>{ if(s > t + 0.01) out.push([t, Math.min(s, x.shift.end)]); t = Math.max(t, e); });
   if(t < x.shift.end - 0.01) out.push([t, x.shift.end]);
   return out.filter(([s, e])=>e - s >= 0.5);
 }
-function castLabel(x){ return x.c ? (x.c.official_name || x.c.temp_name) : x.name; }
+function sortRows(list){
+  const mode = ($("s_sort") && $("s_sort").value) || "start";
+  const kana = x => String((x.c && (x.c.kana || x.c.official_name || x.c.temp_name)) || x.name);
+  const st = x => x.shift ? x.shift.start : 99, en = x => x.shift ? x.shift.end : 99;
+  return list.sort((a, b)=>
+    mode === "kana" ? kana(a).localeCompare(kana(b), "ja")
+    : mode === "endEarly" ? en(a) - en(b)
+    : mode === "endLate" ? en(b) - en(a)
+    : st(a) - st(b));
+}
+function setSort(v){ try{ localStorage.setItem("kirokuSort", v); }catch(e){} renderTL(); }
+// キャストで絞る（複数OK）
+function toggleSelCast(k){ if(selCasts.has(k)) selCasts.delete(k); else selCasts.add(k); renderTL(); }
+function clearSearch(){ $("s_time").value = ""; $("s_free").checked = false; selCasts.clear(); renderTL(); }
+
 function renderTL(){
   const grid = $("tlGrid"); if(!grid || !M.casts) return;
   if(!shiftCache[day]){ grid.innerHTML = `<div class="gate">シフトを読み込み中…</div>`; return; }
   const want = tlHour($("s_time").value), mins = Number($("s_min").value) || 90;
   const wantE = want != null ? want + mins / 60 : null;
-  const word = $("s_cast").value.trim(), onlyFree = $("s_free").checked;
-  const p = h => Math.max(0, Math.min(100, (h - TL_FROM) / (TL_TO - TL_FROM) * 100));
+  const onlyFree = $("s_free").checked;
   const unavailable = x => !!(x.cd && (["お茶", "欠勤", "精算済"].includes(x.cd.status) || x.cd.settled));
-  let list = tlRows().map(x=>{
+  const all = sortRows(tlRows().map(x=>{
     let ok = null;
-    if(want != null) ok = !!x.shift && !unavailable(x) && want >= x.shift.start - 0.01 && wantE <= x.shift.end + 0.01 && !x.bks.some(b=>b.s < wantE && want < b.e);
+    if(want != null){
+      const g = gapOf(x);
+      ok = !!x.shift && !unavailable(x) && want >= x.shift.start - 0.01 && wantE <= x.shift.end + 0.01 && !x.bks.some(b=>b.s - g < wantE && want < b.e + g);
+    }
     return Object.assign(x, { ok });
-  });
-  if(word) list = list.filter(x=>(x.name + " " + (x.c ? [x.c.official_name, x.c.temp_name, x.c.kana].concat(x.c.aliases || []).join(" ") : "")).includes(word));
+  }));
+  // 絞り込みのボタン（その日の全キャスト）
+  $("s_castChips").innerHTML = all.map(x=>`<button type="button" class="chip ${selCasts.has(castKey(x)) ? "on" : ""}" onclick="toggleSelCast('${castKey(x)}')">${esc(castLabel(x))}</button>`).join("")
+    || `<span class="hist">この日のキャストがいません</span>`;
+  $("s_castCount").textContent = selCasts.size ? `（${selCasts.size}人を選択中）` : "";
+  let list = all;
+  if(selCasts.size) list = list.filter(x=>selCasts.has(castKey(x)));
   if(onlyFree && want != null) list = list.filter(x=>x.ok);
-  // 探したときは、行ける人を上に
-  if(want != null) list.sort((a, b)=>(b.ok ? 1 : 0) - (a.ok ? 1 : 0));
+  if(want != null) list = list.slice().sort((a, b)=>(b.ok ? 1 : 0) - (a.ok ? 1 : 0));   // 探したときは、行ける人を上に
   // 結果の文
   let res = "";
   if(want != null){
     const okNames = list.filter(x=>x.ok).map(castLabel);
     res = `<div class="${okNames.length ? "info" : "warn"}" style="margin-bottom:8px">🕐 ${tlLabel(want)}〜${tlLabel(wantE)}（${mins}分）に行けるキャスト：<b>${okNames.length ? okNames.map(esc).join("、") : "いません"}</b></div>`;
   }
-  if(word && want == null){
-    res += list.map(x=>`<div class="info" style="margin-bottom:6px">🔎 <b>${esc(castLabel(x))}</b> の空き：${freeSlots(x).map(([s, e])=>tlLabel(s) + "〜" + tlLabel(e)).join("、") || "なし"}</div>`).join("");
+  if(selCasts.size && want == null){
+    res += list.map(x=>`<div class="info" style="margin-bottom:6px">🔎 <b>${esc(castLabel(x))}</b> の空き：${freeSlots(x).map(([s, e])=>tlLabel(s) + "〜" + tlLabel(e)).join("、") || "なし"}${gapOf(x) ? `<small>（予約の間 ${x.c.interval_min}分あけ）</small>` : ""}</div>`).join("");
   }
   $("tlResult").innerHTML = res;
-  // 時間の目盛り・今の線
-  const ticks = []; for(let h = TL_FROM; h <= TL_TO; h++) ticks.push(`<span style="left:${p(h)}%">${h >= 24 ? "翌" + (h - 24) : h}時</span>`);
-  const nowJ = new Date(Date.now() + 9 * 3600 * 1000); let nowH = nowJ.getUTCHours() + nowJ.getUTCMinutes() / 60; if(nowH < 6) nowH += 24;
+
+  // 表：上の時刻と左の名前は固定。30分のマス（出勤時間だけ白）
+  const N = (TL_TO - TL_FROM) * 2;
+  const p = h => Math.max(0, Math.min(100, (h - TL_FROM) / (TL_TO - TL_FROM) * 100));
+  const heads = []; for(let i = 0; i < N; i++){ const h = TL_FROM + i / 2; heads.push(`<div class="hc ${i % 2 ? "half" : ""}">${i % 2 ? "" : (h >= 24 ? "翌" + (h - 24) : h) + "時"}</div>`); }
+  const nowJ = new Date(Date.now() + 9 * 3600 * 1000); let nowH = nowJ.getUTCHours() + nowJ.getUTCMinutes() / 60; if(nowH < 8) nowH += 24;
   const isToday = day === KB.bizDateOf();
-  grid.innerHTML = `<div class="tlg"><div class="hd"><div class="nm" style="cursor:default">キャスト／出勤</div><div class="times">${ticks.join("")}</div></div>`
+  grid.innerHTML = `<div class="tlg" style="--n:${N}">
+    <div class="hd"><div class="nm corner">キャスト／出勤</div><div class="cells">${heads.join("")}</div></div>`
     + (list.length ? list.map(x=>{
       const st = x.cd && x.cd.status ? `（${esc(x.cd.status)}）` : (x.cd && x.cd.settled ? "（精算済）" : "");
       const shiftTxt = x.shift ? `${tlLabel(x.shift.start)}〜${tlLabel(x.shift.end)}${x.shift.confirmed ? "" : "（未確定）"}` : "シフトなし";
-      const cid = x.c ? x.c.id : "";
+      const cid = x.c ? x.c.id : "", g = gapOf(x);
+      const cells = []; for(let i = 0; i < N; i++){
+        const h = TL_FROM + i / 2, inShift = x.shift && h >= x.shift.start - 0.01 && h < x.shift.end - 0.01;
+        cells.push(`<div class="c ${inShift ? "on" : ""} ${i % 2 ? "half" : ""}" data-t="${tlLabel(h)}" onclick="tlCell('${cid}',${h})"></div>`);
+      }
       return `<div class="r ${want != null && x.ok === false ? "dim" : ""}">
-        <div class="nm ${x.ok ? "ok" : ""}" onclick="jumpCast('${cid}')">${esc(castLabel(x))}${st}<small>${shiftTxt}${x.cd && x.cd.standby ? "・" + esc(x.cd.standby) : ""}</small></div>
-        <div class="tr" onclick="tlClick(event,'${cid}')">
-          ${x.shift ? `<div class="sh" style="left:${p(x.shift.start)}%;width:${p(x.shift.end) - p(x.shift.start)}%"></div>` : `<div class="off"></div>`}
+        <div class="nm ${x.ok ? "ok" : ""}" onclick="jumpCast('${cid}')">${esc(castLabel(x))}${st}<small>${shiftTxt}${x.cd && x.cd.standby ? "・" + esc(x.cd.standby) : ""}${g ? "・間" + x.c.interval_min + "分" : ""}</small></div>
+        <div class="cells">${cells.join("")}
+          ${g ? x.bks.map(b=>`<div class="gap" style="left:${p(b.s - g)}%;width:${p(b.s) - p(b.s - g)}%"></div><div class="gap" style="left:${p(b.e)}%;width:${p(b.e + g) - p(b.e)}%"></div>`).join("") : ""}
           ${x.bks.map(b=>`<div class="bk ${b.r.status === "working" ? "working" : b.r.status === "done" ? "done" : ""}" style="left:${p(b.s)}%;width:${Math.max(1.5, p(b.e) - p(b.s))}%"
               onclick="event.stopPropagation();openForm(${b.id})" title="${esc(hm(b.r.start_at) + "〜" + hm(b.r.end_at) + " " + (b.r.area || "") + " " + (STATUS[b.r.status] || ""))}">${esc(hm(b.r.start_at))}〜${esc(hm(b.r.end_at))}<br>${esc(b.r.area || "")} ${esc(STATUS[b.r.status] || "")}</div>`).join("")}
           ${want != null && x.shift ? `<div class="want ${x.ok ? "" : "ng"}" style="left:${p(want)}%;width:${p(wantE) - p(want)}%"></div>` : ""}
@@ -1378,12 +1425,9 @@ function renderTL(){
     }).join("") : `<div class="gate">この日のシフト・予約がありません（または絞り込みに合う人がいません）</div>`)
     + `</div>`;
 }
-// 空いているところを押す → そのキャスト・その時間（10分きざみ）で予約の入力
-function tlClick(ev, castId){
+// マスを押す → そのキャスト・そのマスの時刻で予約の入力
+function tlCell(castId, h){
   if(!castId || !KB.CAN_EDIT) return;
-  const rect = ev.currentTarget.getBoundingClientRect();
-  let h = TL_FROM + (ev.clientX - rect.left) / rect.width * (TL_TO - TL_FROM);
-  h = Math.round(h * 6) / 6;
   const hh = Math.floor(h) % 24, mm = Math.round((h - Math.floor(h)) * 60);
   newBookingFor(castId, String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0"));
 }
@@ -1393,7 +1437,7 @@ function newBookingFor(castId, time){
   if(time) $("f_start").value = time;
   recalc();
 }
-// キャストの名前を押す → 「探す」に時刻が入っていれば、その時刻で予約の入力（ボードを作ったら、キャストの枠へジャンプ）
+// キャストの名前を押す（ボードの「キャストの枠」を開く。下で上書き）
 function jumpCast(castId){
   if(!castId || !KB.CAN_EDIT) return;
   const want = $("s_time").value;
@@ -1410,7 +1454,7 @@ setInterval(()=>{ if($("viewTL").style.display !== "none" && day === KB.bizDateO
 const STANDBY = ["池袋", "鶯谷", "五反田", "錦糸町", "キャスト宅", "出張・他エリア"];
 const DAY_STATUS = ["", "予約スタート", "出勤前連絡", "お茶", "欠勤"];
 const BOARD_ROWS = [["wait", "待機中"], ["work", "仕事中"], ["before", "予約スタ・出勤前連絡"], ["gone", "今いない"]];
-function nowHour(){ const j = new Date(Date.now() + 9 * 3600 * 1000); let h = j.getUTCHours() + j.getUTCMinutes() / 60; if(h < 6) h += 24; return h; }
+function nowHour(){ const j = new Date(Date.now() + 9 * 3600 * 1000); let h = j.getUTCHours() + j.getUTCMinutes() / 60; if(h < 8) h += 24; return h; }
 function hShort(v){ const h = Math.floor(v) % 24, m = Math.round((v - Math.floor(v)) * 60); return h + (m ? ":" + String(m).padStart(2, "0") : ""); }
 function boardState(x){
   const isToday = day === KB.bizDateOf(), now = nowHour(), cd = x.cd || {};
