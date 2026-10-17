@@ -92,6 +92,11 @@
   .foot .tot{flex:1;font-size:13px;color:var(--sub);font-weight:800;}
   .foot .tot b{font-size:22px;color:#e5638c;margin-left:6px;}
   .foot .btn-primary{padding:12px 26px;font-size:15px;}
+  /* ⑥ 最終確認（読み上げ用に大きく） */
+  .final{background:#FFF7FA;border:2px solid #FFC2D1;border-radius:14px;padding:12px 14px;line-height:1.7;}
+  .final .l1{font-size:17px;font-weight:800;}
+  .final .l2{font-size:19px;font-weight:800;color:#e5638c;}
+  .final .l3{font-size:16px;font-weight:800;} .final .l3 b{font-size:24px;color:#e5638c;}
 </style>
 </head>
 <body>
@@ -133,32 +138,58 @@
     <h2 id="formTitle">予約を追加</h2>
     <div id="receptionNotes"></div>
 
-    <!-- ① 指名・時間・場所 -->
+    <!-- ① 電話番号（最初に台帳の履歴を見る） -->
     <div class="step">
-      <h3><span class="n">1</span>指名・時間・場所</h3>
+      <h3><span class="n">1</span>電話番号（台帳で履歴を見る）</h3>
+      <div class="row1"><div class="f">
+        <div style="display:flex;gap:6px"><input id="f_phone" type="tel" inputmode="tel" placeholder="09012345678" onchange="lookupCustomer()">
+          <button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="lookupCustomer()">🔍 調べる</button></div></div></div>
+      <div id="custInfo"></div>
+      <div class="f" style="margin-top:8px"><label>種別</label><div class="chips" id="f_visit"></div></div>
+    </div>
+
+    <!-- ② 指名キャスト -->
+    <div class="step">
+      <h3><span class="n">2</span>指名キャスト</h3>
       <div class="row2">
         <div class="f"><label>売上店舗</label><select id="f_store" onchange="onStore()"></select></div>
-        <div class="f"><label>状態</label><select id="f_status"></select></div>
+        <div class="f"><label>フリー区分</label>
+          <select id="f_free" onchange="recalc()">
+            <option value="">なし（指名あり）</option><option value="free">フリー</option>
+            <option value="special_free">特別フリー</option><option value="event_free">イベフリー</option>
+          </select></div>
       </div>
-      <div class="row1">
-        <div class="f"><label>指名キャスト（フリーのときは「キャストを選ぶ」で行く人を）</label></div>
-        <!-- ダミーのお店（極門・エイティーン）だけ -->
-        <div id="dummyWrap" style="display:none;background:#F6F2FE;border-radius:12px;padding:8px 10px;margin-bottom:8px">
-          <div class="f"><label>🎭 ダミー名（お客さんに伝える名前）</label>
-            <div style="display:flex;gap:6px"><select id="f_dummy" style="flex:1" onchange="recalc();renderDummyMatch()"></select>
-              <button type="button" class="btn btn-ghost btn-sm" onclick="toggleDummyEdit()">⚙️ 一覧</button></div></div>
-          <div id="dummyEdit" style="display:none;margin-top:6px"></div>
-          <div id="dummyMatch"></div>
-          <div style="font-size:12px;color:var(--sub);margin-top:4px">↓ 下は「実際に行くキャスト」（バックは実際に行くキャストで計算）</div>
-        </div>
-        <select id="f_cast" onchange="onCast()"></select>
-        <div id="castInfo"></div>
-        <div id="castChecks"></div>
+      <!-- ダミーのお店（極門・エイティーン）だけ -->
+      <div id="dummyWrap" style="display:none;background:#F6F2FE;border-radius:12px;padding:8px 10px;margin-bottom:8px">
+        <div class="f"><label>🎭 ダミー名（お客さんに伝える名前）</label>
+          <div style="display:flex;gap:6px"><select id="f_dummy" style="flex:1" onchange="recalc();renderDummyMatch()"></select>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="toggleDummyEdit()">⚙️ 一覧</button></div></div>
+        <div id="dummyEdit" style="display:none;margin-top:6px"></div>
+        <div id="dummyMatch"></div>
+        <div style="font-size:12px;color:var(--sub);margin-top:4px">↓ 下は「実際に行くキャスト」（バックは実際に行くキャストで計算）</div>
       </div>
+      <div class="f"><label>キャスト（フリーのときは行く人を選ぶ）</label><select id="f_cast" onchange="onCast()"></select></div>
+      <div id="castChecks"></div>
+      <div id="castInfo"></div>
+    </div>
+
+    <!-- ③ 日時・エリア・コース -->
+    <div class="step">
+      <h3><span class="n">3</span>日時・エリア・コース</h3>
       <div class="row2">
         <div class="f"><label>開始時刻</label><input type="time" id="f_start" step="300" oninput="recalc()"></div>
+        <div class="f"><label>コース</label><select id="f_course" onchange="recalc()"></select></div>
+      </div>
+      <div class="row2">
+        <div class="f"><label>延長（30分の回数）／デート（30分の回数）</label>
+          <div style="display:flex;gap:6px"><input type="number" id="f_ext" min="0" value="0" oninput="recalc()"><input type="number" id="f_date" min="0" value="0" oninput="recalc()"></div></div>
         <div class="f"><label>終了時刻（自動）</label><div class="endview" id="endView">--:--</div></div>
       </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px;font-size:14px;font-weight:800">
+        <label id="nhWrap"><input type="checkbox" id="f_nh" onchange="recalc()"> キューティ：NH料金で取った</label>
+        <label id="admWrap"><input type="checkbox" id="f_adm" onchange="recalc()"> 入会金あり（極門の新規）</label>
+      </div>
+      <div id="courseInfo"></div>
       <div id="castTimeline"></div>
       <div class="row2" style="margin-top:10px">
         <div class="f"><label>エリア</label>
@@ -173,43 +204,17 @@
       </div>
     </div>
 
-    <!-- ② お客さんの確認 -->
+    <!-- ④ 希望プレイ・オプション・総額 -->
     <div class="step">
-      <h3><span class="n">2</span>お客さんの確認（電話番号で台帳を見る）</h3>
-      <div class="row1"><div class="f"><label>電話番号</label>
-        <div style="display:flex;gap:6px"><input id="f_phone" type="tel" inputmode="tel" placeholder="09012345678" onchange="lookupCustomer()">
-          <button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="lookupCustomer()">🔍 調べる</button></div></div></div>
-      <div id="custInfo"></div>
-      <div class="f" style="margin-top:8px"><label>種別</label><div class="chips" id="f_visit"></div></div>
-    </div>
-
-    <!-- ③ 内容 -->
-    <div class="step">
-      <h3><span class="n">3</span>内容</h3>
-      <div class="row2">
-        <div class="f"><label>コース</label><select id="f_course" onchange="recalc()"></select></div>
-        <div class="f"><label>フリー区分</label>
-          <select id="f_free" onchange="recalc()">
-            <option value="">なし（指名あり）</option><option value="free">フリー</option>
-            <option value="special_free">特別フリー</option><option value="event_free">イベフリー</option>
-          </select></div>
-      </div>
-      <div class="row2">
-        <div class="f"><label>延長（30分の回数）</label><input type="number" id="f_ext" min="0" value="0" oninput="recalc()"></div>
-        <div class="f"><label>デート（30分の回数）</label><input type="number" id="f_date" min="0" value="0" oninput="recalc()"></div>
-      </div>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;font-size:14px;font-weight:800">
-        <label id="nhWrap"><input type="checkbox" id="f_nh" onchange="recalc()"> キューティ：NH料金で取った</label>
-        <label id="admWrap"><input type="checkbox" id="f_adm" onchange="recalc()"> 入会金あり（極門の新規）</label>
-      </div>
-      <div id="courseInfo"></div>
-      <div style="background:#FFF4E5;border:2px solid #FFB547;border-radius:12px;padding:8px 12px;margin:8px 0">
+      <h3><span class="n">4</span>希望プレイ・オプション・総額のご案内</h3>
+      <div style="background:#FFF4E5;border:2px solid #FFB547;border-radius:12px;padding:8px 12px;margin-bottom:8px">
         <div style="font-weight:800;font-size:13.5px;color:#a35a00;margin-bottom:4px">🔸 AF・逆AF のご希望（必ず聞く）</div>
         <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:14.5px;font-weight:700">
           <span>AF：<label><input type="radio" name="f_afw" value="yes" onchange="onAfWish()"> 希望あり</label> <label><input type="radio" name="f_afw" value="no" onchange="onAfWish()"> なし</label></span>
           <span>逆AF：<label><input type="radio" name="f_rafw" value="yes" onchange="onAfWish()"> 希望あり</label> <label><input type="radio" name="f_rafw" value="no" onchange="onAfWish()"> なし</label></span>
         </div>
       </div>
+      <div class="row1"><div class="f"><label>希望プレイ</label><input id="f_play" maxlength="200" placeholder="例：潮吹き・言葉責め など" oninput="recalc()"></div></div>
       <details id="optDetails" style="margin-bottom:10px">
         <summary style="cursor:pointer;font-weight:800;font-size:14px;padding:4px 0">有料オプション<span id="optCount"></span></summary>
         <div id="f_opts"></div>
@@ -218,22 +223,29 @@
           <span></span><input type="number" id="f_xop_price" placeholder="料金" oninput="recalc()"><input type="number" id="f_xop_back" placeholder="バック" oninput="recalc()">
         </div>
       </details>
-      <div class="row1"><div class="f"><label>希望プレイ</label><input id="f_play" maxlength="200" placeholder="例：潮吹き・言葉責め など" oninput="recalc()"></div></div>
-      <div class="row1"><div class="f"><label>媒体（いくつでも）</label><div class="chips" id="f_media"></div></div></div>
       <div class="row1"><div class="f"><label>支払い方法</label><div class="chips" id="f_payChips"></div>
         <select id="f_pay" style="display:none" onchange="recalc()"><option value="cash">現金</option><option value="card">カード（×1.15）</option><option value="card_paid">カード精算済</option></select></div></div>
-      <div class="row2">
-        <div class="f"><label>お客さんの名前</label><input id="f_name" maxlength="40" oninput="recalc()"></div>
-        <div class="f"><label>割引（円）・割引の名前</label>
-          <div style="display:flex;gap:6px"><input type="number" id="f_discount" min="0" value="0" oninput="recalc()" style="max-width:120px"><input id="f_discnote" placeholder="例：口コミ割" maxlength="60"></div></div>
-      </div>
+      <div class="row1"><div class="f"><label>割引（円）・割引の名前</label>
+        <div style="display:flex;gap:6px"><input type="number" id="f_discount" min="0" value="0" oninput="recalc()" style="max-width:140px"><input id="f_discnote" placeholder="例：口コミ割" maxlength="60"></div></div></div>
+      <div class="calc" id="calc"></div>
     </div>
 
-    <!-- ④ 確認して登録 -->
+    <!-- ⑤ 媒体・お客さんの名前 -->
     <div class="step">
-      <h3><span class="n">4</span>確認して登録</h3>
-      <div class="calc" id="calc"></div>
-      <div class="f" style="margin-top:12px"><label>📨 キャストへの予約連絡（コピーして送る）</label></div>
+      <h3><span class="n">5</span>媒体・お客さんの名前</h3>
+      <div class="row1"><div class="f"><label>媒体（いくつでも）</label><div class="chips" id="f_media"></div></div></div>
+      <div class="row1"><div class="f"><label>お客さんの名前</label><input id="f_name" maxlength="40" oninput="recalc()"></div></div>
+    </div>
+
+    <!-- ⑥ 最終確認 -->
+    <div class="step" style="border-color:#e5638c">
+      <h3><span class="n">6</span>最終確認（お客さんに読み上げ）</h3>
+      <div id="finalSummary" class="final"></div>
+      <div class="row2" style="margin-top:10px">
+        <div class="f"><label>状態</label><select id="f_status"></select></div>
+        <div></div>
+      </div>
+      <div class="f" style="margin-top:4px"><label>📨 キャストへの予約連絡（コピーして送る）</label></div>
       <textarea class="msg" id="msg" readonly></textarea>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px">
         <button class="btn btn-ghost btn-sm" onclick="copyMsg()">📋 文面をコピー</button>
@@ -1135,6 +1147,41 @@ function drawTimeline(){
     </div>
     <div class="leg">■ 出勤時間　<span style="color:#8fb0ff">■</span> 入っている予約　<span style="color:#ffbe5c">■</span> この予約${clash ? '　<b style="color:#ff8a8a">重なっています</b>' : ""}</div></div>`;
 }
+
+/* ---------- キャストの情報：受付ではランクは出さない。特記事項・NG・条件はたたんでおく ----------
+   受付のときすぐ見たいことは「必ず案内すること」に入れる */
+const __onCast = onCast;
+onCast = function(){
+  __onCast();
+  const c = M.casts.find(x=>x.id === $("f_cast").value);
+  if(!c){ $("castInfo").innerHTML = ""; return; }
+  hearings = [];
+  const rules = rulesOn(c.id).map(r=>"・" + esc(r.note) + hearLink(r.hearing_text, r.by_name, r.created_at)).join("<br>");
+  const parts = [];
+  if(c.special_notes) parts.push(`<div class="info">📝 特記事項：${esc(c.special_notes)}</div>`);
+  if(c.ng_notes) parts.push(`<div class="warn">🚫 NG：${esc(c.ng_notes)}</div>`);
+  if(rules) parts.push(`<div class="info">🧮 このキャストの条件：<br>${rules}</div>`);
+  $("castInfo").innerHTML = parts.length
+    ? `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:13px;font-weight:800;color:var(--sub)">📂 このキャストの特記事項・NG・条件を見る</summary>${parts.join("")}</details>`
+    : "";
+};
+
+/* ---------- ⑥ 最終確認（お客さんに読み上げ） ---------- */
+const __recalc2 = recalc;
+recalc = function(){
+  __recalc2();
+  const el = $("finalSummary"); if(!el || !last) return;
+  const d = new Date(day + "T12:00:00Z");
+  const c = M.casts.find(x=>x.id === $("f_cast").value);
+  const cname = c ? (c.official_name || c.temp_name) : "（キャスト未定）";
+  const dummy = isDummyStore(last.store) && $("f_dummy").value ? $("f_dummy").value : "";
+  const place = [$("f_area").value, $("f_address").value].filter(Boolean).join(" ") || "（場所未定）";
+  const course = last.course ? last.course + (/^\d+$/.test(last.course) ? "分" : "") + "コース" + (last.ext ? "＋延長" + last.ext * 30 + "分" : "") : "（コース未定）";
+  const pay = { cash: "現金", card: "カード", card_paid: "カード済み" }[last.pay] || "";
+  el.innerHTML = `<div class="l1">${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${$("f_start").value || "--:--"}〜${$("endView").textContent}　${esc(place)}</div>
+    <div class="l2">${dummy ? `🎭 ${esc(dummy)}（実際：${esc(cname)}）` : esc(cname)}　${esc(course)}</div>
+    <div class="l3">総額 <b>${yen(last.total)}</b>（${pay}）</div>`;
+};
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
