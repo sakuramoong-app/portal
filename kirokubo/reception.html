@@ -29,6 +29,8 @@
   .st.done{background:var(--mint-soft);color:#1a7a5e;}
   .st.checking,.st.pre_call,.st.hour_call{background:var(--lemon-soft);color:#9a7000;}
   .st.wait_hotel,.st.wait_guest,.st.wait_cast{background:var(--lav-soft);color:#6c5896;}
+  .st.working{background:#FFE3EC;color:#c9556a;}
+  .stsel{font-family:inherit;font-size:11.5px;font-weight:800;border-radius:99px;padding:3px 6px;border:1.5px solid var(--line);background:#fff;}
   .st.cancel,.st.tobi{background:var(--gray-soft);color:#999;}
   .money{text-align:right;white-space:nowrap;font-weight:800;}
   .form-cols{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;}
@@ -78,15 +80,11 @@
     <div id="receptionNotes"></div>
     <div class="form-cols">
       <div>
+        <!-- ===== 受付中に聞くこと・選ぶこと ===== -->
         <div class="grid3">
           <div class="f"><label>店舗</label><select id="f_store" onchange="onStore()"></select></div>
           <div class="f"><label>開始時間</label><input type="time" id="f_start" step="300" oninput="recalc()"></div>
-          <div class="f"><label>状態</label>
-            <select id="f_status">
-              <option value="checking">確認中</option><option value="pre_call">前日確電</option><option value="hour_call">1H前確電</option>
-              <option value="wait_hotel">ホテル連絡待ち</option><option value="wait_guest">客入室待ち</option><option value="wait_cast">キャスト入室待ち</option>
-              <option value="done">終了</option><option value="cancel">キャンセル</option><option value="tobi">トビ</option>
-            </select></div>
+          <div class="f"><label>状態</label><select id="f_status"></select></div>
         </div>
 
         <div class="sec">💁 キャスト</div>
@@ -106,14 +104,9 @@
         <div class="sec">👤 お客さん</div>
         <div class="grid2">
           <div class="f"><label>電話番号</label><input id="f_phone" inputmode="tel" placeholder="09012345678" onchange="lookupCustomer()"></div>
-          <div class="f"><label>お名前</label><input id="f_name" maxlength="40"></div>
+          <div class="f"><label>お名前</label><input id="f_name" maxlength="40" oninput="recalc()"></div>
         </div>
         <div id="custInfo"></div>
-        <div class="grid2" style="margin-top:8px">
-          <div class="f"><label>NG客</label>
-            <select id="f_ng"><option value="0">NGではない</option><option value="1">⚠️ NG客</option></select></div>
-          <div class="f"><label>NGの理由・お客さんメモ</label><input id="f_custnote" maxlength="200"></div>
-        </div>
         <div class="f" style="margin-top:8px"><label>新規・リピ</label>
           <div class="chips" id="f_visit"></div></div>
 
@@ -152,7 +145,7 @@
           </div>
         </details>
 
-        <div class="sec">📍 場所・媒体・お支払い</div>
+        <div class="sec">📍 場所・お支払い</div>
         <div class="grid2">
           <div class="f"><label>エリア</label>
             <select id="f_areaSel" onchange="onAreaSel()"></select>
@@ -161,22 +154,38 @@
           <div class="f" style="grid-column:1/-1"><div id="areaInfo"></div></div>
           <div class="f"><label>交通費（お客さんから）</label><input type="number" id="f_transport" min="0" value="0" oninput="recalc()">
             <button type="button" class="btn btn-ghost btn-sm" style="margin-top:4px" onclick="saveAreaFee()">💾 この場所の提案額として記録</button></div>
-          <div class="f"><label>割引（円）・割引の名前</label>
-            <div style="display:flex;gap:6px"><input type="number" id="f_discount" min="0" value="0" oninput="recalc()"><input id="f_discnote" placeholder="例：口コミ割" maxlength="60"></div></div>
           <div class="f"><label>お支払い</label>
             <select id="f_pay" onchange="recalc()"><option value="cash">現金</option><option value="card">カード（×1.15）</option><option value="card_paid">カード精算済</option></select></div>
-          <div class="f"><label>確認電話</label><input id="f_confirm" maxlength="60" placeholder="例：前日OK・1H前OK"></div>
+          <div class="f"><label>割引（円）・割引の名前</label>
+            <div style="display:flex;gap:6px"><input type="number" id="f_discount" min="0" value="0" oninput="recalc()"><input id="f_discnote" placeholder="例：口コミ割" maxlength="60"></div></div>
         </div>
-        <div class="f" style="margin-top:8px"><label>媒体（いくつでも）</label><div class="chips" id="f_media"></div></div>
-        <div class="f" style="margin-top:8px"><label>備考</label><textarea id="f_note"></textarea></div>
       </div>
 
       <div class="calc" id="calc"></div>
     </div>
 
+    <!-- ===== キャストへの予約連絡（すぐ下に） ===== -->
     <div class="sec">📨 キャストへの予約連絡（コピーして送る）</div>
     <textarea class="msg" id="msg" readonly></textarea>
-    <div style="margin-top:6px"><button class="btn btn-ghost btn-sm" onclick="copyMsg()">📋 文面をコピー</button></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px">
+      <button class="btn btn-ghost btn-sm" onclick="copyMsg()">📋 文面をコピー</button>
+      <label style="font-size:13.5px;font-weight:800;background:#E6F6EE;border-radius:99px;padding:6px 12px;cursor:pointer">
+        <input type="checkbox" id="f_notified"> ✅ キャストに伝えた</label>
+      <span class="hist" id="notifiedInfo" style="margin:0"></span>
+    </div>
+
+    <!-- ===== あとで書くこと（仕事が終わってからでOK） ===== -->
+    <details id="laterBox" style="margin-top:14px;background:#FAF7F8;border-radius:12px;padding:8px 12px">
+      <summary style="cursor:pointer;font-weight:800;font-size:13.5px">📝 あとで書くこと（NG客・お客さんメモ・媒体・備考など）</summary>
+      <div class="grid2" style="margin-top:8px">
+        <div class="f"><label>NG客</label>
+          <select id="f_ng"><option value="0">NGではない</option><option value="1">⚠️ NG客</option></select></div>
+        <div class="f"><label>NGの理由・お客さんメモ</label><input id="f_custnote" maxlength="200"></div>
+        <div class="f"><label>確認電話のメモ</label><input id="f_confirm" maxlength="60" placeholder="例：前日OK・1H前OK"></div>
+      </div>
+      <div class="f" style="margin-top:8px"><label>媒体（いくつでも）</label><div class="chips" id="f_media"></div></div>
+      <div class="f" style="margin-top:8px"><label>備考</label><textarea id="f_note"></textarea></div>
+    </details>
 
     <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
       <button class="btn btn-danger edit-only" id="delBtn" onclick="removeRes()">🗑 削除</button>
@@ -198,7 +207,7 @@
 const { sb, q, esc, yen, toast } = KB;
 const $ = id => document.getElementById(id);
 const DOW = ["日","月","火","水","木","金","土"];
-const STATUS = { checking:"確認中", pre_call:"前日確電", hour_call:"1H前確電", wait_hotel:"ホテル連絡待ち", wait_guest:"客入室待ち", wait_cast:"キャスト入室待ち", done:"終了", cancel:"キャンセル", tobi:"トビ" };
+const STATUS = { checking:"確認中", pre_call:"前日確認電話", hour_call:"1H前確認電話", wait_hotel:"ホテル連絡待ち", wait_guest:"客ホテル入室待ち", wait_cast:"キャストホテル入室待ち", working:"仕事中", done:"終了", cancel:"キャンセル", tobi:"トビ" };   // 並びが流れの順
 const VISIT = [["new","新規"],["repeat","店リピ"],["honshi","本指名"]];
 const FREE_SUFFIX = { "":"", free:"フリー", special_free:"特別フリー", event_free:"イベフリー" };
 
@@ -270,16 +279,32 @@ function renderList(){
     <div class="s ${showMoney?"":"hide"}">キャスト報酬<b>${yen(back)}</b></div>
     <div class="s ${showMoney?"":"hide"}">店落ち（暫定）<b>${yen(total - back)}</b></div>
     <button class="btn btn-ghost btn-sm" onclick="showMoney=!showMoney;renderList()">${showMoney?"🙈 金額をかくす":"👁 金額を見る"}</button>`;
-  $("list").innerHTML = rows.length ? `<tr><th>時間</th><th>キャスト</th><th>店舗</th><th>コース</th><th>お客さん</th><th>状態</th><th>総額</th><th>報酬</th><th>対応</th></tr>` +
+  $("list").innerHTML = rows.length ? `<tr><th>時間</th><th>キャスト</th><th>店舗</th><th>コース</th><th>お客さん</th><th>状態（ここで変えられる）</th><th>キャストに</th><th>総額</th><th>報酬</th><th>対応した内勤・日時</th></tr>` +
     rows.map(r=>{
       const c = r.kb_customers || {};
+      const when = t => { if(!t) return ""; const d = new Date(t); return (d.getMonth()+1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); };
+      // 状態は、一覧から直接変えられる（小窓を開かなくてよい）
+      const stSel = KB.CAN_EDIT
+        ? `<select class="stsel st ${r.status}" onclick="event.stopPropagation()" onchange="quickStatus(${r.id},this.value)">${Object.keys(STATUS).map(k=>`<option value="${k}" ${k===r.status?"selected":""}>${STATUS[k]}</option>`).join("")}</select>`
+        : `<span class="st ${r.status}">${STATUS[r.status]||r.status}</span>`;
       return `<tr class="r" onclick="openForm(${r.id})">
         <td>${hm(r.start_at)}〜${hm(r.end_at)}</td><td>${r.dummy_name ? `<small style="color:#6c5896">🎭${esc(r.dummy_name)} →</small> ` : ""}<b>${esc(castName(r.cast_id))}</b></td><td>${esc(storeLabel(r.store_key))}</td>
-        <td>${esc(r.course)}${r.free_kind?"・"+FREE_SUFFIX[r.free_kind]:""}${r.extension_count?" 延長"+r.extension_count:""}</td>
+        <td>${esc(r.course)}${r.free_kind?"・"+FREE_SUFFIX[r.free_kind]:""}${r.extension_count?" 延長"+r.extension_count:""}${r.payment!=="cash"?" 💳":""}</td>
         <td>${c.ng?"⚠️":""}${esc(c.name||"")}<small style="color:var(--sub)"> ${VISIT.find(v=>v[0]===r.visit_kind)?.[1]||""}</small></td>
-        <td><span class="st ${r.status}">${STATUS[r.status]||r.status}</span></td>
-        <td class="money">${yen(r.total)}</td><td class="money">${yen(backOf(r))}</td><td>${esc(r.created_by||"")}</td></tr>`;
+        <td>${stSel}</td>
+        <td>${r.cast_notified_at ? `<span style="color:#2f9e6e;font-weight:800">✅ 伝えた</span><br><small style="color:var(--sub)">${esc(r.cast_notified_by||"")} ${when(r.cast_notified_at)}</small>` : `<span style="color:#d9534f;font-weight:800">⚠️ まだ</span>`}</td>
+        <td class="money">${yen(r.total)}</td><td class="money">${yen(backOf(r))}</td>
+        <td><small>受付：${esc(r.created_by||"")} ${when(r.created_at)}${r.updated_by && r.updated_at !== r.created_at ? `<br>最後：${esc(r.updated_by)} ${when(r.updated_at)}` : ""}</small></td></tr>`;
     }).join("") : `<tr><td style="text-align:center;color:var(--sub);font-weight:800;padding:24px">この日の受付はまだありません</td></tr>`;
+}
+// 一覧から状態だけ変える
+async function quickStatus(id, st){
+  if(!KB.CAN_EDIT) return;
+  try{
+    q(await sb.from("kb_reservations").update({ status: st, updated_by: KB.operatorName() }).eq("id", id));
+    const r = rows.find(x=>x.id === id); if(r){ r.status = st; r.updated_by = KB.operatorName(); r.updated_at = new Date().toISOString(); }
+    toast("状態を「" + STATUS[st] + "」にしました"); renderList();
+  }catch(e){ toast("変えられませんでした：" + (e.message || e)); loadDay(); }
 }
 async function saveNotice(){
   if(!KB.CAN_EDIT) return;
@@ -305,7 +330,13 @@ function openForm(id){
   }).join("");
   $("f_cast").value = r.cast_id || "";
   $("f_start").value = r.start_at ? hm(r.start_at) : "";
+  $("f_status").innerHTML = Object.keys(STATUS).map(k=>`<option value="${k}">${STATUS[k]}</option>`).join("");
   $("f_status").value = r.status || "checking";
+  // キャストに伝えたか
+  $("f_notified").checked = !!r.cast_notified_at;
+  $("notifiedInfo").textContent = r.cast_notified_at ? (r.cast_notified_by || "") + " " + new Date(r.cast_notified_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+  // あとで書くこと：NG客・メモ・備考が入っていれば開いておく
+  $("laterBox").open = !!((r.kb_customers && r.kb_customers.ng) || r.note || r.confirm_call);
   $("f_free").value = r.free_kind || "";
   $("f_ext").value = r.extension_count || 0; $("f_date").value = r.date_count || 0;
   $("f_nh").checked = !!r.nh_rate; $("f_adm").checked = (r.admission || 0) > 0;
@@ -845,8 +876,10 @@ ${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st||"--:--"}〜$
 【ホテル・自宅】${$("f_area").value} ${$("f_address").value}${hotelMapUrl() ? "\n【地図】" + hotelMapUrl() : ""}
 【バック有OP】${backOps}
 【バック無OP】${noBackOps}
-【料金総額】${c.total.toLocaleString("ja-JP")}円
-※お会いしたら最初に料金をいただいてください。盗難・貰い忘れに注意！`;
+${c.pay === "cash"
+  ? `【料金総額】${c.total.toLocaleString("ja-JP")}円
+※お会いしたら最初に料金をいただいてください。盗難・貰い忘れに注意！`
+  : `【お支払い】カード決済の為、お金はいただかずスタートしてください`}`;
 }
 function copyMsg(){ navigator.clipboard.writeText($("msg").value).then(()=>toast("📋 文面をコピーしました")); }
 
@@ -893,6 +926,8 @@ async function saveRes(){
       dummy_name: isDummyStore(c.store) ? $("f_dummy").value : "",
       checks: checks || (editing ? (editing.checks || []) : []),
       af_wish: radioVal("f_afw"), rev_af_wish: radioVal("f_rafw"),
+      cast_notified_at: $("f_notified").checked ? ((editing && editing.cast_notified_at) || new Date().toISOString()) : null,
+      cast_notified_by: $("f_notified").checked ? ((editing && editing.cast_notified_at && editing.cast_notified_by) || by) : "",
       visit_kind: visit, free_kind: c.free, nh_rate: $("f_nh").checked,
       start_at: s ? s.toISOString() : null, end_at: s ? new Date(s.getTime() + mins*60000).toISOString() : null,
       area: $("f_area").value.trim(), address: $("f_address").value.trim(), course: c.course,
