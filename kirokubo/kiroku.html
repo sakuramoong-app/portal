@@ -128,6 +128,24 @@
   .chipc.work{border-color:#f3a6bd;background:#FFF2F6;} .chipc.gone{color:#999;background:#FAFAFA;}
   .chipc:hover{border-color:#e5638c;}
   .castmeta{font-size:14px;line-height:1.7;}
+  /* 💴 精算（キャストの枠の中） */
+  #settleBox .card{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;}
+  #settleBox .card.done{border-color:#9ad9bd;background:#F6FCF9;}
+  #settleBox .card h2{font-size:15px;margin:0 0 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  #settleBox .card h2 .st{font-size:11px;font-weight:800;border-radius:99px;padding:3px 10px;background:var(--lemon-soft);color:#9a7000;}
+  #settleBox .card.done h2 .st{background:var(--mint-soft);color:#1a7a5e;}
+  #settleBox table.res{width:100%;border-collapse:collapse;font-size:12.5px;margin:4px 0 8px;}
+  #settleBox table.res th{font-size:11px;color:var(--sub);text-align:left;font-weight:800;padding:3px 4px;border-bottom:1px solid var(--line);}
+  #settleBox table.res td{padding:4px;border-bottom:1px dashed var(--line);}
+  #settleBox table.res tr.off td{color:var(--sub);text-decoration:line-through;}
+  .scalc{display:grid;grid-template-columns:1fr auto;gap:2px 12px;font-size:13.5px;}
+  .scalc .k{color:var(--sub);} .scalc .v{text-align:right;font-weight:800;} .scalc .big{font-size:17px;color:#e5638c;}
+  #settleBox .items .it{display:flex;gap:6px;align-items:center;margin-bottom:4px;}
+  #settleBox .items .it input{font-family:inherit;font-size:12.5px;padding:5px 8px;border:1.5px solid var(--line);border-radius:8px;}
+  #settleBox .items .it input.lbl{flex:1;} #settleBox .items .it input.amt{width:100px;text-align:right;}
+  #settleBox .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+  #settleBox .hint2{font-size:11.5px;color:var(--sub);}
+  #settleBox .note2{font-size:12px;background:var(--lemon-soft);border-radius:10px;padding:6px 10px;margin:6px 0;}
   /* ⑥ 最終確認（読み上げ用に大きく） */
   .final{background:#FFF7FA;border:2px solid #FFC2D1;border-radius:14px;padding:12px 14px;line-height:1.7;}
   .final .l1{font-size:17px;font-weight:800;}
@@ -159,7 +177,7 @@
     <div class="tabs" id="tabs">
       <button data-v="tl" onclick="showView('tl')">⏱ タイムライン</button>
       <button data-v="list" onclick="showView('list')">📋 予約一覧</button>
-      <a href="settle.html">💁 キャスト別・精算</a>
+      <a href="settle.html" title="精算は、ボードの札を押した「キャストの枠」でもできます">💴 精算（一覧）</a>
       <button data-v="board" onclick="showView('board')">🗺 ボード</button>
     </div>
     <div class="sum" id="sum"></div>
@@ -1274,7 +1292,7 @@ const __loadDay = loadDay;
 loadDay = async function(){
   await __loadDay();
   try{
-    const [cd] = await Promise.all([ sb.from("kb_cast_days").select("cast_id,standby,status,settled").eq("biz_date", day), loadShifts(day) ]);
+    const [cd] = await Promise.all([ sb.from("kb_cast_days").select("*").eq("biz_date", day), loadShifts(day) ]);
     castDays = {}; (q(cd) || []).forEach(x=>{ castDays[x.cast_id] = x; });
   }catch(e){ castDays = {}; }
   renderTL();
@@ -1460,9 +1478,12 @@ function openCast(castId, name){
       <td class="money">${showMoney ? yen(r.total) : "••••"}</td></tr>`).join("")}</table>` : `<div class="hist">まだ予約はありません</div>`}
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
       ${x.c && KB.CAN_EDIT ? `<button class="btn btn-primary" onclick="closeCast();newBookingFor('${x.c.id}', $('s_time').value)">＋ この人で予約</button>` : ""}
-      <a class="btn btn-ghost" href="settle.html" style="text-decoration:none">💴 精算へ</a>
       <button class="btn btn-ghost" onclick="closeCast();showView('tl');$('s_cast').value='${esc(nm)}';renderTL()">⏱ タイムラインで見る</button>
     </div>`;
+  // 💴 精算（この日のこのキャスト）
+  $("castBody").insertAdjacentHTML("beforeend", `<div class="f" style="margin-top:16px"><label>💴 精算</label></div><div id="settleBox"></div>`);
+  if(x.c) $("settleBox").innerHTML = cardHtml(x.c.id, calcCast(x.c.id));
+  else $("settleBox").innerHTML = `<div class="hist">台帳とつながっていないキャストは精算できません</div>`;
   $("castBg").classList.add("show");
 }
 function closeCast(){ $("castBg").classList.remove("show"); castOpen = null; }
@@ -1470,9 +1491,9 @@ async function saveCastDay(){
   const x = castOpen; if(!x || !x.c) return;
   const row = { biz_date: day, cast_id: x.c.id, standby: $("cd_standby").value, status: $("cd_status").value, updated_at: new Date().toISOString(), updated_by: KB.operatorName() };
   try{
-    const r = q(await sb.from("kb_cast_days").upsert(row, { onConflict: "biz_date,cast_id" }).select("cast_id,standby,status,settled").single());
+    const r = q(await sb.from("kb_cast_days").upsert(row, { onConflict: "biz_date,cast_id" }).select("*").single());
     castDays[x.c.id] = r; x.cd = r;
-    toast("保存しました"); renderBoard(); renderTL();
+    toast("保存しました"); renderTL();
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
 // タイムラインのキャスト名を押したときも、キャストの枠を開く
@@ -1482,6 +1503,171 @@ KB.closeOnBackdrop($("castBg"), closeCast);
 // ボードもいっしょに描きなおす
 const __renderTL = renderTL;
 renderTL = function(){ __renderTL(); renderBoard(); };
+
+/* ============================================================
+   💴 精算（キャストの枠の中）… settle.html と同じ計算。精算のページはこちらに合体
+   ============================================================ */
+const PLACES = ["池袋", "鶯谷", "五反田", "錦糸町", "事務所", "そのほか"];
+function calcCast(castId){
+  const all = rows.filter(r=>r.cast_id === castId);
+  const live = all.filter(r=>r.status !== "cancel" && r.status !== "tobi");
+  const cd = castDays[castId] || {};
+  // 報酬：手で直した報酬があればそれ（OP込みの金額として扱う）
+  let reward = 0, option = 0;
+  live.forEach(r=>{
+    if(r.back_override != null) reward += r.back_override;
+    else { reward += (r.course_back || 0) + (r.extra_back || 0); option += (r.option_back || 0); }
+  });
+  // 交通費バック（台帳の条件）
+  let transportBack = 0; const why = [];
+  rulesOn(castId).filter(x=>x.kind === "transport_back").forEach(x=>{
+    live.forEach(r=>{
+      const t = r.transport || 0; if(!t) return;
+      const v = x.params && x.params.amount != null ? Math.min(Number(x.params.amount) || 0, t) : Math.round(t * (Number(x.params && x.params.rate) || 0));
+      if(v){ transportBack += v; }
+    });
+    if(transportBack) why.push("交通費バック：" + x.note);
+  });
+  // 雑費（自動・免除の曜日・手で直したとき）
+  const dow = new Date(day + "T12:00:00Z").getUTCDay();
+  const exempt = rulesOn(castId).some(x=>x.kind === "zappi_exempt" && (x.params.days || []).includes(dow));
+  const zappiAuto = exempt ? 0 : Math.min(3000, Math.floor((reward + option) / 10500) * 500);
+  const zappi = cd.zappi_override != null ? cd.zappi_override : zappiAuto;
+  const plusItems = Array.isArray(cd.plus_items) ? cd.plus_items : [];
+  const minusItems = Array.isArray(cd.minus_items) ? cd.minus_items : [];
+  const plus = plusItems.reduce((a, b)=>a + (Number(b.amount) || 0), 0);
+  const minus = minusItems.reduce((a, b)=>a + (Number(b.amount) || 0), 0);
+  const takeHome = reward + option + transportBack + plus - zappi - minus;
+  const total = live.reduce((a, r)=>a + (r.total || 0), 0);
+  // カードは予約の1時間前までに決済URLで先に払ってもらう（現金はキャストに入らない）。「カード」「カード精算済」どちらも引く
+  const cardPaid = live.filter(r=>r.payment === "card" || r.payment === "card_paid").reduce((a, r)=>a + (r.total || 0), 0);
+  const cardUnconfirmed = live.filter(r=>r.payment === "card").length;
+  const drop = total - takeHome - cardPaid;
+  const withholding = Math.floor((reward + option) / 9);
+  const provisional = total - reward - option;          // 暫定残額（総額 − 報酬）
+  const shopDrop = total - takeHome;                    // 店落ち（暫定残額 ＋ 雑費 など）
+  const realDrop = provisional - withholding;           // 実質的な店落ち（暫定残額 − 源泉）
+  const deposited = cd.deposited != null ? cd.deposited : null;
+  const diff = deposited != null ? deposited - drop : null;   // マイナス＝未精算／プラス＝お釣り
+  return { all, live, cd, reward, option, transportBack, why, exempt, zappiAuto, zappi, plusItems, minusItems, plus, minus, takeHome, total, cardPaid, cardUnconfirmed, drop, withholding, provisional, shopDrop, realDrop, deposited, diff };
+}
+
+function cardHtml(id, c){
+  const cd = c.cd, done = !!cd.settled, dis = (!KB.CAN_EDIT || done) ? "disabled" : "";
+  const res = c.all.map(r=>{
+    const off = r.status === "cancel" || r.status === "tobi";
+    return `<tr class="${off ? "off" : ""}"><td>${hm(r.start_at)}</td><td>${esc(storeLabel(r.store_key))}${r.dummy_name ? " 🎭" + esc(r.dummy_name) : ""}</td>
+      <td>${esc(r.course)}${r.extension_count ? " 延長" + r.extension_count : ""}${off ? (r.status === "cancel" ? "（キャンセル）" : "（トビ）") : ""}</td>
+      <td class="money">${yen(r.total)}${r.payment === "card_paid" ? " 💳" : ""}</td><td class="money">${off ? "－" : yen(backOf(r))}</td></tr>`;
+  }).join("");
+  const items = (list, kind)=> list.map((x, i)=>`<div class="it"><input class="lbl" value="${esc(x.label)}" ${dis} onchange="setItem('${id}','${kind}',${i},'label',this.value)">
+      <input class="amt" type="number" value="${Number(x.amount) || 0}" ${dis} onchange="setItem('${id}','${kind}',${i},'amount',this.value)">
+      ${dis ? "" : `<button class="btn btn-ghost btn-sm" onclick="delItem('${id}','${kind}',${i})">🗑</button>`}</div>`).join("");
+  return `<div class="card ${done ? "done" : ""}" id="card-${id}">
+    <h2>${esc(castName(id))}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : "未精算"}</span>
+      ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
+    <table class="res"><tr><th>時間</th><th>店舗</th><th>コース</th><th class="money">総額</th><th class="money">報酬</th></tr>${res}</table>
+    ${c.why.length ? `<div class="note2">🧮 ${c.why.map(esc).join("<br>")}</div>` : ""}
+    ${c.cardUnconfirmed ? `<div class="warn" style="margin:6px 0">⚠️ お支払いが「カード」のままの予約が ${c.cardUnconfirmed}件あります。カード決済の完了を確認して、受付で「カード精算済」にしてください。</div>` : ""}
+    <div class="scalc">
+      <span class="k">① 報酬</span><span class="v">${yen(c.reward)}</span>
+      <span class="k">OP（バック有）</span><span class="v">${yen(c.option)}</span>
+      ${c.transportBack ? `<span class="k">交通費バック（自動）</span><span class="v">＋${yen(c.transportBack)}</span>` : ""}
+      ${c.plus ? `<span class="k">② プラス（手入力）</span><span class="v">＋${yen(c.plus)}</span>` : ""}
+      <span class="k">③ 雑費${c.exempt ? "（この曜日はなし）" : ""}${cd.zappi_override != null ? "（手で直した）" : ""}</span><span class="v">−${yen(c.zappi)}</span>
+      ${c.minus ? `<span class="k">マイナス（手入力）</span><span class="v">−${yen(c.minus)}</span>` : ""}
+      <span class="k"><b>手取り</b></span><span class="v big">${yen(c.takeHome)}</span>
+      <span class="k">カード払分</span><span class="v">${yen(c.cardPaid)}</span>
+      ${c.drop >= 0
+        ? `<span class="k"><b>投函額</b>（総額 ${yen(c.total)} − 手取り − カード払分）</span><span class="v big">${yen(c.drop)}</span>`
+        : `<span class="k"><b>お店からキャストに渡す</b>（カードで現金がないため）</span><span class="v big" style="color:#2f7fd0">${yen(-c.drop)}</span>`}
+      <span class="k">投函した額（お金を確認したあと手入力）</span><span class="v">
+        <input type="number" id="dep-${id}" value="${c.deposited != null ? c.deposited : ""}" placeholder="${c.drop >= 0 ? c.drop : ""}" ${KB.CAN_EDIT ? "" : "disabled"}
+          style="width:110px;text-align:right;font-family:inherit;font-size:13px;padding:4px 6px;border:1.5px solid var(--line);border-radius:8px" onchange="setDeposit('${id}',this.value)"></span>
+      ${c.diff != null && c.diff !== 0 ? `<span class="k">${c.diff < 0 ? "<b style='color:#d9534f'>未精算（マイナス）</b>" : "<b style='color:#2f9e6e'>お釣り（プラス）</b>"}</span><span class="v" style="color:${c.diff < 0 ? "#d9534f" : "#2f9e6e"}">${c.diff < 0 ? "−" : "＋"}${yen(Math.abs(c.diff))}</span>` : ""}
+      ${c.diff === 0 ? `<span class="k">投函した額</span><span class="v" style="color:#2f9e6e">ぴったり ✅</span>` : ""}
+    </div>
+    <details style="margin-top:6px"><summary style="cursor:pointer;font-size:12.5px;font-weight:800;color:var(--sub)">🏪 店落ち・税務用</summary>
+      <div class="scalc" style="margin-top:4px">
+        <span class="k">暫定的な残額（総額 − 報酬）</span><span class="v">${yen(c.provisional)}</span>
+        <span class="k"><b>店落ち</b>（総額 − 手取り）</span><span class="v">${yen(c.shopDrop)}</span>
+        <span class="k">【税務用】源泉徴収（手取りからは引かない）</span><span class="v">${yen(c.withholding)}</span>
+        <span class="k">実質的な店落ち（暫定的な残額 − 源泉）</span><span class="v">${yen(c.realDrop)}</span>
+      </div>
+    </details>
+    ${dis ? "" : `<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:800;font-size:13px">✏️ プラス・マイナス・雑費を直す</summary>
+      <div class="hint2" style="margin-top:6px">② プラス（交通費・ボーナスなど）</div><div class="items">${items(c.plusItems, "plus")}</div>
+      <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','plus')">＋ プラスを足す</button>
+      <div class="hint2" style="margin-top:8px">マイナス（雑費以外）</div><div class="items">${items(c.minusItems, "minus")}</div>
+      <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','minus')">＋ マイナスを足す</button>
+      <div class="hint2" style="margin-top:8px">雑費（自動：${yen(c.zappiAuto)}）</div>
+      <div class="it" style="display:flex;gap:6px;align-items:center"><input type="number" id="zo-${id}" value="${cd.zappi_override != null ? cd.zappi_override : ""}" placeholder="空なら自動" style="width:120px">
+        <button class="btn btn-ghost btn-sm" onclick="setZappi('${id}')">雑費を直す</button></div>
+    </details>`}
+    <div class="acts">
+      <button class="btn btn-ghost btn-sm" onclick="copyDetail('${id}')">📋 精算明細をコピー（LINE用）</button>
+      ${KB.CAN_EDIT ? (done
+        ? `<button class="btn btn-ghost btn-sm" onclick="unsettle('${id}')">↩ 精算済をもどす</button>`
+        : `<select id="pl-${id}">${PLACES.map(p=>`<option ${cd.settle_place === p ? "selected" : ""}>${p}</option>`).join("")}</select>
+           <button class="btn btn-primary btn-sm" onclick="settle('${id}')">✅ 精算済にする</button>`) : ""}
+    </div>
+  </div>`;
+}
+
+/* ---------- 保存（kb_cast_days） ---------- */
+async function saveDay(id, patch){
+  const row = Object.assign({ biz_date: day, cast_id: id }, patch, { updated_at: new Date().toISOString(), updated_by: KB.operatorName() });
+  try{
+    const r = q(await sb.from("kb_cast_days").upsert(row, { onConflict: "biz_date,cast_id" }).select().single());
+    castDays[id] = r; refreshCastSettle(id);
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+function curItems(id, kind){ const cd = castDays[id] || {}; const l = cd[kind + "_items"]; return Array.isArray(l) ? l.map(x=>Object.assign({}, x)) : []; }
+function addItem(id, kind){ const l = curItems(id, kind); l.push({ label: kind === "plus" ? "交通費" : "", amount: 0 }); saveDay(id, { [kind + "_items"]: l }); }
+function setItem(id, kind, i, k, v){ const l = curItems(id, kind); if(!l[i]) return; l[i][k] = k === "amount" ? (Number(v) || 0) : v; saveDay(id, { [kind + "_items"]: l }); }
+function delItem(id, kind, i){ const l = curItems(id, kind); l.splice(i, 1); saveDay(id, { [kind + "_items"]: l }); }
+function setDeposit(id, v){ saveDay(id, { deposited: v === "" ? null : Number(v) || 0 }); }
+function setZappi(id){ const v = $("zo-" + id).value; saveDay(id, { zappi_override: v === "" ? null : Math.max(0, Number(v) || 0) }); }
+function settle(id){
+  const c = calcCast(id);
+  if(!confirm(castName(id) + " を精算済にしますか？\n手取り " + yen(c.takeHome) + "／投函額 " + yen(c.drop))) return;
+  const snap = { reward: c.reward, option: c.option, transportBack: c.transportBack, plus: c.plus, zappi: c.zappi, minus: c.minus,
+                 takeHome: c.takeHome, total: c.total, cardPaid: c.cardPaid, drop: c.drop, withholding: c.withholding,
+                 shopDrop: c.shopDrop, realDrop: c.realDrop, deposited: c.deposited, diff: c.diff, by: KB.operatorName(), at: new Date().toISOString() };
+  saveDay(id, { settled: true, settled_at: new Date().toISOString(), settled_by: KB.operatorName(), settle_place: $("pl-" + id).value, settle_snapshot: snap });
+}
+function unsettle(id){
+  if(!confirm(castName(id) + " の精算済をもどしますか？")) return;
+  saveDay(id, { settled: false, settled_at: null, settle_snapshot: null });
+}
+
+/* ---------- 精算明細（LINE に送る文） ---------- */
+function copyDetail(id){
+  const c = calcCast(id), d = new Date(day + "T12:00:00Z");
+  const lines = [`【精算】${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${castName(id)}さん`, ""];
+  c.all.forEach(r=>{
+    const off = r.status === "cancel" || r.status === "tobi";
+    lines.push(`・${hm(r.start_at)} ${storeLabel(r.store_key)} ${r.course}${/^\d+$/.test(r.course) ? "分" : ""}${r.extension_count ? " 延長" + r.extension_count : ""}　${off ? (r.status === "cancel" ? "キャンセル" : "トビ") : "報酬 " + yen(backOf(r))}`);
+  });
+  lines.push("", `報酬　${yen(c.reward)}`);
+  if(c.option) lines.push(`OP　${yen(c.option)}`);
+  if(c.transportBack) lines.push(`交通費バック　＋${yen(c.transportBack)}`);
+  c.plusItems.forEach(x=>{ if(Number(x.amount)) lines.push(`${x.label || "プラス"}　＋${yen(x.amount)}`); });
+  lines.push(`雑費　−${yen(c.zappi)}`);
+  c.minusItems.forEach(x=>{ if(Number(x.amount)) lines.push(`${x.label || "マイナス"}　−${yen(x.amount)}`); });
+  lines.push("", `本日のお給料　${yen(c.takeHome)}`);
+  if(c.drop >= 0) lines.push(`投函額　${yen(c.drop)}`);
+  else lines.push(`（カード決済のため、お店から ${yen(-c.drop)} お渡しします）`);
+  lines.push("", "お疲れさまでした🌸");
+  navigator.clipboard.writeText(lines.join("\n")).then(()=>toast("📋 精算明細をコピーしました"), ()=>alert(lines.join("\n")));
+}
+
+
+function refreshCastSettle(id){
+  if(castOpen && castOpen.c && castOpen.c.id === id && $("settleBox")) $("settleBox").innerHTML = cardHtml(id, calcCast(id));
+  castOpen && (castOpen.cd = castDays[id]);
+  renderTL();
+}
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
