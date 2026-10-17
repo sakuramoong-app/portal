@@ -115,7 +115,6 @@
   .tlg .c:hover{background:#FFE3EC;}
   .tlg .c:hover::after{content:attr(data-t) " から";position:absolute;top:3px;left:3px;font-size:11.5px;font-weight:800;color:#fff;background:#e5638c;border-radius:6px;padding:2px 6px;z-index:8;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.2);pointer-events:none;}
   .tlg .bk{position:absolute;top:5px;bottom:5px;z-index:2;border-radius:8px;font-size:11px;font-weight:800;padding:2px 5px;overflow:hidden;white-space:nowrap;line-height:1.3;cursor:pointer;color:#fff;background:#5b8def;}
-  .tlg .bk.working{background:#e5638c;} .tlg .bk.done{background:#9d9698;}
   .tlg .gap{position:absolute;top:0;bottom:0;z-index:1;pointer-events:none;background:repeating-linear-gradient(45deg,rgba(110,100,104,.32) 0 5px,rgba(110,100,104,.12) 5px 10px);}
   .tlg .want{position:absolute;top:2px;bottom:2px;z-index:3;border:2.5px dashed #2f9e6e;border-radius:8px;pointer-events:none;}
   .tlg .want.ng{border-color:#ef4444;}
@@ -158,6 +157,10 @@
   .st.cancel{background:#FFE0C2;color:#c25e00;}
   .st.tobi{background:#FFD0D0;color:#c62828;}
   .st.checking,.st.wait_hotel{background:#F2F2F2;color:#999;}
+  /* 予約の帯・札も、予約一覧と同じ色 */
+  .tlg .bk.st,.tl .bk.st{border:1.5px solid rgba(0,0,0,.10);border-radius:8px;}
+  .tlg .bk.st.wait_guest,.tlg .bk.st.wait_cast,.tl .bk.st.wait_guest,.tl .bk.st.wait_cast{border-color:#a99ea2;}
+  .chipc .st{display:inline-block;margin-top:3px;font-size:11px;padding:2px 8px;}
   /* 予約一覧 */
   .told{border:1.5px solid #f3b4b4;background:#FFF5F5;color:#d9534f;border-radius:10px;padding:5px 9px;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer;text-align:left;line-height:1.25;}
   .told.on{border-color:#9ad9bd;background:#F0FBF5;color:#1a7a5e;}
@@ -1283,7 +1286,7 @@ function drawTimeline(){
   if(!sh){ loadShifts(day).then(()=>drawTimeline()).catch(()=>{}); }
   const shift = sh ? (sh[c.shift_name] || sh[c.official_name]) : null;
   const others = rows.filter(r=>r.cast_id === c.id && (!editing || r.id !== editing.id) && r.status !== "cancel" && r.status !== "tobi" && r.start_at && r.end_at)
-    .map(r=>({ s: hourOf(r.start_at), e: hourOf(r.end_at), label: hm(r.start_at) + "〜" + hm(r.end_at) }));
+    .map(r=>{ const s = hourOf(r.start_at); let e = hourOf(r.end_at); if(e < s) e += 24; return { s, e, label: hm(r.start_at) + "〜" + hm(r.end_at), st: r.status }; });
   let cur = null;
   const st = $("f_start").value;
   if(st && last){
@@ -1302,10 +1305,10 @@ function drawTimeline(){
     <div class="axis">${ticks}</div>
     <div class="bar">
       ${shift ? `<div class="shift" style="left:${pct(shift.start)}%;width:${pct(shift.end) - pct(shift.start)}%"></div>` : ""}
-      ${others.map(o=>`<div class="bk other" style="left:${pct(o.s)}%;width:${Math.max(2, pct(o.e) - pct(o.s))}%" title="${esc(o.label)}">${esc(o.label)}</div>`).join("")}
+      ${others.map(o=>`<div class="bk st ${o.st}" style="left:${pct(o.s)}%;width:${Math.max(2, pct(o.e) - pct(o.s))}%" title="${esc(o.label)}">${esc(o.label)}</div>`).join("")}
       ${cur ? `<div class="bk ${clash ? "clash" : "cur"}" style="left:${pct(cur.s)}%;width:${Math.max(2, pct(cur.e) - pct(cur.s))}%">${esc(cur.label)}</div>` : ""}
     </div>
-    <div class="leg">■ 出勤時間　<span style="color:#8fb0ff">■</span> 入っている予約　<span style="color:#ffbe5c">■</span> この予約${clash ? '　<b style="color:#ff8a8a">重なっています</b>' : ""}</div></div>`;
+    <div class="leg">■ 出勤時間　入っている予約（状態の色）　<span style="color:#ffbe5c">■</span> この予約${clash ? '　<b style="color:#ff8a8a">重なっています</b>' : ""}</div></div>`;
 }
 
 /* ---------- キャストの情報：受付ではランクは出さない。特記事項・NG・条件はたたんでおく ----------
@@ -1480,7 +1483,7 @@ function renderTL(){
         <div class="nm ${x.ok ? "ok" : ""}" onclick="jumpCast('${cid}')">${esc(castLabel(x))}${st}<small>${shiftTxt}${x.cd && x.cd.standby ? "・" + esc(x.cd.standby) : ""}${g ? "・間" + x.c.interval_min + "分" : ""}</small></div>
         <div class="cells">${cells.join("")}
           ${g ? x.bks.map(b=>`<div class="gap" style="left:${p(b.s - g)}%;width:${p(b.s) - p(b.s - g)}%"></div><div class="gap" style="left:${p(b.e)}%;width:${p(b.e + g) - p(b.e)}%"></div>`).join("") : ""}
-          ${x.bks.map(b=>`<div class="bk ${b.r.status === "working" ? "working" : b.r.status === "done" ? "done" : ""}" style="left:${p(b.s)}%;width:${Math.max(1.5, p(b.e) - p(b.s))}%"
+          ${x.bks.map(b=>`<div class="bk st ${b.r.status}" style="left:${p(b.s)}%;width:${Math.max(1.5, p(b.e) - p(b.s))}%"
               onclick="event.stopPropagation();openForm(${b.id})" title="${esc(hm(b.r.start_at) + "〜" + hm(b.r.end_at) + " " + (b.r.area || "") + " " + (STATUS[b.r.status] || ""))}">${esc(hm(b.r.start_at))}〜${esc(hm(b.r.end_at))}<br>${esc(b.r.area || "")} ${esc(STATUS[b.r.status] || "")}</div>`).join("")}
           ${want != null && x.shift ? `<div class="want ${x.ok ? "" : "ng"}" style="left:${p(want)}%;width:${p(wantE) - p(want)}%"></div>` : ""}
           ${isToday ? `<div class="now" style="left:${p(nowH)}%"></div>` : ""}
@@ -1553,8 +1556,12 @@ function renderBoard(){
   const chip = (x, st)=>{
     const nm = castLabel(x);
     const sh = x.shift ? `${hShort(x.shift.start)}-${hShort(x.shift.end)}` : "";
-    const note = x.cd && x.cd.status ? x.cd.status : (x.cd && x.cd.settled ? "精算済" : (st === "work" ? "仕事中" : ""));
-    return `<button class="chipc ${st}" onclick="openCast('${x.c ? x.c.id : ""}','${esc(x.name)}')">【${esc(nm)}】${esc(sh)}${note ? `<small>（${esc(note)}）</small>` : ""}</button>`;
+    const note = x.cd && x.cd.status ? x.cd.status : (x.cd && x.cd.settled ? "精算済" : "");
+    // いま関係する予約（仕事中 → これからの予約 → 最後の予約）の状態を、予約一覧と同じ色で出す
+    const now = nowHour(), live = x.bks.filter(b=>!["done", "cancel", "tobi"].includes(b.r.status));
+    const rel = x.bks.find(b=>b.r.status === "working") || live.filter(b=>b.e > now).sort((a, b)=>a.s - b.s)[0] || live.sort((a, b)=>b.s - a.s)[0];
+    const pill = rel ? `<span class="st ${rel.r.status}">${esc(hm(rel.r.start_at))} ${esc(STATUS[rel.r.status] || "")}</span>` : "";
+    return `<button class="chipc ${st}" onclick="openCast('${x.c ? x.c.id : ""}','${esc(x.name)}')">【${esc(nm)}】${esc(sh)}${note ? `<small>（${esc(note)}）</small>` : ""}${pill ? `<br>${pill}` : ""}</button>`;
   };
   el.innerHTML = `<table class="board"><tr><th class="corner"></th>${cols.map(c=>`<th>${c ? esc(c) : "待機場所なし"}</th>`).join("")}</tr>`
     + BOARD_ROWS.map(([k, l])=>`<tr class="${k}"><th>${l}</th>${cols.map(c=>`<td>${(cell[k + "|" + c] || []).map(x=>chip(x, k)).join("")}</td>`).join("")}</tr>`).join("")
