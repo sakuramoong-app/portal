@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>記録簿│サクラG</title>
+<link rel="icon" type="image/png" href="../favicon.png?v=3">
+<link rel="stylesheet" href="kb.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="kb_common.js"></script>
+<style>
+  /* ===== 見やすさ重視（文字は大きめ・枠は少なめ・色は状態と注意だけ） ===== */
+  body{font-size:14.5px;}
+  .wrap.wide{max-width:1280px;}
+  .daybar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+  .daybar input[type=date]{font-family:inherit;font-size:15px;padding:8px 12px;border:1.5px solid var(--line);border-radius:99px;background:#fff;color:var(--ink);}
+  .daytitle{font-size:20px;font-weight:800;margin-right:6px;}
+  /* 数字のカード */
+  .stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:10px;}
+  .stat{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;}
+  .stat .k{font-size:12px;color:var(--sub);font-weight:800;}
+  .stat .v{font-size:24px;font-weight:800;margin-top:4px;color:var(--ink);}
+  .stat .v.pink{color:#e5638c;} .stat .v.green{color:#2f9e6e;}
+  .stats.hide .v.m{filter:blur(8px);user-select:none;}
+  .tax{display:flex;gap:18px;flex-wrap:wrap;align-items:center;background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:var(--sub);font-weight:800;}
+  .tax b{display:block;font-size:17px;color:var(--ink);}
+  .tax.hide b{filter:blur(7px);user-select:none;}
+  @media (max-width:900px){ .stats{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  .notice textarea{width:100%;min-height:44px;font-family:inherit;font-size:14px;padding:9px 12px;border:1.5px solid #f2d27a;border-radius:12px;background:var(--lemon-soft);color:var(--ink);resize:vertical;}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 10px;}
+  .tabs a,.tabs button{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:8px 14px;font-family:inherit;font-size:13.5px;font-weight:800;color:var(--sub);cursor:pointer;text-decoration:none;}
+  .tabs .on{background:#e5638c;border-color:#e5638c;color:#fff;}
+  .tabs .soon{opacity:.55;cursor:default;}
+  /* 予約一覧 */
+  table.list{width:100%;border-collapse:separate;border-spacing:0 6px;font-size:13.5px;}
+  table.list th{font-size:11.5px;color:var(--sub);text-align:left;padding:0 8px;font-weight:800;}
+  table.list td{background:#fff;padding:10px 8px;border-top:1.5px solid var(--line);border-bottom:1.5px solid var(--line);}
+  table.list td:first-child{border-left:1.5px solid var(--line);border-radius:12px 0 0 12px;}
+  table.list td:last-child{border-right:1.5px solid var(--line);border-radius:0 12px 12px 0;}
+  table.list tr.r{cursor:pointer;} table.list tr.r:hover td{background:var(--pink-soft);}
+  .wrapx{overflow-x:auto;}
+  .money{text-align:right;white-space:nowrap;}
+  .st{font-size:11.5px;font-weight:800;border-radius:99px;padding:3px 9px;white-space:nowrap;}
+  .st.done{background:var(--mint-soft);color:#1a7a5e;}
+  .st.checking,.st.pre_call,.st.hour_call{background:var(--lemon-soft);color:#9a7000;}
+  .st.wait_hotel,.st.wait_guest,.st.wait_cast{background:var(--lav-soft);color:#6c5896;}
+  .st.working{background:#FFE3EC;color:#c9556a;}
+  .st.cancel,.st.tobi{background:var(--gray-soft);color:#999;}
+  .stsel{font-family:inherit;font-size:12px;font-weight:800;border-radius:99px;padding:4px 6px;border:1.5px solid var(--line);background:#fff;}
+  .sum{display:none;}
+  /* ===== 予約の入力（1列・電話で聞く順） ===== */
+  #formBg{padding:0;}
+  .drawer{position:relative;background:#fff;max-width:760px;margin:0 auto;min-height:100vh;padding:16px 18px 110px;box-shadow:0 0 40px rgba(92,75,79,.25);}
+  .drawer h2{font-size:19px;font-weight:800;margin:0 40px 10px 0;}
+  .drawer .x{position:absolute;top:12px;right:12px;}
+  .step{border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:12px;}
+  .step h3{font-size:15px;font-weight:800;color:#e5638c;margin:0 0 10px;display:flex;align-items:center;gap:8px;}
+  .step h3 .n{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:99px;background:#e5638c;color:#fff;font-size:13px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
+  .row1{margin-bottom:10px;}
+  @media (max-width:600px){ .row2{grid-template-columns:1fr;} }
+  .drawer .f label{font-size:12.5px;font-weight:800;color:var(--sub);margin-bottom:4px;display:block;}
+  .drawer input[type=text],.drawer input:not([type]),.drawer input[type=tel],.drawer input[type=time],.drawer input[type=number],.drawer select,.drawer textarea{width:100%;font-family:inherit;font-size:15px;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);}
+  .drawer .chips{display:flex;gap:6px;flex-wrap:wrap;}
+  .drawer .chip{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:8px 14px;font-family:inherit;font-size:14px;font-weight:800;color:var(--sub);cursor:pointer;}
+  .drawer .chip.on{background:#e5638c;border-color:#e5638c;color:#fff;}
+  .endview{padding:10px 12px;border-radius:12px;background:#EEFBF4;color:#2f9e6e;font-weight:800;font-size:15px;}
+  .opt{display:grid;grid-template-columns:auto 1fr 56px 80px 80px;gap:6px;align-items:center;padding:4px 0;border-bottom:1px dashed var(--line);}
+  .opt .lbl{font-size:13px;} .opt .lbl small{color:var(--sub);font-size:11px;}
+  .opt input[type=number]{padding:6px 8px !important;font-size:13px !important;}
+  .hist{font-size:12.5px;color:var(--sub);margin-top:6px;line-height:1.6;}
+  .msg{width:100%;min-height:210px;font-family:inherit;font-size:13.5px;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);white-space:pre;}
+  /* 自動計算プレビュー */
+  .calc{background:#F7F5F6;border-radius:14px;padding:12px 14px;}
+  .calc .row{display:flex;justify-content:space-between;font-size:14px;padding:3px 0;}
+  .calc .row.total{font-size:20px;font-weight:800;color:#e5638c;border-top:2px solid var(--line);margin-top:6px;padding-top:8px;}
+  .calc .row.back{color:#2f9e6e;}
+  .calc h3{font-size:13px;font-weight:800;margin:10px 0 4px;color:var(--sub);}
+  .calc .why{font-size:11.5px;color:var(--sub);white-space:pre-wrap;line-height:1.5;margin-top:4px;}
+  /* そのキャストの本日のタイムライン */
+  .tl{border-radius:12px;background:#1f2140;color:#fff;padding:10px 12px;margin-top:8px;}
+  .tl .ttl{font-size:13px;font-weight:800;margin-bottom:6px;}
+  .tl .axis{display:flex;justify-content:space-between;font-size:10.5px;color:#b9bcd6;margin-bottom:3px;}
+  .tl .bar{position:relative;height:30px;background:#2e3157;border-radius:8px;overflow:hidden;}
+  .tl .shift{position:absolute;top:0;bottom:0;background:#3e4270;}
+  .tl .bk{position:absolute;top:4px;bottom:4px;border-radius:6px;font-size:10.5px;font-weight:800;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden;}
+  .tl .bk.other{background:#5b8def;} .tl .bk.cur{background:#ff9f1a;color:#2a1a00;} .tl .bk.clash{background:#ef4444;color:#fff;}
+  .tl .leg{font-size:11px;color:#c9cbe0;margin-top:5px;}
+  /* いつも下に：総額と登録 */
+  .foot{position:fixed;left:0;right:0;bottom:0;z-index:60;background:rgba(255,255,255,.97);border-top:1.5px solid var(--line);box-shadow:0 -6px 18px rgba(92,75,79,.12);}
+  .foot .in{max-width:760px;margin:0 auto;padding:10px 18px;display:flex;gap:10px;align-items:center;}
+  .foot .tot{flex:1;font-size:13px;color:var(--sub);font-weight:800;}
+  .foot .tot b{font-size:22px;color:#e5638c;margin-left:6px;}
+  .foot .btn-primary{padding:12px 26px;font-size:15px;}
+</style>
+</head>
+<body>
+<div class="wrap wide">
+  <header class="kbh"><h1>📒 記録簿</h1><span class="spacer"></span>
+    <button class="btn btn-primary edit-only" onclick="openForm(null)">＋ 予約を追加</button></header>
+  <div id="navArea"></div>
+  <div id="wipArea"></div>
+  <div id="gate" class="gate">読み込み中…</div>
+
+  <div id="main" style="display:none">
+    <div class="daybar">
+      <button class="btn btn-ghost btn-sm" onclick="moveDay(-1)">◀</button>
+      <input type="date" id="day" onchange="loadDay()">
+      <button class="btn btn-ghost btn-sm" onclick="moveDay(1)">▶</button>
+      <button class="btn btn-ghost btn-sm" onclick="goToday()">今日（営業日）</button>
+      <span class="bd" id="dayInfo"></span>
+      <span class="spacer" style="flex:1"></span>
+      <button class="btn btn-ghost btn-sm" id="moneyBtn" onclick="showMoney=!showMoney;renderList()">👁 金額を見る</button>
+    </div>
+    <div class="stats hide" id="stats"></div>
+    <div class="tax hide" id="tax"></div>
+    <div class="notice"><textarea id="notice" placeholder="📢 本日のお知らせ" onchange="saveNotice()"></textarea></div>
+    <div class="tabs">
+      <button class="on">📋 予約一覧</button>
+      <a href="settle.html">💁 キャスト別・精算</a>
+      <button class="soon" title="これから作ります">🗺 ボード（準備中）</button>
+      <button class="soon" title="これから作ります">⏱ タイムライン（準備中）</button>
+    </div>
+    <div class="sum" id="sum"></div>
+    <div class="wrapx"><table class="list" id="list"></table></div>
+  </div>
+</div>
+
+<!-- ===== 予約の入力（1列・電話で聞く順） ===== -->
+<div class="modal-bg" id="formBg">
+  <div class="drawer">
+    <button class="x" onclick="closeForm()" aria-label="閉じる">×</button>
+    <h2 id="formTitle">予約を追加</h2>
+    <div id="receptionNotes"></div>
+
+    <!-- ① 指名・時間・場所 -->
+    <div class="step">
+      <h3><span class="n">1</span>指名・時間・場所</h3>
+      <div class="row2">
+        <div class="f"><label>売上店舗</label><select id="f_store" onchange="onStore()"></select></div>
+        <div class="f"><label>状態</label><select id="f_status"></select></div>
+      </div>
+      <div class="row1">
+        <div class="f"><label>指名キャスト（フリーのときは「キャストを選ぶ」で行く人を）</label></div>
+        <!-- ダミーのお店（極門・エイティーン）だけ -->
+        <div id="dummyWrap" style="display:none;background:#F6F2FE;border-radius:12px;padding:8px 10px;margin-bottom:8px">
+          <div class="f"><label>🎭 ダミー名（お客さんに伝える名前）</label>
+            <div style="display:flex;gap:6px"><select id="f_dummy" style="flex:1" onchange="recalc();renderDummyMatch()"></select>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="toggleDummyEdit()">⚙️ 一覧</button></div></div>
+          <div id="dummyEdit" style="display:none;margin-top:6px"></div>
+          <div id="dummyMatch"></div>
+          <div style="font-size:12px;color:var(--sub);margin-top:4px">↓ 下は「実際に行くキャスト」（バックは実際に行くキャストで計算）</div>
+        </div>
+        <select id="f_cast" onchange="onCast()"></select>
+        <div id="castInfo"></div>
+        <div id="castChecks"></div>
+      </div>
+      <div class="row2">
+        <div class="f"><label>開始時刻</label><input type="time" id="f_start" step="300" oninput="recalc()"></div>
+        <div class="f"><label>終了時刻（自動）</label><div class="endview" id="endView">--:--</div></div>
+      </div>
+      <div id="castTimeline"></div>
+      <div class="row2" style="margin-top:10px">
+        <div class="f"><label>エリア</label>
+          <select id="f_areaSel" onchange="onAreaSel()"></select>
+          <input id="f_area" maxlength="60" placeholder="場所（駅・地名など。例：川崎）" style="display:none;margin-top:6px" oninput="showAreaFee();recalc()"></div>
+        <div class="f"><label>ホテル・自宅（部屋番号）</label><input id="f_address" maxlength="200" list="hotelList" oninput="recalc()"><datalist id="hotelList"></datalist></div>
+      </div>
+      <div id="areaInfo"></div>
+      <div class="row2">
+        <div class="f"><label>交通費（お客さんから）</label><input type="number" id="f_transport" min="0" value="0" oninput="recalc()"></div>
+        <div class="f"><label>&nbsp;</label><button type="button" class="btn btn-ghost btn-sm" onclick="saveAreaFee()">💾 この場所の提案額として記録</button></div>
+      </div>
+    </div>
+
+    <!-- ② お客さんの確認 -->
+    <div class="step">
+      <h3><span class="n">2</span>お客さんの確認（電話番号で台帳を見る）</h3>
+      <div class="row1"><div class="f"><label>電話番号</label>
+        <div style="display:flex;gap:6px"><input id="f_phone" type="tel" inputmode="tel" placeholder="09012345678" onchange="lookupCustomer()">
+          <button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="lookupCustomer()">🔍 調べる</button></div></div></div>
+      <div id="custInfo"></div>
+      <div class="f" style="margin-top:8px"><label>種別</label><div class="chips" id="f_visit"></div></div>
+    </div>
+
+    <!-- ③ 内容 -->
+    <div class="step">
+      <h3><span class="n">3</span>内容</h3>
+      <div class="row2">
+        <div class="f"><label>コース</label><select id="f_course" onchange="recalc()"></select></div>
+        <div class="f"><label>フリー区分</label>
+          <select id="f_free" onchange="recalc()">
+            <option value="">なし（指名あり）</option><option value="free">フリー</option>
+            <option value="special_free">特別フリー</option><option value="event_free">イベフリー</option>
+          </select></div>
+      </div>
+      <div class="row2">
+        <div class="f"><label>延長（30分の回数）</label><input type="number" id="f_ext" min="0" value="0" oninput="recalc()"></div>
+        <div class="f"><label>デート（30分の回数）</label><input type="number" id="f_date" min="0" value="0" oninput="recalc()"></div>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;font-size:14px;font-weight:800">
+        <label id="nhWrap"><input type="checkbox" id="f_nh" onchange="recalc()"> キューティ：NH料金で取った</label>
+        <label id="admWrap"><input type="checkbox" id="f_adm" onchange="recalc()"> 入会金あり（極門の新規）</label>
+      </div>
+      <div id="courseInfo"></div>
+      <div style="background:#FFF4E5;border:2px solid #FFB547;border-radius:12px;padding:8px 12px;margin:8px 0">
+        <div style="font-weight:800;font-size:13.5px;color:#a35a00;margin-bottom:4px">🔸 AF・逆AF のご希望（必ず聞く）</div>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:14.5px;font-weight:700">
+          <span>AF：<label><input type="radio" name="f_afw" value="yes" onchange="onAfWish()"> 希望あり</label> <label><input type="radio" name="f_afw" value="no" onchange="onAfWish()"> なし</label></span>
+          <span>逆AF：<label><input type="radio" name="f_rafw" value="yes" onchange="onAfWish()"> 希望あり</label> <label><input type="radio" name="f_rafw" value="no" onchange="onAfWish()"> なし</label></span>
+        </div>
+      </div>
+      <details id="optDetails" style="margin-bottom:10px">
+        <summary style="cursor:pointer;font-weight:800;font-size:14px;padding:4px 0">有料オプション<span id="optCount"></span></summary>
+        <div id="f_opts"></div>
+        <div class="opt" style="margin-top:4px">
+          <span></span><input type="text" id="f_xop_label" placeholder="ほかのOP（自由入力）" oninput="recalc()">
+          <span></span><input type="number" id="f_xop_price" placeholder="料金" oninput="recalc()"><input type="number" id="f_xop_back" placeholder="バック" oninput="recalc()">
+        </div>
+      </details>
+      <div class="row1"><div class="f"><label>希望プレイ</label><input id="f_play" maxlength="200" placeholder="例：潮吹き・言葉責め など" oninput="recalc()"></div></div>
+      <div class="row1"><div class="f"><label>媒体（いくつでも）</label><div class="chips" id="f_media"></div></div></div>
+      <div class="row1"><div class="f"><label>支払い方法</label><div class="chips" id="f_payChips"></div>
+        <select id="f_pay" style="display:none" onchange="recalc()"><option value="cash">現金</option><option value="card">カード（×1.15）</option><option value="card_paid">カード精算済</option></select></div></div>
+      <div class="row2">
+        <div class="f"><label>お客さんの名前</label><input id="f_name" maxlength="40" oninput="recalc()"></div>
+        <div class="f"><label>割引（円）・割引の名前</label>
+          <div style="display:flex;gap:6px"><input type="number" id="f_discount" min="0" value="0" oninput="recalc()" style="max-width:120px"><input id="f_discnote" placeholder="例：口コミ割" maxlength="60"></div></div>
+      </div>
+    </div>
+
+    <!-- ④ 確認して登録 -->
+    <div class="step">
+      <h3><span class="n">4</span>確認して登録</h3>
+      <div class="calc" id="calc"></div>
+      <div class="f" style="margin-top:12px"><label>📨 キャストへの予約連絡（コピーして送る）</label></div>
+      <textarea class="msg" id="msg" readonly></textarea>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px">
+        <button class="btn btn-ghost btn-sm" onclick="copyMsg()">📋 文面をコピー</button>
+        <label style="font-size:14px;font-weight:800;background:#E6F6EE;border-radius:99px;padding:7px 14px;cursor:pointer">
+          <input type="checkbox" id="f_notified"> ✅ キャストに伝えた</label>
+        <span class="hist" id="notifiedInfo" style="margin:0"></span>
+      </div>
+    </div>
+
+    <!-- あとで書くこと -->
+    <details id="laterBox" style="background:#FAF7F8;border-radius:14px;padding:10px 14px">
+      <summary style="cursor:pointer;font-weight:800;font-size:14px">📝 あとで書くこと（NG客・お客さんメモ・確認電話メモ・備考）</summary>
+      <div class="row2" style="margin-top:8px">
+        <div class="f"><label>NG客</label>
+          <select id="f_ng"><option value="0">NGではない</option><option value="1">⚠️ NG客</option></select></div>
+        <div class="f"><label>NGの理由・お客さんメモ</label><input id="f_custnote" maxlength="200"></div>
+      </div>
+      <div class="row1"><div class="f"><label>確認電話のメモ</label><input id="f_confirm" maxlength="60" placeholder="例：前日OK・1H前OK"></div></div>
+      <div class="row1"><div class="f"><label>備考</label><textarea id="f_note"></textarea></div></div>
+    </details>
+    <div style="margin-top:12px"><button class="btn btn-danger edit-only" id="delBtn" onclick="removeRes()">🗑 この予約を削除</button></div>
+    <div class="hist" id="logInfo"></div>
+  </div>
+  <!-- いつも下に：総額と登録 -->
+  <div class="foot"><div class="in">
+    <div class="tot">総額<b id="footTotal">0円</b><span id="footWarn" style="margin-left:8px;color:#d9534f"></span></div>
+    <button class="btn btn-ghost" onclick="closeForm()">キャンセル</button>
+    <button class="btn btn-primary edit-only" onclick="saveRes()">💾 登録する</button>
+  </div></div>
+</div>
+
+<script>
+/* ============================================================
+   受付（記録簿）
+   ・料金・バックは Supabase のマスタ（kb_prices・kb_back・kb_options・kb_cast_rules・kb_settings）から自動で計算
+   ・キャストはキャスト台帳（master_casts）から選ぶ。お客さんは電話番号で探す
+   ・保存すると、だれが・いつ・何を直したかが自動で残る（kb_reservation_log）
+   ============================================================ */
+const { sb, q, esc, yen, toast } = KB;
+const $ = id => document.getElementById(id);
+const DOW = ["日","月","火","水","木","金","土"];
+const STATUS = { checking:"確認中", pre_call:"前日確認電話", hour_call:"1H前確認電話", wait_hotel:"ホテル連絡待ち", wait_guest:"客ホテル入室待ち", wait_cast:"キャストホテル入室待ち", working:"仕事中", done:"終了", cancel:"キャンセル", tobi:"トビ" };   // 並びが流れの順
+const VISIT = [["new","新規"],["repeat","店リピ"],["honshi","本指名"]];
+const FREE_SUFFIX = { "":"", free:"フリー", special_free:"特別フリー", event_free:"イベフリー" };
+
+let M = {};              // マスタ一式
+let day = "", rows = [], editing = null, curCustomer = null, visit = "new", mediaSel = [];
+let showMoney = false;
+
+$("navArea").innerHTML = KB.nav("reception.html");
+$("wipArea").innerHTML = KB.wipBanner();
+if(!KB.CAN_EDIT) document.body.classList.add("readonly");
+KB.closeOnBackdrop($("formBg"), closeForm);
+
+async function init(){
+  if(location.hash) history.replaceState(null, "", location.pathname + location.search);
+  if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
+  try{
+    const r = await Promise.all([
+      sb.from("master_stores").select("*").order("sort"),
+      sb.from("master_casts").select("id,official_name,temp_name,kana,status,ranks,special_notes,ng_notes,aliases,shift_name,prof_id").neq("status","left"),
+      sb.from("kb_prices").select("*"),
+      sb.from("kb_back").select("*"),
+      sb.from("kb_options").select("*").order("sort"),
+      sb.from("kb_cast_rules").select("*").eq("active", true),
+      sb.from("kb_settings").select("*"),
+      sb.from("kb_media").select("*").eq("active", true).order("sort"),
+      sb.from("kb_course_info").select("*"),
+      sb.from("kb_rank_history").select("cast_id,grp,rank,valid_from,id,hearing_text,by_name,at"),
+      sb.from("kb_dummy_names").select("*").eq("active", true).order("sort").order("id"),
+      sb.from("kb_cast_checks").select("id,cast_id,text,sort").eq("active", true).order("sort").order("id"),
+      sb.from("prof_hotels").select("area,hotel_name,map_url,store_status,note").order("seq"),
+    ]);
+    const [stores, casts, prices, back, options, rules, settings, media, courseInfo, rankHist, dummies, castChecks, hotels] = r.map(q);
+    M = { stores, casts, prices, options, rules, media, courseInfo, rankHist: rankHist || [], dummies: dummies || [], castChecks: castChecks || [], hotels: hotels || [], back: {}, set: {} };
+    back.forEach(b=>{ M.back[b.rank + "|" + b.course] = b.amount; });
+    settings.forEach(s=>{ M.set[s.key] = s.value; });
+    M.casts.sort((a,b)=> String(a.kana || a.official_name || a.temp_name).localeCompare(String(b.kana || b.official_name || b.temp_name), "ja"));
+  }catch(e){ $("gate").textContent = "読み込みに失敗しました：" + (e.message || e); return; }
+  $("gate").style.display = "none"; $("main").style.display = "";
+  goToday();
+}
+
+/* ---------- 日付・一覧 ---------- */
+function goToday(){ $("day").value = KB.bizDateOf(); loadDay(); }
+function moveDay(n){ const d = new Date($("day").value + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); $("day").value = d.toISOString().slice(0,10); loadDay(); }
+async function loadDay(){
+  day = $("day").value;
+  const d = new Date(day + "T12:00:00Z");
+  $("dayInfo").textContent = `${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) の営業日（朝6時まで）`;
+  try{
+    const [res, note] = await Promise.all([
+      sb.from("kb_reservations").select("*, kb_customers(id,name,phone,ng)").eq("biz_date", day).eq("deleted", false).order("start_at"),
+      sb.from("kb_day_notes").select("notice").eq("biz_date", day).maybeSingle(),
+    ]);
+    rows = q(res) || [];
+    $("notice").value = (q(note) || {}).notice || "";
+  }catch(e){ toast("読み込みに失敗しました：" + (e.message || e)); rows = []; }
+  renderList();
+}
+function castName(id){ const c = M.casts.find(x=>x.id===id); return c ? (c.official_name || c.temp_name) : (id || "—"); }
+function storeLabel(k){ const s = M.stores.find(x=>x.key===k); return s ? s.label : k; }
+function hm(iso){ if(!iso) return ""; const d = new Date(iso); const j = new Date(d.getTime()+9*3600*1000); return String(j.getUTCHours()).padStart(2,"0")+":"+String(j.getUTCMinutes()).padStart(2,"0"); }
+function backOf(r){ return r.back_override != null ? r.back_override : (r.course_back + r.option_back + r.extra_back); }
+
+function renderList(){
+  const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi");
+  const total = live.reduce((a,r)=>a + r.total, 0), back = live.reduce((a,r)=>a + backOf(r), 0);
+  $("sum").innerHTML = `<div class="s">件数<b>${live.length}件</b></div>
+    <div class="s ${showMoney?"":"hide"}">売上総額<b>${yen(total)}</b></div>
+    <div class="s ${showMoney?"":"hide"}">キャスト報酬<b>${yen(back)}</b></div>
+    <div class="s ${showMoney?"":"hide"}">店落ち（暫定）<b>${yen(total - back)}</b></div>
+    <button class="btn btn-ghost btn-sm" onclick="showMoney=!showMoney;renderList()">${showMoney?"🙈 金額をかくす":"👁 金額を見る"}</button>`;
+  $("list").innerHTML = rows.length ? `<tr><th>時間</th><th>キャスト</th><th>店舗</th><th>コース</th><th>お客さん</th><th>状態（ここで変えられる）</th><th>キャストに</th><th>総額</th><th>報酬</th><th>対応した内勤・日時</th></tr>` +
+    rows.map(r=>{
+      const c = r.kb_customers || {};
+      const when = t => { if(!t) return ""; const d = new Date(t); return (d.getMonth()+1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); };
+      // 状態は、一覧から直接変えられる（小窓を開かなくてよい）
+      const stSel = KB.CAN_EDIT
+        ? `<select class="stsel st ${r.status}" onclick="event.stopPropagation()" onchange="quickStatus(${r.id},this.value)">${Object.keys(STATUS).map(k=>`<option value="${k}" ${k===r.status?"selected":""}>${STATUS[k]}</option>`).join("")}</select>`
+        : `<span class="st ${r.status}">${STATUS[r.status]||r.status}</span>`;
+      return `<tr class="r" onclick="openForm(${r.id})">
+        <td>${hm(r.start_at)}〜${hm(r.end_at)}</td><td>${r.dummy_name ? `<small style="color:#6c5896">🎭${esc(r.dummy_name)} →</small> ` : ""}<b>${esc(castName(r.cast_id))}</b></td><td>${esc(storeLabel(r.store_key))}</td>
+        <td>${esc(r.course)}${r.free_kind?"・"+FREE_SUFFIX[r.free_kind]:""}${r.extension_count?" 延長"+r.extension_count:""}${r.payment!=="cash"?" 💳":""}</td>
+        <td>${c.ng?"⚠️":""}${esc(c.name||"")}<small style="color:var(--sub)"> ${VISIT.find(v=>v[0]===r.visit_kind)?.[1]||""}</small></td>
+        <td>${stSel}</td>
+        <td>${r.cast_notified_at ? `<span style="color:#2f9e6e;font-weight:800">✅ 伝えた</span><br><small style="color:var(--sub)">${esc(r.cast_notified_by||"")} ${when(r.cast_notified_at)}</small>` : `<span style="color:#d9534f;font-weight:800">⚠️ まだ</span>`}</td>
+        <td class="money">${yen(r.total)}</td><td class="money">${yen(backOf(r))}</td>
+        <td><small>受付：${esc(r.created_by||"")} ${when(r.created_at)}${r.updated_by && r.updated_at !== r.created_at ? `<br>最後：${esc(r.updated_by)} ${when(r.updated_at)}` : ""}</small></td></tr>`;
+    }).join("") : `<tr><td style="text-align:center;color:var(--sub);font-weight:800;padding:24px">この日の受付はまだありません</td></tr>`;
+}
+// 一覧から状態だけ変える
+async function quickStatus(id, st){
+  if(!KB.CAN_EDIT) return;
+  try{
+    q(await sb.from("kb_reservations").update({ status: st, updated_by: KB.operatorName() }).eq("id", id));
+    const r = rows.find(x=>x.id === id); if(r){ r.status = st; r.updated_by = KB.operatorName(); r.updated_at = new Date().toISOString(); }
+    toast("状態を「" + STATUS[st] + "」にしました"); renderList();
+  }catch(e){ toast("変えられませんでした：" + (e.message || e)); loadDay(); }
+}
+async function saveNotice(){
+  if(!KB.CAN_EDIT) return;
+  try{ q(await sb.from("kb_day_notes").upsert({ biz_date: day, notice: $("notice").value, updated_by: KB.operatorName() })); toast("お知らせを保存しました"); }
+  catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+
+/* ---------- 受付の小窓 ---------- */
+function storeGroup(store){ const br = M.set.back_ranks || {}; for(const g in br){ if((br[g]||[]).includes(store)) return g; } return "sakurana"; }
+function minutesOf(course){ const m = String(course).match(/(\d+)$/); if(String(course).includes("泊")) return 480; return m ? Number(m[1]) : 0; }
+
+function openForm(id){
+  editing = id ? rows.find(r=>r.id===id) : null;
+  const r = editing || {};
+  $("formTitle").textContent = id ? `受付の編集（No.${id}）` : "＋ 受付";
+  $("receptionNotes").innerHTML = (M.set.reception_notes || []).map(t=>`<div class="info">📌 ${esc(t)}</div>`).join("");
+  $("f_store").innerHTML = M.stores.map(s=>`<option value="${s.key}">${esc(s.label)}</option>`).join("");
+  $("f_store").value = r.store_key || "sakuramoon";
+  const grp = { active:"在籍", break:"お休み中", new:"入店前", interview:"面接中" };
+  $("f_cast").innerHTML = `<option value="">（キャストを選ぶ）</option>` + Object.keys(grp).map(st=>{
+    const list = M.casts.filter(c=>c.status===st); if(!list.length) return "";
+    return `<optgroup label="${grp[st]}">` + list.map(c=>`<option value="${c.id}">${esc(c.official_name || c.temp_name)}</option>`).join("") + `</optgroup>`;
+  }).join("");
+  $("f_cast").value = r.cast_id || "";
+  $("f_start").value = r.start_at ? hm(r.start_at) : "";
+  $("f_status").innerHTML = Object.keys(STATUS).map(k=>`<option value="${k}">${STATUS[k]}</option>`).join("");
+  $("f_status").value = r.status || "checking";
+  // キャストに伝えたか
+  $("f_notified").checked = !!r.cast_notified_at;
+  $("notifiedInfo").textContent = r.cast_notified_at ? (r.cast_notified_by || "") + " " + new Date(r.cast_notified_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+  // あとで書くこと：NG客・メモ・備考が入っていれば開いておく
+  $("laterBox").open = !!((r.kb_customers && r.kb_customers.ng) || r.note || r.confirm_call);
+  $("f_free").value = r.free_kind || "";
+  $("f_ext").value = r.extension_count || 0; $("f_date").value = r.date_count || 0;
+  $("f_nh").checked = !!r.nh_rate; $("f_adm").checked = (r.admission || 0) > 0;
+  fillAreaSel(r.area || ""); $("f_address").value = r.address || "";
+  setRadio("f_afw", r.af_wish || ""); setRadio("f_rafw", r.rev_af_wish || "");
+  $("optDetails").open = false;
+  $("f_transport").value = r.transport || 0; $("f_discount").value = r.discount || 0; $("f_discnote").value = r.discount_note || "";
+  $("f_pay").value = r.payment || "cash"; $("f_confirm").value = r.confirm_call || ""; $("f_note").value = r.note || "";
+  visit = r.visit_kind || "new"; mediaSel = (r.media || []).slice();
+  const c = r.kb_customers || {};
+  curCustomer = r.customer_id ? { id: r.customer_id, ...c } : null;
+  $("f_phone").value = c.phone || ""; $("f_name").value = c.name || ""; $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = "";
+  $("custInfo").innerHTML = "";
+  onStore(r);
+  onCast();
+  if(curCustomer) lookupCustomer(true);
+  $("delBtn").style.display = id ? "" : "none";
+  document.querySelectorAll("#formBg input, #formBg select, #formBg textarea:not(#msg)").forEach(el=>{ el.disabled = !KB.CAN_EDIT; });
+  $("logInfo").textContent = "";
+  if(id) loadLog(id);
+  $("formBg").classList.add("show");
+  recalc();
+}
+function closeForm(){ $("formBg").classList.remove("show"); }
+
+function onStore(r){
+  const store = $("f_store").value, g = storeGroup(store);
+  const list = M.prices.filter(p=>p.store_key===store);
+  const keep = (r && r.course) || $("f_course").value;
+  $("f_course").innerHTML = list.map(p=>`<option value="${esc(p.course)}">${esc(p.course)}${/^\d+$/.test(p.course)?"分":""}　${yen(p.price)}${p.note?"（"+esc(p.note)+"）":""}</option>`).join("");
+  if(keep && list.some(p=>p.course===keep)) $("f_course").value = keep;
+  // オプション
+  const sel = (r && r.options) || [];
+  $("f_opts").innerHTML = M.options.filter(o=>o.store_group===g).map(o=>{
+    const s = sel.find(x=>x.code===o.code && x.group===g);
+    const qty = s ? s.qty : 1;
+    return `<div class="opt">
+      <input type="checkbox" id="o_${o.code}" ${s?"checked":""} onchange="recalc()">
+      <label class="lbl" for="o_${o.code}">${esc(o.label)}${o.note?`<br><small>${esc(o.note)}</small>`:""}</label>
+      <input type="number" id="oq_${o.code}" min="1" value="${qty}" title="${o.unit==="per_item"?"枚数":o.unit==="per_cast"?"キャストの人数":"回数"}" oninput="recalc()" ${o.unit==="once"?'style="visibility:hidden"':""}>
+      <input type="number" id="op_${o.code}" value="${s?s.price:o.price}" title="料金（1回あたり）" oninput="recalc()" ${o.manual?"":"readonly"}>
+      <input type="number" id="ob_${o.code}" value="${s?s.back:o.back}" title="バック（1回あたり）" oninput="recalc()" ${o.manual?"":"readonly"}>
+    </div>`;
+  }).join("") + `<div style="font-size:11px;color:var(--sub);margin-top:4px">右の2つは「料金」「バック」（1回あたり）。内容で変わるOPだけ直せます。</div>`;
+  const x = sel.find(s=>s.code==="custom");
+  $("f_xop_label").value = x ? x.label : ""; $("f_xop_price").value = x ? x.price : ""; $("f_xop_back").value = x ? x.back : "";
+  // 媒体・新規リピ
+  $("f_media").innerHTML = M.media.map(m=>`<button type="button" class="chip ${mediaSel.includes(m.code)?"on":""}" onclick="toggleMedia('${m.code}')">${esc(m.label)}</button>`).join("");
+  $("f_visit").innerHTML = VISIT.map(([k,l])=>`<button type="button" class="chip ${visit===k?"on":""}" onclick="setVisit('${k}')">${l}</button>`).join("");
+  storeOnlyFields();
+  optSummary();
+  // ダミーのお店：ダミー名を選ぶ
+  renderDummy(r ? (r.dummy_name || "") : undefined);
+  // コースの説明（極門）
+  recalc();
+}
+
+/* ---------- ダミー指名（極門・エイティーン） ---------- */
+/* ---------- ダミーキャストのデータ・マッチ率（極門・エイティーン） ----------
+   ダミーを選ぶと、その日出勤しているキャストを「近い順」に出す。
+   比べるもの：身長・カップ・Pサイズ（キャストプロフの「T158-B82(D)-W58-H85」「15、太め」から読む）、
+              AF・逆AF・射精の可否（キャストプロフのオプション ◎○△×）
+   出勤：サクラシフト（shift_weeks）のその日のシフト */
+const MARKS = ["", "◎", "○", "△", "×"];
+let profById = null;            // キャストプロフ（prof_id → data）
+const shiftCache = {};          // 営業日 → { シフト名: {start,end,confirmed} }
+async function loadProfs(){
+  if(profById) return profById;
+  const rows = q(await sb.from("prof_casts").select("id,data").eq("deleted", false)) || [];
+  profById = {}; rows.forEach(r=>{ profById[r.id] = r.data || {}; });
+  return profById;
+}
+function weekKeyOfYmd(s){
+  const [y, m, d] = s.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const dow = dt.getUTCDay(), diff = dow === 0 ? -6 : 1 - dow;
+  dt.setUTCDate(dt.getUTCDate() + diff);
+  return dt.toISOString().slice(0, 10);
+}
+async function loadShifts(ymd){
+  if(shiftCache[ymd]) return shiftCache[ymd];
+  const rows = q(await sb.from("shift_weeks").select("cast_name,data").eq("wk", weekKeyOfYmd(ymd))) || [];
+  const out = {};
+  rows.forEach(r=>{
+    const sh = r.data && r.data.shifts && r.data.shifts[ymd];
+    if(sh && sh.start != null && sh.end != null) out[r.cast_name] = { start: sh.start, end: sh.end, confirmed: ["confirmed", "change_confirmed"].includes(r.data.status) };
+  });
+  return (shiftCache[ymd] = out);
+}
+function hourLabel(h){ return h >= 24 ? "翌" + (h - 24) + ":00" : h + ":00"; }
+// キャストプロフから、身長・カップ・Pサイズ・AF など
+function specOfProf(d){
+  const sp = (d.storeProfiles && d.storeProfiles["サクラムーン"]) || {};
+  const size = String(sp.size || d.size || ""), ps = String(sp.psize || d.psize || "");
+  const opts = Object.assign({}, d.options || {}, sp.options || {});
+  const t = size.match(/T\s*(\d{3})/i), cup = size.match(/\(\s*([A-K])\s*\)/i) || size.match(/([A-K])\s*カップ/i), p = ps.match(/(\d+(?:\.\d+)?)/);
+  return { height: t ? Number(t[1]) : null, cup: cup ? cup[1].toUpperCase() : "", psize: p ? Number(p[1]) : null,
+           af: opts["AF"] || "", rev_af: opts["逆AF"] || "", shasei: opts["キャスト射精"] || "", size, psizeText: ps };
+}
+// 近さ（100 がいちばん近い）。比べられるものがなければ null
+function matchScore(dm, sp){
+  let s = 100, n = 0;
+  if(dm.height && sp.height){ s -= Math.min(40, Math.abs(dm.height - sp.height) * 2); n++; }
+  if(dm.cup && sp.cup){ s -= Math.min(30, Math.abs(dm.cup.charCodeAt(0) - sp.cup.charCodeAt(0)) * 8); n++; }
+  if(dm.psize && sp.psize){ s -= Math.min(30, Math.abs(Number(dm.psize) - sp.psize) * 6); n++; }
+  [["af", "AF"], ["rev_af", "逆AF"], ["shasei", "射精"]].forEach(([k])=>{
+    if(dm[k] === "◎" || dm[k] === "○"){ n++; if(sp[k] === "×") s -= 40; else if(sp[k] === "△") s -= 10; else if(!sp[k]) s -= 5; }
+  });
+  return n ? Math.max(0, Math.round(s)) : null;
+}
+async function renderDummyMatch(){
+  const el = $("dummyMatch");
+  const store = $("f_store").value, name = $("f_dummy").value;
+  if(!isDummyStore(store) || !name){ el.innerHTML = ""; return; }
+  const dm = M.dummies.find(d=>d.store_key === store && d.name === name) || {};
+  const spec = [dm.age ? dm.age + "歳" : "", dm.height ? "T" + dm.height : "", dm.weight ? dm.weight + "kg" : "", dm.cup ? dm.cup + "カップ" : "", dm.psize ? "P" + dm.psize : ""].filter(Boolean).join(" ");
+  const ops = [["AF", dm.af], ["逆AF", dm.rev_af], ["射精", dm.shasei]].filter(x=>x[1]).map(x=>x[0] + x[1]).join(" ");
+  el.innerHTML = `<div style="font-size:12.5px;margin-top:6px"><b>🎭 ${esc(name)}</b>：${esc(spec || "データなし")} ${esc(ops)}${dm.note ? `<br><small>${esc(dm.note)}</small>` : ""}</div>
+    <div style="font-size:12px;color:var(--sub);margin-top:4px">近いキャストを探しています…</div>`;
+  try{
+    const [profs, shifts] = await Promise.all([loadProfs(), loadShifts(day)]);
+    if($("f_dummy").value !== name) return;   // 選びなおされた
+    const rows = M.casts.map(c=>{
+      const sh = shifts[c.shift_name] || shifts[c.official_name];
+      if(!sh) return null;
+      const sp = specOfProf(profs[c.prof_id] || {});
+      return { c, sh, sp, score: matchScore(dm, sp) };
+    }).filter(Boolean).sort((a, b)=>(b.score == null ? -1 : b.score) - (a.score == null ? -1 : a.score));
+    const head = el.firstElementChild.outerHTML;
+    if(!rows.length){ el.innerHTML = head + `<div class="warn" style="margin-top:4px">この日（${esc(day)}）出勤のキャストが、サクラシフトに見つかりません</div>`; return; }
+    el.innerHTML = head + `<div style="font-size:12px;font-weight:800;margin:6px 0 2px">🎯 この日出勤しているキャスト（近い順）</div>`
+      + rows.map(x=>{
+        const op = [["AF", x.sp.af], ["逆AF", x.sp.rev_af], ["射精", x.sp.shasei]].map(o=>o[0] + (o[1] || "？")).join(" ");
+        return `<div style="display:flex;gap:6px;align-items:center;background:#fff;border-radius:10px;padding:6px 8px;margin-bottom:4px;font-size:12.5px">
+          <b style="min-width:42px;color:${x.score == null ? "#9C8B8F" : x.score >= 80 ? "#2f9e6e" : x.score >= 60 ? "#c98a00" : "#c9556a"}">${x.score == null ? "－" : x.score + "%"}</b>
+          <div style="flex:1"><b>${esc(x.c.official_name || x.c.temp_name)}</b> <small>${hourLabel(x.sh.start)}〜${hourLabel(x.sh.end)}${x.sh.confirmed ? "" : "（未確定）"}</small><br>
+            <small style="color:var(--sub)">${esc(x.sp.size || "サイズなし")} P${esc(x.sp.psizeText || "？")}　${esc(op)}</small></div>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="$('f_cast').value='${x.c.id}';onCast()">この人にする</button></div>`;
+      }).join("")
+      + `<div style="font-size:11px;color:var(--sub)">％は身長・カップ・Pサイズ・AF/逆AF/射精の近さの目安です（体重はキャストプロフにないので比べていません）</div>`;
+  }catch(e){ el.innerHTML = `<div class="warn">近いキャストを探せませんでした：${esc(e.message || e)}</div>`; }
+}
+
+// ダミーキャストのデータを入れる・直す
+function openDummyData(id){
+  const d = M.dummies.find(x=>x.id === id); if(!d) return;
+  const sel = (k)=>`<select id="dd_${k}">${MARKS.map(m=>`<option value="${m}" ${d[k] === m ? "selected" : ""}>${m || "－"}</option>`).join("")}</select>`;
+  $("dummyEdit").innerHTML = `<div style="font-size:12.5px;font-weight:800;margin-bottom:4px">🎭 ${esc(d.name)} のデータ</div>
+    <div class="grid3">
+      <div class="f"><label>年齢</label><input id="dd_age" type="number" value="${d.age ?? ""}"></div>
+      <div class="f"><label>身長（cm）</label><input id="dd_height" type="number" value="${d.height ?? ""}"></div>
+      <div class="f"><label>体重（kg）</label><input id="dd_weight" type="number" value="${d.weight ?? ""}"></div>
+      <div class="f"><label>カップ</label><input id="dd_cup" maxlength="5" value="${esc(d.cup || "")}" placeholder="C"></div>
+      <div class="f"><label>Pサイズ（cm）</label><input id="dd_psize" type="number" step="0.5" value="${d.psize ?? ""}"></div>
+      <div class="f"><label>AF</label>${sel("af")}</div>
+      <div class="f"><label>逆AF</label>${sel("rev_af")}</div>
+      <div class="f"><label>射精</label>${sel("shasei")}</div>
+    </div>
+    <div class="f"><label>メモ</label><input id="dd_note" maxlength="500" value="${esc(d.note || "")}"></div>
+    <div style="display:flex;gap:6px;margin-top:6px"><button type="button" class="btn btn-primary btn-sm" onclick="saveDummyData(${id})">保存</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="renderDummyEdit()">もどる</button></div>`;
+}
+async function saveDummyData(id){
+  const n = k => { const v = $("dd_" + k).value; return v === "" ? null : Number(v); };
+  const u = { age: n("age"), height: n("height"), weight: n("weight"), psize: n("psize"),
+              cup: $("dd_cup").value.trim().toUpperCase(), af: $("dd_af").value, rev_af: $("dd_rev_af").value, shasei: $("dd_shasei").value, note: $("dd_note").value.trim() };
+  try{
+    q(await sb.from("kb_dummy_names").update(u).eq("id", id));
+    Object.assign(M.dummies.find(x=>x.id === id), u);
+    toast("ダミーのデータを保存しました"); renderDummyEdit(); renderDummyMatch();
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+
+/* ---------- お店で出る欄（NH料金はキューティだけ・入会金は極門だけ） ---------- */
+function storeOnlyFields(){
+  const store = $("f_store").value;
+  const nh = store === "cutie", adm = store === "gokumon";
+  $("nhWrap").style.display = nh ? "" : "none"; if(!nh) $("f_nh").checked = false;
+  $("admWrap").style.display = adm ? "" : "none"; if(!adm) $("f_adm").checked = false;
+}
+
+/* ---------- AF・逆AF の希望（必ず聞く） ---------- */
+function radioVal(name){ const el = document.querySelector('input[name="' + name + '"]:checked'); return el ? el.value : ""; }
+function setRadio(name, v){ document.querySelectorAll('input[name="' + name + '"]').forEach(el=>{ el.checked = el.value === v; }); }
+// 希望ありなら、そのお店の AF／逆AF のオプションにチェックを入れる（サクラナは「AF・逆AF」1つ・極門は別々）
+function onAfWish(){
+  const g = storeGroup($("f_store").value), af = radioVal("f_afw") === "yes", raf = radioVal("f_rafw") === "yes";
+  const has = code => !!$("o_" + code) && M.options.some(o=>o.store_group === g && o.code === code);
+  if(has("gyakuaf")){ if(has("af")) $("o_af").checked = af; $("o_gyakuaf").checked = raf; }
+  else if(has("af")) $("o_af").checked = af || raf;
+  recalc();
+}
+function optSummary(){
+  const n = [...document.querySelectorAll("#f_opts input[type=checkbox]:checked")].length + ($("f_xop_label").value.trim() ? 1 : 0);
+  $("optCount").textContent = n ? `（${n}件 選択中）` : "";
+  if(n) $("optDetails").open = true;
+}
+
+/* ---------- エリア：ホテル一覧（地図つき）・交通費のめやす ---------- */
+const AREA_OTHER = "__other";
+function areaList(){ return [...new Set((M.hotels || []).map(h=>h.area).filter(Boolean))]; }
+function fillAreaSel(area){
+  const list = areaList();
+  $("f_areaSel").innerHTML = `<option value="">（エリアを選ぶ）</option>` + list.map(a=>`<option>${esc(a)}</option>`).join("") + `<option value="${AREA_OTHER}">そのほか（場所を入力）</option>`;
+  if(!area){ $("f_areaSel").value = ""; $("f_area").value = ""; $("f_area").style.display = "none"; }
+  else if(list.includes(area)){ $("f_areaSel").value = area; $("f_area").value = area; $("f_area").style.display = "none"; }
+  else { $("f_areaSel").value = AREA_OTHER; $("f_area").value = area; $("f_area").style.display = ""; }
+  showAreaFee();
+}
+function onAreaSel(){
+  const v = $("f_areaSel").value;
+  if(v === AREA_OTHER){ $("f_area").value = ""; $("f_area").style.display = ""; $("f_area").focus(); }
+  else { $("f_area").value = v; $("f_area").style.display = "none"; }
+  showAreaFee();
+  recalc();   // キャストへの予約連絡も新しい場所に
+}
+let areaTimer = null;
+function showAreaFee(){ clearTimeout(areaTimer); areaTimer = setTimeout(paintAreaInfo, 300); }
+async function paintAreaInfo(){
+  const area = $("f_area").value.trim(), el = $("areaInfo");
+  const hotels = (M.hotels || []).filter(h=>h.area === area);
+  $("hotelList").innerHTML = hotels.map(h=>`<option value="${esc(h.hotel_name)}">`).join("");
+  if(!area){ el.innerHTML = ""; return; }
+  let html = "";
+  if(hotels.length){
+    html += `<details class="info" style="margin:0 0 6px"><summary style="cursor:pointer;font-weight:800">🏨 ${esc(area)}のホテル（${hotels.length}件・押すと地図）</summary>`
+      + hotels.map(h=>`<div style="font-size:12.5px;padding:2px 0">${h.store_status === "ok" ? "✅" : h.store_status === "ng" ? "🚫" : "・"} ${esc(h.hotel_name)}`
+        + ` <a href="${esc(mapLink(h))}" target="_blank" rel="noopener">📍地図</a>` + (h.note ? `<small style="color:var(--sub)"> ${esc(h.note)}</small>` : "") + `</div>`).join("")
+      + `</details>`;
+  }
+  // 交通費のめやす（受付の記録＋提案額の記録）
+  try{
+    const like = "%" + area.replace(/[%_]/g, "") + "%";
+    const [rs, fs] = await Promise.all([
+      sb.from("kb_reservations").select("store_key,transport,biz_date").ilike("area", like).gt("transport", 0).eq("deleted", false).order("biz_date", { ascending: false }).limit(300),
+      sb.from("kb_area_fees").select("place,store_key,fee,note,by_name,at").ilike("place", like).order("at", { ascending: false }).limit(100),
+    ]);
+    if($("f_area").value.trim() !== area) return;   // 入力が変わった
+    const fees = (q(rs) || []).map(r=>({ fee: r.transport, store: r.store_key, when: r.biz_date, kind: "受付" }))
+      .concat((q(fs) || []).map(f=>({ fee: f.fee, store: f.store_key, when: String(f.at).slice(0, 10), kind: "提案", note: f.note })));
+    if(fees.length){
+      const avg = Math.round(fees.reduce((a, b)=>a + b.fee, 0) / fees.length / 100) * 100;
+      const min = Math.min(...fees.map(f=>f.fee)), max = Math.max(...fees.map(f=>f.fee));
+      html += `<div class="info">🚕 <b>${esc(area)}</b> の交通費：平均 <b>${yen(avg)}</b>（${fees.length}件・${yen(min)}〜${yen(max)}）<br>`
+        + `<small>最近：${fees.slice(0, 4).map(f=>`${f.when.slice(5).replace("-", "/")} ${esc(storeLabel(f.store) || "")} ${yen(f.fee)}${f.kind === "提案" ? "（提案）" : ""}`).join("、")}</small></div>`;
+    } else if(!hotels.length){
+      html += `<div class="warn">🚕 「${esc(area)}」の交通費の記録はまだありません。提案した金額を入れて「💾 この場所の提案額として記録」を押すと、次から平均が出ます。</div>`;
+    }
+  }catch(e){ html += `<div class="warn">交通費の記録を読めませんでした：${esc(e.message || e)}</div>`; }
+  el.innerHTML = html;
+}
+// ホテルの地図のリンク。正しいアドレス（https://〜）がなければ、ホテル名＋エリアで Google マップを検索するリンクにする
+function mapLink(h){
+  const u = String(h.map_url || "").trim();
+  if(/^https?:\/\//i.test(u)) return u;
+  return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent((h.area || "") + " " + (h.hotel_name || "") + " ホテル");
+}
+// ホテル・自宅の欄に書いたホテルの地図（ホテル一覧の名前が入っていれば。長い名前を先に探す）
+function hotelMapUrl(){
+  const area = $("f_area").value.trim(), addr = $("f_address").value.replace(/\s/g, "");
+  if(!addr) return "";
+  const list = (M.hotels || []).filter(h=>!area || h.area === area)
+    .sort((a, b)=>String(b.hotel_name).length - String(a.hotel_name).length);
+  const h = list.find(x=>addr.includes(String(x.hotel_name).replace(/\s/g, "")));
+  return h ? mapLink(h) : "";
+}
+async function saveAreaFee(){
+  const place = $("f_area").value.trim(), fee = Math.max(0, +$("f_transport").value || 0);
+  if(!place){ toast("エリア（場所）を入れてください"); return; }
+  if(!fee){ toast("交通費の金額を入れてください"); return; }
+  const note = prompt("メモ（例：お客さんに提案・成約しなかった など。空でもOK）", "") ;
+  if(note === null) return;
+  try{
+    q(await sb.from("kb_area_fees").insert({ place, store_key: $("f_store").value || null, fee, note: note.trim(), by_name: KB.operatorName() }));
+    toast("この場所の提案額を記録しました"); paintAreaInfo();
+  }catch(e){ toast("記録できませんでした：" + (e.message || e)); }
+}
+
+function isDummyStore(store){ const s = M.stores.find(x=>x.key===store); return !!(s && s.dummy); }
+function renderDummy(keep){
+  const store = $("f_store").value, on = isDummyStore(store);
+  $("dummyWrap").style.display = on ? "" : "none";
+  if(!on) return;
+  const cur = keep !== undefined && keep !== null ? keep : $("f_dummy").value;
+  const list = M.dummies.filter(d=>d.store_key===store);
+  $("f_dummy").innerHTML = `<option value="">（ダミー名を選ぶ）</option>` + list.map(d=>`<option>${esc(d.name)}</option>`).join("")
+    + (cur && !list.some(d=>d.name===cur) ? `<option>${esc(cur)}</option>` : "");
+  $("f_dummy").value = cur || "";
+  if($("dummyEdit").style.display !== "none") renderDummyEdit();
+  renderDummyMatch();
+}
+function toggleDummyEdit(){
+  const el = $("dummyEdit");
+  el.style.display = el.style.display === "none" ? "" : "none";
+  if(el.style.display !== "none") renderDummyEdit();
+}
+function renderDummyEdit(){
+  const store = $("f_store").value;
+  const list = M.dummies.filter(d=>d.store_key===store);
+  $("dummyEdit").innerHTML = `<div style="font-size:12px;font-weight:800;margin-bottom:4px">${esc(storeLabel(store))} のダミー名</div>`
+    + (list.length ? list.map(d=>`<span class="chip" style="cursor:default"><a href="javascript:void(0)" onclick="openDummyData(${d.id})" title="データを入れる・直す">${esc(d.name)}${d.height || d.cup || d.psize ? "" : " ✏️"}</a> <a href="javascript:void(0)" onclick="removeDummy(${d.id})" style="color:#c9556a">×</a></span>`).join(" ") + `<div style="font-size:11px;color:var(--sub);margin-top:4px">名前を押すと、身長・カップなどのデータを入れられます（マッチ率に使います）</div>` : `<span style="font-size:12px;color:var(--sub)">まだありません</span>`)
+    + `<div style="display:flex;gap:6px;margin-top:6px"><input id="dummyNew" maxlength="40" placeholder="ダミー名を足す" style="flex:1" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addDummy();}">
+       <button type="button" class="btn btn-ghost btn-sm" onclick="addDummy()">足す</button></div>`;
+}
+async function addDummy(){
+  const name = $("dummyNew").value.trim(), store = $("f_store").value;
+  if(!name) return;
+  try{
+    const row = q(await sb.from("kb_dummy_names").insert({ store_key: store, name, sort: M.dummies.length + 1, created_by: KB.operatorName() }).select().single());
+    M.dummies.push(row);
+    renderDummy(name); toast("ダミー名を足しました");
+  }catch(e){ toast("足せませんでした：" + (String(e.message || e).includes("duplicate") ? "同じ名前があります" : (e.message || e))); }
+}
+async function removeDummy(id){
+  const d = M.dummies.find(x=>x.id===id); if(!d) return;
+  if(!confirm("ダミー名「" + d.name + "」を一覧から外しますか？（今までの受付の記録はそのまま）")) return;
+  try{
+    q(await sb.from("kb_dummy_names").delete().eq("id", id));
+    M.dummies = M.dummies.filter(x=>x.id!==id);
+    renderDummy(); toast("外しました");
+  }catch(e){ toast("外せませんでした：" + (e.message || e)); }
+}
+function toggleMedia(code){ mediaSel = mediaSel.includes(code) ? mediaSel.filter(x=>x!==code) : [...mediaSel, code];
+  document.querySelectorAll("#f_media .chip").forEach((b,i)=>b.classList.toggle("on", mediaSel.includes(M.media[i].code))); }
+
+/* ---------- その日に効いているランク・条件（台帳の「適用開始日つき」の履歴から） ---------- */
+function rankRowsOn(cast){
+  const out = {};
+  M.rankHist.forEach(r=>{
+    if(r.cast_id !== cast.id || r.valid_from > day) return;
+    const b = out[r.grp];
+    if(!b || r.valid_from > b.valid_from || (r.valid_from === b.valid_from && r.id > b.id)) out[r.grp] = r;
+  });
+  return out;
+}
+function ranksOn(cast){
+  const rows = rankRowsOn(cast), o = {};
+  if(!Object.keys(rows).length) return cast.ranks || {};   // 履歴がまだ無いキャストは台帳の値
+  Object.keys(rows).forEach(g=>{ if(rows[g].rank) o[g] = rows[g].rank; });
+  return o;
+}
+function rulesOn(castId){
+  return M.rules.filter(r=>r.cast_id === castId && (r.valid_from || "2000-01-01") <= day && (!r.valid_to || r.valid_to > day));
+}
+// ヒアリングを見る
+let hearings = [];
+function hearLink(text, by, at){
+  hearings.push({ text, by, at });
+  return ` <a href="javascript:void(0)" onclick="showHear(${hearings.length - 1})" style="color:#c9556a;font-weight:800">🔗ヒアリング</a>`;
+}
+function showHear(i){
+  const h = hearings[i]; if(!h) return;
+  const d = h.at ? new Date(h.at) : null;
+  alert("💬 ヒアリング" + (h.by ? "（" + h.by + (d ? "　" + (d.getMonth()+1) + "/" + d.getDate() : "") + "）" : "") + "\n\n" + (h.text || "（記録がありません）"));
+}
+
+function onCast(){
+  const c = M.casts.find(x=>x.id===$("f_cast").value);
+  renderCastChecks(c);
+  if(!c){ $("castInfo").innerHTML = ""; recalc(); return; }
+  hearings = [];
+  const GL = {sakurana:"サクラナ",cutie:"CC",gokumon:"極門",event:"イベ"};
+  const rr = rankRowsOn(c), rks = ranksOn(c);
+  const rk = Object.entries(rks).map(([k,v])=>`${GL[k]||k} ${esc(v)}` + (rr[k] ? hearLink(rr[k].hearing_text, rr[k].by_name, rr[k].at) : "")).join("　");
+  const rules = rulesOn(c.id).map(r=>"・" + esc(r.note) + hearLink(r.hearing_text, r.by_name, r.created_at)).join("<br>");
+  $("castInfo").innerHTML =
+    (rk ? `<div class="info">⭐ ランク：${rk}</div>` : `<div class="warn">ランクが台帳に入っていません（バックは手で入れてください）</div>`) +
+    (c.special_notes ? `<div class="info">📝 特記事項：${esc(c.special_notes)}</div>` : "") +
+    (c.ng_notes ? `<div class="warn">🚫 NG：${esc(c.ng_notes)}</div>` : "") +
+    (rules ? `<div class="info">🧮 このキャストの条件：<br>${rules}</div>` : "");
+  recalc();
+}
+
+/* ---------- 受付で必ず案内すること（キャストごとの確認事項）。全部チェックしないと保存できない ---------- */
+function renderCastChecks(c){
+  const el = $("castChecks");
+  const list = c ? M.castChecks.filter(x=>x.cast_id === c.id) : [];
+  if(!list.length){ el.innerHTML = ""; return; }
+  // 編集のときは、前に案内した事項にチェックをつけておく
+  const done = (editing && editing.cast_id === c.id ? (editing.checks || []) : []).map(x=>x.text);
+  el.innerHTML = `<div style="background:#FFF4E5;border:2px solid #FFB547;border-radius:12px;padding:8px 10px;margin:6px 0">
+    <div style="font-weight:800;font-size:13px;color:#a35a00;margin-bottom:4px">📣 必ず案内すること（案内したらチェック）</div>`
+    + list.map(x=>`<label style="display:flex;gap:8px;align-items:flex-start;font-size:13.5px;padding:3px 0;cursor:pointer">
+        <input type="checkbox" class="cchk" data-text="${esc(x.text)}" ${done.includes(x.text) ? "checked" : ""} style="margin-top:3px;transform:scale(1.25)"> <span>${esc(x.text)}</span></label>`).join("")
+    + `<div style="font-size:11px;color:#a35a00;margin-top:2px">全部チェックしないと、受付を保存できません（聞きもれ防止）</div></div>`;
+}
+function checksForSave(){
+  const boxes = [...document.querySelectorAll("#castChecks .cchk")];
+  if(boxes.some(b=>!b.checked)) return null;
+  const prev = editing ? (editing.checks || []) : [];
+  const by = KB.operatorName(), at = new Date().toISOString();
+  return boxes.map(b=>{ const t = b.dataset.text; return prev.find(p=>p.text === t) || { text: t, at, by }; });
+}
+
+/* ---------- お客さん ---------- */
+const digits = s => String(s||"").replace(/[^\d]/g, "");
+async function lookupCustomer(keepName){
+  const phone = digits($("f_phone").value);
+  $("f_phone").value = phone;
+  if(phone.length < 6){ curCustomer = null; $("custInfo").innerHTML = ""; return; }
+  try{
+    const c = q(await sb.from("kb_customers").select("*").eq("phone", phone).order("id").limit(1).maybeSingle());
+    curCustomer = c || null;
+    if(!c){ $("custInfo").innerHTML = `<div class="info">🆕 はじめての電話番号です（保存すると新しいお客さんとして登録します）</div>`; if(!editing) setVisit("new"); return; }
+    if(!keepName || !$("f_name").value) $("f_name").value = c.name || "";
+    $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = c.ng_reason || c.note || "";
+    const past = q(await sb.from("kb_reservations").select("biz_date,store_key,cast_id,dummy_name,course,status").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(10)) || [];
+    const casts = [...new Set(past.map(p=>castName(p.cast_id)))];
+    $("custInfo").innerHTML = (c.ng ? `<div class="warn">⚠️ NG客です：${esc(c.ng_reason||"理由なし")}</div>` : "") +
+      `<div class="hist">これまで ${past.length}件${past.length>=10?"以上":""}（新しい順）：${past.map(p=>`${p.biz_date.slice(5).replace("-","/")} ${esc(storeLabel(p.store_key))} ${p.dummy_name ? "🎭" + esc(p.dummy_name) + "→" : ""}${esc(castName(p.cast_id))} ${esc(p.course)}${p.status==="cancel"?"(キャンセル)":p.status==="tobi"?"(トビ)":""}`).join("、") || "なし"}<br>
+       指名したことのあるキャスト：${casts.map(esc).join("、") || "なし"}<br>※ 台帳（エクセル）の過去データは、あとで入れます</div>`;
+    if(!editing){
+      const cid = $("f_cast").value;
+      setVisit(cid && past.some(p=>p.cast_id===cid) ? "honshi" : (past.length ? "repeat" : "new"));
+    }
+  }catch(e){ $("custInfo").innerHTML = `<div class="warn">お客さんを探せませんでした：${esc(e.message||e)}</div>`; }
+}
+function setVisit(v){ visit = v; document.querySelectorAll("#f_visit .chip").forEach((b,i)=>b.classList.toggle("on", VISIT[i][0]===v)); recalc(); }
+
+/* ---------- 計算 ---------- */
+function calc(){
+  const store = $("f_store").value, g = storeGroup(store), course = $("f_course").value;
+  const cast = M.casts.find(x=>x.id===$("f_cast").value);
+  const free = $("f_free").value, ext = Math.max(0, +$("f_ext").value||0), date = Math.max(0, +$("f_date").value||0);
+  const why = [];
+  const price = (M.prices.find(p=>p.store_key===store && p.course===course) || {}).price || 0;
+  // 指名料：フリーは0。キャストの特例があればその額。キューティの NH 料金は＋3,000円
+  let nomination = 0;
+  if(!free){
+    nomination = (M.set.nomination || {}).default || 2000;
+    const nr = cast && rulesOn(cast.id).find(r=>r.kind==="nomination_fee");
+    if(nr){ nomination = nr.params.amount; why.push(`指名料：特例 ${yen(nomination)}`); }
+    if(g === "cutie" && $("f_nh").checked){ nomination += 3000; why.push("NH料金：指名料＋3,000円"); }
+  }
+  const extSet = (M.set.extension || {})[g] || { price:10000, back:5000 };
+  const dateSet = M.set.date || { price:5000, back:2500 };
+  const admSet = M.set.admission || { price:2000, back_add:1000 };
+  const admission = $("f_adm").checked ? admSet.price : 0;
+  // オプション
+  const opts = [];
+  M.options.filter(o=>o.store_group===g).forEach(o=>{
+    if(!$("o_"+o.code) || !$("o_"+o.code).checked) return;
+    let p = +$("op_"+o.code).value||0, b = +$("ob_"+o.code).value||0;
+    const special = cast && rulesOn(cast.id).find(r=>r.kind==="op_price" && r.params.op===o.code && (!r.params.group || r.params.group===g));
+    if(special){ p = special.params.price; b = special.params.back; why.push(`${o.label}：特例 ${yen(p)}（バック${yen(b)}）`); }
+    const qty = o.unit === "once" ? 1 : Math.max(1, +$("oq_"+o.code).value||1);
+    opts.push({ group:g, code:o.code, label:o.label, qty, price:p, back:b, manual:o.manual });
+  });
+  if($("f_xop_label").value.trim()){
+    opts.push({ group:g, code:"custom", label:$("f_xop_label").value.trim(), qty:1, price:+$("f_xop_price").value||0, back:+$("f_xop_back").value||0, manual:true });
+  }
+  const optionTotal = opts.reduce((a,o)=>a + o.price*o.qty, 0);
+  const optionBack = opts.reduce((a,o)=>a + o.back*o.qty, 0);
+  const transport = Math.max(0, +$("f_transport").value||0), discount = Math.max(0, +$("f_discount").value||0);
+  let total = price + admission + nomination + ext*extSet.price + date*dateSet.price + transport + optionTotal - discount;
+  const pay = $("f_pay").value;
+  const cardRate = (M.set.card || {}).rate || 1.15;
+  if(pay !== "cash"){ total = Math.round(total * cardRate); }
+  // バック：店舗のグループのランク（特別フリー・イベフリーは「イベ」のランク）＋コース＋（本指／フリー…）
+  let courseBack = 0, rank = "", key = "";
+  if(cast){
+    rank = (free === "special_free" || free === "event_free") ? ranksOn(cast).event : ranksOn(cast)[g];
+    const suffix = free ? FREE_SUFFIX[free] : (visit === "honshi" ? "本指" : "");
+    if(rank){
+      let r2 = rank;
+      if(g === "cutie" && $("f_nh").checked && !/NH/.test(rank)) r2 = rank + "+NH指名";
+      key = course + suffix;
+      courseBack = M.back[r2 + "|" + key];
+      if(courseBack == null && r2 !== rank) courseBack = M.back[rank + "|" + key];
+      if(courseBack == null){ courseBack = 0; why.push(`⚠️ バック表に「${rank}・${key}」がありません → 報酬を手で入れてください`); }
+      else why.push(`コースのバック：${rank}・${key} → ${yen(courseBack)}`);
+    }else why.push("⚠️ このお店用のランクが台帳にありません → 報酬を手で入れてください");
+  }
+  let extra = ext*extSet.back + date*dateSet.back;
+  if(ext) why.push(`延長 ${ext}回：バック ${yen(ext*extSet.back)}`);
+  if(date) why.push(`デート ${date}回：バック ${yen(date*dateSet.back)}`);
+  if(admission){ extra += admSet.back_add; why.push(`入会金あり：報酬＋${yen(admSet.back_add)}`); }
+  if(cast){
+    rulesOn(cast.id).filter(r=>r.kind==="back_add").forEach(r=>{
+      const p = r.params || {};
+      const okStore = !p.store || p.store === store, okCourse = !p.course || p.course === course;
+      const okMin = !p.min_minutes || minutesOf(course) >= p.min_minutes;
+      if(okStore && okCourse && okMin){ extra += p.amount; why.push(`特例：${r.note}（＋${yen(p.amount)}）`); }
+    });
+  }
+  return { store, g, course, price, nomination, admission, extFee: ext*extSet.price, dateFee: date*dateSet.price, opts, optionTotal,
+           optionBack, transport, discount, total, pay, courseBack, extra, why, rank, ext, date, free };
+}
+
+let last = null;
+function recalc(){
+  if(!$("f_store").value) return;
+  optSummary();
+  const c = last = calc();
+  const ov = editing && editing.back_override != null ? editing.back_override : "";
+  const back = c.courseBack + c.optionBack + c.extra;
+  $("calc").innerHTML = `
+    <h3>💴 お客さんの料金</h3>
+    <div class="row"><span>基本額（${esc(c.course)}）</span><b>${yen(c.price)}</b></div>
+    ${c.admission?`<div class="row"><span>入会金</span><b>${yen(c.admission)}</b></div>`:""}
+    <div class="row"><span>指名料</span><b>${yen(c.nomination)}</b></div>
+    ${c.extFee?`<div class="row"><span>延長</span><b>${yen(c.extFee)}</b></div>`:""}
+    ${c.dateFee?`<div class="row"><span>デート</span><b>${yen(c.dateFee)}</b></div>`:""}
+    ${c.optionTotal?`<div class="row"><span>オプション</span><b>${yen(c.optionTotal)}</b></div>`:""}
+    ${c.transport?`<div class="row"><span>交通費</span><b>${yen(c.transport)}</b></div>`:""}
+    ${c.discount?`<div class="row"><span>割引</span><b>−${yen(c.discount)}</b></div>`:""}
+    ${c.pay!=="cash"?`<div class="row"><span>カード（×${(M.set.card||{}).rate||1.15}）</span><b></b></div>`:""}
+    <div class="row total"><span>総額</span><b>${yen(c.total)}</b></div>
+    <h3>💗 キャストの報酬</h3>
+    <div class="row back"><span>コースのバック</span><b>${yen(c.courseBack)}</b></div>
+    <div class="row back"><span>OPのバック</span><b>${yen(c.optionBack)}</b></div>
+    <div class="row back"><span>延長・入会金・特例</span><b>${yen(c.extra)}</b></div>
+    <div class="row total"><span>報酬</span><b>${yen(back)}</b></div>
+    <div class="f" style="margin-top:8px"><label>報酬を手で直す（空なら自動）</label><input type="number" id="f_backov" value="${ov}" ${KB.CAN_EDIT?"":"disabled"}></div>
+    <div class="why">${esc(c.why.join("\n"))}</div>`;
+  // コースの説明（極門など）
+  const info = M.courseInfo.find(i=>i.store_key===c.store && String(c.course).startsWith(i.course_type));
+  $("courseInfo").innerHTML = info ? `<div class="info"><b>${esc(info.title)}</b>\n${esc(info.description)}</div>` : "";
+  buildMsg(c);
+}
+
+/* ---------- 予約連絡の文面 ---------- */
+function buildMsg(c){
+  const cast = M.casts.find(x=>x.id===$("f_cast").value);
+  const d = new Date(day + "T12:00:00Z");
+  const st = $("f_start").value;
+  let en = "";
+  if(st){ const [h,m] = st.split(":").map(Number); const mins = minutesOf(c.course) + c.ext*30 + c.date*30; const t = h*60+m+mins; en = String(Math.floor(t/60)%24).padStart(2,"0")+":"+String(t%60).padStart(2,"0"); }
+  const backOps = c.opts.filter(o=>o.back>0).map(o=>o.label + (o.qty>1?"×"+o.qty:"")).join("・") || "なし";
+  const noBackOps = c.opts.filter(o=>!(o.back>0)).map(o=>o.label + (o.qty>1?"×"+o.qty:"")).join("・") || "なし";
+  $("msg").value =
+`【${cast ? (cast.official_name || cast.temp_name) : "キャスト"}】${isDummyStore(c.store) && $("f_dummy").value ? "（ダミー名「" + $("f_dummy").value + "」で受けています）" : ""}
+${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st||"--:--"}〜${en||"--:--"}
+【店名】${storeLabel(c.store)}
+【名前】${$("f_name").value || "お客"}様 ${VISIT.find(v=>v[0]===visit)[1]}
+【コース】${c.course}${/^\d+$/.test(c.course)?"分":""}${c.free?"（"+FREE_SUFFIX[c.free]+"）":""}${c.ext?"＋延長"+c.ext*30+"分":""}
+【ホテル・自宅】${$("f_area").value} ${$("f_address").value}${hotelMapUrl() ? "\n【地図】" + hotelMapUrl() : ""}
+【バック有OP】${backOps}
+【バック無OP】${noBackOps}
+${c.pay === "cash"
+  ? `【料金総額】${c.total.toLocaleString("ja-JP")}円
+※お会いしたら最初に料金をいただいてください。盗難・貰い忘れに注意！`
+  : `【お支払い】カード決済の為、お金はいただかずスタートしてください`}`;
+}
+function copyMsg(){ navigator.clipboard.writeText($("msg").value).then(()=>toast("📋 文面をコピーしました")); }
+
+/* ---------- 保存・削除 ---------- */
+function startAt(){
+  const st = $("f_start").value; if(!st) return null;
+  const [h,m] = st.split(":").map(Number);
+  // 日本時間で組み立てる。朝6時より前は次の日の日付（営業日はそのまま）
+  const d = new Date(`${day}T${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:00+09:00`);
+  if(h < 6) d.setTime(d.getTime() + 24*3600*1000);
+  return d;
+}
+async function saveRes(){
+  if(!KB.CAN_EDIT){ toast("作成中のため、直せるのは店長だけです"); return; }
+  if(!$("f_cast").value){ toast(isDummyStore($("f_store").value) ? "実際に行くキャストを選んでください" : "キャストを選んでください"); return; }
+  if(isDummyStore($("f_store").value) && !$("f_dummy").value){ toast("ダミー名を選んでください（一覧になければ ⚙️ から足せます）"); return; }
+  // 必ず案内すること：全部チェックしないと保存できない（キャンセル・トビは除く）
+  const cancelLike = ["cancel", "tobi"].includes($("f_status").value);
+  const checks = checksForSave();
+  if(!checks && !cancelLike){ toast("📣 必ず案内することに、まだチェックがついていません"); $("castChecks").scrollIntoView({ block: "center" }); return; }
+  if(!cancelLike && (!radioVal("f_afw") || !radioVal("f_rafw"))){ toast("🔸 AF・逆AF のご希望を聞いて、選んでください"); $("optDetails").scrollIntoView({ block: "center" }); return; }
+  if(!$("f_course").value){ toast("コースを選んでください"); return; }
+  if(!(await KB.staffSession())){ toast("ログインの期限が切れました。ポータルから開き直してください"); return; }
+  const c = calc(), by = KB.operatorName();
+  try{
+    // お客さん（電話番号があれば探す・なければ作る）
+    let customerId = curCustomer ? curCustomer.id : null;
+    const phone = digits($("f_phone").value), name = $("f_name").value.trim(), ng = $("f_ng").value === "1", cn = $("f_custnote").value.trim();
+    if(phone || name){
+      if(!customerId && phone){
+        const ex = q(await sb.from("kb_customers").select("id").eq("phone", phone).limit(1).maybeSingle());
+        if(ex) customerId = ex.id;
+      }
+      const cu = { phone, name, ng, updated_by: by };
+      if(ng) cu.ng_reason = cn; else if(cn) cu.note = cn;
+      if(customerId) q(await sb.from("kb_customers").update(cu).eq("id", customerId));
+      else customerId = q(await sb.from("kb_customers").insert(cu).select("id").single()).id;
+    }
+    const s = startAt();
+    const mins = minutesOf(c.course) + c.ext*30 + c.date*30;
+    const ovRaw = $("f_backov") ? $("f_backov").value : "";
+    const row = {
+      biz_date: day, store_key: c.store, cast_id: $("f_cast").value, customer_id: customerId,
+      dummy_name: isDummyStore(c.store) ? $("f_dummy").value : "",
+      checks: checks || (editing ? (editing.checks || []) : []),
+      af_wish: radioVal("f_afw"), rev_af_wish: radioVal("f_rafw"),
+      play_wish: $("f_play").value.trim(),
+      cast_notified_at: $("f_notified").checked ? ((editing && editing.cast_notified_at) || new Date().toISOString()) : null,
+      cast_notified_by: $("f_notified").checked ? ((editing && editing.cast_notified_at && editing.cast_notified_by) || by) : "",
+      visit_kind: visit, free_kind: c.free, nh_rate: $("f_nh").checked,
+      start_at: s ? s.toISOString() : null, end_at: s ? new Date(s.getTime() + mins*60000).toISOString() : null,
+      area: $("f_area").value.trim(), address: $("f_address").value.trim(), course: c.course,
+      extension_count: c.ext, date_count: c.date, options: c.opts, media: mediaSel,
+      base_price: c.price, admission: c.admission, nomination_fee: c.nomination, extension_fee: c.extFee + c.dateFee,
+      transport: c.transport, option_total: c.optionTotal, discount: c.discount, discount_note: $("f_discnote").value.trim(),
+      total: c.total, payment: c.pay, card_total: c.pay === "cash" ? 0 : c.total,
+      course_back: c.courseBack, option_back: c.optionBack, extra_back: c.extra,
+      back_override: ovRaw === "" ? null : Number(ovRaw),
+      status: $("f_status").value, confirm_call: $("f_confirm").value.trim(), note: $("f_note").value, updated_by: by,
+    };
+    if(editing) q(await sb.from("kb_reservations").update(row).eq("id", editing.id));
+    else { row.created_by = by; q(await sb.from("kb_reservations").insert(row)); }
+    closeForm(); toast("保存しました🌸"); loadDay();
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+async function removeRes(){
+  if(!KB.CAN_EDIT || !editing) return;
+  if(!confirm("この受付を削除しますか？（記録には「削除」として残ります）")) return;
+  try{ q(await sb.from("kb_reservations").update({ deleted: true, updated_by: KB.operatorName() }).eq("id", editing.id)); closeForm(); toast("削除しました"); loadDay(); }
+  catch(e){ toast("削除できませんでした：" + (e.message || e)); }
+}
+async function loadLog(id){
+  try{
+    const logs = q(await sb.from("kb_reservation_log").select("at,by_name,action,changes").eq("reservation_id", id).order("at")) || [];
+    $("logInfo").innerHTML = "🕒 記録：" + logs.map(l=>{
+      const t = new Date(l.at); const j = new Date(t.getTime()+9*3600*1000);
+      const w = `${j.getUTCMonth()+1}/${j.getUTCDate()} ${String(j.getUTCHours()).padStart(2,"0")}:${String(j.getUTCMinutes()).padStart(2,"0")}`;
+      const what = l.action === "insert" ? "受付" : l.action === "delete" ? "削除" : "変更（" + Object.keys(l.changes||{}).slice(0,6).join("・") + "）";
+      return `${w} ${esc(l.by_name||"")} ${what}`;
+    }).join(" ／ ");
+  }catch(e){}
+}
+
+init();
+
+/* ============================================================
+   ここから下：新しい記録簿の画面だけで使うもの
+   （上の受付のしくみ・計算・保存はそのまま使う）
+   ============================================================ */
+$("navArea").innerHTML = KB.nav("kiroku.html");
+
+/* ---------- 数字のカード・税務集計 ---------- */
+const __renderList = renderList;
+renderList = function(){
+  __renderList();
+  const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi");
+  const total = live.reduce((a, r)=>a + (r.total || 0), 0), back = live.reduce((a, r)=>a + backOf(r), 0);
+  const casts = new Set(live.map(r=>r.cast_id).filter(Boolean)).size;
+  const tax = live.reduce((a, r)=>a + Math.floor(backOf(r) / 9), 0);
+  const card = live.filter(r=>r.payment !== "cash").reduce((a, r)=>a + (r.total || 0), 0);
+  $("stats").className = "stats" + (showMoney ? "" : " hide");
+  $("tax").className = "tax" + (showMoney ? "" : " hide");
+  $("moneyBtn").textContent = showMoney ? "🙈 金額をかくす" : "👁 金額を見る";
+  $("stats").innerHTML = `
+    <div class="stat"><div class="k">本日売上</div><div class="v pink m">${yen(total)}</div></div>
+    <div class="stat"><div class="k">予約件数</div><div class="v">${live.length}件</div></div>
+    <div class="stat"><div class="k">予約のあるキャスト</div><div class="v">${casts}名</div></div>
+    <div class="stat"><div class="k">キャスト報酬計</div><div class="v green m">${yen(back)}</div></div>
+    <div class="stat"><div class="k">店落ち（暫定）</div><div class="v m">${yen(total - back)}</div></div>`;
+  $("tax").innerHTML = `<span>📊 税務集計（本日分）</span>
+    <span>源泉徴収合計<b>${yen(tax)}</b></span><span>暫定残額合計<b>${yen(total - back)}</b></span>
+    <span>実質店落ち<b>${yen(total - back - tax)}</b></span><span>カード売上<b>${yen(card)}</b></span>`;
+};
+
+/* ---------- 支払い方法のボタン ---------- */
+const PAYS = [["cash", "現金"], ["card", "カード（×1.15）"], ["card_paid", "カード済み"]];
+function renderPayChips(){
+  const v = $("f_pay").value || "cash";
+  $("f_payChips").innerHTML = PAYS.map(([k, l])=>`<button type="button" class="chip ${v === k ? "on" : ""}" onclick="setPay('${k}')">${l}</button>`).join("");
+}
+function setPay(v){ $("f_pay").value = v; renderPayChips(); recalc(); }
+
+/* ---------- 開いたとき：希望プレイ・支払い ---------- */
+const __openForm = openForm;
+openForm = function(id){
+  __openForm(id);
+  const r = (id ? rows.find(x=>x.id === id) : null) || {};
+  $("formTitle").textContent = id ? `予約の編集（No.${id}）` : "予約を追加";
+  $("f_play").value = r.play_wish || "";
+  renderPayChips();
+  recalc();
+  $("formBg").scrollTop = 0;
+};
+
+/* ---------- 計算のたびに：終了時刻・総額の帯・タイムライン ---------- */
+const __recalc = recalc;
+recalc = function(){
+  __recalc();
+  if(!last) return;
+  const s = $("f_start").value;
+  if(s){
+    const [h, m] = s.split(":").map(Number);
+    const t = h * 60 + m + minutesOf(last.course) + last.ext * 30 + last.date * 30;
+    $("endView").textContent = String(Math.floor(t / 60) % 24).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+  } else $("endView").textContent = "--:--";
+  $("footTotal").textContent = yen(last.total);
+  // 希望プレイを予約連絡に入れる
+  const pw = $("f_play").value.trim();
+  if(pw) $("msg").value = $("msg").value.replace(/(【バック無OP】[^\n]*)/, "$1\n【希望プレイ】" + pw);
+  drawTimeline();
+};
+
+/* ---------- そのキャストの本日のタイムライン（11時〜翌5時） ---------- */
+const TL_FROM = 11, TL_TO = 29;
+function hourOf(iso){ const d = new Date(new Date(iso).getTime() + 9 * 3600 * 1000); let h = d.getUTCHours() + d.getUTCMinutes() / 60; if(h < 6) h += 24; return h; }
+function pct(h){ return Math.max(0, Math.min(100, (h - TL_FROM) / (TL_TO - TL_FROM) * 100)); }
+function drawTimeline(){
+  const el = $("castTimeline"); if(!el) return;
+  const c = M.casts.find(x=>x.id === $("f_cast").value);
+  if(!c){ el.innerHTML = ""; $("footWarn").textContent = ""; return; }
+  const sh = shiftCache[day];
+  if(!sh){ loadShifts(day).then(()=>drawTimeline()).catch(()=>{}); }
+  const shift = sh ? (sh[c.shift_name] || sh[c.official_name]) : null;
+  const others = rows.filter(r=>r.cast_id === c.id && (!editing || r.id !== editing.id) && r.status !== "cancel" && r.status !== "tobi" && r.start_at && r.end_at)
+    .map(r=>({ s: hourOf(r.start_at), e: hourOf(r.end_at), label: hm(r.start_at) + "〜" + hm(r.end_at) }));
+  let cur = null;
+  const st = $("f_start").value;
+  if(st && last){
+    const [h, m] = st.split(":").map(Number);
+    let s = h + m / 60; if(s < 6) s += 24;
+    const e = s + (minutesOf(last.course) + last.ext * 30 + last.date * 30) / 60;
+    cur = { s, e, label: st + "〜" + $("endView").textContent };
+  }
+  const clash = cur && others.some(o=>o.s < cur.e && cur.s < o.e);
+  const outShift = cur && shift && (cur.s < shift.start || cur.e > shift.end);
+  $("footWarn").textContent = clash ? "⚠️ 予約が重なっています" : (outShift ? "⚠️ 出勤時間の外です" : "");
+  const ticks = [11, 14, 17, 20, 23, 26].map(h=>`<span>${h >= 24 ? "翌" + (h - 24) : h}時</span>`).join("");
+  el.innerHTML = `<div class="tl"><div class="ttl">📅 本日のタイムライン（${esc(c.official_name || c.temp_name)}）
+      ${shift ? `<span style="font-weight:400;color:#c9cbe0">出勤 ${hourLabel(shift.start)}〜${hourLabel(shift.end)}${shift.confirmed ? "" : "（未確定）"}</span>` : `<span style="font-weight:400;color:#c9cbe0">${sh ? "シフトが見つかりません" : "シフトを読み込み中…"}</span>`}</div>
+    <div class="axis">${ticks}</div>
+    <div class="bar">
+      ${shift ? `<div class="shift" style="left:${pct(shift.start)}%;width:${pct(shift.end) - pct(shift.start)}%"></div>` : ""}
+      ${others.map(o=>`<div class="bk other" style="left:${pct(o.s)}%;width:${Math.max(2, pct(o.e) - pct(o.s))}%" title="${esc(o.label)}">${esc(o.label)}</div>`).join("")}
+      ${cur ? `<div class="bk ${clash ? "clash" : "cur"}" style="left:${pct(cur.s)}%;width:${Math.max(2, pct(cur.e) - pct(cur.s))}%">${esc(cur.label)}</div>` : ""}
+    </div>
+    <div class="leg">■ 出勤時間　<span style="color:#8fb0ff">■</span> 入っている予約　<span style="color:#ffbe5c">■</span> この予約${clash ? '　<b style="color:#ff8a8a">重なっています</b>' : ""}</div></div>`;
+}
+</script>
+<!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
+</body>
+</html>

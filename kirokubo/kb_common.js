@@ -44,7 +44,7 @@
   }
   // ページの上の切りかえ
   function nav(active){
-    const items = [["reception.html","🧾 受付"],["settle.html","💴 精算"],["index.html","📒 キャスト台帳"]];
+    const items = [["kiroku.html","🆕 新しい記録簿（ためし中）"],["reception.html","🧾 受付"],["settle.html","💴 精算"],["index.html","📒 キャスト台帳"]];
     return `<nav class="kbnav">${items.map(([h,l])=>`<a href="${h}" class="${h===active?"on":""}">${l}</a>`).join("")}</nav>`;
   }
   function wipBanner(){
