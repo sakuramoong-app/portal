@@ -125,6 +125,25 @@
   .castpick .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
   .castpick .chip{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:6px 12px;font-family:inherit;font-size:13.5px;font-weight:800;color:var(--sub);cursor:pointer;}
   .castpick .chip.on{background:#e5638c;border-color:#e5638c;color:#fff;}
+  /* 🕐 空き枠 */
+  .search .chips{display:inline-flex;gap:6px;}
+  .search .chip{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:6px 14px;font-family:inherit;font-size:14px;font-weight:800;color:var(--sub);cursor:pointer;}
+  .search .chip.on{background:#e5638c;border-color:#e5638c;color:#fff;}
+  .slothead{font-size:12.5px;color:var(--sub);font-weight:800;margin:4px 2px 8px;}
+  .slot{display:grid;grid-template-columns:120px 64px 1fr;gap:10px;align-items:center;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:8px 12px;margin-bottom:6px;}
+  .slot.none{background:#F6F4F5;opacity:.7;}
+  .slot .tm{font-size:20px;font-weight:800;line-height:1.1;}
+  .slot .tm small{display:block;font-size:11.5px;color:var(--sub);font-weight:700;}
+  .slot .mk{font-size:22px;font-weight:800;color:#2f9e6e;text-align:center;line-height:1.1;}
+  .slot.none .mk{color:#bbb;}
+  .slot .mk small{display:block;font-size:11px;color:var(--sub);}
+  .slot .who,.slotcast .times{display:flex;gap:6px;flex-wrap:wrap;}
+  .pick{border:1.5px solid #9ad9bd;background:#F0FBF5;color:#1a7a5e;border-radius:12px;padding:8px 14px;font-family:inherit;font-size:15px;font-weight:800;cursor:pointer;line-height:1.2;}
+  .pick small{display:block;font-size:11px;color:var(--sub);font-weight:700;}
+  .pick:hover{background:#2f9e6e;color:#fff;border-color:#2f9e6e;}
+  .slotcast{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:8px;}
+  .slotcast .nm{font-size:16px;font-weight:800;margin-bottom:8px;}
+  .slotcast .nm small{font-size:12px;color:var(--sub);font-weight:700;margin-left:8px;}
   /* 🗺 ボード */
   table.board{width:100%;min-width:900px;border-collapse:separate;border-spacing:0;background:#fff;border:1.5px solid var(--line);border-radius:14px;overflow:hidden;}
   table.board th{background:#FBF7F8;font-size:13px;font-weight:800;padding:8px;border-bottom:1.5px solid var(--line);}
@@ -185,12 +204,24 @@
     <div class="tax hide" id="tax"></div>
     <div class="notice"><textarea id="notice" placeholder="📢 本日のお知らせ" onchange="saveNotice()"></textarea></div>
     <div class="tabs" id="tabs">
+      <button data-v="slots" onclick="showView('slots')">🕐 空き枠</button>
       <button data-v="tl" onclick="showView('tl')">⏱ タイムライン</button>
       <button data-v="list" onclick="showView('list')">📋 予約一覧</button>
       <a href="settle.html" title="精算は、ボードの札を押した「キャストの枠」でもできます">💴 精算（一覧）</a>
       <button data-v="board" onclick="showView('board')">🗺 ボード</button>
     </div>
     <div class="sum" id="sum"></div>
+
+    <!-- 🕐 空き枠 -->
+    <div id="viewSlots" style="display:none">
+      <div class="search">
+        <span class="lbl">🕐 空き枠</span>
+        <span class="chips" id="slotModes"><button type="button" class="chip" data-m="free" onclick="setSlotMode('free')">指名なし</button><button type="button" class="chip" data-m="cast" onclick="setSlotMode('cast')">キャスト指名</button></span>
+        <label>何分 <select id="sl_min" onchange="renderSlots()"><option value="60">60分</option><option value="90" selected>90分</option><option value="120">120分</option><option value="150">150分</option><option value="180">180分</option><option value="240">240分</option></select></label>
+      </div>
+      <div class="castpick" id="slotPick" style="display:none"><div style="font-weight:800;font-size:13.5px;color:var(--sub)">👥 キャストを選ぶ（複数OK）</div><div class="chips" id="slotPickChips"></div></div>
+      <div id="slotList"></div>
+    </div>
 
     <!-- 🗺 ボード -->
     <div id="viewBoard" style="display:none">
@@ -1295,12 +1326,10 @@ let castDays = {};
 let selCasts = new Set();
 function showView(v){
   try{ localStorage.setItem("kirokuView", v); }catch(e){}
-  $("viewTL").style.display = v === "tl" ? "" : "none";
-  $("viewList").style.display = v === "list" ? "" : "none";
-  if($("viewBoard")) $("viewBoard").style.display = v === "board" ? "" : "none";
+  ["tl", "list", "board", "slots"].forEach(k=>{ const el = $("view" + { tl: "TL", list: "List", board: "Board", slots: "Slots" }[k]); if(el) el.style.display = v === k ? "" : "none"; });
   document.querySelectorAll("#tabs button[data-v]").forEach(b=>b.classList.toggle("on", b.dataset.v === v));
 }
-(function(){ let v = "tl"; try{ v = localStorage.getItem("kirokuView") || "tl"; }catch(e){} showView(v); })();
+(function(){ let v = "slots"; try{ v = localStorage.getItem("kirokuView") || "slots"; }catch(e){} showView(v); })();
 (function(){ try{ const s = localStorage.getItem("kirokuSort"); if(s && $("s_sort")) $("s_sort").value = s; }catch(e){} })();
 
 const __loadDay = loadDay;
@@ -1443,7 +1472,7 @@ function jumpCast(castId){
   const want = $("s_time").value;
   if(confirm("このキャストで予約を入れますか？" + (want ? "（" + want + " から）" : ""))) newBookingFor(castId, want);
 }
-setInterval(()=>{ if($("viewTL").style.display !== "none" && day === KB.bizDateOf()) renderTL(); }, 60000);
+setInterval(()=>{ if(day === KB.bizDateOf() && !$("formBg").classList.contains("show")) renderTL(); }, 60000);
 
 /* ============================================================
    🗺 ボード（エクセルの「待機場所 × 待機中／仕事中／予約スタ・出勤前連絡／今いない」）
@@ -1712,6 +1741,73 @@ function refreshCastSettle(id){
   castOpen && (castOpen.cd = castDays[id]);
   renderTL();
 }
+
+/* ============================================================
+   🕐 空き枠（ホットペッパーのような一覧）
+   ・指名なし：30分ごとの開始時刻と、その時刻から行けるキャスト（押すとその人・その時刻で予約）
+   ・キャスト指名：選んだキャスト（複数OK）ごとに、空いている開始時刻をボタンで
+   ・行けるかどうかは、タイムラインと同じ（出勤時間・予約・予約の間・お茶／欠勤／精算済）
+   ============================================================ */
+let slotMode = "free";
+let slotSel = new Set();
+function canGo(x, t, mins){
+  if(!x.shift || !x.c) return false;
+  if(x.cd && (["お茶", "欠勤", "精算済"].includes(x.cd.status) || x.cd.settled)) return false;
+  const e = t + mins / 60, g = gapOf(x);
+  return t >= x.shift.start - 0.01 && e <= x.shift.end + 0.01 && !x.bks.some(b=>b.s - g < e && t < b.e + g);
+}
+function slotTimes(){
+  // 今日は今より後（30分きざみ）から。ほかの日は11時から。最後は翌6時半まで
+  let from = TL_FROM;
+  if(day === KB.bizDateOf()){ const n = nowHour(); from = Math.max(TL_FROM, Math.ceil(n * 2) / 2); }
+  const out = []; for(let t = from; t <= TL_TO - 0.5; t += 0.5) out.push(t);
+  return out;
+}
+function setSlotMode(m){ slotMode = m; renderSlots(); }
+function toggleSlotSel(k){ if(slotSel.has(k)) slotSel.delete(k); else slotSel.add(k); renderSlots(); }
+function slotBook(castId, t){
+  if(!KB.CAN_EDIT) return;
+  const hh = Math.floor(t) % 24, mm = Math.round((t - Math.floor(t)) * 60);
+  newBookingFor(castId, String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0"));
+  // コースの分数も合わせる（同じ分数のコースがあれば）
+  const mins = String(Number($("sl_min").value) || 90);
+  if([...$("f_course").options].some(o=>o.value === mins)){ $("f_course").value = mins; recalc(); }
+}
+function renderSlots(){
+  const el = $("slotList"); if(!el || !M.casts) return;
+  if(!shiftCache[day]){ el.innerHTML = `<div class="gate">シフトを読み込み中…</div>`; return; }
+  const mins = Number($("sl_min").value) || 90;
+  const casts = sortRows(tlRows()).filter(x=>x.c && x.shift);
+  document.querySelectorAll("#slotModes .chip").forEach(b=>b.classList.toggle("on", b.dataset.m === slotMode));
+  $("slotPick").style.display = slotMode === "cast" ? "" : "none";
+  $("slotPickChips").innerHTML = casts.map(x=>`<button type="button" class="chip ${slotSel.has(x.c.id) ? "on" : ""}" onclick="toggleSlotSel('${x.c.id}')">${esc(castLabel(x))}</button>`).join("") || `<span class="hist">この日のシフトがありません</span>`;
+  const times = slotTimes();
+  if(!casts.length){ el.innerHTML = `<div class="gate">この日のシフトがありません</div>`; return; }
+  if(slotMode === "free"){
+    // 指名なし：時刻ごとに行ける人
+    const rowsHtml = times.map(t=>{
+      const ok = casts.filter(x=>canGo(x, t, mins));
+      return `<div class="slot ${ok.length ? "" : "none"}">
+        <div class="tm">${tlLabel(t)}<small>〜${tlLabel(t + mins / 60)}</small></div>
+        <div class="mk">${ok.length ? (ok.length >= 3 ? "◎" : "○") : "×"}<small>${ok.length}人</small></div>
+        <div class="who">${ok.length ? ok.map(x=>`<button class="pick" onclick="slotBook('${x.c.id}',${t})">${esc(castLabel(x))}${x.cd && x.cd.standby ? `<small>${esc(x.cd.standby)}</small>` : ""}</button>`).join("") : `<span class="hist" style="margin:0">行ける人はいません</span>`}</div>
+      </div>`;
+    }).join("");
+    el.innerHTML = `<div class="slothead">${mins}分コースで、開始時刻ごとに行けるキャスト（名前を押すと、その人・その時刻で予約）</div>` + rowsHtml;
+  } else {
+    // キャスト指名：選んだ人の空いている開始時刻
+    const list = slotSel.size ? casts.filter(x=>slotSel.has(x.c.id)) : [];
+    el.innerHTML = list.length ? list.map(x=>{
+      const ok = times.filter(t=>canGo(x, t, mins));
+      return `<div class="slotcast">
+        <div class="nm">${esc(castLabel(x))}<small>出勤 ${tlLabel(x.shift.start)}〜${tlLabel(x.shift.end)}${x.cd && x.cd.standby ? "・" + esc(x.cd.standby) : ""}${gapOf(x) ? "・予約の間" + x.c.interval_min + "分" : ""}</small></div>
+        <div class="times">${ok.length ? ok.map(t=>`<button class="pick" onclick="slotBook('${x.c.id}',${t})">${tlLabel(t)}</button>`).join("") : `<span class="hist" style="margin:0">${mins}分で空いている時間はありません</span>`}</div>
+      </div>`;
+    }).join("") : `<div class="gate">上のボタンでキャストを選んでください（複数OK）</div>`;
+  }
+}
+const __renderTL3 = renderTL;
+renderTL = function(){ __renderTL3(); renderSlots(); };
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
