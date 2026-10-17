@@ -115,6 +115,19 @@
   .tlg .want.ng{border-color:#ef4444;}
   .tlg .now{position:absolute;top:0;bottom:0;width:2px;background:#ef4444;pointer-events:none;}
   .tlg .off{position:absolute;inset:0;background:repeating-linear-gradient(45deg,#f5f5f5 0 6px,#fff 6px 12px);}
+  /* 🗺 ボード */
+  table.board{width:100%;min-width:900px;border-collapse:separate;border-spacing:0;background:#fff;border:1.5px solid var(--line);border-radius:14px;overflow:hidden;}
+  table.board th{background:#FBF7F8;font-size:13px;font-weight:800;padding:8px;border-bottom:1.5px solid var(--line);}
+  table.board tr > th:first-child{width:120px;text-align:center;border-right:1.5px solid var(--line);}
+  table.board td{vertical-align:top;padding:6px;border-bottom:1px solid #F1E9EC;border-right:1px solid #F1E9EC;min-width:120px;}
+  table.board tr.wait > th{background:#FFF8E6;color:#9a7000;} table.board tr.work > th{background:#FFE3EC;color:#c9556a;}
+  table.board tr.before > th{background:#F1ECFB;color:#6c5896;font-size:12px;} table.board tr.gone > th{background:#F2F2F2;color:#999;}
+  table.board tr.gone td{background:#FAFAFA;}
+  .chipc{display:block;width:100%;text-align:left;margin-bottom:4px;border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:6px 8px;font-family:inherit;font-size:13.5px;font-weight:800;color:var(--ink);cursor:pointer;}
+  .chipc small{font-weight:700;color:var(--sub);}
+  .chipc.work{border-color:#f3a6bd;background:#FFF2F6;} .chipc.gone{color:#999;background:#FAFAFA;}
+  .chipc:hover{border-color:#e5638c;}
+  .castmeta{font-size:14px;line-height:1.7;}
   /* ⑥ 最終確認（読み上げ用に大きく） */
   .final{background:#FFF7FA;border:2px solid #FFC2D1;border-radius:14px;padding:12px 14px;line-height:1.7;}
   .final .l1{font-size:17px;font-weight:800;}
@@ -147,9 +160,15 @@
       <button data-v="tl" onclick="showView('tl')">⏱ タイムライン</button>
       <button data-v="list" onclick="showView('list')">📋 予約一覧</button>
       <a href="settle.html">💁 キャスト別・精算</a>
-      <button class="soon" title="これから作ります">🗺 ボード（準備中）</button>
+      <button data-v="board" onclick="showView('board')">🗺 ボード</button>
     </div>
     <div class="sum" id="sum"></div>
+
+    <!-- 🗺 ボード -->
+    <div id="viewBoard" style="display:none">
+      <div class="wrapx"><div id="boardGrid"></div></div>
+      <div style="font-size:12px;color:var(--sub);margin-top:6px">札を押すと、そのキャストの枠（その日の予約・空き時間・待機場所の変更・この人で予約）が開きます。仕事中は予約のエリアの列に出ます。</div>
+    </div>
 
     <!-- ⏱ タイムライン＋🔍 探す -->
     <div id="viewTL">
@@ -170,6 +189,15 @@
     <div id="viewList" style="display:none">
       <div class="wrapx"><table class="list" id="list"></table></div>
     </div>
+  </div>
+</div>
+
+<!-- キャストの枠 -->
+<div class="modal-bg" id="castBg">
+  <div class="modal" style="max-width:720px">
+    <button class="x" onclick="closeCast()" aria-label="閉じる">×</button>
+    <h2 id="castTitle">キャスト</h2>
+    <div id="castBody"></div>
   </div>
 </div>
 
@@ -1237,6 +1265,7 @@ function showView(v){
   try{ localStorage.setItem("kirokuView", v); }catch(e){}
   $("viewTL").style.display = v === "tl" ? "" : "none";
   $("viewList").style.display = v === "list" ? "" : "none";
+  if($("viewBoard")) $("viewBoard").style.display = v === "board" ? "" : "none";
   document.querySelectorAll("#tabs button[data-v]").forEach(b=>b.classList.toggle("on", b.dataset.v === v));
 }
 (function(){ let v = "tl"; try{ v = localStorage.getItem("kirokuView") || "tl"; }catch(e){} showView(v); })();
@@ -1353,6 +1382,106 @@ function jumpCast(castId){
   if(confirm("このキャストで予約を入れますか？" + (want ? "（" + want + " から）" : ""))) newBookingFor(castId, want);
 }
 setInterval(()=>{ if($("viewTL").style.display !== "none" && day === KB.bizDateOf()) renderTL(); }, 60000);
+
+/* ============================================================
+   🗺 ボード（エクセルの「待機場所 × 待機中／仕事中／予約スタ・出勤前連絡／今いない」）
+   ・その日シフトか予約のあるキャストを札（【まゆ】19-3）で並べる
+   ・待機場所はキャストの1日の記録（kb_cast_days.standby）。仕事中は予約のエリアの列に出す
+   ・札を押すと「キャストの枠」：その日の予約・空き時間・待機場所／状態の変更・この人で予約・精算へ
+   ============================================================ */
+const STANDBY = ["池袋", "鶯谷", "五反田", "錦糸町", "キャスト宅", "出張・他エリア"];
+const DAY_STATUS = ["", "予約スタート", "出勤前連絡", "お茶", "欠勤"];
+const BOARD_ROWS = [["wait", "待機中"], ["work", "仕事中"], ["before", "予約スタ・出勤前連絡"], ["gone", "今いない"]];
+function nowHour(){ const j = new Date(Date.now() + 9 * 3600 * 1000); let h = j.getUTCHours() + j.getUTCMinutes() / 60; if(h < 6) h += 24; return h; }
+function hShort(v){ const h = Math.floor(v) % 24, m = Math.round((v - Math.floor(v)) * 60); return h + (m ? ":" + String(m).padStart(2, "0") : ""); }
+function boardState(x){
+  const isToday = day === KB.bizDateOf(), now = nowHour(), cd = x.cd || {};
+  if(cd.settled || ["お茶", "欠勤", "精算済"].includes(cd.status)) return "gone";
+  const work = x.bks.find(b=>b.r.status === "working" || (isToday && b.s <= now && now < b.e && b.r.status !== "done"));
+  if(work) return "work";
+  if(["予約スタート", "出勤前連絡"].includes(cd.status)) return "before";
+  if(isToday && x.shift){
+    if(now < x.shift.start) return "before";
+    if(now >= x.shift.end) return "gone";
+  }
+  return "wait";
+}
+function boardCol(x, state){
+  if(state === "work"){
+    const isToday = day === KB.bizDateOf(), now = nowHour();
+    const b = x.bks.find(b=>b.r.status === "working" || (isToday && b.s <= now && now < b.e));
+    const a = b && b.r.area || "";
+    if(a) return STANDBY.find(s=>a.includes(s)) || "出張・他エリア";
+  }
+  const sb = (x.cd && x.cd.standby) || "";
+  return STANDBY.includes(sb) ? sb : (sb ? "出張・他エリア" : "");
+}
+function renderBoard(){
+  const el = $("boardGrid"); if(!el || !M.casts) return;
+  if(!shiftCache[day]){ el.innerHTML = `<div class="gate">シフトを読み込み中…</div>`; return; }
+  const cols = STANDBY.concat([""]);
+  const cell = {};
+  tlRows().forEach(x=>{
+    const st = boardState(x), col = boardCol(x, st);
+    (cell[st + "|" + col] = cell[st + "|" + col] || []).push(x);
+  });
+  const chip = (x, st)=>{
+    const nm = castLabel(x);
+    const sh = x.shift ? `${hShort(x.shift.start)}-${hShort(x.shift.end)}` : "";
+    const note = x.cd && x.cd.status ? x.cd.status : (x.cd && x.cd.settled ? "精算済" : (st === "work" ? "仕事中" : ""));
+    return `<button class="chipc ${st}" onclick="openCast('${x.c ? x.c.id : ""}','${esc(x.name)}')">【${esc(nm)}】${esc(sh)}${note ? `<small>（${esc(note)}）</small>` : ""}</button>`;
+  };
+  el.innerHTML = `<table class="board"><tr><th class="corner"></th>${cols.map(c=>`<th>${c ? esc(c) : "待機場所なし"}</th>`).join("")}</tr>`
+    + BOARD_ROWS.map(([k, l])=>`<tr class="${k}"><th>${l}</th>${cols.map(c=>`<td>${(cell[k + "|" + c] || []).map(x=>chip(x, k)).join("")}</td>`).join("")}</tr>`).join("")
+    + `</table>`;
+}
+
+/* ---------- キャストの枠 ---------- */
+let castOpen = null;
+function openCast(castId, name){
+  const x = tlRows().find(r=>(castId && r.c && r.c.id === castId) || (!castId && r.name === name));
+  if(!x) return;
+  castOpen = x;
+  const nm = castLabel(x), cd = x.cd || {};
+  const free = freeSlots(x).map(([s, e])=>tlLabel(s) + "〜" + tlLabel(e)).join("、") || "なし";
+  const bks = x.c ? rows.filter(r=>r.cast_id === x.c.id).sort((a, b)=>String(a.start_at).localeCompare(String(b.start_at))) : [];
+  $("castTitle").textContent = "💁 " + nm;
+  $("castBody").innerHTML = `
+    <div class="castmeta">出勤：<b>${x.shift ? tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) + (x.shift.confirmed ? "" : "（未確定）") : "シフトなし"}</b>　空き：<b>${esc(free)}</b></div>
+    ${x.c && KB.CAN_EDIT ? `<div class="row2" style="margin:10px 0">
+      <div class="f"><label>待機場所</label><select id="cd_standby" onchange="saveCastDay()">${[""].concat(STANDBY).map(s=>`<option value="${esc(s)}" ${cd.standby === s ? "selected" : ""}>${s || "（なし）"}</option>`).join("")}</select></div>
+      <div class="f"><label>今の状態</label><select id="cd_status" onchange="saveCastDay()">${DAY_STATUS.map(s=>`<option value="${esc(s)}" ${(cd.status || "") === s ? "selected" : ""}>${s || "（ふつう：予約から自動）"}</option>`).join("")}</select></div>
+    </div>` : ""}
+    <div class="f"><label>この日の予約（押すと開く）</label></div>
+    ${bks.length ? `<table class="list">${bks.map(r=>`<tr class="r" onclick="closeCast();openForm(${r.id})">
+      <td>${hm(r.start_at)}〜${hm(r.end_at)}</td><td>${esc(storeLabel(r.store_key))}${r.dummy_name ? " 🎭" + esc(r.dummy_name) : ""}</td>
+      <td>${esc(r.course)}${/^\d+$/.test(r.course) ? "分" : ""}</td><td>${esc(r.area || "")}</td>
+      <td><span class="st ${r.status}">${STATUS[r.status] || r.status}</span></td>
+      <td class="money">${showMoney ? yen(r.total) : "••••"}</td></tr>`).join("")}</table>` : `<div class="hist">まだ予約はありません</div>`}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      ${x.c && KB.CAN_EDIT ? `<button class="btn btn-primary" onclick="closeCast();newBookingFor('${x.c.id}', $('s_time').value)">＋ この人で予約</button>` : ""}
+      <a class="btn btn-ghost" href="settle.html" style="text-decoration:none">💴 精算へ</a>
+      <button class="btn btn-ghost" onclick="closeCast();showView('tl');$('s_cast').value='${esc(nm)}';renderTL()">⏱ タイムラインで見る</button>
+    </div>`;
+  $("castBg").classList.add("show");
+}
+function closeCast(){ $("castBg").classList.remove("show"); castOpen = null; }
+async function saveCastDay(){
+  const x = castOpen; if(!x || !x.c) return;
+  const row = { biz_date: day, cast_id: x.c.id, standby: $("cd_standby").value, status: $("cd_status").value, updated_at: new Date().toISOString(), updated_by: KB.operatorName() };
+  try{
+    const r = q(await sb.from("kb_cast_days").upsert(row, { onConflict: "biz_date,cast_id" }).select("cast_id,standby,status,settled").single());
+    castDays[x.c.id] = r; x.cd = r;
+    toast("保存しました"); renderBoard(); renderTL();
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+// タイムラインのキャスト名を押したときも、キャストの枠を開く
+jumpCast = function(castId){ if(castId) openCast(castId, ""); };
+KB.closeOnBackdrop($("castBg"), closeCast);
+
+// ボードもいっしょに描きなおす
+const __renderTL = renderTL;
+renderTL = function(){ __renderTL(); renderBoard(); };
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
