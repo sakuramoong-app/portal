@@ -92,6 +92,29 @@
   .foot .tot{flex:1;font-size:13px;color:var(--sub);font-weight:800;}
   .foot .tot b{font-size:22px;color:#e5638c;margin-left:6px;}
   .foot .btn-primary{padding:12px 26px;font-size:15px;}
+  /* ⏱ タイムライン */
+  .search{display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:8px;font-size:13.5px;font-weight:800;color:var(--sub);}
+  .search .lbl{color:#e5638c;}
+  .search input,.search select{font-family:inherit;font-size:14px;padding:6px 8px;border:1.5px solid var(--line);border-radius:10px;}
+  .tlwrap{overflow-x:auto;background:#fff;border:1.5px solid var(--line);border-radius:14px;}
+  .tlg{min-width:1100px;}
+  .tlg .hd,.tlg .r{display:grid;grid-template-columns:150px 1fr;}
+  .tlg .hd{position:sticky;top:0;background:#FBF7F8;z-index:2;border-bottom:1.5px solid var(--line);}
+  .tlg .hd .times{position:relative;height:28px;}
+  .tlg .hd .times span{position:absolute;top:6px;font-size:11px;color:var(--sub);font-weight:800;transform:translateX(-50%);}
+  .tlg .r{border-bottom:1px solid #F1E9EC;}
+  .tlg .nm{padding:7px 8px;font-size:13px;font-weight:800;line-height:1.3;border-right:1.5px solid var(--line);cursor:pointer;}
+  .tlg .nm small{display:block;font-size:11px;color:var(--sub);font-weight:700;}
+  .tlg .nm.ok{background:#E9F9F0;color:#1a7a5e;}
+  .tlg .r.dim{opacity:.35;}
+  .tlg .tr{position:relative;height:44px;cursor:copy;background-image:repeating-linear-gradient(90deg,#F4EEF0 0 1px,transparent 1px calc(100%/36));}
+  .tlg .sh{position:absolute;top:0;bottom:0;background:#FFF8FB;border-left:2px solid #FFC2D1;border-right:2px solid #FFC2D1;}
+  .tlg .bk{position:absolute;top:5px;bottom:5px;border-radius:8px;font-size:11px;font-weight:800;padding:2px 5px;overflow:hidden;white-space:nowrap;line-height:1.3;cursor:pointer;color:#fff;background:#5b8def;}
+  .tlg .bk.working{background:#e5638c;} .tlg .bk.done{background:#b9b3b5;}
+  .tlg .want{position:absolute;top:2px;bottom:2px;border:2.5px dashed #2f9e6e;border-radius:8px;pointer-events:none;}
+  .tlg .want.ng{border-color:#ef4444;}
+  .tlg .now{position:absolute;top:0;bottom:0;width:2px;background:#ef4444;pointer-events:none;}
+  .tlg .off{position:absolute;inset:0;background:repeating-linear-gradient(45deg,#f5f5f5 0 6px,#fff 6px 12px);}
   /* ⑥ 最終確認（読み上げ用に大きく） */
   .final{background:#FFF7FA;border:2px solid #FFC2D1;border-radius:14px;padding:12px 14px;line-height:1.7;}
   .final .l1{font-size:17px;font-weight:800;}
@@ -120,14 +143,33 @@
     <div class="stats hide" id="stats"></div>
     <div class="tax hide" id="tax"></div>
     <div class="notice"><textarea id="notice" placeholder="📢 本日のお知らせ" onchange="saveNotice()"></textarea></div>
-    <div class="tabs">
-      <button class="on">📋 予約一覧</button>
+    <div class="tabs" id="tabs">
+      <button data-v="tl" onclick="showView('tl')">⏱ タイムライン</button>
+      <button data-v="list" onclick="showView('list')">📋 予約一覧</button>
       <a href="settle.html">💁 キャスト別・精算</a>
       <button class="soon" title="これから作ります">🗺 ボード（準備中）</button>
-      <button class="soon" title="これから作ります">⏱ タイムライン（準備中）</button>
     </div>
     <div class="sum" id="sum"></div>
-    <div class="wrapx"><table class="list" id="list"></table></div>
+
+    <!-- ⏱ タイムライン＋🔍 探す -->
+    <div id="viewTL">
+      <div class="search">
+        <span class="lbl">🔍 探す</span>
+        <label>何時から <input type="time" id="s_time" step="300" oninput="renderTL()"></label>
+        <label>何分 <select id="s_min" onchange="renderTL()"><option value="60">60分</option><option value="90" selected>90分</option><option value="120">120分</option><option value="150">150分</option><option value="180">180分</option><option value="240">240分</option></select></label>
+        <label>キャスト <input id="s_cast" placeholder="名前で絞る" oninput="renderTL()" style="width:120px"></label>
+        <label><input type="checkbox" id="s_free" onchange="renderTL()"> 行ける人だけ</label>
+        <button class="btn btn-ghost btn-sm" onclick="$('s_time').value='';$('s_cast').value='';$('s_free').checked=false;renderTL()">クリア</button>
+      </div>
+      <div id="tlResult"></div>
+      <div class="tlwrap"><div id="tlGrid"></div></div>
+      <div class="hint2" style="font-size:12px;color:var(--sub);margin-top:6px">空いているところを押すと、そのキャスト・その時間で予約の入力が開きます。予約の帯を押すと、その予約が開きます。</div>
+    </div>
+
+    <!-- 📋 予約一覧 -->
+    <div id="viewList" style="display:none">
+      <div class="wrapx"><table class="list" id="list"></table></div>
+    </div>
   </div>
 </div>
 
@@ -1182,6 +1224,135 @@ recalc = function(){
     <div class="l2">${dummy ? `🎭 ${esc(dummy)}（実際：${esc(cname)}）` : esc(cname)}　${esc(course)}</div>
     <div class="l3">総額 <b>${yen(last.total)}</b>（${pay}）</div>`;
 };
+
+/* ============================================================
+   ⏱ タイムライン＋🔍 探す
+   ・その日シフトのあるキャストを、出勤の早い順に1行ずつ。11時〜翌5時を横に並べる
+   ・予約は帯（押すと開く）。空いているところを押すと、そのキャスト・その時間で予約の入力が開く
+   ・「何時から・何分」を入れると、行けるキャストの名前が緑になる（出勤中で予約が重ならない人）
+   ・キャストの名前で絞れる。お茶・欠勤・精算済（キャストの1日の状態）は行けない扱い
+   ============================================================ */
+let castDays = {};
+function showView(v){
+  try{ localStorage.setItem("kirokuView", v); }catch(e){}
+  $("viewTL").style.display = v === "tl" ? "" : "none";
+  $("viewList").style.display = v === "list" ? "" : "none";
+  document.querySelectorAll("#tabs button[data-v]").forEach(b=>b.classList.toggle("on", b.dataset.v === v));
+}
+(function(){ let v = "tl"; try{ v = localStorage.getItem("kirokuView") || "tl"; }catch(e){} showView(v); })();
+
+const __loadDay = loadDay;
+loadDay = async function(){
+  await __loadDay();
+  try{
+    const [cd] = await Promise.all([ sb.from("kb_cast_days").select("cast_id,standby,status,settled").eq("biz_date", day), loadShifts(day) ]);
+    castDays = {}; (q(cd) || []).forEach(x=>{ castDays[x.cast_id] = x; });
+  }catch(e){ castDays = {}; }
+  renderTL();
+};
+const __renderList2 = renderList;
+renderList = function(){ __renderList2(); renderTL(); };
+
+function tlHour(s){ if(!s) return null; const [h, m] = s.split(":").map(Number); let v = h + m / 60; if(v < 6) v += 24; return v; }
+function tlLabel(v){ let h = Math.floor(v), m = Math.round((v - h) * 60); if(m === 60){ h++; m = 0; } return (h >= 24 ? "翌" + (h - 24) : h) + ":" + String(m).padStart(2, "0"); }
+function bookingsOf(castId){
+  return rows.filter(r=>r.cast_id === castId && r.status !== "cancel" && r.status !== "tobi" && r.start_at && r.end_at)
+    .map(r=>({ id: r.id, s: hourOf(r.start_at), e: hourOf(r.end_at), r }));
+}
+function tlRows(){
+  const sh = shiftCache[day] || {};
+  const out = [];
+  Object.keys(sh).forEach(name=>{
+    const c = M.casts.find(x=>x.shift_name === name || x.official_name === name);
+    out.push({ name, c, shift: sh[name], bks: c ? bookingsOf(c.id) : [], cd: c ? castDays[c.id] : null });
+  });
+  // 予約だけあって、シフトにないキャストも出す
+  rows.forEach(r=>{
+    if(!r.cast_id || r.status === "cancel" || r.status === "tobi" || out.some(x=>x.c && x.c.id === r.cast_id)) return;
+    const c = M.casts.find(x=>x.id === r.cast_id);
+    out.push({ name: c ? (c.official_name || c.temp_name) : r.cast_id, c, shift: null, bks: bookingsOf(r.cast_id), cd: castDays[r.cast_id] });
+  });
+  return out.sort((a, b)=>(a.shift ? a.shift.start : 99) - (b.shift ? b.shift.start : 99));
+}
+function freeSlots(x){
+  if(!x.shift) return [];
+  const busy = x.bks.map(b=>[b.s, b.e]).sort((a, b)=>a[0] - b[0]);
+  const out = []; let t = x.shift.start;
+  busy.forEach(([s, e])=>{ if(s > t + 0.01) out.push([t, Math.min(s, x.shift.end)]); t = Math.max(t, e); });
+  if(t < x.shift.end - 0.01) out.push([t, x.shift.end]);
+  return out.filter(([s, e])=>e - s >= 0.5);
+}
+function castLabel(x){ return x.c ? (x.c.official_name || x.c.temp_name) : x.name; }
+function renderTL(){
+  const grid = $("tlGrid"); if(!grid || !M.casts) return;
+  if(!shiftCache[day]){ grid.innerHTML = `<div class="gate">シフトを読み込み中…</div>`; return; }
+  const want = tlHour($("s_time").value), mins = Number($("s_min").value) || 90;
+  const wantE = want != null ? want + mins / 60 : null;
+  const word = $("s_cast").value.trim(), onlyFree = $("s_free").checked;
+  const p = h => Math.max(0, Math.min(100, (h - TL_FROM) / (TL_TO - TL_FROM) * 100));
+  const unavailable = x => !!(x.cd && (["お茶", "欠勤", "精算済"].includes(x.cd.status) || x.cd.settled));
+  let list = tlRows().map(x=>{
+    let ok = null;
+    if(want != null) ok = !!x.shift && !unavailable(x) && want >= x.shift.start - 0.01 && wantE <= x.shift.end + 0.01 && !x.bks.some(b=>b.s < wantE && want < b.e);
+    return Object.assign(x, { ok });
+  });
+  if(word) list = list.filter(x=>(x.name + " " + (x.c ? [x.c.official_name, x.c.temp_name, x.c.kana].concat(x.c.aliases || []).join(" ") : "")).includes(word));
+  if(onlyFree && want != null) list = list.filter(x=>x.ok);
+  // 探したときは、行ける人を上に
+  if(want != null) list.sort((a, b)=>(b.ok ? 1 : 0) - (a.ok ? 1 : 0));
+  // 結果の文
+  let res = "";
+  if(want != null){
+    const okNames = list.filter(x=>x.ok).map(castLabel);
+    res = `<div class="${okNames.length ? "info" : "warn"}" style="margin-bottom:8px">🕐 ${tlLabel(want)}〜${tlLabel(wantE)}（${mins}分）に行けるキャスト：<b>${okNames.length ? okNames.map(esc).join("、") : "いません"}</b></div>`;
+  }
+  if(word && want == null){
+    res += list.map(x=>`<div class="info" style="margin-bottom:6px">🔎 <b>${esc(castLabel(x))}</b> の空き：${freeSlots(x).map(([s, e])=>tlLabel(s) + "〜" + tlLabel(e)).join("、") || "なし"}</div>`).join("");
+  }
+  $("tlResult").innerHTML = res;
+  // 時間の目盛り・今の線
+  const ticks = []; for(let h = TL_FROM; h <= TL_TO; h++) ticks.push(`<span style="left:${p(h)}%">${h >= 24 ? "翌" + (h - 24) : h}時</span>`);
+  const nowJ = new Date(Date.now() + 9 * 3600 * 1000); let nowH = nowJ.getUTCHours() + nowJ.getUTCMinutes() / 60; if(nowH < 6) nowH += 24;
+  const isToday = day === KB.bizDateOf();
+  grid.innerHTML = `<div class="tlg"><div class="hd"><div class="nm" style="cursor:default">キャスト／出勤</div><div class="times">${ticks.join("")}</div></div>`
+    + (list.length ? list.map(x=>{
+      const st = x.cd && x.cd.status ? `（${esc(x.cd.status)}）` : (x.cd && x.cd.settled ? "（精算済）" : "");
+      const shiftTxt = x.shift ? `${tlLabel(x.shift.start)}〜${tlLabel(x.shift.end)}${x.shift.confirmed ? "" : "（未確定）"}` : "シフトなし";
+      const cid = x.c ? x.c.id : "";
+      return `<div class="r ${want != null && x.ok === false ? "dim" : ""}">
+        <div class="nm ${x.ok ? "ok" : ""}" onclick="jumpCast('${cid}')">${esc(castLabel(x))}${st}<small>${shiftTxt}${x.cd && x.cd.standby ? "・" + esc(x.cd.standby) : ""}</small></div>
+        <div class="tr" onclick="tlClick(event,'${cid}')">
+          ${x.shift ? `<div class="sh" style="left:${p(x.shift.start)}%;width:${p(x.shift.end) - p(x.shift.start)}%"></div>` : `<div class="off"></div>`}
+          ${x.bks.map(b=>`<div class="bk ${b.r.status === "working" ? "working" : b.r.status === "done" ? "done" : ""}" style="left:${p(b.s)}%;width:${Math.max(1.5, p(b.e) - p(b.s))}%"
+              onclick="event.stopPropagation();openForm(${b.id})" title="${esc(hm(b.r.start_at) + "〜" + hm(b.r.end_at) + " " + (b.r.area || "") + " " + (STATUS[b.r.status] || ""))}">${esc(hm(b.r.start_at))}〜${esc(hm(b.r.end_at))}<br>${esc(b.r.area || "")} ${esc(STATUS[b.r.status] || "")}</div>`).join("")}
+          ${want != null && x.shift ? `<div class="want ${x.ok ? "" : "ng"}" style="left:${p(want)}%;width:${p(wantE) - p(want)}%"></div>` : ""}
+          ${isToday ? `<div class="now" style="left:${p(nowH)}%"></div>` : ""}
+        </div></div>`;
+    }).join("") : `<div class="gate">この日のシフト・予約がありません（または絞り込みに合う人がいません）</div>`)
+    + `</div>`;
+}
+// 空いているところを押す → そのキャスト・その時間（10分きざみ）で予約の入力
+function tlClick(ev, castId){
+  if(!castId || !KB.CAN_EDIT) return;
+  const rect = ev.currentTarget.getBoundingClientRect();
+  let h = TL_FROM + (ev.clientX - rect.left) / rect.width * (TL_TO - TL_FROM);
+  h = Math.round(h * 6) / 6;
+  const hh = Math.floor(h) % 24, mm = Math.round((h - Math.floor(h)) * 60);
+  newBookingFor(castId, String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0"));
+}
+function newBookingFor(castId, time){
+  openForm(null);
+  $("f_cast").value = castId; onCast();
+  if(time) $("f_start").value = time;
+  recalc();
+}
+// キャストの名前を押す → 「探す」に時刻が入っていれば、その時刻で予約の入力（ボードを作ったら、キャストの枠へジャンプ）
+function jumpCast(castId){
+  if(!castId || !KB.CAN_EDIT) return;
+  const want = $("s_time").value;
+  if(confirm("このキャストで予約を入れますか？" + (want ? "（" + want + " から）" : ""))) newBookingFor(castId, want);
+}
+setInterval(()=>{ if($("viewTL").style.display !== "none" && day === KB.bizDateOf()) renderTL(); }, 60000);
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
