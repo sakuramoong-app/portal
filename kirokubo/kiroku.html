@@ -268,6 +268,10 @@
         <button class="btn btn-ghost btn-sm" onclick="clearSearch()">クリア</button>
       </div>
       <details class="castpick"><summary>👥 キャストで絞る（複数OK）<span id="s_castCount"></span></summary><div class="chips" id="s_castChips"></div></details>
+      <details class="castpick"><summary>🎯 希望プレイで絞る（複数OK・キャストプロフのオプションから）<span id="s_playCount"></span></summary>
+        <div class="chips" id="s_playChips"></div>
+        <label style="display:block;margin-top:8px;font-size:13px;font-weight:800;color:var(--sub)"><input type="checkbox" id="s_playTri" onchange="renderTL()"> △（条件つきOK）の子も入れる</label>
+        <div class="hist" style="margin:4px 0 0">選んだプレイが全部「◎か○」のキャストだけになります。名前の下に可否が出ます。プロフとつながっていないキャストは出ません。</div></details>
       <div id="tlResult"></div>
       <div class="tlwrap"><div id="tlGrid"></div></div>
       <div class="hint2" style="font-size:12px;color:var(--sub);margin-top:6px">マスにマウスを乗せると時刻が出ます。押すと、そのキャスト・その時刻で予約の入力が開きます。白＝出勤時間、しま模様＝予約の前後のインターバル。予約の帯を押すと、その予約が開きます。</div>
@@ -1427,7 +1431,7 @@ function sortRows(list){
 function setSort(v){ try{ localStorage.setItem("kirokuSort", v); }catch(e){} renderTL(); }
 // キャストで絞る（複数OK）
 function toggleSelCast(k){ if(selCasts.has(k)) selCasts.delete(k); else selCasts.add(k); renderTL(); }
-function clearSearch(){ $("s_time").value = ""; $("s_free").checked = false; selCasts.clear(); renderTL(); }
+function clearSearch(){ $("s_time").value = ""; $("s_free").checked = false; selCasts.clear(); playSel.clear(); renderTL(); }
 
 function renderTL(){
   const grid = $("tlGrid"); if(!grid || !M.casts) return;
@@ -1450,6 +1454,7 @@ function renderTL(){
   $("s_castCount").textContent = selCasts.size ? `（${selCasts.size}人を選択中）` : "";
   let list = all;
   if(selCasts.size) list = list.filter(x=>selCasts.has(castKey(x)));
+  list = applyPlayFilter(list);   // 🎯 希望プレイで絞る
   if(onlyFree && want != null) list = list.filter(x=>x.ok);
   if(want != null) list = list.slice().sort((a, b)=>(b.ok ? 1 : 0) - (a.ok ? 1 : 0));   // 探したときは、行ける人を上に
   // 結果の文
@@ -1461,6 +1466,7 @@ function renderTL(){
   if(selCasts.size && want == null){
     res += list.map(x=>`<div class="info" style="margin-bottom:6px">🔎 <b>${esc(castLabel(x))}</b> の空き：${freeSlots(x).map(([s, e])=>tlLabel(s) + "〜" + tlLabel(e)).join("、") || "なし"}${gapOf(x) ? `<small>（予約の間 ${x.c.interval_min}分あけ）</small>` : ""}</div>`).join("");
   }
+  if(playSel.size && want == null) res += `<div class="${list.length ? "info" : "warn"}" style="margin-bottom:8px">🎯 ${esc($("s_playCount").textContent.replace(/[（）]/g, ""))} がOKのキャスト：<b>${list.length ? list.map(x=>esc(castLabel(x))).join("、") : "いません"}</b>${profById ? "" : "（キャストプロフを読み込み中…）"}</div>`;
   $("tlResult").innerHTML = res;
 
   // 表：上の時刻と左の名前は固定。30分のマス（出勤時間だけ白）
@@ -1480,7 +1486,7 @@ function renderTL(){
         cells.push(`<div class="c ${inShift ? "on" : ""} ${i % 2 ? "half" : ""}" data-t="${tlLabel(h)}" onclick="tlCell('${cid}',${h})"></div>`);
       }
       return `<div class="r ${want != null && x.ok === false ? "dim" : ""}">
-        <div class="nm ${x.ok ? "ok" : ""}" onclick="jumpCast('${cid}')">${esc(castLabel(x))}${st}<small>${shiftTxt}${x.cd && x.cd.standby ? "・" + esc(x.cd.standby) : ""}${g ? "・間" + x.c.interval_min + "分" : ""}</small></div>
+        <div class="nm ${x.ok ? "ok" : ""}" onclick="jumpCast('${cid}')">${esc(castLabel(x))}${st}<small>${shiftTxt}${x.cd && x.cd.standby ? "・" + esc(x.cd.standby) : ""}${g ? "・間" + x.c.interval_min + "分" : ""}${esc(playMarks(x))}</small></div>
         <div class="cells">${cells.join("")}
           ${g ? x.bks.map(b=>`<div class="gap" style="left:${p(b.s - g)}%;width:${p(b.s) - p(b.s - g)}%"></div><div class="gap" style="left:${p(b.e)}%;width:${p(b.e + g) - p(b.e)}%"></div>`).join("") : ""}
           ${x.bks.map(b=>`<div class="bk st ${b.r.status}" style="left:${p(b.s)}%;width:${Math.max(1.5, p(b.e) - p(b.s))}%"
@@ -1946,6 +1952,53 @@ openForm = function(id){
   if(!id) $("f_status").value = "wait_cast_reply";   // 新しい予約は「キャスト返事待ち」から
   renderFormLog();
 };
+
+/* ============================================================
+   🎯 希望プレイで絞る（⏱ 全体を見たい）
+   ・キャストプロフのオプションの可否（◎大好き／○OK／△条件つき／×NG）を読む
+   ・選んだプレイが全部「◎か○」のキャストだけにする（「△も入れる」にチェックすると△も）
+   ・名前の下に、選んだプレイの可否を出す
+   ============================================================ */
+const PLAYS = [["AF", "AF"], ["逆AF", "逆AF"], ["キャスト射精", "射精"], ["無限射精", "無限射精"], ["前立腺", "前立腺"], ["兜合わせ", "兜合わせ"],
+  ["玉舐め", "玉舐め"], ["キス", "キス"], ["全身リップ", "全身リップ"], ["乳首責め", "乳首責め"], ["生フェラ", "生フェラ"], ["69", "69"],
+  ["Sプレイ", "Sプレイ"], ["Mプレイ", "Mプレイ"], ["ごっくん", "ごっくん"], ["聖水", "聖水"], ["コスプレ", "コスプレ"],
+  ["女装", "女装のお客様"], ["外国人", "外国人のお客様"], ["3P_お客2名", "3P お客2名"], ["3P_キャスト2名", "3P キャスト2名"], ["お泊り", "お泊り"], ["デート", "デート"]];
+let playSel = new Set();
+let profLoading = false;
+function profOpts(c){
+  if(!c || !c.prof_id || !profById) return null;
+  const d = profById[c.prof_id]; if(!d) return null;
+  const sp = (d.storeProfiles && d.storeProfiles["サクラムーン"]) || {};
+  return Object.assign({}, d.options || {}, sp.options || {});
+}
+function togglePlay(k){ if(playSel.has(k)) playSel.delete(k); else playSel.add(k); renderTL(); }
+function clearPlay(){ playSel.clear(); renderTL(); }
+function renderPlayChips(){
+  const el = $("s_playChips"); if(!el) return;
+  el.innerHTML = PLAYS.map(([k, l])=>`<button type="button" class="chip ${playSel.has(k) ? "on" : ""}" onclick="togglePlay('${k}')">${esc(l)}</button>`).join("");
+  $("s_playCount").textContent = playSel.size ? `（${[...playSel].map(k=>(PLAYS.find(p=>p[0] === k) || [k, k])[1]).join("・")}）` : "";
+}
+// 絞り込み（タイムラインの一覧から呼ばれる）
+function applyPlayFilter(list){
+  renderPlayChips();
+  if(!playSel.size) return list;
+  if(!profById){
+    if(!profLoading){ profLoading = true; loadProfs().then(()=>{ profLoading = false; renderTL(); }).catch(()=>{ profLoading = false; }); }
+    return list;
+  }
+  const okMarks = $("s_playTri") && $("s_playTri").checked ? ["◎", "○", "△"] : ["◎", "○"];
+  return list.filter(x=>{
+    const o = profOpts(x.c); if(!o) return false;
+    return [...playSel].every(k=>okMarks.includes(o[k]));
+  });
+}
+// 名前の下に出す可否（例：AF◎ 逆AF○）
+function playMarks(x){
+  if(!playSel.size || !profById) return "";
+  const o = profOpts(x.c);
+  if(!o) return "・プロフなし";
+  return "・" + [...playSel].map(k=>(PLAYS.find(p=>p[0] === k) || [k, k])[1] + (o[k] || "？")).join(" ");
+}
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
