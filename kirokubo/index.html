@@ -145,6 +145,7 @@
     <div class="f"><label>特記事項 <small style="font-weight:400;color:#9C8B8F">… 内勤が理解しておくこと（お客さんには言わない）。お客さんに言うことは上の「確認事項」へ</small></label><textarea id="e_special"></textarea></div>
     <div class="f" style="margin-top:10px"><label>NG <small style="font-weight:400;color:#9C8B8F">… キャストが受けないこと（内勤がつけるか判断する材料）</small></label><textarea id="e_ng"></textarea></div>
     <div class="f" style="margin-top:10px"><label>メモ <small style="font-weight:400;color:#9C8B8F">… そのほか（受付には出ません）</small></label><textarea id="e_note"></textarea></div>
+    <div class="f" style="margin-top:10px"><label>⏱ 予約と予約の間（インターバル・分） <small style="font-weight:400;color:#9C8B8F">… 「予約の間を30分あけてほしい」など。記録簿のタイムラインで予約の前後がグレーになります（0＝なし）</small></label><input type="number" id="e_interval" min="0" max="240" step="5" style="max-width:140px"></div>
 
     <div class="sec">🔗 つながっているアプリのデータ</div>
     <div class="links" id="e_links"></div>
@@ -522,6 +523,7 @@ function openEdit(id){
   $("termsBtn").style.display = id && CAN_EDIT ? "" : "none";
   renderChecks(id);
   $("e_special").value = c.special_notes || ""; $("e_ng").value = c.ng_notes || ""; $("e_note").value = c.note || "";
+  $("e_interval").value = c.interval_min || 0;
   const st = c.stores || {};
   $("e_stores").innerHTML = stores.map(s=>{
     const v = st[s.key];
@@ -566,6 +568,7 @@ async function saveCast(){
     join_date: $("e_join").value || null, leave_date: $("e_leave").value || null,
     aliases: [...new Set(aliases)], agg_name: $("e_agg").value.trim(), stores: st,
     special_notes: $("e_special").value, ng_notes: $("e_ng").value, note: $("e_note").value,
+    interval_min: Math.max(0, Math.min(240, Number($("e_interval").value) || 0)),
   };
   try{
     if(!(await staffSession())){ toast("ログインの期限が切れました。ポータルから開き直してください"); return; }
