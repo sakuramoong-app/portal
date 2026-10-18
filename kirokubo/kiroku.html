@@ -235,12 +235,15 @@
     <div class="stats hide" id="stats"></div>
     <div class="tax hide" id="tax"></div>
     <div class="notice"><textarea id="notice" placeholder="📢 本日のお知らせ" onchange="saveNotice()"></textarea></div>
+    <!-- 🗺 今どこに誰が（いつも上に出しておく） -->
+    <div id="viewBoard">
+      <div style="font-weight:800;font-size:13.5px;color:var(--sub);margin:8px 0 4px">🗺 今どこに誰が<small style="font-weight:700;margin-left:6px">待機中・仕事中・今いない（札を押すとキャストの枠）</small></div>
+      <div class="wrapx"><div id="boardGrid"></div></div>
+    </div>
     <div class="tabs" id="tabs">
       <button data-v="list" onclick="showView('list')" class="tabmain">📋 予約一覧<small>状態・伝えた・対応ログ・やること</small></button>
       <div class="tabgrp"><div class="tabgrp-h">📞 電話受付（電話の内容で選ぶ）</div><div class="tabgrp-b">
-      <button data-v="slotsCast" onclick="showView('slotsCast')">💁 キャスト決まってる<small>「〇〇ちゃん何時空いてる？」</small></button>
-      <button data-v="slotsFree" onclick="showView('slotsFree')">🙋 誰が行ける？<small>「何時から誰か行ける？」</small></button>
-      <button data-v="board" onclick="showView('board')">🗺 今どこに誰が<small>待機中・仕事中・今いない</small></button>
+      <button data-v="slotsFree" onclick="showView('slotsFree')">🙋 誰が行ける？<small>「〇〇ちゃん何時空いてる？」「何時から誰か行ける？」</small></button>
       <button data-v="tl" onclick="showView('tl')">⏱ 全体を見たい<small>全時刻のタイムライン</small></button>
       </div></div>
     </div>
@@ -253,14 +256,9 @@
         <label>何時から <input type="time" id="sl_time" step="300" oninput="renderSlots()"></label>
         <label>何分 <select id="sl_min" onchange="renderSlots()"><option value="60">60分</option><option value="90" selected>90分</option><option value="120">120分</option><option value="150">150分</option><option value="180">180分</option><option value="240">240分</option></select></label>
       </div>
-      <div class="castpick" id="slotPick" style="display:none"><div style="font-weight:800;font-size:13.5px;color:var(--sub)">👥 キャストを選ぶ（複数OK）</div><div class="chips" id="slotPickChips"></div></div>
+      <div class="castpick" id="slotPick"><div style="font-weight:800;font-size:13.5px;color:var(--sub)">👥 キャストが決まっていれば選ぶ（複数OK・選ばなければ全員）
+        <button type="button" class="btn btn-ghost btn-sm" style="margin-left:6px" onclick="slotSel.clear();renderSlots()">全員にもどす</button></div><div class="chips" id="slotPickChips"></div></div>
       <div id="slotList"></div>
-    </div>
-
-    <!-- 🗺 ボード -->
-    <div id="viewBoard" style="display:none">
-      <div class="wrapx"><div id="boardGrid"></div></div>
-      <div style="font-size:12px;color:var(--sub);margin-top:6px">札を押すと、そのキャストの枠（その日の予約・空き時間・待機場所の変更・この人で予約）が開きます。仕事中は予約のエリアの列に出ます。</div>
     </div>
 
     <!-- ⏱ タイムライン＋🔍 探す -->
@@ -1448,11 +1446,13 @@ var slotMode = "cast";
 let selCasts = new Set();
 function showView(v){
   try{ localStorage.setItem("kirokuView", v); }catch(e){}
-  // 💁 キャスト決まってる／🙋 誰が行ける？ は、どちらも「空き枠」の画面（見せ方だけ変える）
-  if(v === "slots") v = "slotsCast";
-  const box = { tl: "viewTL", list: "viewList", board: "viewBoard", slotsCast: "viewSlots", slotsFree: "viewSlots" };
-  ["viewTL", "viewList", "viewBoard", "viewSlots"].forEach(id=>{ const el = $(id); if(el) el.style.display = box[v] === id ? "" : "none"; });
-  if(v === "slotsCast" || v === "slotsFree"){ slotMode = v === "slotsCast" ? "cast" : "free"; if(typeof renderSlots === "function") renderSlots(); }
+  // 🙋 誰が行ける？：キャストを選べば「その人の空き時間」、選ばなければ「時刻ごとに行ける人」（💁 キャスト決まってる はここにまとめた）
+  // 🗺 今どこに誰が は、いつも上に出しておく（タブではない）
+  if(v === "slots" || v === "slotsCast") v = "slotsFree";
+  if(v === "board") v = "list";
+  const box = { tl: "viewTL", list: "viewList", slotsFree: "viewSlots" };
+  ["viewTL", "viewList", "viewSlots"].forEach(id=>{ const el = $(id); if(el) el.style.display = box[v] === id ? "" : "none"; });
+  if(v === "slotsFree" && typeof renderSlots === "function") renderSlots();
   document.querySelectorAll("#tabs button[data-v]").forEach(b=>b.classList.toggle("on", b.dataset.v === v));
 }
 (function(){ let v = "list"; try{ v = localStorage.getItem("kirokuView") || "list"; }catch(e){} setTimeout(()=>showView(v), 0); })();   // 基本は予約一覧
@@ -1926,8 +1926,9 @@ function renderSlots(){
   if(!shiftCache[day]){ el.innerHTML = `<div class="gate">シフトを読み込み中…</div>`; return; }
   const mins = Number($("sl_min").value) || 90;
   const casts = sortRows(tlRows()).filter(x=>x.c && x.shift);
-  if($("slotTitle")) $("slotTitle").textContent = slotMode === "cast" ? "💁 キャスト決まってる：空いている時間" : "🙋 誰が行ける？：時刻ごとに行ける人";
-  $("slotPick").style.display = slotMode === "cast" ? "" : "none";
+  // キャストを選んでいれば「その人の空き時間」、選んでいなければ「時刻ごとに行ける人」
+  slotMode = slotSel.size ? "cast" : "free";
+  if($("slotTitle")) $("slotTitle").textContent = slotMode === "cast" ? "🙋 選んだキャストの空いている時間" : "🙋 誰が行ける？：時刻ごとに行ける人";
   $("slotPickChips").innerHTML = casts.map(x=>`<button type="button" class="chip ${slotSel.has(x.c.id) ? "on" : ""}" onclick="toggleSlotSel('${x.c.id}')">${esc(castLabel(x))}</button>`).join("") || `<span class="hist">この日のシフトがありません</span>`;
   const times = slotTimes();
   if(!casts.length){ el.innerHTML = `<div class="gate">この日のシフトがありません</div>`; return; }
