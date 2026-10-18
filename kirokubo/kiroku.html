@@ -26,7 +26,18 @@
   .tax b{display:block;font-size:17px;color:var(--ink);}
   .tax.hide b{filter:blur(7px);user-select:none;}
   @media (max-width:900px){ .stats{grid-template-columns:repeat(2,minmax(0,1fr));} }
-  .notice textarea{width:100%;min-height:44px;font-family:inherit;font-size:14px;padding:9px 12px;border:1.5px solid #f2d27a;border-radius:12px;background:var(--lemon-soft);color:var(--ink);resize:vertical;}
+  .notice textarea{width:100%;min-height:44px;font-family:inherit;font-size:17px;font-weight:800;padding:9px 12px;border:2px solid #F0A0A0;border-radius:12px;background:#FFF5F5;color:#D32F2F;resize:vertical;}
+  .notice textarea::placeholder{color:#E8A0A0;font-weight:700;font-size:14px;}
+  /* 日付（いちばん上・大きく） */
+  header.kbh .bigday{margin:0 auto 0 12px;}
+  header.kbh .bigday input[type=date]{font-size:22px;font-weight:800;padding:6px 14px;color:var(--pink-deep);border:2px solid #FFC2D1;}
+  header.kbh .bigday .bd{font-size:16px;font-weight:800;}
+  /* しまえる箱（今日の数字・今どこに誰が） */
+  details.fold{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:6px 10px;margin:8px 0;}
+  details.fold > summary{cursor:pointer;font-weight:800;font-size:14px;color:var(--sub);padding:4px 2px;}
+  details.fold > summary small{font-weight:700;margin-left:8px;font-size:12px;}
+  .todaygrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px;margin:6px 0 4px;}
+  .todaygrid .t{background:#FBF7F8;border-radius:10px;padding:6px 10px;} .todaygrid .t .k{font-size:11.5px;color:var(--sub);font-weight:700;} .todaygrid .t .v{font-size:16px;font-weight:800;}
   .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 10px;}
   .tabs a,.tabs button{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:8px 14px;font-family:inherit;font-size:13.5px;font-weight:800;color:var(--sub);cursor:pointer;text-decoration:none;}
   .tabs .on{background:#e5638c;border-color:#e5638c;color:#fff;}
@@ -184,6 +195,23 @@
   table.board tr.wait > th{background:#FFF8E6;color:#9a7000;} table.board tr.work > th{background:#FFE3EC;color:#c9556a;}
   table.board tr.before > th{background:#F1ECFB;color:#6c5896;font-size:12px;} table.board tr.gone > th{background:#F2F2F2;color:#999;}
   table.board tr.gone td{background:#FAFAFA;}
+  /* エリアの色（今の記録簿と同じ）：見出しは濃いめ、マスはうすく */
+  table.board th.a-ike{background:#FFC966;} table.board td.a-ike{background:#FFF4DE;}
+  table.board th.a-ugu{background:#CCCCFF;} table.board td.a-ugu{background:#F0F0FF;}
+  table.board th.a-goh{background:#C6E0B4;} table.board td.a-goh{background:#EEF6E8;}
+  table.board th.a-kin{background:#F8CBAD;} table.board td.a-kin{background:#FDF0E7;}
+  table.board th.a-home{background:#BDD7EE;} table.board td.a-home{background:#EDF4FA;}
+  table.board th.a-other{background:#9FE5E1;} table.board td.a-other{background:#E5F8F7;}
+  /* 今いない：出勤前・退勤＝グレー／お茶＝緑／欠勤＝赤 */
+  .chipc.inl{display:inline-block;width:auto;margin:0 4px 4px 0;}
+  .chipc.tea{background:#E6F6E6;border-color:#9AD39A;color:#2E7A35;} .chipc.absent{background:#FFE8EC;border-color:#F09AAA;color:#B0213F;}
+  .seats{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:8px;overflow-x:auto;}
+  .seat{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px;}
+  .seat.on{border-color:#6c5ce7;background:#F4F2FF;}
+  .seat .no{font-weight:800;color:#6c5ce7;} .seat .who{font-size:16px;font-weight:800;} .seat .since{font-size:12px;color:var(--sub);}
+  .seat select{font-family:inherit;font-size:13px;padding:5px 8px;border:1.5px solid var(--line);border-radius:8px;}
+  .seatpick{background:#F4F2FF;border-radius:12px;padding:8px 10px;margin:8px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-weight:800;font-size:13.5px;}
+  .seatbadge{display:inline-block;background:#6c5ce7;color:#fff;border-radius:99px;font-size:11px;padding:1px 7px;margin-left:4px;}
   .chipc{display:block;width:100%;text-align:left;margin-bottom:4px;border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:6px 8px;font-family:inherit;font-size:13.5px;font-weight:800;color:var(--ink);cursor:pointer;}
   .chipc small{font-weight:700;color:var(--sub);}
   .chipc.work{border-color:#f3a6bd;background:#FFF2F6;} .chipc.gone{color:#999;background:#FAFAFA;}
@@ -216,40 +244,45 @@
 </head>
 <body>
 <div class="wrap wide">
-  <header class="kbh"><h1>📒 記録簿</h1><span class="spacer"></span>
-    <button class="btn btn-primary edit-only" onclick="openForm(null)">＋ 予約を追加</button></header>
+  <!-- いちばん上：記録簿の右に、日付を大きく（日付がいちばん大事） -->
+  <header class="kbh"><h1>📒 記録簿</h1>
+    <div class="daybar bigday">
+      <button class="btn btn-ghost btn-sm" onclick="moveDay(-1)">◀</button>
+      <input type="date" id="day" onchange="loadDay()">
+      <button class="btn btn-ghost btn-sm" onclick="moveDay(1)">▶</button>
+      <span class="bd" id="dayInfo"></span>
+      <button class="btn btn-ghost btn-sm" onclick="goToday()">今日（営業日）</button>
+    </div>
+    <span class="spacer"></span>
+    <button class="btn btn-ghost btn-sm" id="moneyBtn" onclick="showMoney=!showMoney;renderList()">👁 金額を見る</button></header>
   <div id="navArea"></div>
   <div id="wipArea"></div>
   <div id="gate" class="gate">読み込み中…</div>
 
   <div id="main" style="display:none">
-    <div class="daybar">
-      <button class="btn btn-ghost btn-sm" onclick="moveDay(-1)">◀</button>
-      <input type="date" id="day" onchange="loadDay()">
-      <button class="btn btn-ghost btn-sm" onclick="moveDay(1)">▶</button>
-      <button class="btn btn-ghost btn-sm" onclick="goToday()">今日（営業日）</button>
-      <span class="bd" id="dayInfo"></span>
-      <span class="spacer" style="flex:1"></span>
-      <button class="btn btn-ghost btn-sm" id="moneyBtn" onclick="showMoney=!showMoney;renderList()">👁 金額を見る</button>
-    </div>
-    <div class="stats hide" id="stats"></div>
-    <div class="tax hide" id="tax"></div>
-    <div class="notice"><textarea id="notice" placeholder="📢 本日のお知らせ" onchange="saveNotice()"></textarea></div>
-    <!-- 🗺 今どこに誰が（いつも上に出しておく） -->
-    <div id="viewBoard">
-      <div style="font-weight:800;font-size:13.5px;color:var(--sub);margin:8px 0 4px">🗺 今どこに誰が<small style="font-weight:700;margin-left:6px">待機中・仕事中・今いない（札を押すとキャストの枠）</small></div>
+    <div class="stats hide" id="stats" style="display:none"></div>
+    <div class="tax hide" id="tax" style="display:none"></div>
+    <div class="notice"><textarea id="notice" placeholder="📢 本日のお知らせ（ここに書くと赤く大きく出ます）" onchange="saveNotice()"></textarea></div>
+    <!-- 📊 今日の数字（内勤用・ふだんはしまっておく） -->
+    <details class="fold" id="todayBox"><summary>📊 今日の数字</summary><div class="todaygrid" id="todayGrid"></div></details>
+    <!-- 🗺 今どこに誰が（いつも上に・ひらいておく） -->
+    <details class="fold" id="viewBoard" open><summary>🗺 今どこに誰が<small>待機中・仕事中・今いない（札を押すとキャストの枠）</small></summary>
       <div class="wrapx"><div id="boardGrid"></div></div>
-    </div>
+    </details>
     <div class="tabs" id="tabs">
       <button data-v="list" onclick="showView('list')" class="tabmain">📋 予約一覧<small>状態・伝えた・対応ログ・やること</small></button>
       <div class="tabgrp"><div class="tabgrp-h">📞 電話受付（電話の内容で選ぶ）</div><div class="tabgrp-b">
       <button data-v="slotsFree" onclick="showView('slotsFree')">🙋 誰が行ける？<small>「〇〇ちゃん何時空いてる？」「何時から誰か行ける？」</small></button>
       <button data-v="tl" onclick="showView('tl')">⏱ 全体を見たい<small>全時刻のタイムライン</small></button>
       </div></div>
+      <button data-v="seats" onclick="showView('seats')">🪑 鶯谷待機席<small>席1〜5・だれが何時から何時まで</small></button>
     </div>
     <div class="sum" id="sum"></div>
 
     <!-- 🕐 空き枠 -->
+    <!-- 🪑 鶯谷待機席 -->
+    <div id="viewSeats" style="display:none"><div id="seatBox"></div></div>
+
     <div id="viewSlots" style="display:none">
       <div class="search">
         <span class="lbl" id="slotTitle">🕐 空き枠</span>
@@ -1450,8 +1483,8 @@ function showView(v){
   // 🗺 今どこに誰が は、いつも上に出しておく（タブではない）
   if(v === "slots" || v === "slotsCast") v = "slotsFree";
   if(v === "board") v = "list";
-  const box = { tl: "viewTL", list: "viewList", slotsFree: "viewSlots" };
-  ["viewTL", "viewList", "viewSlots"].forEach(id=>{ const el = $(id); if(el) el.style.display = box[v] === id ? "" : "none"; });
+  const box = { tl: "viewTL", list: "viewList", slotsFree: "viewSlots", seats: "viewSeats" };
+  ["viewTL", "viewList", "viewSlots", "viewSeats"].forEach(id=>{ const el = $(id); if(el) el.style.display = box[v] === id ? "" : "none"; });
   if(v === "slotsFree" && typeof renderSlots === "function") renderSlots();
   document.querySelectorAll("#tabs button[data-v]").forEach(b=>b.classList.toggle("on", b.dataset.v === v));
 }
@@ -1635,27 +1668,33 @@ function boardCol(x, state){
   const sb = (x.cd && x.cd.standby) || "";
   return STANDBY.includes(sb) ? sb : (sb ? "出張・他エリア" : "");
 }
+const AREA_CLASS = { "池袋": "a-ike", "鶯谷": "a-ugu", "五反田": "a-goh", "錦糸町": "a-kin", "キャスト宅": "a-home", "出張・他エリア": "a-other" };
 function renderBoard(){
   const el = $("boardGrid"); if(!el || !M.casts) return;
   if(!shiftCache[day]){ el.innerHTML = `<div class="gate">シフトを読み込み中…</div>`; return; }
-  const cols = STANDBY.concat([""]);
-  const cell = {};
+  const cols = STANDBY;
+  const cell = {}, gone = [];
   tlRows().forEach(x=>{
     const st = boardState(x), col = boardCol(x, st);
-    (cell[st + "|" + col] = cell[st + "|" + col] || []).push(x);
+    // 待機中・仕事中で場所がわかる人だけ表に。ほか（出勤前・退勤・お茶・欠勤・場所なし）は全部「今いない」
+    if((st === "wait" || st === "work") && col) (cell[st + "|" + col] = cell[st + "|" + col] || []).push(x);
+    else gone.push(x);
   });
   const chip = (x, st)=>{
     const nm = castLabel(x);
     const sh = x.shift ? `${hShort(x.shift.start)}-${hShort(x.shift.end)}` : "";
-    const note = x.cd && x.cd.status ? x.cd.status : (x.cd && x.cd.settled ? "精算済" : "");
-    // いま関係する予約（仕事中 → これからの予約 → 最後の予約）の状態を、予約一覧と同じ色で出す
+    const cds = (x.cd && x.cd.status) || "";
+    const note = cds ? cds : (x.cd && x.cd.settled ? "精算済" : "");
     const now = nowHour(), live = x.bks.filter(b=>!["done", "cancel", "tobi"].includes(b.r.status));
     const rel = x.bks.find(b=>b.r.status === "working") || live.filter(b=>b.e > now).sort((a, b)=>a.s - b.s)[0] || live.sort((a, b)=>b.s - a.s)[0];
     const pill = rel ? `<span class="st ${rel.r.status}">${esc(hm(rel.r.start_at))} ${esc(STATUS[rel.r.status] || "")}</span>` : "";
-    return `<button class="chipc ${st}" onclick="openCast('${x.c ? x.c.id : ""}','${esc(x.name)}')">【${esc(nm)}】${esc(sh)}${note ? `<small>（${esc(note)}）</small>` : ""}${pill ? `<br>${pill}` : ""}</button>`;
+    const seat = x.c && typeof seatOf === "function" ? seatOf(x.c.id) : null;
+    const cls = st === "gone" ? "gone inl" + (cds === "お茶" ? " tea" : cds === "欠勤" ? " absent" : "") : st;
+    return `<button class="chipc ${cls}" onclick="openCast('${x.c ? x.c.id : ""}','${esc(x.name)}')">【${esc(nm)}】${esc(sh)}${seat ? `<span class="seatbadge">🪑${seat.seat}</span>` : ""}${note ? `<small>（${esc(note)}）</small>` : ""}${pill && st !== "gone" ? `<br>${pill}` : ""}</button>`;
   };
-  el.innerHTML = `<table class="board"><tr><th class="corner"></th>${cols.map(c=>`<th>${c ? esc(c) : "待機場所なし"}</th>`).join("")}</tr>`
-    + BOARD_ROWS.map(([k, l])=>`<tr class="${k}"><th>${l}</th>${cols.map(c=>`<td>${(cell[k + "|" + c] || []).map(x=>chip(x, k)).join("")}</td>`).join("")}</tr>`).join("")
+  el.innerHTML = `<table class="board"><tr><th class="corner"></th>${cols.map(c=>`<th class="${AREA_CLASS[c] || ""}">${esc(c)}</th>`).join("")}</tr>`
+    + [["wait", "待機中"], ["work", "仕事中"]].map(([k, l])=>`<tr class="${k}"><th>${l}</th>${cols.map(c=>`<td class="${AREA_CLASS[c] || ""}">${(cell[k + "|" + c] || []).map(x=>chip(x, k)).join("")}</td>`).join("")}</tr>`).join("")
+    + `<tr class="gone"><th>今いない<br><small style="font-weight:700">⬜出勤前・退勤 🟩お茶 🟥欠勤</small></th><td colspan="${cols.length}">${gone.map(x=>chip(x, "gone")).join("") || `<span class="hist" style="margin:0">なし</span>`}</td></tr>`
     + `</table>`;
 }
 
@@ -2062,6 +2101,88 @@ async function toggleTodo(id, i){
   try{ q(await sb.from("kb_reservations").update({ todos, updated_by: KB.operatorName() }).eq("id", id)); r.todos = todos; renderList(); toast(x.done_at ? "やったことにしました" : "もどしました"); }
   catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
+
+/* ---------- 📊 今日の数字（内勤用）：店落ち（暫定＋雑費）・カード・件数・人数・お茶・欠勤 ---------- */
+function renderToday(){
+  const el = $("todayGrid"); if(!el) return;
+  const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi");
+  const total = live.reduce((a, r)=>a + (r.total || 0), 0), back = live.reduce((a, r)=>a + backOf(r), 0);
+  const ids = [...new Set(live.map(r=>r.cast_id).filter(Boolean))];
+  let zappi = 0; ids.forEach(id=>{ try{ zappi += calcCast(id).zappi || 0; }catch(e){} });
+  const card = live.filter(r=>r.payment !== "cash").reduce((a, r)=>a + (r.total || 0), 0);
+  const st = Object.values(castDays || {}).map(c=>c.status || "");
+  const t = (k, v)=>`<div class="t"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+  el.innerHTML = t("今日の店落ち（暫定＋雑費）", yen(total - back + zappi)) + t("カード合計", yen(card)) + t("予約件数", live.length + "件")
+    + t("予約のあるキャスト", ids.length + "名") + t("お茶", st.filter(s=>s === "お茶").length + "名") + t("欠勤", st.filter(s=>s === "欠勤").length + "名");
+}
+const __renderListT = renderList;
+renderList = function(){ __renderListT(); renderToday(); };
+
+/* ---------- 🪑 鶯谷待機席（1〜5番）：座った時刻〜退席の時刻を、日付ごとに記録（kb_seat_logs） ---------- */
+let seatLogs = [], seatsOk = true;
+async function loadSeats(){
+  try{ seatLogs = q(await sb.from("kb_seat_logs").select("*").eq("biz_date", day).order("start_at")) || []; seatsOk = true; }
+  catch(e){ seatLogs = []; seatsOk = false; }
+}
+function seatOf(castId){ return seatLogs.find(l=>l.cast_id === castId && !l.end_at) || null; }
+function seatCandidates(){ return tlRows().filter(x=>x.c && (x.cd && x.cd.standby) === "鶯谷" && boardState(x) === "wait" && !seatOf(x.c.id)); }
+function renderSeats(){
+  const el = $("seatBox"); if(!el) return;
+  if(!seatsOk){ el.innerHTML = `<div class="gate">SQL 102（鶯谷待機席）を実行すると使えます</div>`; return; }
+  const cand = seatCandidates();
+  const cards = [1, 2, 3, 4, 5].map(n=>{
+    const l = seatLogs.find(x=>x.seat === n && !x.end_at);
+    if(l) return `<div class="seat on"><div class="no">🪑 ${n}番</div><div class="who">${esc(castName(l.cast_id))}</div><div class="since">${hm(l.start_at)} から</div>
+      ${KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="leaveSeat(${l.id})">退席</button>` : ""}</div>`;
+    return `<div class="seat"><div class="no">🪑 ${n}番</div><div class="who" style="color:var(--sub)">あいている</div>
+      ${KB.CAN_EDIT ? (cand.length ? `<select id="seatSel${n}"><option value="">だれが座る？</option>${cand.map(x=>`<option value="${x.c.id}">${esc(castLabel(x))}</option>`).join("")}</select>
+        <button class="btn btn-primary btn-sm" onclick="sitDown(${n})">座る</button>` : `<div class="hint2">鶯谷で待機中の人がいません</div>`) : ""}</div>`;
+  }).join("");
+  const mins = l=>Math.round(((l.end_at ? new Date(l.end_at) : new Date()) - new Date(l.start_at)) / 60000);
+  const log = seatLogs.slice().sort((a, b)=>String(a.start_at).localeCompare(String(b.start_at)));
+  el.innerHTML = `<div class="hint2" style="margin:4px 0 8px">鶯谷で「待機中」のキャストを席に座らせると、その時刻から「退席」を押した時刻までが記録されます（日付ごと）。キャストの枠（今どこに誰がの札）からも選べます。</div>
+    <div class="seats">${cards}</div>
+    <div style="font-weight:800;margin:14px 0 6px">📜 この日の記録</div>
+    ${log.length ? `<table class="list"><tr><th>席</th><th>キャスト</th><th>座った</th><th>退席</th><th>時間</th><th>記録</th></tr>${log.map(l=>`<tr>
+      <td>${l.seat}番</td><td><b>${esc(castName(l.cast_id))}</b></td><td>${hm(l.start_at)}</td><td>${l.end_at ? hm(l.end_at) : "<b style='color:#6c5ce7'>座っている</b>"}</td>
+      <td>${mins(l)}分</td><td><small>${esc(l.start_by)}${l.end_by ? " → " + esc(l.end_by) : ""}</small></td></tr>`).join("")}</table>` : `<div class="hist">まだ記録はありません</div>`}`;
+}
+async function sitDown(n, castId){
+  if(!KB.CAN_EDIT) return;
+  const id = castId || ($("seatSel" + n) && $("seatSel" + n).value);
+  if(!id){ toast("だれが座るか選んでください"); return; }
+  if(seatLogs.some(l=>l.seat === n && !l.end_at)){ toast(n + "番はもう使われています"); return; }
+  const old = seatOf(id);
+  try{
+    if(old) q(await sb.from("kb_seat_logs").update({ end_at: new Date().toISOString(), end_by: KB.operatorName() }).eq("id", old.id));   // 席の移動：前の席は退席
+    q(await sb.from("kb_seat_logs").insert({ biz_date: day, seat: n, cast_id: id, start_by: KB.operatorName() }));
+    await loadSeats(); renderSeats(); renderBoard(); if(castOpen && castOpen.c && castOpen.c.id === id) openCast(id, "");
+    toast(castName(id) + " → 🪑" + n + "番");
+  }catch(e){ toast("記録できませんでした：" + (e.message || e)); }
+}
+async function leaveSeat(logId){
+  if(!KB.CAN_EDIT) return;
+  const l = seatLogs.find(x=>x.id === logId);
+  try{
+    q(await sb.from("kb_seat_logs").update({ end_at: new Date().toISOString(), end_by: KB.operatorName() }).eq("id", logId));
+    await loadSeats(); renderSeats(); renderBoard(); if(l && castOpen && castOpen.c && castOpen.c.id === l.cast_id) openCast(l.cast_id, "");
+    toast("退席しました");
+  }catch(e){ toast("記録できませんでした：" + (e.message || e)); }
+}
+const __loadDayS = loadDay;
+loadDay = async function(){ await __loadDayS(); await loadSeats(); renderSeats(); renderBoard(); renderToday(); };
+// キャストの枠：鶯谷で待機のときは、席を選べる
+const __openCastS = openCast;
+openCast = function(castId, name){
+  __openCastS(castId, name);
+  const x = castOpen; if(!x || !x.c || !seatsOk || !KB.CAN_EDIT) return;
+  if(((x.cd && x.cd.standby) || "") !== "鶯谷") return;
+  const cur = seatOf(x.c.id), used = seatLogs.filter(l=>!l.end_at && l.cast_id !== x.c.id).map(l=>l.seat);
+  const html = `<div class="seatpick">🪑 鶯谷の席：${[1, 2, 3, 4, 5].map(n=>`<button class="btn btn-sm ${cur && cur.seat === n ? "btn-primary" : "btn-ghost"}" ${used.includes(n) ? "disabled" : ""} onclick="sitDown(${n},'${x.c.id}')">${n}</button>`).join("")}
+    ${cur ? `<span class="hint2">${hm(cur.start_at)}から ${cur.seat}番</span> <button class="btn btn-ghost btn-sm" onclick="leaveSeat(${cur.id})">退席</button>` : ""}</div>`;
+  const meta = document.querySelector("#castBody .castmeta");
+  if(meta) meta.insertAdjacentHTML("afterend", html);
+};
 
 /* ---------- 予約の入力 ⑥：対応ログ ---------- */
 function renderFormLog(){
