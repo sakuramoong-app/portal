@@ -682,6 +682,9 @@ async function showAnswer(aid){
       ${(d.personalOptions || []).length ? two("🎁 個人オプション", d.personalOptions.map(o=>"・" + o.name + (o.price ? "　" + o.price : "")).join("\n"), c.special_notes) : ""}
       ${d.ng ? two("🙅 今のNG", d.ng, c.ng_notes) : ""}
       ${two("📝 電話受付外でのご要望・🏨 ホテル", [d.notes, d.hotel ? "🏨 " + d.hotel : ""].filter(Boolean).join("\n"), c.special_notes)}
+      ${d.introChange ? ["self", "mgr"].map(k=>{ const s = d.introChange[k] || {}, t = k === "self" ? "💬 自己紹介文" : "📝 店長紹介文";
+          return s.want === "change" ? `<div style="background:#FFF0F5;border-radius:10px;padding:8px;margin-top:8px"><div style="font-weight:800;font-size:12px">${t}：<b style="color:#E5638C">変えたい</b>（${k === "self" ? "この文章にしてほしい" : "こういう内容で書いてほしい"}）</div><div style="white-space:pre-wrap">${esc(s.text)}</div></div>`
+                                     : `<div style="font-size:12px;margin-top:4px">${t}：このままでOK</div>`; }).join("") : ""}
       ${CAN_EDIT ? answerToolsHtml(d, a.id) : ""}
       <details style="margin-top:8px"><summary style="cursor:pointer;font-weight:800">オプション（ピンク＝公式HPとちがう）</summary>${opt}</details>
       <details style="margin-top:6px"><summary style="cursor:pointer;font-weight:800">プロフィール</summary>${prof}</details>
