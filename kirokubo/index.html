@@ -612,7 +612,8 @@ async function showAnswer(aid){
     const opt = Object.keys(d.options || {}).map(k=>{
       const v = d.options[k], hpv = (d.hpOptions || {})[k] || ((k.indexOf("3P") === 0) ? (d.hpOptions || {})["3P（有料）"] : "") || "";
       const diff = hpv && hpv !== v ? `<b style="color:#E5638C">（公式HP：${esc(hpv)}）</b>` : "";
-      const tell = d.optTell && d.optTell[k] ? (d.optTell[k] === "tell" ? "　📣受付で伝えてほしい" : "　🤫伝えないでほしい") : "";
+      const mean = d.optMeaning && d.optMeaning[k] && d.optMeaning[k][v] ? `（${esc(d.optMeaning[k][v])}）` : "";
+      const tell = mean + (d.optTell && d.optTell[k] ? (d.optTell[k] === "tell" ? "　📣受付で伝えてほしい" : "　🤫伝えないでほしい") : "");
       return `<div>${esc(k)}：<b>${esc(v)}</b>${diff}${tell}${d.optMemo && d.optMemo[k] ? "　📝" + esc(d.optMemo[k]) : ""}</div>`;
     }).join("");
     const prof = Object.keys(d.profile || {}).map(k=>{
@@ -624,9 +625,10 @@ async function showAnswer(aid){
       <div style="background:#F3F7FF;border-radius:10px;padding:8px"><div style="font-weight:800;font-size:12px">台帳にあるもの</div><div style="white-space:pre-wrap">${esc(ours || "（なし）")}</div></div></div>`;
     $("e_answer").innerHTML = `<div style="border:1.5px solid #F1E3E7;border-radius:12px;padding:10px;margin-top:8px;font-size:13px;line-height:1.8">
       <div style="font-weight:800">📨 ${fmtDT(a.submitted_at)} の答え　<span style="font-weight:400;color:#9C8B8F">性格タイプ：${esc(d.personalityType || "")}</span></div>
-      ${two("📣 受付で必ず案内してほしいこと", (d.mustAnnounce || []).map(s=>"・" + s).join("\n"), chk)}
-      ${two("🙅 今のNG", d.ng, c.ng_notes)}
-      ${two("📝 そのほか・🏨 ホテル", [d.notes, d.hotel ? "🏨 " + d.hotel : ""].filter(Boolean).join("\n"), c.special_notes)}
+      ${two("📣 受付時お客様に必ず確認・案内してほしいこと", (d.mustAnnounce || []).map(s=>"・" + s).join("\n"), chk)}
+      ${d.interval != null ? two("⏱ 予約と予約の間", d.interval ? d.interval + "分" : "なし", c.interval_min ? c.interval_min + "分" : "なし") : ""}
+      ${d.ng ? two("🙅 今のNG", d.ng, c.ng_notes) : ""}
+      ${two("📝 電話受付外でのご要望・🏨 ホテル", [d.notes, d.hotel ? "🏨 " + d.hotel : ""].filter(Boolean).join("\n"), c.special_notes)}
       <details style="margin-top:8px"><summary style="cursor:pointer;font-weight:800">オプション（ピンク＝公式HPとちがう）</summary>${opt}</details>
       <details style="margin-top:6px"><summary style="cursor:pointer;font-weight:800">プロフィール</summary>${prof}</details>
       <div style="display:flex;gap:6px;margin-top:10px">
