@@ -145,6 +145,10 @@
     <div class="hint" style="margin:-4px 0 8px">電話番号・住所・誕生日など。<b>内勤ならだれでも見られて・直せます</b>（キャストのページには出ません）。見たり直したりすると、だれが・いつかが残ります。</div>
     <div id="e_private"></div>
 
+    <div class="sec">📨 プロフ確認フォーム（既存キャスト）</div>
+    <div class="hint" style="margin:-4px 0 8px">キャスト専用のURLを作って、LINEで送ってください。キャストには<b>公式HPの内容だけ</b>が見えます（特記事項・NG・連絡先は見えません）。答えが届いたら、ここで台帳の内容と照らし合わせます。</div>
+    <div id="e_confirm"></div>
+
     <div class="sec">📝 特記事項・NG・メモ</div>
     <div class="f"><label>特記事項 <small style="font-weight:400;color:#9C8B8F">… 内勤が理解しておくこと（お客さんには言わない）。お客さんに言うことは上の「確認事項」へ</small></label><textarea id="e_special"></textarea></div>
     <div class="f" style="margin-top:10px"><label>NG <small style="font-weight:400;color:#9C8B8F">… キャストが受けないこと（内勤がつけるか判断する材料）</small></label><textarea id="e_ng"></textarea></div>
@@ -556,6 +560,87 @@ async function savePrivate(){
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
 
+/* ---------- 📨 プロフ確認フォーム（既存キャスト） ---------- */
+const CONFIRM_URL = "https://sakuramoong-app.github.io/cast-sakura-profile/confirm.html?t=";
+const fmtDT = s=>{ if(!s) return ""; const d = new Date(s); return (d.getMonth() + 1) + "/" + d.getDate() + " " + d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0"); };
+async function renderConfirm(id){
+  const box = $("e_confirm");
+  if(!id){ box.innerHTML = `<div class="hint">キャストを保存してから作れます。</div>`; return; }
+  box.innerHTML = `<div class="hint">読みこみ中…</div>`;
+  try{
+    const links = q(await sb.from("prof_confirm_links").select("token,created_at,created_by,expires_at,revoked,opened_at,submitted_at").eq("cast_id", id).order("created_at", { ascending: false }).limit(5)) || [];
+    const answers = q(await sb.from("prof_confirm_answers").select("id,submitted_at,reviewed_at,reviewed_by").eq("cast_id", id).order("submitted_at", { ascending: false }).limit(10)) || [];
+    if(editingId !== id) return;
+    const l = links.find(x=>!x.revoked && new Date(x.expires_at) > new Date());
+    let h = "";
+    if(l){
+      h += `<div style="font-size:13px;line-height:1.9">🔗 URLあり（${fmtDT(l.created_at)} ${esc(l.created_by)} が作成・${fmtDT(l.expires_at)}まで）<br>
+        ${l.opened_at ? "👀 キャストが開いた：" + fmtDT(l.opened_at) : "👀 まだ開いていません"}　${l.submitted_at ? "📨 答え：" + fmtDT(l.submitted_at) : ""}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+          <button class="btn btn-primary btn-sm" onclick="copyConfirm('${l.token}')">📋 URLとLINEの文をコピー</button>
+          <button class="btn btn-ghost btn-sm" onclick="makeConfirm(true)">🔁 URLを作り直す（古いURLは使えなくなる）</button></div>`;
+    }else{
+      h += `<button class="btn btn-primary" style="width:100%" onclick="makeConfirm(false)">🔗 このキャスト専用のURLを作る</button>`;
+    }
+    if(answers.length){
+      h += `<div style="margin-top:10px;font-size:13px;font-weight:800">届いた答え</div>` + answers.map(a=>`<div style="display:flex;gap:6px;align-items:center;padding:4px 0;border-bottom:1px dashed #F1E3E7;font-size:13px">
+        <span style="flex:1">📨 ${fmtDT(a.submitted_at)}　${a.reviewed_at ? "✅ 照合ずみ（" + esc(a.reviewed_by) + "）" : "<b style='color:#E5638C'>未照合</b>"}</span>
+        <button class="btn btn-ghost btn-sm" onclick="showAnswer(${a.id})">見る</button></div>`).join("");
+    }
+    box.innerHTML = h + `<div id="e_answer"></div>`;
+  }catch(e){ box.innerHTML = `<div class="hint">読みこめませんでした（SQL 098 を実行してください）：${esc(e.message || e)}</div>`; }
+}
+async function makeConfirm(isNew){
+  if(!operatorName()){ toast("ポータルで自分の名前を選んでから開いてください"); return; }
+  if(isNew && !confirm("URLを作り直しますか？\n前に送ったURLは使えなくなります（届いた答えは残ります）")) return;
+  try{
+    const t = q(await sb.rpc("prof_confirm_create", { p_cast_id: editingId, p_by: operatorName(), p_new: !!isNew }));
+    await renderConfirm(editingId); copyConfirm(t);
+  }catch(e){ toast("作れませんでした：" + (e.message || e)); }
+}
+function copyConfirm(t){
+  const c = casts.find(x=>x.id === editingId) || {};
+  const text = `${nameOf(c)}さん\nお疲れさまです🌸\nキャストさんごとの条件やOK・NGをもっと正確に管理するために、プロフの確認フォームを作りました。\nお手数ですが、下のURLから入力をお願いします🙏（10〜15分くらいです）\n\n${CONFIRM_URL}${t}\n\n※このURLは${nameOf(c)}さん専用です。ほかの人には送らないでください。`;
+  const done = ()=>toast("URLとLINEの文をコピーしました。LINEに貼りつけて送ってください");
+  try{ navigator.clipboard.writeText(text).then(done, ()=>prompt("コピーしてLINEに貼ってください", text)); }catch(e){ prompt("コピーしてLINEに貼ってください", text); }
+}
+async function showAnswer(aid){
+  try{
+    const a = q(await sb.from("prof_confirm_answers").select("*").eq("id", aid).single());
+    const d = a.data || {}, c = casts.find(x=>x.id === a.cast_id) || {};
+    const chk = castChecks.filter(x=>x.cast_id === a.cast_id).map(x=>"・" + x.text).join("\n") || "（なし）";
+    const opt = Object.keys(d.options || {}).map(k=>{
+      const v = d.options[k], hpv = (d.hpOptions || {})[k] || ((k.indexOf("3P") === 0) ? (d.hpOptions || {})["3P（有料）"] : "") || "";
+      const diff = hpv && hpv !== v ? `<b style="color:#E5638C">（公式HP：${esc(hpv)}）</b>` : "";
+      const tell = d.optTell && d.optTell[k] ? (d.optTell[k] === "tell" ? "　📣受付で伝えてほしい" : "　🤫伝えないでほしい") : "";
+      return `<div>${esc(k)}：<b>${esc(v)}</b>${diff}${tell}${d.optMemo && d.optMemo[k] ? "　📝" + esc(d.optMemo[k]) : ""}</div>`;
+    }).join("");
+    const prof = Object.keys(d.profile || {}).map(k=>{
+      const v = d.profile[k] || "", hv = (d.hpProfile || {})[k] || "";
+      return `<div>${esc(k)}：${esc(v)}${hv && hv !== v ? ` <b style="color:#E5638C">（公式HP：${esc(hv)}）</b>` : ""}</div>`;
+    }).join("");
+    const two = (title, mine, ours)=>`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+      <div style="background:#FFF5F8;border-radius:10px;padding:8px"><div style="font-weight:800;font-size:12px">${title}（キャストの答え）</div><div style="white-space:pre-wrap">${esc(mine || "（なし）")}</div></div>
+      <div style="background:#F3F7FF;border-radius:10px;padding:8px"><div style="font-weight:800;font-size:12px">台帳にあるもの</div><div style="white-space:pre-wrap">${esc(ours || "（なし）")}</div></div></div>`;
+    $("e_answer").innerHTML = `<div style="border:1.5px solid #F1E3E7;border-radius:12px;padding:10px;margin-top:8px;font-size:13px;line-height:1.8">
+      <div style="font-weight:800">📨 ${fmtDT(a.submitted_at)} の答え　<span style="font-weight:400;color:#9C8B8F">性格タイプ：${esc(d.personalityType || "")}</span></div>
+      ${two("📣 受付で必ず案内してほしいこと", (d.mustAnnounce || []).map(s=>"・" + s).join("\n"), chk)}
+      ${two("🙅 今のNG", d.ng, c.ng_notes)}
+      ${two("📝 そのほか・🏨 ホテル", [d.notes, d.hotel ? "🏨 " + d.hotel : ""].filter(Boolean).join("\n"), c.special_notes)}
+      <details style="margin-top:8px"><summary style="cursor:pointer;font-weight:800">オプション（ピンク＝公式HPとちがう）</summary>${opt}</details>
+      <details style="margin-top:6px"><summary style="cursor:pointer;font-weight:800">プロフィール</summary>${prof}</details>
+      <div style="display:flex;gap:6px;margin-top:10px">
+        ${a.reviewed_at ? `<span class="hint">✅ ${fmtDT(a.reviewed_at)} ${esc(a.reviewed_by)} が照合ずみ</span>` : `<button class="btn btn-primary btn-sm" onclick="markReviewed(${a.id})">✅ 照合した（台帳に反映した）</button>`}
+        <button class="btn btn-ghost btn-sm" onclick="$('e_answer').innerHTML=''">閉じる</button></div></div>`;
+  }catch(e){ toast("開けませんでした：" + (e.message || e)); }
+}
+async function markReviewed(aid){
+  try{
+    q(await sb.from("prof_confirm_answers").update({ reviewed_at: new Date().toISOString(), reviewed_by: operatorName() }).eq("id", aid));
+    toast("照合ずみにしました"); renderConfirm(editingId);
+  }catch(e){ toast("できませんでした：" + (e.message || e)); }
+}
+
 /* ---------- 編集 ---------- */
 function openEdit(id){
   editingId = id;
@@ -569,6 +654,7 @@ function openEdit(id){
   $("termsBtn").style.display = id && CAN_EDIT ? "" : "none";
   renderChecks(id);
   renderPrivateClosed(id);
+  renderConfirm(id);
   $("e_special").value = c.special_notes || ""; $("e_ng").value = c.ng_notes || ""; $("e_note").value = c.note || "";
   $("e_interval").value = c.interval_min || 0;
   const st = c.stores || {};
