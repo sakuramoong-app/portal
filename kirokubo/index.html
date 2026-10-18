@@ -519,7 +519,12 @@ function openRule(rid, pre){
       <div class="f"><label>いつ出す？</label><select id="r_cond" onchange="ruleCondUI()">${Object.keys(RULE_COND).map(k=>`<option value="${k}" ${x.cond === k ? "selected" : ""}>${RULE_COND[k]}</option>`).join("")}</select></div>
       <div class="f" id="r_valWrap"></div>
     </div>
-    <div class="hint" style="margin-top:4px">📣 案内：チェックしないと受付を保存できない／✅ 確認してから：チェックするまで「返事待ち」でしか保存できない／⏳ 予約のあと：予約一覧に「やること」として残る／🤫：受付に出るだけ</div>
+    <div class="hint" style="margin-top:6px;line-height:1.8;background:#FAF7F8;border-radius:10px;padding:8px 10px">
+      <b>📣 お客様に案内</b>：受付中、案内をしたらチェック。チェックしないと受付を保存できない<br>
+      <b>✅ 確認してから受ける</b>：確認したらチェック。チェックするまで「返事待ち」でしか保存できない<br>
+      <span style="padding-left:1em">例「外国人が日本語をしゃべれるか確認後、まほに受けるかどうか要確認」「つばさ 180分以上のコースを受けるかどうか要確認」</span><br>
+      <b>⏳ 予約のあとにやること</b>：予約一覧に「やること」として残る　例「美咲 ホテル在室確認」<br>
+      <b>🤫 知っておくだけ</b>：受付に出るだけ　例「りん 自宅→池40分／鶯50分／錦90分」「りん 出勤時間1時間前から連絡つく」</div>
     <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost btn-sm" onclick="$('ruleBox').innerHTML=''">やめる</button>
       <button class="btn btn-primary btn-sm" onclick="saveRule()">💾 保存</button></div></div>`;
