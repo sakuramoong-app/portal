@@ -56,6 +56,9 @@
   .add{display:flex;gap:6px;margin:6px 0 2px;}
   .add input{flex:1;font-family:inherit;font-size:13px;border:1.5px dashed var(--line);border-radius:10px;padding:7px 10px;}
   .none{font-size:12px;color:var(--sub);padding:4px;}
+  .row{flex-wrap:wrap;}
+  .sugg{flex-basis:100%;font-size:12px;font-weight:700;color:#1f5fbf;background:#EEF5FF;border-radius:8px;padding:5px 8px;margin-top:4px;line-height:1.6;}
+  .sugg .ib{margin-left:4px;}
   .back{position:fixed;left:12px;bottom:12px;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);}
 </style>
 </head>
@@ -189,7 +192,42 @@ async function loadBoard(){
   }
   rows = data || [];
   renderBoard();
+  // 「これ終わった？」のために、公開の記録（作業ログ）も読んでおく
+  if(!logLoaded){ logLoaded = true; try{ await load(); }catch(e){} renderBoard(); }
 }
+
+/* ---------- 「これ終わった？」：やることの文章と、公開の記録（作業ログ）の文章が似ていたら知らせる ----------
+   勝手に完了にはしない（似ているだけで、まちがえることがあるため）。押したら完了 */
+function bigrams(s){
+  const t = String(s || "").replace(/^[^：:]{1,20}[：:]/, "").replace(/[\s　・、。，．（）()「」『』【】！!？?〜~＋+\-—…:：/]/g, "").toLowerCase();
+  const out = new Map(); for(let i = 0; i < t.length - 1; i++){ const g = t.slice(i, i + 2); out.set(g, (out.get(g) || 0) + 1); }
+  return out;
+}
+// やることの言葉（2文字ずつ）のうち、公開の文に入っている割合
+function cover(a, b){
+  let n = 0, sa = 0;
+  a.forEach((v, g)=>{ sa += v; if(b.has(g)) n += Math.min(v, b.get(g)); });
+  return { r: sa ? n / sa : 0, n };
+}
+function dice(a, b){
+  let n = 0, sa = 0, sb2 = 0;
+  a.forEach(v=>{ sa += v; }); b.forEach(v=>{ sb2 += v; });
+  a.forEach((v, g)=>{ if(b.has(g)) n += Math.min(v, b.get(g)); });
+  return sa + sb2 ? 2 * n / (sa + sb2) : 0;
+}
+const dismissed = (()=>{ try{ return new Set(JSON.parse(localStorage.getItem("mgrDismiss") || "[]")); }catch(e){ return new Set(); } })();
+function suggestDone(r){
+  if(r.kind !== "task" || !items.length || dismissed.has(r.id)) return null;
+  const tb = bigrams(r.title); let best = null;
+  items.forEach(it=>{
+    if(r.created_at && it.at < new Date(r.created_at)) return;   // やることを書く前の公開は見ない
+    const cv = cover(tb, bigrams(it.msg)), s = cv.r;
+    if(cv.n < 4) return;   // 一致が少なすぎるものは出さない
+    if(s >= 0.5 && (!best || s > best.s)) best = { s, it };
+  });
+  return best;
+}
+function dismissSuggest(id){ dismissed.add(id); try{ localStorage.setItem("mgrDismiss", JSON.stringify([...dismissed])); }catch(e){} renderBoard(); }
 function list(app, kind){ return rows.filter(r=>r.kind === kind && (kind === "vision" || r.app === app)); }
 function fmt(d){ if(!d) return ""; const x = new Date(d); return (x.getMonth()+1) + "/" + x.getDate(); }
 
@@ -205,6 +243,9 @@ function rowHtml(r, i, opts){
     if(isDone) h += `<button class="ib" onclick="setKind(${r.id},'task')">戻す</button>`;
     h += `<button class="ib" onclick="delItem(${r.id})" title="消す">🗑</button>`;
   }
+  const sg = CAN ? suggestDone(r) : null;
+  if(sg) h += `<div class="sugg">🤖 これ終わった？　似ている公開：「${esc(sg.it.msg)}」（${fmt(sg.it.at)}）
+      <button class="ib ok" onclick="setKind(${r.id},'done')">✅ 終わった</button><button class="ib" onclick="dismissSuggest(${r.id})">まだ</button></div>`;
   return h + `</div>`;
 }
 function addHtml(app, kind, ph){
