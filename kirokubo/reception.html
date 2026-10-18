@@ -236,7 +236,7 @@ async function init(){
       sb.from("kb_course_info").select("*"),
       sb.from("kb_rank_history").select("cast_id,grp,rank,valid_from,id,hearing_text,by_name,at"),
       sb.from("kb_dummy_names").select("*").eq("active", true).order("sort").order("id"),
-      sb.from("kb_cast_checks").select("id,cast_id,text,sort").eq("active", true).order("sort").order("id"),
+      sb.from("kb_cast_checks").select("*").eq("active", true).order("sort").order("id"),
       sb.from("prof_hotels").select("area,hotel_name,map_url,store_status,note").order("seq"),
     ]);
     const [stores, casts, prices, back, options, rules, settings, media, courseInfo, rankHist, dummies, castChecks, hotels] = r.map(q);
@@ -713,7 +713,8 @@ function onCast(){
 /* ---------- 受付で必ず案内すること（キャストごとの確認事項）。全部チェックしないと保存できない ---------- */
 function renderCastChecks(c){
   const el = $("castChecks");
-  const list = c ? M.castChecks.filter(x=>x.cast_id === c.id) : [];
+  // 古い受付ページ：受付ルールのうち「📣 案内・いつも」だけ出す（条件つき・ほかの種類は新しい記録簿で）
+  const list = c ? M.castChecks.filter(x=>x.cast_id === c.id && (x.kind || "announce") === "announce" && (x.cond || "always") === "always") : [];
   if(!list.length){ el.innerHTML = ""; return; }
   // 編集のときは、前に案内した事項にチェックをつけておく
   const done = (editing && editing.cast_id === c.id ? (editing.checks || []) : []).map(x=>x.text);
