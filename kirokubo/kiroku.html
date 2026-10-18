@@ -1599,6 +1599,7 @@ function openCast(castId, name){
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
       ${x.c && KB.CAN_EDIT ? `<button class="btn btn-primary" onclick="closeCast();newBookingFor('${x.c.id}', $('s_time').value)">＋ この人で予約</button>` : ""}
       <button class="btn btn-ghost" onclick="closeCast();showView('tl');$('s_cast').value='${esc(nm)}';renderTL()">⏱ タイムラインで見る</button>
+      ${x.c ? `<button class="btn btn-ghost" onclick="callCast('${x.c.id}', this)">📞 電話（LINEがつながらないとき）</button>` : ""}
     </div>`;
   // 💴 精算（この日のこのキャスト）
   $("castBody").insertAdjacentHTML("beforeend", `<div class="f" style="margin-top:16px"><label>💴 精算</label></div><div id="settleBox"></div>`);
@@ -1607,6 +1608,16 @@ function openCast(castId, name){
   $("castBg").classList.add("show");
 }
 function closeCast(){ $("castBg").classList.remove("show"); castOpen = null; }
+// 電話番号は押したときだけ取りに行く（だれが見たかが台帳に残る）
+async function callCast(castId, btn){
+  if(!KB.operatorName()){ toast("ポータルで自分の名前を選んでから開いてください"); return; }
+  try{
+    const tel = q(await sb.rpc("cast_private_phone", { p_cast_id: castId, p_by: KB.operatorName() }));
+    if(!tel){ toast("電話番号がまだ入っていません（キャスト台帳の「📞 連絡先」から入れられます）"); return; }
+    const num = String(tel).replace(/[^\d+]/g, "");
+    btn.outerHTML = `<a class="btn btn-primary" href="tel:${esc(num)}">📞 ${esc(tel)} にかける</a>`;
+  }catch(e){ toast("電話番号を見られませんでした：" + (e.message || e)); }
+}
 async function saveCastDay(){
   const x = castOpen; if(!x || !x.c) return;
   const row = { biz_date: day, cast_id: x.c.id, standby: $("cd_standby").value, status: $("cd_status").value, updated_at: new Date().toISOString(), updated_by: KB.operatorName() };
