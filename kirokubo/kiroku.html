@@ -265,6 +265,8 @@
     <div class="notice"><textarea id="notice" placeholder="📢 本日のお知らせ（ここに書くと赤く大きく出ます）" onchange="saveNotice()"></textarea></div>
     <!-- 📊 今日の数字（内勤用・ふだんはしまっておく） -->
     <details class="fold" id="todayBox"><summary>📊 今日の数字</summary><div class="todaygrid" id="todayGrid"></div></details>
+    <!-- 👑 社長用（「社長」で入ったときだけ） -->
+    <details class="fold" id="ownerBox" style="display:none"><summary>👑 社長用：今日の集計</summary><div id="ownerGrid"></div></details>
     <!-- 🗺 今どこに誰が（いつも上に・ひらいておく） -->
     <details class="fold" id="viewBoard" open><summary>🗺 今どこに誰が<small>待機中・仕事中・今いない（札を押すとキャストの枠）</small></summary>
       <div class="wrapx"><div id="boardGrid"></div></div>
@@ -1641,7 +1643,7 @@ setInterval(()=>{ if(day === KB.bizDateOf() && !$("formBg").classList.contains("
    ・待機場所はキャストの1日の記録（kb_cast_days.standby）。仕事中は予約のエリアの列に出す
    ・札を押すと「キャストの枠」：その日の予約・空き時間・待機場所／状態の変更・この人で予約・精算へ
    ============================================================ */
-const STANDBY = ["池袋", "鶯谷", "五反田", "錦糸町", "キャスト宅", "出張・他エリア"];
+const STANDBY = ["池袋", "鶯谷", "五反田", "キャスト宅", "出張・他エリア"];   // 錦糸町は待機場所がないので「出張・他エリア」に入る
 const DAY_STATUS = ["", "予約スタート", "出勤前連絡", "お茶", "欠勤"];
 const BOARD_ROWS = [["wait", "待機中"], ["work", "仕事中"], ["before", "予約スタ・出勤前連絡"], ["gone", "今いない"]];
 function nowHour(){ const j = new Date(Date.now() + 9 * 3600 * 1000); let h = j.getUTCHours() + j.getUTCMinutes() / 60; if(h < 8) h += 24; return h; }
@@ -2116,7 +2118,31 @@ function renderToday(){
     + t("予約のあるキャスト", ids.length + "名") + t("お茶", st.filter(s=>s === "お茶").length + "名") + t("欠勤", st.filter(s=>s === "欠勤").length + "名");
 }
 const __renderListT = renderList;
-renderList = function(){ __renderListT(); renderToday(); };
+renderList = function(){ __renderListT(); renderToday(); renderOwner(); };
+
+/* ---------- 👑 社長用：今の記録簿の金額の列と同じ並び（予約ごと＋合計）・雑費合計・カード合計。「社長」で入ったときだけ ---------- */
+const OWNER_NAME = "社長";
+function renderOwner(){
+  const box = $("ownerBox"); if(!box) return;
+  if(KB.operatorName() !== OWNER_NAME){ box.style.display = "none"; return; }
+  box.style.display = "";
+  const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi").sort((a, b)=>String(a.start_at).localeCompare(String(b.start_at)));
+  const cols = [["基本額", r=>r.base_price], ["入会金", r=>r.admission], ["指名料", r=>r.nomination_fee], ["延長", r=>r.extension_fee], ["交通費", r=>r.transport],
+    ["オプション額", r=>r.option_total], ["割引", r=>r.discount], ["総額", r=>r.total], ["キャスト報酬", r=>backOf(r)],
+    ["暫定的な残額（源泉含む）", r=>(r.total || 0) - backOf(r)], ["【税務用】源泉徴収", r=>Math.floor(backOf(r) / 9)],
+    ["実質的な店落ち", r=>(r.total || 0) - backOf(r) - Math.floor(backOf(r) / 9)]];
+  const sum = cols.map(([, f])=>live.reduce((a, r)=>a + (Number(f(r)) || 0), 0));
+  const ids = [...new Set(live.map(r=>r.cast_id).filter(Boolean))];
+  let zappi = 0; ids.forEach(id=>{ try{ zappi += calcCast(id).zappi || 0; }catch(e){} });
+  const card = live.filter(r=>r.payment !== "cash").reduce((a, r)=>a + (r.total || 0), 0);
+  $("ownerGrid").innerHTML = `<div class="todaygrid">
+      <div class="t"><div class="k">雑費合計</div><div class="v">${yen(zappi)}</div></div>
+      <div class="t"><div class="k">カード合計</div><div class="v">${yen(card)}</div></div>
+      <div class="t"><div class="k">実質的な店落ち（合計）</div><div class="v">${yen(sum[11])}</div></div></div>
+    <div class="wrapx"><table class="list" style="font-size:12.5px"><tr><th>時間</th><th>キャスト</th>${cols.map(([l])=>`<th>${l}</th>`).join("")}</tr>
+      ${live.map(r=>`<tr><td>${hm(r.start_at)}</td><td>${esc(castName(r.cast_id))}</td>${cols.map(([, f])=>`<td class="money">${yen(Number(f(r)) || 0)}</td>`).join("")}</tr>`).join("")}
+      <tr style="font-weight:800;background:#FFF7FA"><td colspan="2">合計（${live.length}件）</td>${sum.map(v=>`<td class="money">${yen(v)}</td>`).join("")}</tr></table></div>`;
+}
 
 /* ---------- 🪑 鶯谷待機席（1〜5番）：座った時刻〜退席の時刻を、日付ごとに記録（kb_seat_logs） ---------- */
 let seatLogs = [], seatsOk = true;
