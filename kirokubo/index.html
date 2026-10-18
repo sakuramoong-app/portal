@@ -627,6 +627,9 @@ async function showAnswer(aid){
       <div style="font-weight:800">📨 ${fmtDT(a.submitted_at)} の答え　<span style="font-weight:400;color:#9C8B8F">性格タイプ：${esc(d.personalityType || "")}</span></div>
       ${two("📣 受付時お客様に必ず確認・案内してほしいこと", (d.mustAnnounce || []).map(s=>"・" + s).join("\n"), chk)}
       ${d.interval != null ? two("⏱ 予約と予約の間", d.interval ? d.interval + "分" : "なし", c.interval_min ? c.interval_min + "分" : "なし") : ""}
+      ${d.longMax != null ? two("⌛ 長いコース", d.longMax ? d.longMax + "分まで（それより長いのは" + (d.longOver === "ng" ? "受けない" : "確認してから") + "）" : "何分でもOK", "") : ""}
+      ${d.area != null ? two("🗺 行けるお店・エリアと移動", d.area, c.ng_notes) : ""}
+      ${(d.personalOptions || []).length ? two("🎁 個人オプション", d.personalOptions.map(o=>"・" + o.name + (o.price ? "　" + o.price : "")).join("\n"), c.special_notes) : ""}
       ${d.ng ? two("🙅 今のNG", d.ng, c.ng_notes) : ""}
       ${two("📝 電話受付外でのご要望・🏨 ホテル", [d.notes, d.hotel ? "🏨 " + d.hotel : ""].filter(Boolean).join("\n"), c.special_notes)}
       <details style="margin-top:8px"><summary style="cursor:pointer;font-weight:800">オプション（ピンク＝公式HPとちがう）</summary>${opt}</details>
