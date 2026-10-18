@@ -308,6 +308,7 @@
           <button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="lookupCustomer()">🔍 調べる</button></div></div></div>
       <div id="custInfo"></div>
       <div class="f" style="margin-top:8px"><label>種別</label><div class="chips" id="f_visit"></div></div>
+      <div class="f" style="margin-top:8px"><label>お客様のこと（当てはまれば押す）</label><div class="chips" id="f_guest"></div></div>
     </div>
 
     <!-- ② 指名キャスト -->
@@ -482,7 +483,7 @@ async function init(){
       sb.from("kb_course_info").select("*"),
       sb.from("kb_rank_history").select("cast_id,grp,rank,valid_from,id,hearing_text,by_name,at"),
       sb.from("kb_dummy_names").select("*").eq("active", true).order("sort").order("id"),
-      sb.from("kb_cast_checks").select("id,cast_id,text,sort").eq("active", true).order("sort").order("id"),
+      sb.from("kb_cast_checks").select("*").eq("active", true).order("sort").order("id"),
       sb.from("prof_hotels").select("area,hotel_name,map_url,store_status,note").order("seq"),
     ]);
     const [stores, casts, prices, back, options, rules, settings, media, courseInfo, rankHist, dummies, castChecks, hotels] = r.map(q);
@@ -956,25 +957,98 @@ function onCast(){
   recalc();
 }
 
-/* ---------- 受付で必ず案内すること（キャストごとの確認事項）。全部チェックしないと保存できない ---------- */
+/* ---------- 📋 受付ルール（キャストごと）。お客様の条件に当てはまるものだけ出す ----------
+   📣 announce：全部チェックしないと保存できない／✅ confirm：チェックするまで「〜待ち」の状態でしか保存できない
+   ⏳ after：保存すると予約の「やること」に入る／🤫 know：出るだけ
+   ⌛ 長いコースの上限（台帳）・NGのオプション（プロフの×）も、ここで赤く出す */
+let guestFlags = new Set();
+const GUEST = [["foreign", "🌏 外国人"], ["josou", "👗 女装"], ["female", "👩 女性"], ["couple", "💑 カップル"]];
+function renderGuestChips(){
+  const el = $("f_guest"); if(!el) return;
+  el.innerHTML = GUEST.map(([k, l])=>`<button type="button" class="chip ${guestFlags.has(k) ? "on" : ""}" onclick="toggleGuest('${k}')">${l}</button>`).join("");
+}
+function toggleGuest(k){ if(guestFlags.has(k)) guestFlags.delete(k); else guestFlags.add(k); renderGuestChips(); renderCastChecks(M.casts.find(c=>c.id === $("f_cast").value)); }
+function formMinutes(){ try{ const c = calc(); return minutesOf(c.course) + c.ext*30 + c.date*30; }catch(e){ return 0; } }
+function formOptLabels(){ try{ return (calc().opts || []).map(o=>String(o.label || "")); }catch(e){ return []; } }
+function ruleApplies(x){
+  const cond = x.cond || "always", v = x.cond_value || "";
+  if(cond === "always") return true;
+  if(cond === "new") return visit === "new";
+  if(["foreign", "josou", "female", "couple"].includes(cond)) return guestFlags.has(cond);
+  if(cond === "store") return $("f_store").value === v;
+  if(cond === "long") return formMinutes() >= Number(v || 0);
+  if(cond === "option") return formOptLabels().some(l=>l.includes(v) || (l && v.includes(l)));
+  return true;
+}
+// プロフで×のものに当たっていないか（オプション・女装・外国人など）
+function ngWarnings(c){
+  const out = [];
+  const o = typeof profOpts === "function" ? profOpts(c) : null;
+  if(!o){ if(typeof profById !== "undefined" && !profById && typeof loadProfs === "function" && !window.__profLoadingRules){ window.__profLoadingRules = true; loadProfs().then(()=>renderCastChecks(M.casts.find(x=>x.id === $("f_cast").value))).catch(()=>{}); } return out; }
+  const core = s => String(s).replace(/（.*?）|\(.*?\)/g, "").replace(/^キャスト/, "").replace(/のお客様$/, "").trim();
+  const labels = formOptLabels();
+  Object.keys(o).forEach(k=>{
+    if(o[k] !== "×") return;
+    const kc = core(k); if(!kc) return;
+    if(labels.some(l=>{ const lc = core(l); return lc && (lc.includes(kc) || kc.includes(lc)); })) out.push(`「${k}」は × です`);
+  });
+  if(guestFlags.has("josou") && o["女装されているお客様"] === "×") out.push("女装のお客様は × です");
+  if(guestFlags.has("foreign") && o["外国人のお客様"] === "×") out.push("外国人のお客様は × です");
+  if(guestFlags.has("female") && o["女性のお客様"] === "×") out.push("女性のお客様は × です");
+  if(guestFlags.has("couple") && o["カップルのお客様"] === "×") out.push("カップルのお客様は × です");
+  return out;
+}
 function renderCastChecks(c){
   const el = $("castChecks");
-  const list = c ? M.castChecks.filter(x=>x.cast_id === c.id) : [];
-  if(!list.length){ el.innerHTML = ""; return; }
-  // 編集のときは、前に案内した事項にチェックをつけておく
-  const done = (editing && editing.cast_id === c.id ? (editing.checks || []) : []).map(x=>x.text);
-  el.innerHTML = `<div style="background:#FFF4E5;border:2px solid #FFB547;border-radius:12px;padding:8px 10px;margin:6px 0">
-    <div style="font-weight:800;font-size:13px;color:#a35a00;margin-bottom:4px">📣 必ず案内すること（案内したらチェック）</div>`
-    + list.map(x=>`<label style="display:flex;gap:8px;align-items:flex-start;font-size:13.5px;padding:3px 0;cursor:pointer">
-        <input type="checkbox" class="cchk" data-text="${esc(x.text)}" ${done.includes(x.text) ? "checked" : ""} style="margin-top:3px;transform:scale(1.25)"> <span>${esc(x.text)}</span></label>`).join("")
-    + `<div style="font-size:11px;color:#a35a00;margin-top:2px">全部チェックしないと、受付を保存できません（聞きもれ防止）</div></div>`;
+  if(!c){ el.innerHTML = ""; return; }
+  // いまチェックしてあるもの（描きなおしても消さない）＋ 前に保存したもの
+  const keep = new Set([...document.querySelectorAll("#castChecks .cchk:checked")].map(b=>b.dataset.text));
+  if(el.dataset.cast !== c.id){ keep.clear(); }
+  if(editing && editing.cast_id === c.id) (editing.checks || []).forEach(x=>keep.add(x.text));
+  el.dataset.cast = c.id;
+  const all = M.castChecks.filter(x=>x.cast_id === c.id && ruleApplies(x));
+  const by = k => all.filter(x=>(x.kind || "announce") === k);
+  const ann = by("announce"), conf = by("confirm").slice(), after = by("after"), know = by("know");
+  // ⌛ 長いコース
+  const mins = formMinutes(), warn = ngWarnings(c);
+  let longNg = false;
+  if(c.long_max && mins > c.long_max){
+    if(c.long_over === "ng"){ longNg = true; warn.unshift(`⌛ ${c.long_max}分までのキャストです（それより長いコースは受けない）`); }
+    else conf.unshift({ text: `⌛ ${c.long_max}分を超えるので、キャストに確認した` });
+  }
+  const box = (x, kind)=>`<label style="display:flex;gap:8px;align-items:flex-start;font-size:13.5px;padding:3px 0;cursor:pointer">
+      <input type="checkbox" class="cchk" data-kind="${kind}" data-text="${esc(x.text)}" ${keep.has(x.text) ? "checked" : ""} style="margin-top:3px;transform:scale(1.25)"> <span>${esc(x.text)}</span></label>`;
+  let h = "";
+  if(warn.length) h += `<div style="background:#FFE8EC;border:2px solid #E5486C;border-radius:12px;padding:8px 10px;margin:6px 0;font-size:13.5px;font-weight:700;color:#B0213F">🚫 ${warn.map(esc).join("<br>🚫 ")}</div>`;
+  if(ann.length) h += `<div style="background:#FFF4E5;border:2px solid #FFB547;border-radius:12px;padding:8px 10px;margin:6px 0">
+    <div style="font-weight:800;font-size:13px;color:#a35a00;margin-bottom:4px">📣 お客様に案内（案内したらチェック）</div>${ann.map(x=>box(x, "announce")).join("")}
+    <div style="font-size:11px;color:#a35a00;margin-top:2px">全部チェックしないと、受付を保存できません</div></div>`;
+  if(conf.length) h += `<div style="background:#E8F4FF;border:2px solid #6AA8E8;border-radius:12px;padding:8px 10px;margin:6px 0">
+    <div style="font-weight:800;font-size:13px;color:#1f5d99;margin-bottom:4px">✅ キャストに確認してから受ける（確認したらチェック）</div>${conf.map(x=>box(x, "confirm")).join("")}
+    <div style="font-size:11px;color:#1f5d99;margin-top:2px">チェックするまでは「キャスト返事待ち」などの待ちの状態でしか保存できません</div></div>`;
+  if(after.length) h += `<div style="background:#EEF9EE;border-radius:12px;padding:8px 10px;margin:6px 0;font-size:13.5px">
+    <div style="font-weight:800;font-size:13px;color:#2e7a35">⏳ 予約のあとにやること（保存すると予約一覧に残ります）</div>${after.map(x=>"・" + esc(x.text)).join("<br>")}</div>`;
+  if(know.length) h += `<div style="background:#F3F0F5;border-radius:12px;padding:8px 10px;margin:6px 0;font-size:13.5px">
+    <div style="font-weight:800;font-size:13px;color:#6a5a70">🤫 知っておくこと</div>${know.map(x=>"・" + esc(x.text)).join("<br>")}</div>`;
+  el.innerHTML = h;
+  el.dataset.longng = longNg ? "1" : "";
 }
+// 保存用：{ list（チェックしたもの）, missAnnounce, missConfirm, longNg, todos }
 function checksForSave(){
   const boxes = [...document.querySelectorAll("#castChecks .cchk")];
-  if(boxes.some(b=>!b.checked)) return null;
   const prev = editing ? (editing.checks || []) : [];
   const by = KB.operatorName(), at = new Date().toISOString();
-  return boxes.map(b=>{ const t = b.dataset.text; return prev.find(p=>p.text === t) || { text: t, at, by }; });
+  const list = boxes.filter(b=>b.checked).map(b=>{ const t = b.dataset.text; return prev.find(p=>p.text === t) || { text: t, kind: b.dataset.kind, at, by }; });
+  const c = M.casts.find(x=>x.id === $("f_cast").value);
+  const afterTexts = c ? M.castChecks.filter(x=>x.cast_id === c.id && (x.kind || "announce") === "after" && ruleApplies(x)).map(x=>x.text) : [];
+  const prevTodos = editing ? (editing.todos || []) : [];
+  const todos = afterTexts.map(t=>prevTodos.find(p=>p.text === t) || { text: t, done_at: null, done_by: "" });
+  return {
+    list, todos,
+    missAnnounce: boxes.some(b=>b.dataset.kind === "announce" && !b.checked),
+    missConfirm: boxes.some(b=>b.dataset.kind === "confirm" && !b.checked),
+    longNg: $("castChecks").dataset.longng === "1",
+  };
 }
 
 /* ---------- お客さん ---------- */
@@ -1142,10 +1216,14 @@ async function saveRes(){
   if(!KB.CAN_EDIT){ toast("作成中のため、直せるのは店長だけです"); return; }
   if(!$("f_cast").value){ toast(isDummyStore($("f_store").value) ? "実際に行くキャストを選んでください" : "キャストを選んでください"); return; }
   if(isDummyStore($("f_store").value) && !$("f_dummy").value){ toast("ダミー名を選んでください（一覧になければ ⚙️ から足せます）"); return; }
-  // 必ず案内すること：全部チェックしないと保存できない（キャンセル・トビは除く）
+  // 受付ルール：📣は全部チェック／✅はチェックするまで「〜待ち」でしか保存できない／⌛受けない長さは保存できない（キャンセル・トビは除く）
   const cancelLike = ["cancel", "tobi"].includes($("f_status").value);
-  const checks = checksForSave();
-  if(!checks && !cancelLike){ toast("📣 必ず案内することに、まだチェックがついていません"); $("castChecks").scrollIntoView({ block: "center" }); return; }
+  const waiting = String($("f_status").value).startsWith("wait_");
+  const ck = checksForSave();
+  if(!cancelLike && ck.longNg){ toast("🚫 このキャストは、このコースの長さを受けません"); $("castChecks").scrollIntoView({ block: "center" }); return; }
+  if(!cancelLike && ck.missAnnounce){ toast("📣 お客様に案内することに、まだチェックがついていません"); $("castChecks").scrollIntoView({ block: "center" }); return; }
+  if(!cancelLike && ck.missConfirm && !waiting){ toast("✅ キャストに確認してから受けるものがあります。確認したらチェック、まだなら状態を「キャスト返事待ち」に"); $("castChecks").scrollIntoView({ block: "center" }); return; }
+  const checks = ck.list;
   if(!cancelLike && (!radioVal("f_afw") || !radioVal("f_rafw"))){ toast("🔸 AF・逆AF のご希望を聞いて、選んでください"); $("optDetails").scrollIntoView({ block: "center" }); return; }
   if(!$("f_course").value){ toast("コースを選んでください"); return; }
   if(!(await KB.staffSession())){ toast("ログインの期限が切れました。ポータルから開き直してください"); return; }
@@ -1170,7 +1248,8 @@ async function saveRes(){
     const row = {
       biz_date: day, store_key: c.store, cast_id: $("f_cast").value, customer_id: customerId,
       dummy_name: isDummyStore(c.store) ? $("f_dummy").value : "",
-      checks: checks || (editing ? (editing.checks || []) : []),
+      checks,
+      ...(("guest_flags" in (rows[0] || editing || {}) || M.castChecks.some(x=>"kind" in x)) ? { guest_flags: [...guestFlags], todos: ck.todos } : {}),
       af_wish: radioVal("f_afw"), rev_af_wish: radioVal("f_rafw"),
       play_wish: $("f_play").value.trim(),
       cast_notified_at: $("f_notified").checked ? ((editing && editing.cast_notified_at) || new Date().toISOString()) : null,
@@ -1935,13 +2014,47 @@ function renderListTable(){
         <td>${esc(String(storeLabel(r.store_key) || "").slice(0, 3))}</td>
         <td>${esc(r.course)}${/^\d+$/.test(r.course) ? "分" : ""}${r.free_kind ? "・" + FREE_SUFFIX[r.free_kind] : ""}${r.extension_count ? " 延長" + r.extension_count : ""}${r.payment !== "cash" ? " 💳" : ""}</td>
         <td>${c.ng ? "⚠️" : ""}${esc(c.name || "")}<small style="color:var(--sub)"> ${VISIT.find(v=>v[0] === r.visit_kind)?.[1] || ""}</small>${c.phone ? `<br><span class="tel">📞 ${esc(c.phone)}</span>` : ""}</td>
-        <td>${stSel}</td>
+        <td>${stSel}${todosHtml(r)}</td>
         <td>${told}</td>
         <td>${logHtml}</td></tr>`;
     }).join("") : `<tr><td style="text-align:center;color:var(--sub);font-weight:800;padding:24px">この日の予約はまだありません</td></tr>`;
 }
 const __renderList3 = renderList;
 renderList = function(){ __renderList3(); renderListTable(); };
+
+/* ---------- 📋 受付ルール：お客様のこと・描きなおし・⏳やること ---------- */
+const __openFormR = openForm;
+openForm = function(id){
+  const r = id ? rows.find(x=>x.id === id) : null;
+  guestFlags = new Set((r && r.guest_flags) || []);
+  $("castChecks").dataset.cast = "";
+  __openFormR(id);
+  renderGuestChips();
+  renderCastChecks(M.casts.find(c=>c.id === $("f_cast").value));
+};
+// コース・オプション・種別・店が変わったら、当てはまるルールを出しなおす
+const __recalcR = recalc;
+recalc = function(){
+  const out = __recalcR.apply(this, arguments);
+  const c = M.casts.find(x=>x.id === $("f_cast").value);
+  if(c) renderCastChecks(c);
+  return out;
+};
+function todosHtml(r){
+  const t = r.todos || []; if(!t.length) return "";
+  return `<div style="margin-top:4px">${t.map((x, i)=>`<button type="button" class="told ${x.done_at ? "on" : ""}" style="display:block;margin-top:2px;text-align:left"
+      onclick="event.stopPropagation();toggleTodo(${r.id},${i})">${x.done_at ? "✅" : "⏳"} ${esc(x.text)}${x.done_at ? `<small>${esc(x.done_by || "")} ${whenShort(x.done_at)}</small>` : ""}</button>`).join("")}</div>`;
+}
+async function toggleTodo(id, i){
+  if(!KB.CAN_EDIT){ toast("作成中のため、直せるのは店長だけです"); return; }
+  const r = rows.find(x=>x.id === id); if(!r) return;
+  const todos = (r.todos || []).map(x=>Object.assign({}, x));
+  const x = todos[i]; if(!x) return;
+  if(x.done_at){ if(!confirm("「" + x.text + "」を、まだにもどしますか？")) return; x.done_at = null; x.done_by = ""; }
+  else { x.done_at = new Date().toISOString(); x.done_by = KB.operatorName(); }
+  try{ q(await sb.from("kb_reservations").update({ todos, updated_by: KB.operatorName() }).eq("id", id)); r.todos = todos; renderList(); toast(x.done_at ? "やったことにしました" : "もどしました"); }
+  catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
 
 /* ---------- 予約の入力 ⑥：対応ログ ---------- */
 function renderFormLog(){
