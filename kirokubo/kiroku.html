@@ -266,6 +266,10 @@
   label.bikoh{font-size:17px !important;color:#8a6d00 !important;background:#FFF8D6;border-radius:8px;padding:3px 8px;display:inline-block;}
   .movebox .movenow{display:inline-block !important;width:auto !important;min-width:110px;margin:0 2px 0 0 !important;}
   .mlog .addlog{font-size:14px !important;padding:3px 12px !important;} .mlog .more,.mlog .none{font-size:14px !important;}
+  /* 過去の場所 */
+  .placepick{background:#F2F8FF;border:1.5px solid #9cc6ee;border-radius:12px;padding:8px 10px;margin:8px 0;}
+  .placepick .pp{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;margin:3px 4px 0 0;font-family:inherit;font-size:13px;font-weight:800;padding:5px 10px;border:1.5px solid #9cc6ee;border-radius:10px;background:#fff;color:#1f5d99;cursor:pointer;text-align:left;}
+  .placepick .pp.on{background:#1f5d99;color:#fff;} .placepick .pp .fee{color:#C62850;} .placepick .pp.on .fee{color:#FFE0E8;} .placepick .pp small{font-weight:700;opacity:.75;} .placepick .pp.new{border-style:dashed;}
   .seats{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:8px;overflow-x:auto;}
   .seat{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px;}
   .seat.on{border-color:#6c5ce7;background:#F4F2FF;}
@@ -496,6 +500,7 @@
       </div>
       <div id="courseInfo"></div>
       <div id="castTimeline"></div>
+      <div id="placePick"></div>
       <div class="row2" style="margin-top:10px">
         <div class="f"><label>エリア</label>
           <select id="f_areaSel" onchange="onAreaSel()"></select>
@@ -504,6 +509,7 @@
           <div style="display:flex;gap:6px"><select id="f_place" style="max-width:110px" onchange="checkNewHotel()"><option value="">（種類）</option><option value="love">ラブホ</option><option value="biz">ビジホ</option><option value="home">自宅</option></select>
           <input id="f_address" maxlength="200" list="hotelList" oninput="recalc();checkNewHotel()" style="flex:1"></div><datalist id="hotelList"></datalist></div>
       </div>
+      <div class="f" style="margin-top:6px"><label>📍 地図のURL（自宅やリストにない場所のとき。お客さんの場所として覚えます）</label><input id="f_map" maxlength="500" placeholder="https://maps.app.goo.gl/…" oninput="recalc()"></div>
       <div id="newHotelBox"></div>
       <div id="areaInfo"></div>
       <div id="nextFeeInfo"></div>
@@ -3256,6 +3262,139 @@ const __lookupCustomerN = lookupCustomer;
 lookupCustomer = async function(keepName){ await __lookupCustomerN(keepName); paintNextFee(); };
 const __openFormN = openForm;
 openForm = function(id){ __openFormN(id); paintNextFee(); };
+
+/* ============================================================
+   📍 お客さんの利用場所（kb_customer_places）：場所ごとに「次回の交通費」
+   ・電話番号で調べる → 過去の場所が一覧で出る → 押すとエリア・ホテル/住所・種類・地図・交通費が入る（＋新しい場所）
+   ・同じ場所を使うときだけ「この場所は次回 ○円（理由）」と案内して、交通費に入れる
+   ・予約を保存すると、その場所を自動で覚える
+   ============================================================ */
+let custPlaces = [];      // 受付中のお客さんの場所
+let placesByCust = {};    // 一覧用：customer_id → 場所
+const pkey = s=>String(s || "").replace(/[\s　]/g, "");
+function samePlace(p, area, addr){ return pkey(p.area) === pkey(area) && pkey(p.address) === pkey(addr); }
+
+async function loadPlacesFor(ids){
+  ids = [...new Set(ids.filter(Boolean))];
+  if(!ids.length) return [];
+  try{ return q(await sb.from("kb_customer_places").select("*").in("customer_id", ids).order("last_used", { ascending: false, nullsFirst: false })) || []; }
+  catch(e){ return []; }
+}
+// 一覧のために、その日のお客さんの場所を読む
+const __loadDayP = loadDay;
+loadDay = async function(){
+  await __loadDayP();
+  const list = await loadPlacesFor(rows.map(r=>r.customer_id));
+  placesByCust = {}; list.forEach(p=>{ (placesByCust[p.customer_id] = placesByCust[p.customer_id] || []).push(p); });
+  renderList();
+};
+
+// 受付：電話番号で調べたら、過去の場所を出す
+const __lookupCustomerP = lookupCustomer;
+lookupCustomer = async function(keepName){
+  await __lookupCustomerP(keepName);
+  custPlaces = curCustomer && curCustomer.id ? await loadPlacesFor([curCustomer.id]) : [];
+  renderPlacePick(); paintNextFee();
+};
+const __openFormPP = openForm;
+openForm = function(id){
+  custPlaces = [];
+  __openFormPP(id);
+  if($("f_map")) $("f_map").value = "";
+  renderPlacePick();
+};
+function placeLabel(p){ return [p.area, (PLACE[p.place_kind] ? "（" + PLACE[p.place_kind] + "）" : "") + (p.address || "")].filter(Boolean).join(" "); }
+function renderPlacePick(){
+  const el = $("placePick"); if(!el) return;
+  if(!custPlaces.length){ el.innerHTML = ""; return; }
+  const area = $("f_area").value, addr = $("f_address").value;
+  el.innerHTML = `<div class="placepick"><div style="font-weight:800;font-size:13.5px;margin-bottom:4px">📍 このお客さんの過去の場所（押すと入ります）</div>
+    ${custPlaces.map((p, i)=>`<button type="button" class="pp ${samePlace(p, area, addr) ? "on" : ""}" onclick="pickPlace(${i})">${esc(placeLabel(p) || "（場所なし）")}
+      ${p.next_transport != null ? `<b class="fee">🚕 次回 ${yen(p.next_transport)}</b>` : ""}<small>${p.last_used ? String(p.last_used).slice(5).replace("-", "/") + "・" : ""}${p.use_count || 0}回</small></button>`).join("")}
+    <button type="button" class="pp new" onclick="pickPlace(-1)">＋ 新しい場所</button></div>`;
+}
+function pickPlace(i){
+  if(i < 0){ fillAreaSel(""); $("f_address").value = ""; if($("f_place")) $("f_place").value = ""; if($("f_map")) $("f_map").value = ""; $("f_transport").value = 0; }
+  else{
+    const p = custPlaces[i];
+    fillAreaSel(p.area || ""); $("f_address").value = p.address || "";
+    if($("f_place")) $("f_place").value = p.place_kind || "";
+    if($("f_map")) $("f_map").value = p.map_url || "";
+    if(p.next_transport != null) $("f_transport").value = p.next_transport;
+  }
+  renderPlacePick(); paintNextFee(); checkNewHotel(); recalc();
+}
+// 「同じ場所なら次回 ○円」の案内（場所が決まっていなければ、お客さん全体の次回の交通費を出す）
+paintNextFee = function(){
+  const el = $("nextFeeInfo"); if(!el) return;
+  const area = $("f_area") ? $("f_area").value : "", addr = $("f_address") ? $("f_address").value : "";
+  const p = custPlaces.find(x=>x.next_transport != null && samePlace(x, area, addr));
+  const c = curCustomer;
+  if(p) el.innerHTML = `<div class="warn">🚕 この場所（${esc(placeLabel(p))}）は<b>次回の交通費 ${yen(p.next_transport)}</b>${p.next_note ? "：" + esc(p.next_note) : ""}</div>`;
+  else if(c && c.next_transport != null) el.innerHTML = `<div class="warn">🚕 このお客さんの次回の交通費 ${yen(c.next_transport)}${c.next_transport_note ? "（" + esc(c.next_transport_note) + "）" : ""}　※場所は決まっていません</div>`;
+  else el.innerHTML = "";
+};
+// 場所を打ちかえたら、案内も出しなおす
+const __recalcP = recalc;
+recalc = function(){ const o = __recalcP.apply(this, arguments); if(custPlaces.length){ paintNextFee(); renderPlacePickLite(); } return o; };
+function renderPlacePickLite(){ document.querySelectorAll("#placePick .pp").forEach((b, i)=>{ const p = custPlaces[i]; if(p) b.classList.toggle("on", samePlace(p, $("f_area").value, $("f_address").value)); }); }
+// キャストへの連絡の地図：地図のURLが入っていればそれ
+const __hotelMapUrl = hotelMapUrl;
+hotelMapUrl = function(){ const m = $("f_map") ? $("f_map").value.trim() : ""; return /^https?:\/\//i.test(m) ? m : __hotelMapUrl(); };
+
+// 予約を保存したら、その場所をお客さんの場所として覚える
+const __saveResP = saveRes;
+saveRes = async function(){
+  const phone = digits($("f_phone").value), area = $("f_area").value.trim(), address = $("f_address").value.trim();
+  const kind = $("f_place") ? $("f_place").value : "", map = $("f_map") ? $("f_map").value.trim() : "", st = $("f_status").value;
+  await __saveResP();
+  if($("formBg").classList.contains("show")) return;   // 保存できなかった
+  if(!phone || (!area && !address) || ["cancel", "tobi"].includes(st)) return;
+  try{
+    const cu = q(await sb.from("kb_customers").select("id").eq("phone", phone).limit(1).maybeSingle());
+    if(!cu) return;
+    const ex = q(await sb.from("kb_customer_places").select("*").eq("customer_id", cu.id).eq("area", area).eq("address", address).maybeSingle());
+    if(ex) q(await sb.from("kb_customer_places").update({ place_kind: kind || ex.place_kind, map_url: map || ex.map_url, use_count: (ex.use_count || 0) + (editing ? 0 : 1), last_used: day, updated_at: new Date().toISOString(), updated_by: KB.operatorName() }).eq("id", ex.id));
+    else q(await sb.from("kb_customer_places").insert({ customer_id: cu.id, area, address, place_kind: kind, map_url: map, use_count: 1, last_used: day, updated_by: KB.operatorName() }));
+  }catch(e){ /* SQL 109 の前は何もしない */ }
+};
+
+/* ---------- 一覧の「🚕 次回の交通費」：その予約の場所に入れる ---------- */
+function placeOf(r){ return (placesByCust[r.customer_id] || []).find(p=>samePlace(p, r.area, r.address)); }
+custCell = function(r){
+  const c = r.kb_customers || {};
+  if(!r.customer_id || !KB.CAN_EDIT) return c.ng ? `<br><small style="color:#B0213F">⚠️ NG：${esc(c.ng_reason || "")}</small>` : "";
+  const p = placeOf(r);
+  return `<div class="inl" onclick="event.stopPropagation()">
+    <button type="button" class="mini ${c.ng ? "ng" : ""}" onclick="custNg(${r.id})">${c.ng ? "⚠️ NG客：" + esc(c.ng_reason || "理由なし") : "🚫 NGにする"}</button>
+    <button type="button" class="mini" onclick="custNextFee(${r.id})">🚕 この場所の次回の交通費${p && p.next_transport != null ? "：" + yen(p.next_transport) + (p.next_note ? "<small>（" + esc(p.next_note) + "）</small>" : "") : ""}</button></div>`;
+};
+custNextFee = function(id){
+  const r = rows.find(x=>x.id === id); if(!r || !r.customer_id) return;
+  if(!r.area && !r.address){ toast("この予約は場所（エリア・ホテル）が入っていません。先に場所を入れてください"); return; }
+  const p = placeOf(r) || {}, c = r.kb_customers || {};
+  feeFor = id;
+  $("feeTitle").textContent = "🚕 次回の交通費：" + (c.name || "お客さん") + "／" + placeLabel({ area: r.area, address: r.address, place_kind: r.place_kind });
+  $("fee_amt").value = p.next_transport != null ? p.next_transport : "";
+  $("fee_note").value = p.next_note || "";
+  $("feeBg").classList.add("show");
+  setTimeout(()=>$("fee_amt").focus(), 50);
+};
+saveNextFee = async function(clear){
+  const id = feeFor, r = rows.find(x=>x.id === id); if(!r) return;
+  $("feeBg").classList.remove("show");
+  const n = clear || !String($("fee_amt").value).trim() ? null : Math.max(0, parseInt(String($("fee_amt").value).replace(/[^\d]/g, ""), 10) || 0);
+  const note = n == null ? "" : $("fee_note").value.trim();
+  const area = r.area || "", address = r.address || "";
+  try{
+    const ex = placeOf(r);
+    if(ex) q(await sb.from("kb_customer_places").update({ next_transport: n, next_note: note, updated_at: new Date().toISOString(), updated_by: KB.operatorName() }).eq("id", ex.id));
+    else q(await sb.from("kb_customer_places").insert({ customer_id: r.customer_id, area, address, place_kind: r.place_kind || "", next_transport: n, next_note: note, use_count: 1, last_used: r.biz_date, updated_by: KB.operatorName() }));
+    const list = await loadPlacesFor([r.customer_id]); placesByCust[r.customer_id] = list;
+    await pushLog(id, n == null ? "この場所の次回の交通費を消した" : "この場所の次回の交通費 → " + yen(n) + (note ? "（" + note + "）" : ""));
+    toast(n == null ? "消しました" : "保存しました"); renderList();
+  }catch(e){ toast("保存できませんでした（SQL 109 は実行ずみ？）：" + (e.message || e)); }
+};
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
