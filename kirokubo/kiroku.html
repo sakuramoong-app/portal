@@ -288,6 +288,15 @@
   .bikobox .none{font-size:13px;color:var(--sub);} .addbiko{margin-top:6px;font-family:inherit;font-size:13.5px;font-weight:800;border:1.5px solid #F2D27A;background:#fff;color:#8a6d00;border-radius:99px;padding:4px 14px;cursor:pointer;}
   .proflink{display:inline-block;margin-top:6px;font-size:14px;font-weight:800;color:#1f5d99;background:#F2F8FF;border:1.5px solid #9cc6ee;border-radius:10px;padding:6px 12px;text-decoration:none;}
   .rc-row .mini{font-family:inherit;font-size:12px;font-weight:800;padding:2px 10px;border:1.5px solid var(--line);border-radius:99px;background:#fff;color:var(--sub);cursor:pointer;}
+  /* タブは横に半分ずつ・低く／日付は「営業日」の札と同じくらいの高さ（色はそのまま） */
+  .stickybar .tabs{display:flex;gap:8px;flex-wrap:nowrap;} .stickybar .tabs .tabmain{flex:1;padding:5px 12px !important;font-size:14px !important;text-align:center;line-height:1.3;} .stickybar .tabs .tabmain small{display:inline;font-size:11px;margin-left:6px;}
+  .viewbar .bigday input[type=date]{font-size:15px !important;padding:3px 10px !important;border-width:1.5px !important;}
+  .viewbar{gap:8px !important;margin:2px 0 6px !important;}
+  /* あかさたなでジャンプ */
+  .kanabar{display:flex;gap:3px;flex-wrap:wrap;} .kanabar .kb{font-family:inherit;font-size:14px;font-weight:800;min-width:30px;padding:3px 6px;border:1.5px solid #FFC2D1;border-radius:8px;background:#fff;color:#e5638c;cursor:pointer;} .kanabar .kb.off{opacity:.35;}
+  /* 大事な未完了は点滅（キャストにまだ・カードのURL未送信） */
+  @keyframes blinkwarn{0%,100%{box-shadow:0 0 0 0 rgba(229,72,108,0);}50%{box-shadow:0 0 0 4px rgba(229,72,108,.55);}}
+  .rescard:not(.cx) .told:not(.on), .rescard:not(.cx) .payurl, .rescard:not(.cx) select.cardst.unsent{animation:blinkwarn 1.1s ease-in-out infinite;}
   .seats{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:8px;overflow-x:auto;}
   .seat{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px;}
   .seat.on{border-color:#6c5ce7;background:#F4F2FF;}
@@ -368,9 +377,26 @@
       <label>並び・絞り <select id="s_sort" onchange="setSort(this.value)">
         <option value="kana">あいうえお順</option><option value="start">出勤が早い順</option><option value="endEarly">退勤が早い順</option><option value="endLate">退勤が遅い順</option>
         <option value="booked">予約があるキャストのみ</option><option value="freeNow">今すぐ行けるキャスト</option></select></label>
+      <div class="kanabar" id="kanaBar"></div>
     </div>
     </div>
     <div class="sum" id="sum"></div>
+    <!-- 🔍 探す・キャストで絞る・希望プレイで絞る（本日のキャスト一覧・全体を見たい 共通） -->
+    <div id="sharedFilter">
+      <div class="search">
+        <span class="lbl">🔍 探す</span>
+        <label>何時から <input type="time" id="s_time" step="300" oninput="renderList()"></label>
+        <label>何分 <select id="s_min" onchange="renderList()"><option value="60">60分</option><option value="90" selected>90分</option><option value="120">120分</option><option value="150">150分</option><option value="180">180分</option><option value="240">240分</option></select></label>
+        <label><input type="checkbox" id="s_free" onchange="renderList()"> 行ける人だけ</label>
+        <button class="btn btn-ghost btn-sm" onclick="clearSearch()">クリア</button>
+      </div>
+      <details class="castpick"><summary>👥 キャストで絞る（複数OK）<span id="s_castCount"></span></summary><div class="chips" id="s_castChips"></div></details>
+      <details class="castpick"><summary>🎯 希望プレイで絞る（複数OK・キャストプロフのオプションから）<span id="s_playCount"></span></summary>
+        <div class="chips" id="s_playChips"></div>
+        <label style="display:block;margin-top:8px;font-size:13px;font-weight:800;color:var(--sub)"><input type="checkbox" id="s_playTri" onchange="renderList()"> △（条件つきOK）の子も入れる</label>
+        <div class="hist" style="margin:4px 0 0">選んだプレイが全部「◎か○」のキャストだけになります。名前の下に可否が出ます。プロフとつながっていないキャストは出ません。</div></details>
+      <div id="tlResult"></div>
+    </div>
 
     <!-- 有料オプションの一覧：足す（内勤みんな）・直す/消す（店長） -->
     <div class="modal-bg" id="optBg" style="z-index:70"><div class="modal" style="max-width:620px"><button class="x" onclick="$('optBg').classList.remove('show')" aria-label="閉じる">×</button>
@@ -422,19 +448,6 @@
 
     <!-- ⏱ タイムライン＋🔍 探す -->
     <div id="viewTL">
-      <div class="search">
-        <span class="lbl">🔍 探す</span>
-        <label>何時から <input type="time" id="s_time" step="300" oninput="renderTL()"></label>
-        <label>何分 <select id="s_min" onchange="renderTL()"><option value="60">60分</option><option value="90" selected>90分</option><option value="120">120分</option><option value="150">150分</option><option value="180">180分</option><option value="240">240分</option></select></label>
-        <label><input type="checkbox" id="s_free" onchange="renderTL()"> 行ける人だけ</label>
-        <button class="btn btn-ghost btn-sm" onclick="clearSearch()">クリア</button>
-      </div>
-      <details class="castpick"><summary>👥 キャストで絞る（複数OK）<span id="s_castCount"></span></summary><div class="chips" id="s_castChips"></div></details>
-      <details class="castpick"><summary>🎯 希望プレイで絞る（複数OK・キャストプロフのオプションから）<span id="s_playCount"></span></summary>
-        <div class="chips" id="s_playChips"></div>
-        <label style="display:block;margin-top:8px;font-size:13px;font-weight:800;color:var(--sub)"><input type="checkbox" id="s_playTri" onchange="renderTL()"> △（条件つきOK）の子も入れる</label>
-        <div class="hist" style="margin:4px 0 0">選んだプレイが全部「◎か○」のキャストだけになります。名前の下に可否が出ます。プロフとつながっていないキャストは出ません。</div></details>
-      <div id="tlResult"></div>
       <div class="tlwrap"><div id="tlGrid"></div></div>
       <div class="hint2" style="font-size:12px;color:var(--sub);margin-top:6px">マスにマウスを乗せると時刻が出ます。押すと、そのキャスト・その時刻で予約の入力が開きます。白＝出勤時間、しま模様＝予約の前後のインターバル。予約の帯を押すと、その予約が開きます。</div>
     </div>
@@ -3540,6 +3553,63 @@ onCast = function(){
   if(!c || !c.prof_id) return;   // プロフとつながっていない子は、今までどおり（たたんで出す）
   $("castInfo").innerHTML = `<a class="proflink" href="${PROF_STAFF_URL}?cast=${encodeURIComponent(c.prof_id)}" target="_blank" rel="noopener">📂 ${esc(c.official_name || c.temp_name)}のプロフを開く（特記事項・NG・条件・ホテル）</a>`;
 };
+
+/* ============================================================
+   2026/10/20：探す・キャストで絞る・希望プレイで絞る を「本日のキャスト一覧」にも／あかさたなでジャンプ／大事な未完了は点滅
+   ============================================================ */
+// 一覧にも同じ絞り込み（何時から何分・行ける人だけ・キャスト・希望プレイ）
+function filterCasts(list){
+  const want = tlHour($("s_time").value), mins = Number($("s_min").value) || 90;
+  const unavailable = x => !!(x.cd && (["お茶", "欠勤", "精算済"].includes(x.cd.status) || x.cd.settled));
+  if(want != null){
+    const wantE = want + mins / 60;
+    list.forEach(x=>{ const g = gapOf(x); x.ok = !!x.shift && !unavailable(x) && want >= x.shift.start - 0.01 && wantE <= x.shift.end + 0.01 && !x.bks.some(b=>b.s - g < wantE && want < b.e + g); });
+  }
+  if(selCasts.size) list = list.filter(x=>selCasts.has(castKey(x)));
+  list = applyPlayFilter(list);
+  if($("s_free").checked && want != null) list = list.filter(x=>x.ok);
+  if(want != null) list = list.slice().sort((a, b)=>(b.ok ? 1 : 0) - (a.ok ? 1 : 0));
+  return list;
+}
+const __sortRowsF = sortRows;
+let filterForList = false;
+sortRows = function(list){ const out = __sortRowsF(list); return filterForList ? filterCasts(out) : out; };
+const __renderListTableF = renderListTable;
+renderListTable = function(){ filterForList = true; try{ __renderListTableF(); } finally{ filterForList = false; } renderKanaBar(); };
+// ボタンを押したら、一覧と全体を見たいの両方を描きなおす
+toggleSelCast = function(k){ if(selCasts.has(k)) selCasts.delete(k); else selCasts.add(k); renderList(); };
+togglePlay = function(k){ if(playSel.has(k)) playSel.delete(k); else playSel.add(k); renderList(); };
+clearPlay = function(){ playSel.clear(); renderList(); };
+clearSearch = function(){ $("s_time").value = ""; $("s_free").checked = false; selCasts.clear(); playSel.clear(); renderList(); };
+
+/* ---------- あかさたな…でジャンプ（本日のキャスト一覧・全体を見たい） ---------- */
+const KANA_ROWS = [["あ", "あいうえおぁぃぅぇぉ"], ["か", "かきくけこがぎぐげご"], ["さ", "さしすせそざじずぜぞ"], ["た", "たちつてとだぢづでどっ"], ["な", "なにぬねの"],
+  ["は", "はひふへほばびぶべぼぱぴぷぺぽ"], ["ま", "まみむめも"], ["や", "やゆよゃゅょ"], ["ら", "らりるれろ"], ["わ", "わをんゐゑ"]];
+function kanaHead(x){
+  let s = String((x.c && (x.c.kana || x.c.official_name || x.c.temp_name)) || x.name || "").trim().charAt(0);
+  const code = s.charCodeAt(0); if(code >= 0x30A1 && code <= 0x30F6) s = String.fromCharCode(code - 0x60);   // カタカナ→ひらがな
+  const row = KANA_ROWS.find(r=>r[1].includes(s));
+  return row ? row[0] : "他";
+}
+function renderKanaBar(){
+  const el = $("kanaBar"); if(!el || !M.casts) return;
+  const have = new Set(tlRows().map(kanaHead));
+  el.innerHTML = KANA_ROWS.map(([k])=>`<button type="button" class="kb ${have.has(k) ? "" : "off"}" onclick="jumpKana('${k}')">${k}</button>`).join("");
+}
+function jumpKana(k){
+  const inTL = $("viewTL") && $("viewTL").style.display !== "none";
+  const xs = tlRows().filter(x=>kanaHead(x) === k && x.c);
+  for(const x of xs){
+    const el = inTL ? document.querySelector(`#tlGrid .nm[onclick*="'${x.c.id}'"]`) : $("cb-" + x.c.id);
+    if(el){
+      const y = el.getBoundingClientRect().top + window.scrollY - (document.querySelector(".stickybar").offsetHeight + 8);
+      window.scrollTo({ top: y, behavior: "smooth" });
+      el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+      return;
+    }
+  }
+  toast("「" + k + "」行のキャストは、今の一覧にいません");
+}
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
