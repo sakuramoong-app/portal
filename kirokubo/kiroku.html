@@ -311,9 +311,7 @@
   .bizbox .bq>span{min-width:170px;} .bizbox .bq.miss>span{color:#d9534f;} .bizbox .bq.miss>span::before{content:"⚠️ ";}
   .bizbox .ynp{border:1.5px solid #B9CBE3;background:#fff;border-radius:99px;padding:4px 12px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;}
   .bizbox .ynp.on{background:#1E6FD9;border-color:#1E6FD9;color:#fff;}
-  small.bizinfo{display:block;color:#1C4F8F;font-weight:700;}
-  .msg{min-height:96px !important;}
-  .seats{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:8px;overflow-x:auto;}
+  small.bizinfo{display:block;color:#1C4F8F;font-weight:700;}  .seats{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:8px;overflow-x:auto;}
   .seat{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px;}
   .seat.on{border-color:#6c5ce7;background:#F4F2FF;}
   .seat .no{font-weight:800;color:#6c5ce7;} .seat .who{font-size:16px;font-weight:800;} .seat .since{font-size:12px;color:var(--sub);}
@@ -3713,14 +3711,15 @@ saveRes = async function(){
 const __placeCellB = placeCell;
 placeCell = function(r){ const b = r.biz_check; return __placeCellB(r) + (r.place_kind === "biz" && b && b.twin ? `<small class="bizinfo">🏢 ${bizText(b)}</small>` : ""); };
 
-/* ---------- 📨 キャストへの予約連絡：LINEで一言（くわしくはアプリで見てもらう） ---------- */
-buildMsg = function(c){
+/* ---------- 📨 キャストへの予約連絡：LINEで一言（くわしくはアプリで見てもらう）
+   ※キャスト用の予約アプリができて、みんなが見られるようになったら buildMsg = buildMsgShort; にする。それまでは前のくわしい文面 ---------- */
+function buildMsgShort(c){
   const cast = M.casts.find(x=>x.id === $("f_cast").value);
   const d = new Date(day + "T12:00:00Z"), st = $("f_start").value;
   $("msg").value = `${cast ? (cast.official_name || cast.temp_name) + "さん" : "おつかれさまです"}
 ご予約いただきましたので、アプリでご確認お願いいたします。
 （${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st || "--:--"}〜）`;
-};
+}
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
