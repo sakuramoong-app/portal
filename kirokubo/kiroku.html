@@ -193,6 +193,7 @@
   table.board tr > th:first-child{width:120px;text-align:center;border-right:1.5px solid var(--line);}
   table.board td{vertical-align:top;padding:6px;border-bottom:1px solid #F1E9EC;border-right:1px solid #F1E9EC;min-width:120px;}
   table.board tr.wait > th{background:#FFF8E6;color:#9a7000;} table.board tr.work > th{background:#FFE3EC;color:#c9556a;}
+  table.board tr.start > th{background:#E8F4FF;color:#1f5d99;} .chipc.start{border-color:#9cc6ee;background:#F2F8FF;}
   table.board tr.before > th{background:#F1ECFB;color:#6c5896;font-size:12px;} table.board tr.gone > th{background:#F2F2F2;color:#999;}
   table.board tr.gone td{background:#FAFAFA;}
   /* エリアの色（今の記録簿と同じ）：見出しは濃いめ、マスはうすく */
@@ -1716,7 +1717,7 @@ function renderBoard(){
     return `<button class="chipc ${cls}" onclick="openCast('${x.c ? x.c.id : ""}','${esc(x.name)}')">【${esc(nm)}】${esc(sh)}${seat ? `<span class="seatbadge">🪑${seat.seat}</span>` : ""}${note ? `<small>（${esc(note)}）</small>` : ""}${pill && st !== "gone" ? `<br>${pill}` : ""}</button>`;
   };
   el.innerHTML = `<table class="board"><tr><th class="corner"></th>${cols.map(c=>`<th class="${AREA_CLASS[c] || ""}">${esc(c)}</th>`).join("")}</tr>`
-    + [["wait", "待機中"], ["work", "仕事中"]].map(([k, l])=>`<tr class="${k}"><th>${l}</th>${cols.map(c=>`<td class="${AREA_CLASS[c] || ""}">${(cell[k + "|" + c] || []).map(x=>chip(x, k)).join("")}</td>`).join("")}</tr>`).join("")
+    + [["wait", "待機中"], ["work", "仕事中"], ["start", "予約スタート"]].map(([k, l])=>`<tr class="${k}"><th>${l}</th>${cols.map(c=>`<td class="${AREA_CLASS[c] || ""}">${(cell[k + "|" + c] || []).map(x=>chip(x, k)).join("")}</td>`).join("")}</tr>`).join("")
     + `<tr class="gone"><th>今いない<br><small style="font-weight:700">⬜出勤前・退勤 🟩お茶 🟥欠勤</small></th><td colspan="${cols.length}">${gone.map(x=>chip(x, "gone")).join("") || `<span class="hist" style="margin:0">なし</span>`}</td></tr>`
     + `</table>`;
 }
@@ -2311,7 +2312,7 @@ function playMarks(x){
 const GONE_CYCLE = ["", "出勤前", "お茶", "欠勤"];
 function goneKind(cd){
   const s = (cd && cd.status) || "";
-  if(["出勤前", "出勤前連絡", "予約スタート"].includes(s)) return "出勤前";
+  if(["出勤前", "出勤前連絡"].includes(s)) return "出勤前";
   if(s === "お茶" || s === "欠勤") return s;
   return "";
 }
@@ -2334,6 +2335,7 @@ boardState = function(x){
   if(aw && aw.t >= manualT(x)) return "work";
   if(cd.settled) return "gone";
   if(cd.status === "仕事中") return "work";
+  if(cd.status === "予約スタート") return "start";   // 待機しないで、最初の予約から仕事を始める
   if(cd.standby && !["お茶", "欠勤", "出勤前"].includes(cd.status)) return "wait";
   return "gone";
 };
@@ -2378,7 +2380,7 @@ renderBoard = function(){
   };
   const th = c=>`<th class="${AREA_CLASS[c] || ""}">${esc(c)}${c === "鶯谷" ? ` <button type="button" class="logbtn" onclick="openSeatLog()">📜 ログ</button>` : ""}</th>`;
   el.innerHTML = `<table class="board"><tr><th class="corner"></th>${cols.map(th).join("")}</tr>`
-    + [["wait", "待機中"], ["work", "仕事中"]].map(([k, l])=>`<tr class="${k}"><th>${l}</th>${cols.map(c=>`<td class="${AREA_CLASS[c] || ""}" data-drop="${k}|${esc(c)}">${(cell[k + "|" + c] || []).map(x=>chip(x, k, c)).join("")}</td>`).join("")}</tr>`).join("")
+    + [["wait", "待機中"], ["work", "仕事中"], ["start", "予約スタート"]].map(([k, l])=>`<tr class="${k}"><th>${l}</th>${cols.map(c=>`<td class="${AREA_CLASS[c] || ""}" data-drop="${k}|${esc(c)}">${(cell[k + "|" + c] || []).map(x=>chip(x, k, c)).join("")}</td>`).join("")}</tr>`).join("")
     + `<tr class="gone"><th>今いない<br><small style="font-weight:700">押すと色：⬜ふつう→🟪出勤前→🟩お茶→🟥欠勤</small></th><td colspan="${cols.length}" data-drop="gone">${gone.map(x=>chip(x, "gone", "")).join("") || `<span class="hist" style="margin:0">なし</span>`}</td></tr>`
     + `</table>`;
 };
@@ -2394,6 +2396,11 @@ async function moveCast(cid, target){
   const x = tlRows().find(r=>r.c && r.c.id === cid); if(!x) return;
   const [kind, area] = target.split("|");
   const seat = seatsOk ? seatOf(cid) : null;
+  if(kind === "start"){   // 待機しないで、最初の予約から（予約スタート）
+    if(seat) await leaveSeat(seat.id, true);
+    if(await saveDayPart(cid, { standby: area, status: "予約スタート" })) toast(castLabel(x) + " → " + area + "で予約スタート");
+    return;
+  }
   if(kind === "work"){   // つまんで仕事中へ（新しい情報で上書き）
     if(seat) await leaveSeat(seat.id, true);
     if(await saveDayPart(cid, { standby: area, status: "仕事中" })) toast(castLabel(x) + " → " + area + "で仕事中");
@@ -2538,7 +2545,7 @@ renderListTable = function(){
   const el = $("list"); if(!el || !M.casts) return;
   const byStart = (a, b)=>String(a.start_at).localeCompare(String(b.start_at));
   const casts = sortRows(tlRows());
-  const STATE = { wait: "待機中", work: "仕事中", gone: "今いない" };
+  const STATE = { wait: "待機中", work: "仕事中", start: "予約スタート", gone: "今いない" };
   const head = `<tr><th>時間</th><th>店舗</th><th>コース・エリア</th><th>お客さん・電話</th><th>状態・やること</th><th>キャストに</th><th>対応ログ</th></tr>`;
   const block = (title, sub, list, cid)=>`<div class="cblock">
       <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid ? dayStatusSel(cid) : ""}${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
