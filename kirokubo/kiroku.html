@@ -356,10 +356,11 @@
       </div>
       <div class="hint2" style="font-size:12px;color:var(--sub)">遅刻・早退・時間変更は、ここで出勤／退勤の時刻を変えると、今どこに誰が・一覧・全体を見たいの出勤時間が変わります（サクラシフトの元の時間は残るので、あとで集計できます）</div>
       <div class="f" style="margin-top:8px"><label>理由</label><textarea id="at_reason" maxlength="300" placeholder="例：体調不良／電車の遅延／家の用事"></textarea></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:10px">
+        <button class="btn btn-ghost" id="at_skip" style="display:none;margin-right:auto" onclick="skipAbsent()">⬜ 欠勤にしない（不在にもどす）</button>
         <button class="btn btn-ghost" onclick="$('attendBg').classList.remove('show')">やめる</button>
         <button class="btn btn-primary" onclick="saveAttend()">💾 記録する</button></div>
-      <div class="hint2" style="margin-top:6px;font-size:12px;color:var(--sub)">欠勤にすると、今どこに誰がの「今いない（欠勤）」に入ります。シフトの時間そのものはサクラシフトで直してください。</div>
+      <div class="hint2" style="margin-top:6px;font-size:12px;color:var(--sub)">欠勤にすると、今どこに誰がの「今いない（欠勤）」に入ります。記録はあとから「✖ 取り消し」できます。</div>
     </div></div>
     <!-- 🪑 鶯谷待機席のログ（今どこに誰がの「📜 ログ」から） -->
     <div class="modal-bg" id="seatLogBg" style="z-index:70"><div class="modal"><button class="x" onclick="$('seatLogBg').classList.remove('show')" aria-label="閉じる">×</button>
@@ -2809,7 +2810,8 @@ const __cycleGone = cycleGone;
 cycleGone = async function(cid){
   const cd = castDays[cid] || {};
   const next = GONE_CYCLE[(GONE_CYCLE.indexOf(goneKind(cd)) + 1) % GONE_CYCLE.length];
-  if(next === "欠勤"){ openAttend(cid, "欠勤"); return; }
+  // 欠勤は理由を聞く。やめたいときは「欠勤にしない（不在にもどす）」で ⬜不在 にもどせる
+  if(next === "欠勤"){ openAttend(cid, "欠勤"); $("at_skip").style.display = ""; return; }
   await saveDayPart(cid, { status: next });
 };
 
@@ -2930,6 +2932,7 @@ openAttend = function(cid, kind){
   $("at_start").value = fromHour(cd.shift_start_ov); $("at_end").value = fromHour(cd.shift_end_ov);
   const sync = ()=>{ $("at_shiftBox").style.display = $("at_kind").value === "欠勤" ? "none" : ""; };
   $("at_kind").onchange = sync; sync();
+  $("at_skip").style.display = "none";   // 今いないの札から「欠勤」にしたときだけ出す（下の cycleGone）
 };
 saveAttend = async function(){
   const cid = attendCid; if(!cid) return;
@@ -3022,6 +3025,12 @@ async function undoAttend(cid, i){
     if(sh.en != null) patch.shift_end_ov = en;
   }
   if(await saveDayPart(cid, patch)) toast("取り消しました");
+}
+
+// 今いないの札で「欠勤」の窓が出たけど、やっぱり欠勤にしない → ⬜不在 にもどす
+async function skipAbsent(){
+  const cid = attendCid; if(!cid) return;
+  if(await saveDayPart(cid, { status: "" })){ $("attendBg").classList.remove("show"); toast("不在にもどしました"); }
 }
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
