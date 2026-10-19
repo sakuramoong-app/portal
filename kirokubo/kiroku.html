@@ -540,7 +540,7 @@
           <div style="display:flex;gap:6px"><select id="f_place" style="max-width:110px" onchange="checkNewHotel()"><option value="">（種類）</option><option value="love">ラブホ</option><option value="biz">ビジホ</option><option value="home">自宅</option></select>
           <input id="f_address" maxlength="200" list="hotelList" oninput="recalc();checkNewHotel()" style="flex:1"></div><datalist id="hotelList"></datalist></div>
       </div>
-      <div class="f" style="margin-top:6px"><label>📍 地図のURL（自宅やリストにない場所のとき。お客さんの場所として覚えます）</label><input id="f_map" maxlength="500" placeholder="https://maps.app.goo.gl/…" oninput="recalc()"></div>
+      <div class="f" style="margin-top:6px"><label>📍 地図のURL（自宅やリストにない場所のとき。お客さんの場所として覚えます）</label><input id="f_map" maxlength="500" placeholder="https://maps.app.goo.gl/…（登録されているホテルなら自動で入ります）" oninput="this.dataset.auto='';recalc()"></div>
       <div id="newHotelBox"></div>
       <div id="areaInfo"></div>
       <div id="nextFeeInfo"></div>
@@ -3610,6 +3610,40 @@ function jumpKana(k){
   }
   toast("「" + k + "」行のキャストは、今の一覧にいません");
 }
+
+/* ---------- エリアのホテル一覧（地図つき）は出さない。登録されているホテルなら、地図のURLを自動で入れる ---------- */
+const __paintAreaInfoM = paintAreaInfo;
+paintAreaInfo = async function(){
+  await __paintAreaInfoM();
+  document.querySelectorAll("#areaInfo details").forEach(d=>d.remove());   // 「🏨 ○○のホテル（押すと地図）」はなし
+};
+// ホテル・住所の欄に、登録されているホテルの名前が入っていたら、そのホテルの地図のURLを入れる
+// （手で打った地図のURLは上書きしない。お客さんの過去の場所を選んだときは、その地図）
+function autoMap(){
+  const m = $("f_map"); if(!m) return;
+  if(m.value.trim() && m.dataset.auto !== "1") return;
+  const area = $("f_area").value.trim(), addr = $("f_address").value.replace(/[\s　]/g, "");
+  let url = "";
+  if(addr){
+    const list = (M.hotels || []).filter(h=>!area || h.area === area || String(area).includes(h.area))
+      .sort((a, b)=>String(b.hotel_name).length - String(a.hotel_name).length);
+    const h = list.find(x=>x.hotel_name && addr.includes(String(x.hotel_name).replace(/[\s　]/g, "")));
+    if(h) url = mapLink(h);
+    else{
+      const p = custPlaces.find(x=>x.map_url && samePlace(x, $("f_area").value, $("f_address").value));
+      if(p) url = p.map_url;
+    }
+  }
+  m.value = url; m.dataset.auto = url ? "1" : "";
+}
+const __checkNewHotelM = checkNewHotel;
+checkNewHotel = function(){ __checkNewHotelM(); autoMap(); };
+const __onAreaSelM = onAreaSel;
+onAreaSel = function(){ __onAreaSelM(); autoMap(); };
+const __pickPlaceM = pickPlace;
+pickPlace = function(i){ __pickPlaceM(i); if($("f_map")) $("f_map").dataset.auto = i >= 0 && custPlaces[i] && custPlaces[i].map_url ? "" : "1"; autoMap(); };
+const __openFormM = openForm;
+openForm = function(id){ __openFormM(id); const m = $("f_map"); if(m){ m.dataset.auto = m.value ? "" : "1"; autoMap(); } };
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
