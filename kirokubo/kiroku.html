@@ -261,6 +261,10 @@
   .inl{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;} .inl select,.inl input{font-family:inherit;font-size:12px;padding:3px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;} .inl input{min-width:120px;flex:1;}
   .inl .mini{font-family:inherit;font-size:11.5px;font-weight:800;padding:2px 8px;border:1.5px solid var(--line);border-radius:99px;background:#fff;color:var(--sub);cursor:pointer;} .inl .mini.ng{background:#FFE8EC;border-color:#F09AAA;color:#B0213F;}
   .newhotel{background:#FFF8E6;border:2px dashed #FFB547;border-radius:12px;padding:8px 10px;margin:6px 0;font-size:13.5px;}
+  /* 備考（対応ログ）を目立たせる */
+  .mlog{font-size:13.5px !important;background:#FFF8D6;border:1.5px solid #F2D27A;border-radius:10px;padding:6px 8px;} .mlog b{color:#8a6d00;} .mlog .addlog{font-weight:800;color:#8a6d00;border-color:#F2D27A;background:#fff;}
+  label.bikoh{font-size:14px !important;color:#8a6d00 !important;background:#FFF8D6;border-radius:8px;padding:3px 8px;display:inline-block;}
+  .movebox .movenow{display:inline-block !important;width:auto !important;min-width:110px;margin:0 2px 0 0 !important;}
   .seats{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:8px;overflow-x:auto;}
   .seat{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px;}
   .seat.on{border-color:#6c5ce7;background:#F4F2FF;}
@@ -348,6 +352,17 @@
     <!-- 有料オプションの一覧：足す（内勤みんな）・直す/消す（店長） -->
     <div class="modal-bg" id="optBg" style="z-index:70"><div class="modal" style="max-width:620px"><button class="x" onclick="$('optBg').classList.remove('show')" aria-label="閉じる">×</button>
       <h2 id="optTitle">有料オプション</h2><div id="optBody"></div></div></div>
+    <!-- 🚕 次回の交通費（お客さんごと） -->
+    <div class="modal-bg" id="feeBg" style="z-index:70"><div class="modal" style="max-width:420px"><button class="x" onclick="$('feeBg').classList.remove('show')" aria-label="閉じる">×</button>
+      <h2 id="feeTitle">🚕 次回の交通費</h2>
+      <div class="f"><label>次にこのお客さんの予約を受けるときの交通費（円）</label><input type="number" id="fee_amt" min="0" step="500" placeholder="例：3000"></div>
+      <div class="f" style="margin-top:8px"><label>メモ（なぜ？）</label><input id="fee_note" maxlength="100" placeholder="例：思ったより遠かった／タクシー代がかかった"></div>
+      <div class="hint2" style="font-size:12px;color:var(--sub);margin-top:6px">次にこの電話番号で予約を受けると、知らせが出て交通費に自動で入ります。</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:10px">
+        <button class="btn btn-ghost" style="margin-right:auto" onclick="saveNextFee(true)">🗑 消す</button>
+        <button class="btn btn-ghost" onclick="$('feeBg').classList.remove('show')">やめる</button>
+        <button class="btn btn-primary" onclick="saveNextFee(false)">💾 保存</button></div>
+    </div></div>
     <!-- 📝 勤怠の記録（欠勤・遅刻・早退・時間変更の理由） -->
     <div class="modal-bg" id="attendBg" style="z-index:70"><div class="modal" style="max-width:460px"><button class="x" onclick="$('attendBg').classList.remove('show')" aria-label="閉じる">×</button>
       <h2 id="attendTitle">📝 勤怠の記録</h2>
@@ -490,6 +505,7 @@
       </div>
       <div id="newHotelBox"></div>
       <div id="areaInfo"></div>
+      <div id="nextFeeInfo"></div>
       <div class="row2">
         <div class="f"><label>交通費（お客さんから）</label><input type="number" id="f_transport" min="0" value="0" oninput="recalc()"></div>
         <div class="f"><label>&nbsp;</label><button type="button" class="btn btn-ghost btn-sm" onclick="saveAreaFee()">💾 この場所の提案額として記録</button></div>
@@ -536,7 +552,7 @@
       <div class="row2" style="margin-top:10px">
         <div class="f"><label>状態</label><select id="f_status" class="stsel st pick" onchange="stColor()"></select></div>
       </div>
-      <div class="f" style="margin:4px 0 8px"><label>📝 対応ログ（だれが・いつ・どんな対応）</label><div id="formLog"></div></div>
+      <div class="f" style="margin:4px 0 8px"><label class="bikoh">📝 備考（だれが・いつ・どんな対応／いちばん大事なメモ）</label><div id="formLog"></div></div>
       <div class="row2" style="display:none">
         <div></div>
       </div>
@@ -559,7 +575,7 @@
         <div class="f"><label>NGの理由・お客さんメモ</label><input id="f_custnote" maxlength="200"></div>
       </div>
       <div class="row1"><div class="f"><label>確認電話のメモ</label><input id="f_confirm" maxlength="60" placeholder="例：前日OK・1H前OK"></div></div>
-      <div class="row1"><div class="f"><label>備考</label><textarea id="f_note"></textarea></div></div>
+      <div class="row1"><div class="f"><label>そのほかのメモ</label><textarea id="f_note"></textarea></div></div>
     </details>
     <div style="margin-top:12px"><button class="btn btn-danger edit-only" id="delBtn" onclick="removeRes()">🗑 この予約を削除</button></div>
     <div class="hist" id="logInfo"></div>
@@ -2143,7 +2159,7 @@ async function toggleNotified(id){
 }
 async function addLogPrompt(id){
   if(!KB.CAN_EDIT) return;
-  const t = prompt("対応ログに書くこと（例：お客様に折り返し済み／キャストに場所変更を連絡）");
+  const t = prompt("備考に書くこと（例：お客様に折り返し済み／キャストに場所変更を連絡）");
   if(!t || !t.trim()) return;
   if(await pushLog(id, t.trim())){ toast("ログに書きました"); renderList(); if(editing && editing.id === id) renderFormLog(); }
 }
@@ -2162,7 +2178,7 @@ function renderListTable(){
       const logHtml = `<div class="mlog">${logs.length
           ? logs.slice(0, 3).map(l=>`<div><b>${esc(whenShort(l.at))} ${esc(l.by || "")}</b> ${esc(l.text)}</div>`).join("") + (logs.length > 3 ? `<div class="more">ほか ${logs.length - 3}件（予約を開くと全部）</div>` : "")
           : `<div class="none">受付：${esc(r.created_by || "")} ${whenShort(r.created_at)}</div>`}
-        ${KB.CAN_EDIT ? `<button class="addlog" onclick="event.stopPropagation();addLogPrompt(${r.id})">＋ ログ</button>` : ""}</div>`;
+        ${KB.CAN_EDIT ? `<button class="addlog" onclick="event.stopPropagation();addLogPrompt(${r.id})">＋ 備考</button>` : ""}</div>`;
       return `<tr class="r" onclick="openForm(${r.id})">
         <td><b>${hm(r.start_at)}</b>〜${hm(r.end_at)}</td>
         <td>${r.dummy_name ? `<small style="color:#6c5896">🎭${esc(r.dummy_name)} →</small><br>` : ""}<b>${esc(castName(r.cast_id))}</b></td>
@@ -2322,7 +2338,7 @@ openCast = function(castId, name){
 /* ---------- 予約の入力 ⑥：対応ログ ---------- */
 function renderFormLog(){
   const el = $("formLog"); if(!el) return;
-  if(!editing){ el.innerHTML = `<div class="hist" style="margin:0">登録したあとに、対応ログを書けます（予約一覧の「＋ ログ」からも書けます）</div>`; return; }
+  if(!editing){ el.innerHTML = `<div class="hist" style="margin:0">登録したあとに、備考を書けます（一覧の「＋ 備考」からも書けます）</div>`; return; }
   const r = rows.find(x=>x.id === editing.id) || editing;
   const logs = logOf(r);
   el.innerHTML = `<div class="mlog full">${logs.length ? logs.map(l=>`<div><b>${esc(whenShort(l.at))} ${esc(l.by || "")}</b> ${esc(l.text)}</div>`).join("") : `<div class="none">まだありません</div>`}</div>
@@ -2637,7 +2653,7 @@ function resCells(r){
   const logHtml = `<div class="mlog">${logs.length
       ? logs.slice(0, 2).map(l=>`<div><b>${esc(whenShort(l.at))} ${esc(l.by || "")}</b> ${esc(l.text)}</div>`).join("") + (logs.length > 2 ? `<div class="more">ほか ${logs.length - 2}件</div>` : "")
       : `<div class="none">受付：${esc(r.created_by || "")} ${whenShort(r.created_at)}</div>`}
-    ${KB.CAN_EDIT ? `<button class="addlog" onclick="event.stopPropagation();addLogPrompt(${r.id})">＋ ログ</button>` : ""}</div>`;
+    ${KB.CAN_EDIT ? `<button class="addlog" onclick="event.stopPropagation();addLogPrompt(${r.id})">＋ 備考</button>` : ""}</div>`;
   return `<td><b>${hm(r.start_at)}</b>〜${hm(r.end_at)}</td>
     <td>${r.dummy_name ? `<small style="color:#6c5896">🎭${esc(r.dummy_name)}</small><br>` : ""}${esc(String(storeLabel(r.store_key) || "").slice(0, 3))}</td>
     <td>${esc(r.course)}${/^\d+$/.test(r.course) ? "分" : ""}${r.free_kind ? "・" + FREE_SUFFIX[r.free_kind] : ""}${r.extension_count ? " 延長" + r.extension_count : ""}${r.payment !== "cash" ? " 💳" : ""}<br><small style="color:var(--sub)">${esc(r.area || "")}</small>${placeCell(r)}${cardSel(r)}</td>
@@ -2649,7 +2665,7 @@ renderListTable = function(){
   const byStart = (a, b)=>String(a.start_at).localeCompare(String(b.start_at));
   const casts = sortRows(tlRows());
   const STATE = { wait: "待機中", work: "仕事中", start: "予約スタート", precall: "出勤前連絡", gone: "今いない" };
-  const head = `<tr><th>時間</th><th>店舗</th><th>コース・エリア</th><th>お客さん・電話</th><th>状態・やること</th><th>キャストに</th><th>対応ログ</th></tr>`;
+  const head = `<tr><th>時間</th><th>店舗</th><th>コース・エリア</th><th>お客さん・電話</th><th>状態・やること</th><th>キャストに</th><th>📝 備考</th></tr>`;
   // 今いない（不在・お茶・欠勤）は、枠ぜんたいをグレー・緑・赤に（今どこに誰がとつながっている）
   const block = (title, sub, list, cid, cls)=>`<div class="cblock ${cls || ""}" ${cid ? `id="cb-${cid}"` : ""}>
       <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button>` : ""}${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
@@ -2782,7 +2798,7 @@ function cancelSection(){
   if(!list.length) return "";
   const n = s => list.filter(r=>r.status === s).length;
   return `<div class="cblock cxbox"><div class="ch"><b>🚫 キャンセル・トビ</b><small>キャンセル ${n("cancel")}件・トビ ${n("tobi")}件（売上・報酬には入りません）</small></div>
-    <div class="wrapx"><table class="list"><tr><th>時間</th><th>キャスト</th><th>状態</th><th>コース</th><th>お客さん</th><th>対応ログ（新しい順）</th></tr>
+    <div class="wrapx"><table class="list"><tr><th>時間</th><th>キャスト</th><th>状態</th><th>コース</th><th>お客さん</th><th>📝 備考（新しい順）</th></tr>
     ${list.map(r=>{ const c = r.kb_customers || {}, lg = logOf(r).slice().reverse()[0];
       return `<tr class="r" onclick="openForm(${r.id})"><td>${hm(r.start_at)}〜${hm(r.end_at)}</td><td><b>${esc(castName(r.cast_id))}</b></td>
         <td><span class="st ${r.status}">${STATUS[r.status]}</span></td><td>${esc(r.course)}${/^\d+$/.test(r.course) ? "分" : ""}</td>
@@ -3184,6 +3200,61 @@ function custNextFee(id){
   if(note === null) return;
   updCustomer(id, { next_transport: n, next_transport_note: note.trim() }, "次回の交通費 → " + yen(n) + (note.trim() ? "（" + note.trim() + "）" : ""));
 }
+
+/* ---------- エリア：池袋・鶯谷・五反田・渋谷・錦糸町・出張 は、ホテルリストになくてもいつも出す ---------- */
+areaList = function(){
+  const rank = a=>{ const i = AREA_ORDER.findIndex(x=>String(a).includes(x)); return i < 0 ? 99 : i; };
+  const fromHotels = __areaList();
+  const all = AREA_ORDER.filter(a=>!fromHotels.some(h=>String(h).includes(a))).concat(fromHotels);
+  return [...new Set(all)].sort((a, b)=>rank(a) - rank(b) || String(a).localeCompare(String(b), "ja"));
+};
+
+/* ---------- 移動中の札：［今いる場所の入力］→ ※移動中※ ---------- */
+movingHtml = function(x){
+  if(!x.c || !movingRes(x.c.id)) return "";
+  const cd = x.cd || {}, now = cd.move_now || cd.move_from || "";
+  return `<div class="movebox">${KB.CAN_EDIT
+      ? `<input class="movenow" value="${esc(now)}" placeholder="今いる場所（例：池袋駅）" onchange="saveDayPart('${x.c.id}',{ move_now: this.value.trim() })">`
+      : `📍${esc(now || "？")}`} → <b>※移動中※</b></div>`;
+};
+
+/* ---------- 🚕 次回の交通費：金額とメモを1つの小窓で ---------- */
+let feeFor = null;
+custNextFee = function(id){
+  const r = rows.find(x=>x.id === id), c = (r && r.kb_customers) || {};
+  if(!r || !r.customer_id) return;
+  feeFor = id;
+  $("feeTitle").textContent = "🚕 次回の交通費：" + (c.name || "お客さん") + (c.phone ? "（" + c.phone + "）" : "");
+  $("fee_amt").value = c.next_transport != null ? c.next_transport : "";
+  $("fee_note").value = c.next_transport_note || "";
+  $("feeBg").classList.add("show");
+  setTimeout(()=>$("fee_amt").focus(), 50);
+};
+function saveNextFee(clear){
+  const id = feeFor; if(!id) return;
+  $("feeBg").classList.remove("show");
+  if(clear || !String($("fee_amt").value).trim()){ updCustomer(id, { next_transport: null, next_transport_note: "" }, "次回の交通費を消した"); return; }
+  const n = Math.max(0, parseInt(String($("fee_amt").value).replace(/[^\d]/g, ""), 10) || 0), note = $("fee_note").value.trim();
+  updCustomer(id, { next_transport: n, next_transport_note: note }, "次回の交通費 → " + yen(n) + (note ? "（" + note + "）" : ""));
+}
+KB.closeOnBackdrop($("feeBg"), ()=>$("feeBg").classList.remove("show"));
+// 一覧のボタンに、金額とメモも出す
+const __custCell = custCell;
+custCell = function(r){
+  const c = r.kb_customers || {};
+  let h = __custCell(r);
+  if(c.next_transport != null && c.next_transport_note) h = h.replace(/(🚕 次回の交通費：[^<]*)<\/button>/, `$1<small>（${esc(c.next_transport_note)}）</small></button>`);
+  return h;
+};
+// 予約の画面：交通費の欄のそばにも出す（電話番号で調べたお客さんに「次回の交通費」があるとき）
+function paintNextFee(){
+  const c = curCustomer, el = $("nextFeeInfo"); if(!el) return;
+  el.innerHTML = c && c.next_transport != null ? `<div class="warn">🚕 このお客さんの<b>次回の交通費 ${yen(c.next_transport)}</b>${c.next_transport_note ? "（" + esc(c.next_transport_note) + "）" : ""}</div>` : "";
+}
+const __lookupCustomerN = lookupCustomer;
+lookupCustomer = async function(keepName){ await __lookupCustomerN(keepName); paintNextFee(); };
+const __openFormN = openForm;
+openForm = function(id){ __openFormN(id); paintNextFee(); };
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
