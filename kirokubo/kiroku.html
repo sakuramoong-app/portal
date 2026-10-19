@@ -449,7 +449,8 @@
         <div id="dummyMatch"></div>
         <div style="font-size:12px;color:var(--sub);margin-top:4px">↓ 下は「実際に行くキャスト」（バックは実際に行くキャストで計算）</div>
       </div>
-      <div class="f"><label>キャスト（フリーのときは行く人を選ぶ）</label><select id="f_cast" onchange="onCast()"></select></div>
+      <div class="f"><label>キャスト（フリーのときは行く人を選ぶ）</label><select id="f_cast" onchange="onCast()"></select>
+        <label style="display:block;font-size:12px;color:var(--sub);margin-top:4px"><input type="checkbox" id="f_castAll" onchange="fillCastSel()"> シフトにない人も出す（ふだんは、その日の出勤のキャストだけ）</label></div>
       <div id="castChecks"></div>
       <div id="castInfo"></div>
     </div>
@@ -1715,7 +1716,7 @@ function tlCell(castId, h){
   newBookingFor(castId, String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0"));
 }
 function newBookingFor(castId, time){
-  openForm(null);
+  if(castId && ![...$("f_cast").options].some(o=>o.value === castId)){ $("f_castAll").checked = true; fillCastSel(); }
   $("f_cast").value = castId; onCast();
   if(time) $("f_start").value = time;
   recalc();
@@ -2965,6 +2966,28 @@ saveRes = async function(){
   const st = $("f_status").value, cid = $("f_cast").value, was = editing ? editing.status : "";
   await __saveResM();
   if(cid && st === "moving" && was !== "moving") markMoving(cid);
+};
+
+/* ---------- 受付の指名キャスト：その日の出勤のキャストだけ（出勤が早い順）。「シフトにない人も出す」で全員 ---------- */
+function fillCastSel(){
+  const sel = $("f_cast"); if(!sel) return;
+  const cur = sel.value || (editing && editing.cast_id) || "";
+  const sh = shiftCache[day] || {};
+  const onShift = M.casts.map(c=>{ const nm = Object.keys(sh).find(n=>n === c.shift_name || n === c.official_name); return nm ? { c, s: sh[nm] } : null; })
+    .filter(Boolean).sort((a, b)=>a.s.start - b.s.start);
+  const ids = new Set(onShift.map(x=>x.c.id));
+  let h = `<option value="">（キャストを選ぶ）</option>`;
+  h += onShift.length ? `<optgroup label="今日の出勤">${onShift.map(x=>`<option value="${x.c.id}">${esc(x.c.official_name || x.c.temp_name)}　${tlLabel(x.s.start)}〜${tlLabel(x.s.end)}${x.s.confirmed ? "" : "（未確定）"}</option>`).join("")}</optgroup>`
+                      : `<optgroup label="この日のシフトがありません"></optgroup>`;
+  const others = M.casts.filter(c=>!ids.has(c.id) && (c.id === cur || ($("f_castAll") && $("f_castAll").checked && c.status !== "left")));
+  if(others.length) h += `<optgroup label="シフトにない人">${others.map(c=>`<option value="${c.id}">${esc(c.official_name || c.temp_name)}</option>`).join("")}</optgroup>`;
+  sel.innerHTML = h; sel.value = cur;
+}
+const __openFormC = openForm;
+openForm = function(id){
+  if($("f_castAll")) $("f_castAll").checked = false;
+  __openFormC(id);
+  fillCastSel();
 };
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
