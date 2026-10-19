@@ -137,7 +137,12 @@
   .tlg .gap{position:absolute;top:0;bottom:0;z-index:1;pointer-events:none;background:repeating-linear-gradient(45deg,rgba(110,100,104,.32) 0 5px,rgba(110,100,104,.12) 5px 10px);}
   .tlg .want{position:absolute;top:2px;bottom:2px;z-index:3;border:2.5px dashed #2f9e6e;border-radius:8px;pointer-events:none;}
   .tlg .want.ng{border-color:#ef4444;}
-  .tlg .now{position:absolute;top:0;bottom:0;width:2px;z-index:3;background:#ef4444;pointer-events:none;}
+  .tlg .now{position:absolute;top:0;bottom:0;width:3px;margin-left:-1px;z-index:4;pointer-events:none;
+    background:linear-gradient(180deg,#ff4f9a,#ffd54f,#ff4f9a);background-size:100% 200%;animation:nowShine 1.8s linear infinite, nowGlow 1.2s ease-in-out infinite alternate;}
+  .tlg .hd .cells .nowhead{position:absolute;top:0;bottom:0;z-index:7;pointer-events:none;transform:translateX(-50%);display:flex;align-items:center;}
+  .tlg .hd .cells .nowhead span{background:#ff4f9a;color:#fff;font-size:11.5px;font-weight:800;border-radius:99px;padding:2px 8px;white-space:nowrap;box-shadow:0 0 8px rgba(255,79,154,.7);animation:nowGlow 1.2s ease-in-out infinite alternate;}
+  @keyframes nowShine{from{background-position:0 0;}to{background-position:0 200%;}}
+  @keyframes nowGlow{from{box-shadow:0 0 3px 1px rgba(255,79,154,.45);}to{box-shadow:0 0 10px 4px rgba(255,213,79,.85);}}
   .castpick{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:8px 12px;margin-bottom:8px;}
   .castpick summary{cursor:pointer;font-weight:800;font-size:13.5px;color:var(--sub);}
   .castpick .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
@@ -3800,6 +3805,31 @@ saveRes = async function(){
 
 /* ---------- 📨 キャストへの予約連絡：LINEで一言（くわしくはアプリで見てもらう）
    ※キャスト用の予約アプリができて、みんなが見られるようになったら buildMsg = buildMsgShort; にする。それまでは前のくわしい文面 ---------- */
+/* ---------- ⏱ 全体を見たい：今の時刻に、きらきらの縦線（1分ごとに動く）＋ 上に「今 21:35 ✨」 ---------- */
+function nowHourTL(){ const j = new Date(Date.now() + 9 * 3600 * 1000); let h = j.getUTCHours() + j.getUTCMinutes() / 60; if(h < 8) h += 24; return h; }
+function paintNowLine(){
+  const grid = $("tlGrid"); if(!grid) return;
+  const head = grid.querySelector(".hd .cells"); if(!head) return;
+  let mk = head.querySelector(".nowhead");
+  if(day !== KB.bizDateOf()){ if(mk) mk.remove(); return; }
+  const h = nowHourTL(), left = Math.max(0, Math.min(100, (h - TL_FROM) / (TL_TO - TL_FROM) * 100)) + "%";
+  if(!mk){ mk = document.createElement("div"); mk.className = "nowhead"; head.appendChild(mk); }
+  const j = new Date(Date.now() + 9 * 3600 * 1000);
+  mk.style.left = left; mk.innerHTML = `<span>今 ${String(j.getUTCHours()).padStart(2, "0")}:${String(j.getUTCMinutes()).padStart(2, "0")} ✨</span>`;
+  grid.querySelectorAll(".r .cells > .now").forEach(el=>{ el.style.left = left; });
+}
+const __renderTLNow = renderTL;
+renderTL = function(){ __renderTLNow(); paintNowLine(); };
+setInterval(paintNowLine, 60000);
+// 「全体を見たい」を開いたら、今の時刻が見えるところまで横にずらす（今日だけ）
+function scrollToNow(){
+  const wrap = document.querySelector(".tlwrap"), mk = document.querySelector("#tlGrid .nowhead"); if(!wrap || !mk) return;
+  const x = mk.getBoundingClientRect().left - wrap.getBoundingClientRect().left + wrap.scrollLeft;
+  wrap.scrollLeft = Math.max(0, x - wrap.clientWidth / 3);
+}
+const __showViewNow = showView;
+showView = function(v){ const r = __showViewNow.apply(this, arguments); if(v === "tl") setTimeout(scrollToNow, 50); return r; };
+
 function buildMsgShort(c){
   const cast = M.casts.find(x=>x.id === $("f_cast").value);
   const d = new Date(day + "T12:00:00Z"), st = $("f_start").value;
