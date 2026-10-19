@@ -332,6 +332,7 @@
         <button class="btn btn-ghost btn-sm" onclick="moveDay(1)">▶</button>
         <span class="bd" id="dayInfo"></span>
         <button class="btn btn-ghost btn-sm" onclick="goToday()">今日（営業日）</button>
+        <button class="btn btn-ghost btn-sm" id="shiftReloadBtn" onclick="reloadShifts()" title="サクラシフトで受理したシフトを、今すぐ読みこむ">🔄 シフトを読みなおす</button>
       </div>
       <label>並び・絞り <select id="s_sort" onchange="setSort(this.value)">
         <option value="kana">あいうえお順</option><option value="start">出勤が早い順</option><option value="endEarly">退勤が早い順</option><option value="endLate">退勤が遅い順</option>
@@ -3039,6 +3040,14 @@ setInterval(async ()=>{
   if(!day || $("formBg").classList.contains("show")) return;
   try{ delete shiftCache[day]; await loadShifts(day); renderList(); }catch(e){}
 }, 300000);
+
+// 🔄 シフトを今すぐ読みなおす（サクラシフトで受理した直後など）
+async function reloadShifts(){
+  const b = $("shiftReloadBtn"); if(b){ b.disabled = true; b.textContent = "🔄 読みこみ中…"; }
+  try{ delete shiftCache[day]; await loadShifts(day); renderList(); toast("シフトを読みなおしました"); }
+  catch(e){ toast("読みこめませんでした：" + (e.message || e)); }
+  finally{ if(b){ b.disabled = false; b.textContent = "🔄 シフトを読みなおす"; } }
+}
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
