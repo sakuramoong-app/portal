@@ -2201,7 +2201,7 @@ async function sitDown(n, castId){
   try{
     if(old) q(await sb.from("kb_seat_logs").update({ end_at: new Date().toISOString(), end_by: KB.operatorName() }).eq("id", old.id));   // 席の移動：前の席は退席
     q(await sb.from("kb_seat_logs").insert({ biz_date: day, seat: n, cast_id: id, start_by: KB.operatorName() }));
-    await loadSeats(); renderSeats(); renderBoard(); if(castOpen && castOpen.c && castOpen.c.id === id) openCast(id, "");
+    await loadSeats(); renderSeats(); renderBoard();
     toast(castName(id) + " → 🪑" + n + "番");
   }catch(e){ toast("記録できませんでした：" + (e.message || e)); }
 }
@@ -2487,6 +2487,14 @@ setSort = function(v){ try{ localStorage.setItem("kirokuSort", v); }catch(e){} r
 // 全体を見たい：名前を押すと、その子の予約を追加（キャストの枠の窓はなくした）
 jumpCast = function(castId){ if(castId && KB.CAN_EDIT) newBookingFor(castId, ""); };
 
+// 💴 精算（本日のキャスト一覧の枠から）：前のキャストの枠の精算と同じ中身を、窓で開く
+function openSettle(cid){
+  const x = tlRows().find(r=>r.c && r.c.id === cid); if(!x) return;
+  castOpen = x;
+  $("castTitle").textContent = "💴 精算：" + castLabel(x) + "（" + dayTitle().replace(/^📅 /, "") + "）";
+  $("castBody").innerHTML = `<div id="settleBox">${cardHtml(cid, calcCast(cid))}</div>`;
+  $("castBg").classList.add("show");
+}
 // 📋 本日のキャスト一覧（1キャスト1枠）
 function resCells(r){
   const c = r.kb_customers || {};
@@ -2514,7 +2522,7 @@ renderListTable = function(){
   const STATE = { wait: "待機中", work: "仕事中", gone: "今いない" };
   const head = `<tr><th>時間</th><th>店舗</th><th>コース・エリア</th><th>お客さん・電話</th><th>状態・やること</th><th>キャストに</th><th>対応ログ</th></tr>`;
   const block = (title, sub, list, cid)=>`<div class="cblock">
-      <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
+      <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
       ${list.length ? `<div class="wrapx"><table class="list">${head}${list.map(r=>`<tr class="r" onclick="openForm(${r.id})">${resCells(r)}</tr>`).join("")}</table></div>` : `<div class="none">予約なし</div>`}</div>`;
   const noCast = rows.filter(r=>!r.cast_id).sort(byStart);
   const mode = $("s_sort").value;
