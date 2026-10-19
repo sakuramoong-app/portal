@@ -340,10 +340,10 @@
     <div class="sum" id="sum"></div>
 
     <!-- 有料オプションの一覧：足す（内勤みんな）・直す/消す（店長） -->
-    <div class="modal-bg" id="optBg"><div class="modal" style="max-width:620px"><button class="x" onclick="$('optBg').classList.remove('show')" aria-label="閉じる">×</button>
+    <div class="modal-bg" id="optBg" style="z-index:70"><div class="modal" style="max-width:620px"><button class="x" onclick="$('optBg').classList.remove('show')" aria-label="閉じる">×</button>
       <h2 id="optTitle">有料オプション</h2><div id="optBody"></div></div></div>
     <!-- 📝 勤怠の記録（欠勤・遅刻・早退・時間変更の理由） -->
-    <div class="modal-bg" id="attendBg"><div class="modal" style="max-width:460px"><button class="x" onclick="$('attendBg').classList.remove('show')" aria-label="閉じる">×</button>
+    <div class="modal-bg" id="attendBg" style="z-index:70"><div class="modal" style="max-width:460px"><button class="x" onclick="$('attendBg').classList.remove('show')" aria-label="閉じる">×</button>
       <h2 id="attendTitle">📝 勤怠の記録</h2>
       <div class="row2">
         <div class="f"><label>なに？</label><select id="at_kind"><option>欠勤</option><option>遅刻</option><option>早退</option><option>時間変更</option></select></div>
@@ -361,7 +361,7 @@
       <div class="hint2" style="margin-top:6px;font-size:12px;color:var(--sub)">欠勤にすると、今どこに誰がの「今いない（欠勤）」に入ります。シフトの時間そのものはサクラシフトで直してください。</div>
     </div></div>
     <!-- 🪑 鶯谷待機席のログ（今どこに誰がの「📜 ログ」から） -->
-    <div class="modal-bg" id="seatLogBg"><div class="modal"><button class="x" onclick="$('seatLogBg').classList.remove('show')" aria-label="閉じる">×</button>
+    <div class="modal-bg" id="seatLogBg" style="z-index:70"><div class="modal"><button class="x" onclick="$('seatLogBg').classList.remove('show')" aria-label="閉じる">×</button>
       <h2>🪑 鶯谷待機席のログ</h2><div id="seatBox"></div></div></div>
 
     <div id="viewSlots" style="display:none">
@@ -450,7 +450,7 @@
         <div style="font-size:12px;color:var(--sub);margin-top:4px">↓ 下は「実際に行くキャスト」（バックは実際に行くキャストで計算）</div>
       </div>
       <div class="f"><label>キャスト（フリーのときは行く人を選ぶ）</label><select id="f_cast" onchange="onCast()"></select>
-        <label style="display:block;font-size:12px;color:var(--sub);margin-top:4px"><input type="checkbox" id="f_castAll" onchange="fillCastSel()"> シフトにない人も出す（ふだんは、その日の出勤のキャストだけ）</label></div>
+        <label style="display:block;font-size:12px;color:var(--sub);margin-top:4px"><input type="checkbox" id="f_castAll" onchange="fillCastSel()" style="width:auto;display:inline;vertical-align:middle;margin-right:4px"> シフトにない人も出す（ふだんは、その日の出勤のキャストだけ）</label></div>
       <div id="castChecks"></div>
       <div id="castInfo"></div>
     </div>
@@ -792,6 +792,8 @@ async function loadShifts(ymd){
   const out = {};
   rows.forEach(r=>{
     const sh = r.data && r.data.shifts && r.data.shifts[ymd];
+    // 内勤が受理（確定）したシフトだけ。変更の申請中・入力中も、確定したことがあるので出す
+    if(!["confirmed", "change_requested", "change_inputting", "change_confirmed"].includes(r.data && r.data.status)) return;
     if(sh && sh.start != null && sh.end != null) out[r.cast_name] = { start: sh.start, end: sh.end, confirmed: ["confirmed", "change_confirmed"].includes(r.data.status) };
   });
   return (shiftCache[ymd] = out);
