@@ -236,6 +236,11 @@
   .chipc{display:block;width:100%;text-align:left;margin-bottom:4px;border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:6px 8px;font-family:inherit;font-size:13.5px;font-weight:800;color:var(--ink);cursor:pointer;}
   .chipc small{font-weight:700;color:var(--sub);}
   .chipc.work{border-color:#f3a6bd;background:#FFF2F6;} .chipc.gone{color:#999;background:#FAFAFA;}
+  /* 今いないの色（押すと ⬜不在→🟪出勤前→🟩お茶→🟥欠勤） */
+  .chipc.gone{background:#EDEDED;border-color:#CFCFCF;color:#555;}
+  .chipc.gone.pre{background:#9B7BE0;border-color:#7E5ED0;color:#fff;} .chipc.gone.tea{background:#43A047;border-color:#2E7D32;color:#fff;} .chipc.gone.absent{background:#E5486C;border-color:#C62850;color:#fff;}
+  .chipc.gone small{color:inherit;opacity:.9;}
+  .daysel.away{background:#EDEDED;border-color:#CFCFCF;} .daysel.pre{background:#9B7BE0;border-color:#7E5ED0;color:#fff;} .daysel.tea{background:#43A047;border-color:#2E7D32;color:#fff;} .daysel.absent{background:#E5486C;border-color:#C62850;color:#fff;}
   .chipc:hover{border-color:#e5638c;}
   .castmeta{font-size:14px;line-height:1.7;}
   /* 💴 精算（キャストの枠の中） */
@@ -2305,7 +2310,7 @@ function playMarks(x){
    ・🗺 今どこに誰が：その日の出勤のキャストは全員、待機中／仕事中／今いない のどれかに必ず入る
        仕事中＝今の時刻に予約がある（自動）／待機中＝待機場所に置いた／それ以外は全部「今いない」
        名前をつまんで移動（待機場所の列・今いない）。長押しでその子の予約を追加
-       今いない：押すたびに グレー（ふつう・退勤）→ 出勤前 → お茶（緑）→ 欠勤（赤）
+       今いない：押すたびに グレー（不在・退勤）→ 出勤前 → お茶（緑）→ 欠勤（赤）
        鶯谷の待機中は、札で席（1〜5）を選ぶ・退席。動かしたら自動で退席。「📜 ログ」で記録
    ・📋 本日のキャスト一覧：1キャスト1枠（予約一覧のかわり）。並び・絞りは全体を見たいと共通
    ============================================================ */
@@ -2381,7 +2386,7 @@ renderBoard = function(){
   const th = c=>`<th class="${AREA_CLASS[c] || ""}">${esc(c)}${c === "鶯谷" ? ` <button type="button" class="logbtn" onclick="openSeatLog()">📜 ログ</button>` : ""}</th>`;
   el.innerHTML = `<table class="board"><tr><th class="corner"></th>${cols.map(th).join("")}</tr>`
     + [["wait", "待機中"], ["work", "仕事中"], ["start", "予約スタート"]].map(([k, l])=>`<tr class="${k}"><th>${l}</th>${cols.map(c=>`<td class="${AREA_CLASS[c] || ""}" data-drop="${k}|${esc(c)}">${(cell[k + "|" + c] || []).map(x=>chip(x, k, c)).join("")}</td>`).join("")}</tr>`).join("")
-    + `<tr class="gone"><th>今いない<br><small style="font-weight:700">押すと色：⬜ふつう→🟪出勤前→🟩お茶→🟥欠勤</small></th><td colspan="${cols.length}" data-drop="gone">${gone.map(x=>chip(x, "gone", "")).join("") || `<span class="hist" style="margin:0">なし</span>`}</td></tr>`
+    + `<tr class="gone"><th>今いない<br><small style="font-weight:700">押すと色：⬜不在→🟪出勤前→🟩お茶→🟥欠勤</small></th><td colspan="${cols.length}" data-drop="gone">${gone.map(x=>chip(x, "gone", "")).join("") || `<span class="hist" style="margin:0">なし</span>`}</td></tr>`
     + `</table>`;
 };
 // その日のキャストの状態を保存（待機場所・今いないの色）
@@ -2561,17 +2566,23 @@ renderListTable = function(){
 };
 
 /* ---------- 本日のキャスト一覧：今の状態のプルダウン（今どこに誰がとつながっている）
-   ふつう／出勤前／お茶／欠勤。出勤前・お茶・欠勤にすると「今いない」へ（新しい情報で上書き） ---------- */
+   不在／出勤前／お茶／欠勤。出勤前・お茶・欠勤にすると「今いない」へ（新しい情報で上書き） ---------- */
 function dayStatusSel(cid){
-  const cd = castDays[cid] || {}, cur = goneKind(cd);
-  if(!KB.CAN_EDIT) return cur ? `<span class="st">${esc(cur)}</span>` : "";
-  return `<select class="daysel ${cur === "お茶" ? "tea" : cur === "欠勤" ? "absent" : cur === "出勤前" ? "pre" : ""}" onclick="event.stopPropagation()" onchange="setDayStatus('${cid}',this.value)">
-    ${[["", "ふつう"], ["出勤前", "出勤前"], ["お茶", "🍵 お茶"], ["欠勤", "❌ 欠勤"]].map(([v, l])=>`<option value="${v}" ${cur === v ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+  const cd = castDays[cid] || {}, x = tlRows().find(r=>r.c && r.c.id === cid);
+  const st = x ? boardState(x) : "gone", col = x ? boardCol(x, st) : "";
+  const cur = st === "gone" ? goneKind(cd) : "_here";
+  const hereLbl = { wait: "🟡 待機中", work: "🔴 仕事中", start: "🔵 予約スタート" }[st] || "";
+  if(!KB.CAN_EDIT) return `<span class="st">${esc(st === "gone" ? "今いない・" + (cur || "不在") : hereLbl + (col ? "（" + col + "）" : ""))}</span>`;
+  const opts = (st !== "gone" ? [["_here", hereLbl + (col ? "（" + col + "）" : "")]] : []).concat([["", "⬜ 不在"], ["出勤前", "🟪 出勤前"], ["お茶", "🟩 お茶"], ["欠勤", "🟥 欠勤"]]);
+  return `<select class="daysel ${cur === "お茶" ? "tea" : cur === "欠勤" ? "absent" : cur === "出勤前" ? "pre" : cur === "" ? "away" : ""}" onclick="event.stopPropagation()" onchange="setDayStatus('${cid}',this.value)">
+    ${opts.map(([v, l])=>`<option value="${v}" ${cur === v ? "selected" : ""}>${l}</option>`).join("")}</select>`;
 }
+// 不在・出勤前・お茶・欠勤 → 今いない へ（新しい情報で上書き）
 async function setDayStatus(cid, v){
+  if(v === "_here") return;
   const seat = seatsOk ? seatOf(cid) : null;
-  if(v && seat) await leaveSeat(seat.id, true);
-  await saveDayPart(cid, v ? { status: v, standby: "" } : { status: "" });
+  if(seat) await leaveSeat(seat.id, true);
+  await saveDayPart(cid, { status: v, standby: "" });
 }
 
 /* ---------- 🔔 確認電話が来ていない予約（画面のいちばん上に赤く）
