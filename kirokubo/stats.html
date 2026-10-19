@@ -290,24 +290,18 @@ async function loadLive(){
 /* ============================================================
    過去＋新しい記録簿をまとめて取りだす
    ============================================================ */
-// 店のお金の見方は2つ（どちらも「総額」ではない）
-//   drop ＝ 店落ち（暫定的な残額 ＋ 雑費）… 過去はキャスト別の月の数字（2025年1月〜）・日ごとは【名前】シート（2026年1月〜）
-//   prov ＝ 暫定的な残額（総額 − 報酬。雑費なし）… 過去は売上管理.xlsx の「年間比較」・日ごとのシート（2018年12月〜）
-let salesMetric = "drop";
-const METRIC_LABEL = { drop: "店落ち（雑費込み）", prov: "暫定的な残額（雑費なし）" };
-function valOfMonth(ym, met){
-  met = met || salesMetric;
-  if(isLive(ym)){ const rs = L.res.filter(r=>r.ym === ym); return rs.length ? rs.reduce((a, r)=>a + (met === "drop" ? r.drop : r.prov), 0) : null; }
-  if(met === "drop"){ const rows = H.cmonth.filter(x=>ymOf(x.ym) === ym && x.drop_yen != null); return rows.length ? rows.reduce((a, x)=>a + n0(x.drop_yen), 0) : null; }
+// 店落ち（雑費込み）＝ 暫定的な残額（総額 − 報酬）＋ 雑費
+//   過去は売上管理.xlsx の「年間比較」・日ごとのシート（2018年12月〜）。各日の記録簿の「暫定的な残額の合計＋雑費合計」と同じ数字
+//   （内勤の日払いも引いたあと＝お店に残る額。キャスト別の店落ちを足したものより5〜10%少ないのはそのため）
+function valOfMonth(ym){
+  if(isLive(ym)){ const rs = L.res.filter(r=>r.ym === ym); return rs.length ? rs.reduce((a, r)=>a + r.drop, 0) : null; }
   const m = H.month.find(x=>ymOf(x.ym) === ym); if(m) return n0(m.sales);
   const ds = H.daily.filter(x=>ymOf(x.d) === ym); return ds.length ? ds.reduce((a, x)=>a + n0(x.sales), 0) : null;
 }
-function dailyVals(months, met){
-  met = met || salesMetric;
+function dailyVals(months){
   const set = new Set(months), out = {};
-  if(met === "drop") H.cday.forEach(x=>{ const ym = ymOf(x.d); if(set.has(ym) && !isLive(ym) && x.drop_yen != null) out[x.d] = (out[x.d] || 0) + n0(x.drop_yen); });
-  else H.daily.forEach(x=>{ const ym = ymOf(x.d); if(set.has(ym) && !isLive(ym)) out[x.d] = n0(x.sales); });
-  L.res.forEach(r=>{ if(set.has(r.ym) && isLive(r.ym)) out[r.d] = (out[r.d] || 0) + (met === "drop" ? r.drop : r.prov); });
+  H.daily.forEach(x=>{ const ym = ymOf(x.d); if(set.has(ym) && !isLive(ym)) out[x.d] = n0(x.sales); });
+  L.res.forEach(r=>{ if(set.has(r.ym) && isLive(r.ym)) out[r.d] = (out[r.d] || 0) + r.drop; });
   return out;
 }
 // キャスト×月（実働時間・店落ち・報酬・本数・新規・店リ・本指名・出勤/お茶/欠勤日数）
@@ -371,9 +365,9 @@ function liveNote(){ return liveYm ? `<span class="livebadge">${ymLabel(liveYm)}
 let salesUnit = "month";
 function renderSales(){
   const R = range(), months = R.months;
-  const sumM = (ms, met)=>ms.reduce((a, ym)=>a + n0(valOfMonth(ym, met)), 0);
-  const cntM = (ms, met)=>ms.filter(ym=>valOfMonth(ym, met) != null).length;
-  const drop = sumM(months, "drop"), prov = sumM(months, "prov"), sel = salesMetric === "drop" ? drop : prov;
+  const sumM = ms=>ms.reduce((a, ym)=>a + n0(valOfMonth(ym)), 0);
+  const cntM = ms=>ms.filter(ym=>valOfMonth(ym) != null).length;
+  const drop = sumM(months);
   const cm = castMonths(months);
   const reward = cm.reduce((a, x)=>a + n0(x.reward), 0);
   const cnt = cm.reduce((a, x)=>a + n0(x.cnt), 0), nw = cm.reduce((a, x)=>a + n0(x.n_new), 0), rp = cm.reduce((a, x)=>a + n0(x.n_repeat), 0), hn = cm.reduce((a, x)=>a + n0(x.n_honshi), 0);
@@ -384,21 +378,19 @@ function renderSales(){
   const el = $("v_sales");
   el.innerHTML = `
     <div class="cards">
-      <div class="c"><div class="k">店落ち（雑費込み）</div><div class="v pink">${cntM(months, "drop") ? yen(Math.round(drop)) : "−"}</div><div class="s">${cntM(months, "drop")}か月ぶん（2025年1月から）</div></div>
-      <div class="c"><div class="k">暫定的な残額（雑費なし）</div><div class="v">${cntM(months, "prov") ? yen(Math.round(prov)) : "−"}</div><div class="s">${cntM(months, "prov")}か月ぶん（2018年12月から）</div></div>
-      <div class="c"><div class="k">前年の同じ月とくらべて</div><div class="v green">${yoy}</div><div class="s">${METRIC_LABEL[salesMetric]}で</div></div>
-      <div class="c"><div class="k">1日平均</div><div class="v">${days ? yen(Math.round(Object.values(dailyVals(months)).reduce((a, b)=>a + b, 0) / days)) : "−"}</div><div class="s">${days}日ぶん・${METRIC_LABEL[salesMetric]}</div></div>
+      <div class="c"><div class="k">店落ち（雑費込み）</div><div class="v pink">${cntM(months) ? yen(Math.round(drop)) : "−"}</div><div class="s">${cntM(months)}か月ぶん</div></div>
+      <div class="c"><div class="k">前年の同じ月とくらべて</div><div class="v green">${yoy}</div><div class="s">両方に数字がある月で</div></div>
+      <div class="c"><div class="k">1日平均の店落ち</div><div class="v">${days ? yen(Math.round(Object.values(dailyVals(months)).reduce((a, b)=>a + b, 0) / days)) : "−"}</div><div class="s">${days}日ぶん</div></div>
       <div class="c"><div class="k">キャスト報酬</div><div class="v">${yen(Math.round(reward))}</div></div>
       <div class="c"><div class="k">本数</div><div class="v">${cnt.toLocaleString("ja-JP")}本</div></div>
       <div class="c"><div class="k">新規／店リピ／本指名</div><div class="v" style="font-size:16px">${nw}／${rp}／${hn}</div><div class="s">${pct(nw, cnt)}／${pct(rp, cnt)}／${pct(hn, cnt)}</div></div>
     </div>
-    <div class="box"><h3>📈 ${METRIC_LABEL[salesMetric]}の推移 <small>${ymLabel(R.from)}〜${ymLabel(R.to)}</small> ${liveNote()}
-      <span class="r"><span class="seg">${[["drop", "店落ち"], ["prov", "暫定的な残額"]].map(([k, l])=>`<button type="button" class="${salesMetric === k ? "on" : ""}" onclick="salesMetric='${k}';renderSales()">${l}</button>`).join("")}</span>
-      <span class="seg" style="margin-left:8px">${[["day", "日"], ["month", "月"], ["year", "年"]].map(([k, l])=>`<button type="button" class="${salesUnit === k ? "on" : ""}" onclick="salesUnit='${k}';renderSales()">${l}</button>`).join("")}</span></span></h3>
+    <div class="box"><h3>📈 店落ちの推移 <small>${ymLabel(R.from)}〜${ymLabel(R.to)}</small> ${liveNote()}
+      <span class="r"><span class="seg">${[["day", "日"], ["month", "月"], ["year", "年"]].map(([k, l])=>`<button type="button" class="${salesUnit === k ? "on" : ""}" onclick="salesUnit='${k}';renderSales()">${l}</button>`).join("")}</span></span></h3>
       <div class="chartwrap tall"><canvas id="ch_sales"></canvas></div>
       <div class="hint">${salesUnit === "month" ? "棒＝その月、線＝前の年の同じ月" : salesUnit === "day" ? "1日ずつ（営業日。朝6時まで）" : "年ごと（期間に入っている月だけ足しています）"}。
-        店落ち＝暫定的な残額（総額 − 報酬）＋ 雑費。<br>過去の数字：店落ちは2025年1月から（日ごとは2026年1月から）、暫定的な残額は2018年12月から（売上管理.xlsx の年間比較）。長い期間の前年比は「暫定的な残額」で見てください</div></div>
-    <div class="box"><h3>📅 年間比較（月ごとの${METRIC_LABEL[salesMetric]}）</h3><div class="tw" id="yearTable"></div></div>
+        店落ち＝暫定的な残額（総額 − 報酬）＋ 雑費。<br>過去の数字は2018年12月から（売上管理.xlsx の年間比較＝各日の記録簿の「暫定的な残額の合計＋雑費合計」。内勤の日払いも引いたあと）</div></div>
+    <div class="box"><h3>📅 年間比較（月ごとの店落ち）</h3><div class="tw" id="yearTable"></div></div>
     <div class="grid2x">
       <div class="box"><h3>🌙 22時を境に（昼／深夜）<small>開始が22:00〜は深夜</small></h3><div class="chartwrap"><canvas id="ch_band"></canvas></div><div class="tw" id="bandTable" style="margin-top:8px"></div></div>
       <div class="box"><h3>🙋 新規・店リピ・本指名</h3><div class="chartwrap"><canvas id="ch_visit"></canvas></div><div class="tw" id="visitTable" style="margin-top:8px"></div></div>
@@ -406,14 +398,14 @@ function renderSales(){
   // 推移のグラフ
   if(salesUnit === "day"){
     const ds = dailyVals(months), keys = Object.keys(ds).sort();
-    chart("ch_sales", { type: "line", data: { labels: keys.map(d=>d.slice(5).replace("-", "/")), datasets: [{ label: METRIC_LABEL[salesMetric], data: keys.map(k=>ds[k]), borderColor: COLORS[0], backgroundColor: "rgba(229,99,140,.12)", fill: true, pointRadius: keys.length > 90 ? 0 : 2, tension: .2 }] }, options: { scales: { y: yenAxis } } });
+    chart("ch_sales", { type: "line", data: { labels: keys.map(d=>d.slice(5).replace("-", "/")), datasets: [{ label: "店落ち", data: keys.map(k=>ds[k]), borderColor: COLORS[0], backgroundColor: "rgba(229,99,140,.12)", fill: true, pointRadius: keys.length > 90 ? 0 : 2, tension: .2 }] }, options: { scales: { y: yenAxis } } });
   }else if(salesUnit === "month"){
     chart("ch_sales", { data: { labels: months.map(ymLabel), datasets: [
-      { type: "bar", label: METRIC_LABEL[salesMetric], data: months.map(ym=>valOfMonth(ym)), backgroundColor: "rgba(229,99,140,.75)", borderRadius: 6 },
+      { type: "bar", label: "店落ち", data: months.map(ym=>valOfMonth(ym)), backgroundColor: "rgba(229,99,140,.75)", borderRadius: 6 },
       { type: "line", label: "前の年", data: months.map(ym=>valOfMonth(ymAdd(ym, -12))), borderColor: COLORS[1], pointRadius: 2, tension: .2 } ] }, options: { scales: { y: yenAxis } } });
   }else{
     const ys = [...new Set(months.map(m=>m.slice(0, 4)))];
-    chart("ch_sales", { type: "bar", data: { labels: ys.map(y=>y + "年"), datasets: [{ label: METRIC_LABEL[salesMetric], data: ys.map(y=>sumM(months.filter(m=>m.startsWith(y)))), backgroundColor: "rgba(229,99,140,.75)", borderRadius: 6 }] }, options: { scales: { y: yenAxis } } });
+    chart("ch_sales", { type: "bar", data: { labels: ys.map(y=>y + "年"), datasets: [{ label: "店落ち", data: ys.map(y=>sumM(months.filter(m=>m.startsWith(y)))), backgroundColor: "rgba(229,99,140,.75)", borderRadius: 6 }] }, options: { scales: { y: yenAxis } } });
   }
   // 年間比較の表（期間に入っている年）
   const years = [...new Set(months.map(m=>m.slice(0, 4)))];
@@ -423,8 +415,8 @@ function renderSales(){
     h += `<tr><td class="l">${m}月</td>` + years.map(y=>{ const v = cell(y, m), p = cell(y - 1, m); const r = v != null && p ? v / p - 1 : null;
       return `<td>${v != null ? yen0(v) : ""}</td><td class="${r == null ? "" : r >= 0 ? "up" : "down"}">${r == null ? "" : (r >= 0 ? "+" : "") + Math.round(r * 1000) / 10 + "%"}</td>`; }).join("") + `</tr>`;
   }
-  h += `<tr class="sum"><td class="l">合計</td>` + years.map(y=>{ let v = 0, p = 0; for(let m = 1; m <= 12; m++){ const a = cell(y, m), b = cell(y - 1, m); if(a != null){ v += a; if(b) p += b; } }
-    const r = p ? v / p - 1 : null; return `<td>${yen0(v)}</td><td class="${r == null ? "" : r >= 0 ? "up" : "down"}">${r == null ? "" : (r >= 0 ? "+" : "") + Math.round(r * 1000) / 10 + "%"}</td>`; }).join("") + `</tr></table>`;
+  h += `<tr class="sum"><td class="l">合計</td>` + years.map(y=>{ let v = 0, vb = 0, p = 0; for(let m = 1; m <= 12; m++){ const a = cell(y, m), b = cell(y - 1, m); if(a != null){ v += a; if(b){ vb += a; p += b; } } }
+    const r = p ? vb / p - 1 : null; return `<td>${yen0(v)}</td><td class="${r == null ? "" : r >= 0 ? "up" : "down"}">${r == null ? "" : (r >= 0 ? "+" : "") + Math.round(r * 1000) / 10 + "%"}</td>`; }).join("") + `</tr></table>`;
   $("yearTable").innerHTML = h + `<div class="hint">前年比は、前の年の同じ月とくらべた増減。合計の前年比は、両方の年に数字がある月だけでくらべています</div>`;
   // 昼／深夜
   const band = groupRows("band", months);
@@ -486,7 +478,7 @@ function renderCast(){
       ${list.map(a=>`<tr>${CAST_COLS.map(([f, , c])=>`<td class="${c || ""}">${fmt(a, f)}</td>`).join("")}</tr>`).join("")}
       <tr class="sum"><td class="l">合計（${list.length}人）</td><td>${tot("days_work")}</td><td>${fmtH(tot("work_hours"))}</td><td>${tot("days_ocha")}</td><td>${tot("days_absent")}</td><td>${tot("cnt")}</td><td>${tot("n_new")}</td><td>${tot("n_repeat")}</td><td>${tot("n_honshi")}</td><td>${yen0(tot("drop_yen"))}</td><td>${yen0(tot("reward"))}</td><td>${yen0(avg)}</td><td></td><td></td></tr>
       </table></div>
-      <div class="hint">実働時間＝出勤した日（お茶の日も入る）の勤務時間。欠勤の日は入りません。時給換算＝報酬÷実働時間。<br>効率：全体の平均時給（${yen0(avg)}円）とくらべて ◎1.2倍以上 ○0.9倍以上 △0.6倍以上 ×それより下</div></div>
+      <div class="hint">キャスト別の店落ちは、内勤の日払いを引く前の数字です（全員を足すと、店落ちタブの数字より少し多くなります）。<br>実働時間＝出勤した日（お茶の日も入る）の勤務時間。欠勤の日は入りません。時給換算＝報酬÷実働時間。<br>効率：全体の平均時給（${yen0(avg)}円）とくらべて ◎1.2倍以上 ○0.9倍以上 △0.6倍以上 ×それより下</div></div>
     <div id="castDetail"></div>`;
   if(castSel) renderCastDetail();
 }
