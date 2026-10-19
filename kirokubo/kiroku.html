@@ -205,6 +205,25 @@
   /* 今いない：出勤前・退勤＝グレー／お茶＝緑／欠勤＝赤 */
   .chipc.inl{display:inline-block;width:auto;margin:0 4px 4px 0;}
   .chipc.tea{background:#E6F6E6;border-color:#9AD39A;color:#2E7A35;} .chipc.absent{background:#FFE8EC;border-color:#F09AAA;color:#B0213F;}
+  /* 今どこに誰が：つまんで移動 */
+  .chipc{user-select:none;-webkit-user-select:none;touch-action:none;}
+  .chipc.pre{background:#EEE8FB;border-color:#B9A6E8;color:#5B4790;}
+  .chipc.dragging{opacity:.35;}
+  .chipc.ghost{position:fixed;z-index:2000;pointer-events:none;width:auto;max-width:220px;box-shadow:0 8px 20px rgba(0,0,0,.18);transform:rotate(-2deg);}
+  table.board td.dropon{outline:3px dashed #e5638c;outline-offset:-3px;}
+  .seatbtns{margin-top:4px;display:flex;gap:3px;align-items:center;flex-wrap:wrap;font-size:12px;}
+  .seatbtns button{font-family:inherit;font-size:12px;font-weight:800;min-width:24px;padding:2px 6px;border:1.5px solid #c9c0f5;border-radius:8px;background:#fff;color:#6c5ce7;cursor:pointer;}
+  .seatbtns button.on{background:#6c5ce7;color:#fff;border-color:#6c5ce7;} .seatbtns button:disabled{opacity:.35;cursor:default;}
+  .seatbtns button.out{color:#B0213F;border-color:#F09AAA;}
+  .logbtn{font-family:inherit;font-size:11px;font-weight:800;padding:1px 8px;border:1.5px solid #8f86d8;border-radius:99px;background:#fff;color:#6c5ce7;cursor:pointer;}
+  /* 何日の画面か・並び */
+  .viewbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 10px;}
+  .viewday{font-size:20px;font-weight:800;color:var(--pink-deep);background:#FFF0F5;border:2px solid #FFC2D1;border-radius:12px;padding:4px 14px;}
+  .viewbar label{font-size:13px;font-weight:800;color:var(--sub);} .viewbar select{font-family:inherit;font-size:14px;padding:6px 10px;border:1.5px solid var(--line);border-radius:99px;}
+  /* 本日のキャスト一覧（1キャスト1枠） */
+  .cblock{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:8px 10px;margin-bottom:10px;}
+  .cblock .ch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;} .cblock .ch b{font-size:16px;} .cblock .ch small{color:var(--sub);font-weight:700;}
+  .cblock .none{font-size:12.5px;color:var(--sub);padding:2px 4px;}
   .seats{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:8px;overflow-x:auto;}
   .seat{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px;}
   .seat.on{border-color:#6c5ce7;background:#F4F2FF;}
@@ -253,8 +272,7 @@
       <span class="bd" id="dayInfo"></span>
       <button class="btn btn-ghost btn-sm" onclick="goToday()">今日（営業日）</button>
     </div>
-    <span class="spacer"></span>
-    <button class="btn btn-ghost btn-sm" id="moneyBtn" onclick="showMoney=!showMoney;renderList()">👁 金額を見る</button></header>
+    <span class="spacer"></span></header>
   <div id="navArea"></div>
   <div id="wipArea"></div>
   <div id="gate" class="gate">読み込み中…</div>
@@ -268,22 +286,25 @@
     <!-- 👑 社長用（「社長」で入ったときだけ） -->
     <details class="fold" id="ownerBox" style="display:none"><summary>👑 社長用：今日の集計</summary><div id="ownerGrid"></div></details>
     <!-- 🗺 今どこに誰が（いつも上に・ひらいておく） -->
-    <details class="fold" id="viewBoard" open><summary>🗺 今どこに誰が<small>待機中・仕事中・今いない（札を押すとキャストの枠）</small></summary>
+    <details class="fold" id="viewBoard" open><summary>🗺 今どこに誰が<small>名前をつまんで移動・長押しでその子の予約を追加・今いないは押すと色が変わる</small></summary>
       <div class="wrapx"><div id="boardGrid"></div></div>
     </details>
     <div class="tabs" id="tabs">
-      <button data-v="list" onclick="showView('list')" class="tabmain">📋 予約一覧<small>状態・伝えた・対応ログ・やること</small></button>
-      <div class="tabgrp"><div class="tabgrp-h">📞 電話受付（電話の内容で選ぶ）</div><div class="tabgrp-b">
-      <button data-v="slotsFree" onclick="showView('slotsFree')">🙋 誰が行ける？<small>「〇〇ちゃん何時空いてる？」「何時から誰か行ける？」</small></button>
-      <button data-v="tl" onclick="showView('tl')">⏱ 全体を見たい<small>全時刻のタイムライン</small></button>
-      </div></div>
-      <button data-v="seats" onclick="showView('seats')">🪑 鶯谷待機席<small>席1〜5・だれが何時から何時まで</small></button>
+      <button data-v="list" onclick="showView('list')" class="tabmain">📋 本日のキャスト一覧<small>1キャスト1枠・予約・状態・伝えた・やること</small></button>
+      <button data-v="tl" onclick="showView('tl')" class="tabmain">⏱ 全体を見たい<small>全時刻のタイムライン</small></button>
+    </div>
+    <!-- どのタブでも、何日の画面かわかるように＋並び・絞り（2つのタブで共通） -->
+    <div class="viewbar">
+      <span class="viewday" id="viewDay"></span>
+      <label>並び・絞り <select id="s_sort" onchange="setSort(this.value)">
+        <option value="kana">あいうえお順</option><option value="start">出勤が早い順</option><option value="endEarly">退勤が早い順</option><option value="endLate">退勤が遅い順</option>
+        <option value="booked">予約があるキャストのみ</option><option value="freeNow">今すぐ行けるキャスト</option></select></label>
     </div>
     <div class="sum" id="sum"></div>
 
-    <!-- 🕐 空き枠 -->
-    <!-- 🪑 鶯谷待機席 -->
-    <div id="viewSeats" style="display:none"><div id="seatBox"></div></div>
+    <!-- 🪑 鶯谷待機席のログ（今どこに誰がの「📜 ログ」から） -->
+    <div class="modal-bg" id="seatLogBg"><div class="modal"><button class="x" onclick="$('seatLogBg').classList.remove('show')" aria-label="閉じる">×</button>
+      <h2>🪑 鶯谷待機席のログ</h2><div id="seatBox"></div></div></div>
 
     <div id="viewSlots" style="display:none">
       <div class="search">
@@ -303,7 +324,6 @@
         <label>何時から <input type="time" id="s_time" step="300" oninput="renderTL()"></label>
         <label>何分 <select id="s_min" onchange="renderTL()"><option value="60">60分</option><option value="90" selected>90分</option><option value="120">120分</option><option value="150">150分</option><option value="180">180分</option><option value="240">240分</option></select></label>
         <label><input type="checkbox" id="s_free" onchange="renderTL()"> 行ける人だけ</label>
-        <label>並び順 <select id="s_sort" onchange="setSort(this.value)"><option value="start">出勤が早い順</option><option value="kana">あいうえお順</option><option value="endEarly">退勤が早い順</option><option value="endLate">退勤が遅い順</option></select></label>
         <button class="btn btn-ghost btn-sm" onclick="clearSearch()">クリア</button>
       </div>
       <details class="castpick"><summary>👥 キャストで絞る（複数OK）<span id="s_castCount"></span></summary><div class="chips" id="s_castChips"></div></details>
@@ -318,7 +338,7 @@
 
     <!-- 📋 予約一覧 -->
     <div id="viewList" style="display:none">
-      <div class="wrapx"><table class="list" id="list"></table></div>
+      <div id="list"></div>
     </div>
   </div>
 </div>
@@ -1483,8 +1503,7 @@ function showView(v){
   try{ localStorage.setItem("kirokuView", v); }catch(e){}
   // 🙋 誰が行ける？：キャストを選べば「その人の空き時間」、選ばなければ「時刻ごとに行ける人」（💁 キャスト決まってる はここにまとめた）
   // 🗺 今どこに誰が は、いつも上に出しておく（タブではない）
-  if(v === "slots" || v === "slotsCast") v = "slotsFree";
-  if(v === "board") v = "list";
+  if(v !== "tl") v = "list";   // タブは「本日のキャスト一覧」と「全体を見たい」の2つだけ
   const box = { tl: "viewTL", list: "viewList", slotsFree: "viewSlots", seats: "viewSeats" };
   ["viewTL", "viewList", "viewSlots", "viewSeats"].forEach(id=>{ const el = $(id); if(el) el.style.display = box[v] === id ? "" : "none"; });
   if(v === "slotsFree" && typeof renderSlots === "function") renderSlots();
@@ -2277,6 +2296,235 @@ function playMarks(x){
   if(!o) return "・プロフなし";
   return "・" + [...playSel].map(k=>(PLAYS.find(p=>p[0] === k) || [k, k])[1] + (o[k] || "？")).join(" ");
 }
+
+/* ============================================================
+   2026/10/19 作りなおし
+   ・🗺 今どこに誰が：その日の出勤のキャストは全員、待機中／仕事中／今いない のどれかに必ず入る
+       仕事中＝今の時刻に予約がある（自動）／待機中＝待機場所に置いた／それ以外は全部「今いない」
+       名前をつまんで移動（待機場所の列・今いない）。長押しでその子の予約を追加
+       今いない：押すたびに グレー（ふつう・退勤）→ 出勤前 → お茶（緑）→ 欠勤（赤）
+       鶯谷の待機中は、札で席（1〜5）を選ぶ・退席。動かしたら自動で退席。「📜 ログ」で記録
+   ・📋 本日のキャスト一覧：1キャスト1枠（予約一覧のかわり）。並び・絞りは全体を見たいと共通
+   ============================================================ */
+const GONE_CYCLE = ["", "出勤前", "お茶", "欠勤"];
+function goneKind(cd){
+  const s = (cd && cd.status) || "";
+  if(["出勤前", "出勤前連絡", "予約スタート"].includes(s)) return "出勤前";
+  if(s === "お茶" || s === "欠勤") return s;
+  return "";
+}
+function workNow(x){
+  const isToday = day === KB.bizDateOf(), now = nowHour();
+  return x.bks.find(b=>b.r.status === "working" || (isToday && b.s <= now && now < b.e && b.r.status !== "done"));
+}
+boardState = function(x){
+  const cd = x.cd || {};
+  if(workNow(x)) return "work";
+  if(cd.settled) return "gone";
+  if(cd.standby && !["お茶", "欠勤"].includes(cd.status)) return "wait";
+  return "gone";
+};
+boardCol = function(x, state){
+  if(state === "work"){
+    const b = workNow(x), a = (b && b.r.area) || "";
+    return STANDBY.find(s=>a.includes(s)) || (x.cd && STANDBY.includes(x.cd.standby) ? x.cd.standby : "出張・他エリア");
+  }
+  const sb = (x.cd && x.cd.standby) || "";
+  return STANDBY.includes(sb) ? sb : (sb ? "出張・他エリア" : "");
+};
+const autoLeft = new Set();
+renderBoard = function(){
+  const el = $("boardGrid"); if(!el || !M.casts) return;
+  if(!shiftCache[day]){ el.innerHTML = `<div class="gate">シフトを読み込み中…</div>`; return; }
+  const cols = STANDBY, cell = {}, gone = [];
+  tlRows().forEach(x=>{
+    const st = boardState(x), col = boardCol(x, st);
+    if(st !== "gone" && col) (cell[st + "|" + col] = cell[st + "|" + col] || []).push(x); else gone.push(x);
+    // 鶯谷で待機中でなくなった人は、自動で退席
+    const s = x.c && seatsOk ? seatOf(x.c.id) : null;
+    if(s && KB.CAN_EDIT && !(st === "wait" && col === "鶯谷") && !autoLeft.has(s.id)){ autoLeft.add(s.id); leaveSeat(s.id, true); }
+  });
+  const used = seatLogs.filter(l=>!l.end_at);
+  const chip = (x, st, col)=>{
+    const cid = x.c ? x.c.id : "";
+    const sh = x.shift ? `${hShort(x.shift.start)}-${hShort(x.shift.end)}` : "";
+    const gk = goneKind(x.cd);
+    const now = nowHour(), live = x.bks.filter(b=>!["done", "cancel", "tobi"].includes(b.r.status));
+    const rel = x.bks.find(b=>b.r.status === "working") || live.filter(b=>b.e > now).sort((a, b)=>a.s - b.s)[0];
+    const pill = rel && st !== "gone" ? `<br><span class="st ${rel.r.status}">${esc(hm(rel.r.start_at))} ${esc(STATUS[rel.r.status] || "")}</span>` : "";
+    const cls = st === "gone" ? "gone inl" + (gk === "出勤前" ? " pre" : gk === "お茶" ? " tea" : gk === "欠勤" ? " absent" : "") : st;
+    let seat = "";
+    if(st === "wait" && col === "鶯谷" && cid && seatsOk && KB.CAN_EDIT){
+      const mine = seatOf(cid);
+      seat = `<div class="seatbtns">🪑${[1, 2, 3, 4, 5].map(n=>{ const u = used.find(l=>l.seat === n); return `<button type="button" class="${mine && mine.seat === n ? "on" : ""}" ${u && u.cast_id !== cid ? "disabled" : ""} onclick="sitDown(${n},'${cid}')">${n}</button>`; }).join("")}
+        ${mine ? `<button type="button" class="out" onclick="leaveSeat(${mine.id})">退席</button><small>${hm(mine.start_at)}〜</small>` : ""}</div>`;
+    }
+    return `<div class="chipc ${cls}" data-cid="${cid}" data-st="${st}">【${esc(castLabel(x))}】${esc(sh)}${st === "gone" && gk ? `<small>（${gk}）</small>` : ""}${x.cd && x.cd.settled ? "<small>（精算済）</small>" : ""}${pill}${seat}</div>`;
+  };
+  const th = c=>`<th class="${AREA_CLASS[c] || ""}">${esc(c)}${c === "鶯谷" ? ` <button type="button" class="logbtn" onclick="openSeatLog()">📜 ログ</button>` : ""}</th>`;
+  el.innerHTML = `<table class="board"><tr><th class="corner"></th>${cols.map(th).join("")}</tr>`
+    + [["wait", "待機中"], ["work", "仕事中"]].map(([k, l])=>`<tr class="${k}"><th>${l}</th>${cols.map(c=>`<td class="${AREA_CLASS[c] || ""}" data-drop="${k}|${esc(c)}">${(cell[k + "|" + c] || []).map(x=>chip(x, k, c)).join("")}</td>`).join("")}</tr>`).join("")
+    + `<tr class="gone"><th>今いない<br><small style="font-weight:700">押すと色：⬜ふつう→🟪出勤前→🟩お茶→🟥欠勤</small></th><td colspan="${cols.length}" data-drop="gone">${gone.map(x=>chip(x, "gone", "")).join("") || `<span class="hist" style="margin:0">なし</span>`}</td></tr>`
+    + `</table>`;
+};
+// その日のキャストの状態を保存（待機場所・今いないの色）
+async function saveDayPart(cid, patch){
+  if(!KB.CAN_EDIT){ toast("作成中のため、動かせるのは店長だけです"); return false; }
+  try{
+    const r = q(await sb.from("kb_cast_days").upsert(Object.assign({ biz_date: day, cast_id: cid, updated_at: new Date().toISOString(), updated_by: KB.operatorName() }, patch), { onConflict: "biz_date,cast_id" }).select("*").single());
+    castDays[cid] = r; renderList(); return true;
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); return false; }
+}
+async function moveCast(cid, target){
+  const x = tlRows().find(r=>r.c && r.c.id === cid); if(!x) return;
+  const [kind, area] = target.split("|");
+  const seat = seatsOk ? seatOf(cid) : null;
+  if(kind === "work"){ toast("仕事中は、予約の時間に自動で入ります"); return; }
+  if(kind === "gone"){
+    if(seat) await leaveSeat(seat.id, true);
+    if(await saveDayPart(cid, { standby: "", status: "" })) toast(castLabel(x) + " → 今いない");
+    return;
+  }
+  if(seat && area !== "鶯谷") await leaveSeat(seat.id, true);
+  if(await saveDayPart(cid, { standby: area, status: "" })) toast(castLabel(x) + " → " + area + "で待機" + (workNow(x) ? "（予約中なので、終わるまでは仕事中に出ます）" : ""));
+}
+async function cycleGone(cid){
+  const cd = castDays[cid] || {};
+  const next = GONE_CYCLE[(GONE_CYCLE.indexOf(goneKind(cd)) + 1) % GONE_CYCLE.length];
+  await saveDayPart(cid, { status: next });
+}
+// つまんで移動・長押し・押す（スマホ・パソコンどちらでも）
+(function(){
+  let st = null, ghost = null, over = null;
+  function clearOver(){ if(over){ over.classList.remove("dropon"); over = null; } }
+  document.addEventListener("pointerdown", e=>{
+    const chip = e.target.closest && e.target.closest("#boardGrid .chipc[data-cid]");
+    if(!chip || e.target.closest("button") || !chip.dataset.cid) return;
+    st = { chip, cid: chip.dataset.cid, gone: chip.dataset.st === "gone", x: e.clientX, y: e.clientY, moved: false, long: false };
+    st.timer = setTimeout(()=>{ if(st && !st.moved){ st.long = true; try{ navigator.vibrate && navigator.vibrate(30); }catch(_){} if(KB.CAN_EDIT) newBookingFor(st.cid, ""); } }, 600);
+  });
+  document.addEventListener("pointermove", e=>{
+    if(!st) return;
+    if(!st.moved && Math.hypot(e.clientX - st.x, e.clientY - st.y) > 8){
+      if(st.long) return;
+      st.moved = true; clearTimeout(st.timer);
+      if(!KB.CAN_EDIT){ st = null; return; }
+      ghost = st.chip.cloneNode(true); ghost.classList.add("ghost"); document.body.appendChild(ghost);
+      st.chip.classList.add("dragging");
+    }
+    if(st && st.moved && ghost){
+      e.preventDefault();
+      ghost.style.left = (e.clientX + 6) + "px"; ghost.style.top = (e.clientY + 6) + "px";
+      ghost.style.display = "none"; const t = document.elementFromPoint(e.clientX, e.clientY); ghost.style.display = "";
+      const td = t && t.closest && t.closest("#boardGrid td[data-drop]");
+      if(td !== over){ clearOver(); if(td){ over = td; td.classList.add("dropon"); } }
+    }
+  }, { passive: false });
+  function end(){
+    if(!st) return;
+    clearTimeout(st.timer);
+    const s = st; st = null;
+    if(ghost){ ghost.remove(); ghost = null; }
+    s.chip.classList.remove("dragging");
+    const target = over && over.dataset.drop; clearOver();
+    if(s.moved){ if(target) moveCast(s.cid, target); return; }
+    if(!s.long && s.gone) cycleGone(s.cid);
+  }
+  document.addEventListener("pointerup", end);
+  document.addEventListener("pointercancel", end);
+})();
+// 🪑 席：今どこに誰がの札から。ログは「📜 ログ」で
+leaveSeat = async function(logId, quiet){
+  try{
+    q(await sb.from("kb_seat_logs").update({ end_at: new Date().toISOString(), end_by: KB.operatorName() }).eq("id", logId));
+    await loadSeats(); renderSeats(); renderBoard();
+    if(!quiet) toast("退席しました");
+  }catch(e){ toast("記録できませんでした：" + (e.message || e)); }
+};
+renderSeats = function(){
+  const el = $("seatBox"); if(!el) return;
+  if(!seatsOk){ el.innerHTML = `<div class="gate">SQL 102（鶯谷待機席）を実行すると使えます</div>`; return; }
+  const mins = l=>Math.round(((l.end_at ? new Date(l.end_at) : new Date()) - new Date(l.start_at)) / 60000);
+  const log = seatLogs.slice().sort((a, b)=>String(a.start_at).localeCompare(String(b.start_at)));
+  el.innerHTML = `<div class="hint2" style="margin:0 0 8px">${esc(dayTitle())}　今どこに誰がの「鶯谷・待機中」の札で席を選ぶと記録されます。退席・移動すると退席の時刻が入ります。</div>`
+    + (log.length ? `<table class="list"><tr><th>席</th><th>キャスト</th><th>座った</th><th>退席</th><th>時間</th><th>記録</th></tr>${log.map(l=>`<tr>
+      <td>${l.seat}番</td><td><b>${esc(castName(l.cast_id))}</b></td><td>${hm(l.start_at)}</td><td>${l.end_at ? hm(l.end_at) : "<b style='color:#6c5ce7'>座っている</b>"}</td>
+      <td>${mins(l)}分</td><td><small>${esc(l.start_by)}${l.end_by ? " → " + esc(l.end_by) : ""}</small></td></tr>`).join("")}</table>` : `<div class="hist">まだ記録はありません</div>`);
+};
+function openSeatLog(){ renderSeats(); $("seatLogBg").classList.add("show"); }
+KB.closeOnBackdrop($("seatLogBg"), ()=>$("seatLogBg").classList.remove("show"));
+
+// 何日の画面か
+function dayTitle(){
+  if(!day) return "";
+  const d = new Date(day + "T12:00:00Z"), w = "日月火水木金土"[d.getUTCDay()];
+  return `📅 ${d.getUTCMonth() + 1}月${d.getUTCDate()}日（${w}）${day === KB.bizDateOf() ? "・今日" : ""}`;
+}
+const __loadDayV = loadDay;
+loadDay = async function(){ if($("viewDay")) $("viewDay").textContent = dayTitle(); await __loadDayV(); if($("viewDay")) $("viewDay").textContent = dayTitle(); };
+
+// 並び・絞り（本日のキャスト一覧・全体を見たい 共通）：予約があるキャストのみ／今すぐ行けるキャスト を追加
+function freeNowOf(x){
+  if(day !== KB.bizDateOf() || !x.shift) return false;
+  const now = nowHour(), g = gapOf(x), cd = x.cd || {};
+  if(now < x.shift.start || now >= x.shift.end) return false;
+  if(cd.settled || ["お茶", "欠勤", "精算済"].includes(cd.status)) return false;
+  return !x.bks.some(b=>b.s - g <= now && now < b.e + g);
+}
+sortRows = function(list){
+  const mode = ($("s_sort") && $("s_sort").value) || "kana";
+  const kana = x => String((x.c && (x.c.kana || x.c.official_name || x.c.temp_name)) || x.name);
+  const st = x => x.shift ? x.shift.start : 99, en = x => x.shift ? x.shift.end : 99;
+  if(mode === "booked") list = list.filter(x=>x.bks.length);
+  if(mode === "freeNow") list = list.filter(freeNowOf);
+  return list.sort((a, b)=>
+    mode === "kana" ? kana(a).localeCompare(kana(b), "ja")
+    : mode === "endEarly" ? en(a) - en(b)
+    : mode === "endLate" ? en(b) - en(a)
+    : st(a) - st(b));
+};
+setSort = function(v){ try{ localStorage.setItem("kirokuSort", v); }catch(e){} renderList(); };
+// 全体を見たい：名前を押すと、その子の予約を追加（キャストの枠の窓はなくした）
+jumpCast = function(castId){ if(castId && KB.CAN_EDIT) newBookingFor(castId, ""); };
+
+// 📋 本日のキャスト一覧（1キャスト1枠）
+function resCells(r){
+  const c = r.kb_customers || {};
+  const stSel = KB.CAN_EDIT
+    ? `<select class="stsel st ${r.status}" onclick="event.stopPropagation()" onchange="quickStatus(${r.id},this.value)">${statusKeys(r.status).map(k=>`<option value="${k}" ${k === r.status ? "selected" : ""}>${STATUS[k]}</option>`).join("")}</select>`
+    : `<span class="st ${r.status}">${STATUS[r.status] || r.status}</span>`;
+  const told = r.cast_notified_at
+    ? `<button class="told on" onclick="event.stopPropagation();toggleNotified(${r.id})" title="押すと取り消し">✅ 伝えた<small>${esc(r.cast_notified_by || "")} ${whenShort(r.cast_notified_at)}</small></button>`
+    : `<button class="told" onclick="event.stopPropagation();toggleNotified(${r.id})">⚠️ まだ<small>押すと「伝えた」</small></button>`;
+  const logs = logOf(r).slice().reverse();
+  const logHtml = `<div class="mlog">${logs.length
+      ? logs.slice(0, 2).map(l=>`<div><b>${esc(whenShort(l.at))} ${esc(l.by || "")}</b> ${esc(l.text)}</div>`).join("") + (logs.length > 2 ? `<div class="more">ほか ${logs.length - 2}件</div>` : "")
+      : `<div class="none">受付：${esc(r.created_by || "")} ${whenShort(r.created_at)}</div>`}
+    ${KB.CAN_EDIT ? `<button class="addlog" onclick="event.stopPropagation();addLogPrompt(${r.id})">＋ ログ</button>` : ""}</div>`;
+  return `<td><b>${hm(r.start_at)}</b>〜${hm(r.end_at)}</td>
+    <td>${r.dummy_name ? `<small style="color:#6c5896">🎭${esc(r.dummy_name)}</small><br>` : ""}${esc(String(storeLabel(r.store_key) || "").slice(0, 3))}</td>
+    <td>${esc(r.course)}${/^\d+$/.test(r.course) ? "分" : ""}${r.free_kind ? "・" + FREE_SUFFIX[r.free_kind] : ""}${r.extension_count ? " 延長" + r.extension_count : ""}${r.payment !== "cash" ? " 💳" : ""}<br><small style="color:var(--sub)">${esc(r.area || "")}</small></td>
+    <td>${c.ng ? "⚠️" : ""}${esc(c.name || "")}<small style="color:var(--sub)"> ${(VISIT.find(v=>v[0] === r.visit_kind) || [])[1] || ""}</small>${c.phone ? `<br><span class="tel">📞 ${esc(c.phone)}</span>` : ""}</td>
+    <td>${stSel}${todosHtml(r)}</td><td>${told}</td><td>${logHtml}</td>`;
+}
+renderListTable = function(){
+  const el = $("list"); if(!el || !M.casts) return;
+  const byStart = (a, b)=>String(a.start_at).localeCompare(String(b.start_at));
+  const casts = sortRows(tlRows());
+  const STATE = { wait: "待機中", work: "仕事中", gone: "今いない" };
+  const head = `<tr><th>時間</th><th>店舗</th><th>コース・エリア</th><th>お客さん・電話</th><th>状態・やること</th><th>キャストに</th><th>対応ログ</th></tr>`;
+  const block = (title, sub, list, cid)=>`<div class="cblock">
+      <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
+      ${list.length ? `<div class="wrapx"><table class="list">${head}${list.map(r=>`<tr class="r" onclick="openForm(${r.id})">${resCells(r)}</tr>`).join("")}</table></div>` : `<div class="none">予約なし</div>`}</div>`;
+  const noCast = rows.filter(r=>!r.cast_id).sort(byStart);
+  const mode = $("s_sort").value;
+  el.innerHTML = (noCast.length ? block("キャスト未定", "", noCast, "") : "")
+    + (casts.length ? casts.map(x=>{
+        const st = boardState(x), col = boardCol(x, st), gk = goneKind(x.cd);
+        const sub = `${x.shift ? "出勤 " + tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) : "シフトなし"}・${STATE[st]}${st !== "gone" && col ? "（" + col + "）" : gk ? "（" + gk + "）" : ""}`;
+        return block("【" + esc(castLabel(x)) + "】", esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart) : [], x.c ? x.c.id : "");
+      }).join("") : `<div class="gate">${mode === "freeNow" ? "今すぐ行けるキャストはいません" : mode === "booked" ? "予約があるキャストはいません" : "この日のキャストがいません"}</div>`);
+};
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
