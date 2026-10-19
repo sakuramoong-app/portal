@@ -224,6 +224,7 @@
   .cblock{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:8px 10px;margin-bottom:10px;}
   .cblock .ch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;} .cblock .ch b{font-size:16px;} .cblock .ch small{color:var(--sub);font-weight:700;}
   .cblock .none{font-size:12.5px;color:var(--sub);padding:2px 4px;}
+/* 🔔 確認電話の通知 */  .callalert{background:#FFE8EC;border:2px solid #E5486C;border-radius:14px;padding:8px 12px;margin:8px 0;color:#B0213F;font-weight:800;font-size:15px;}  .callalert button{display:block;width:100%;text-align:left;margin-top:6px;font-family:inherit;font-size:14px;font-weight:700;color:#7a1328;background:#fff;border:1.5px solid #F09AAA;border-radius:10px;padding:6px 10px;cursor:pointer;}  /* 本日のキャスト一覧：今の状態 */  .daysel{font-family:inherit;font-size:13px;font-weight:800;padding:4px 8px;border:1.5px solid var(--line);border-radius:99px;background:#fff;}  .daysel.pre{background:#EEE8FB;border-color:#B9A6E8;} .daysel.tea{background:#E6F6E6;border-color:#9AD39A;} .daysel.absent{background:#FFE8EC;border-color:#F09AAA;}
   .seats{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:8px;overflow-x:auto;}
   .seat{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px;}
   .seat.on{border-color:#6c5ce7;background:#F4F2FF;}
@@ -280,6 +281,7 @@
   <div id="main" style="display:none">
     <div class="stats hide" id="stats" style="display:none"></div>
     <div class="tax hide" id="tax" style="display:none"></div>
+    <div id="callAlerts"></div>
     <div class="notice"><textarea id="notice" placeholder="📢 本日のお知らせ（ここに書くと赤く大きく出ます）" onchange="saveNotice()"></textarea></div>
     <!-- 📊 今日の数字（内勤用・ふだんはしまっておく） -->
     <details class="fold" id="todayBox"><summary>📊 今日の数字</summary><div class="todaygrid" id="todayGrid"></div></details>
@@ -2317,20 +2319,33 @@ function workNow(x){
   const isToday = day === KB.bizDateOf(), now = nowHour();
   return x.bks.find(b=>b.r.status === "working" || (isToday && b.s <= now && now < b.e && b.r.status !== "done"));
 }
+// 仕事中：①予約の状態が「仕事中」②今の時刻に予約がある → 自動。ただし、そのあとに札を動かしていたら、動かしたほうが勝ち（新しいほう）
+function autoWork(x){
+  if(!x.c) return null;
+  const w = rows.find(r=>r.cast_id === x.c.id && r.status === "working");
+  if(w) return { r: w, t: Date.parse(w.updated_at || w.start_at || 0) || 0 };
+  const b = workNow(x);
+  return b ? { r: b.r, t: Date.parse(b.r.start_at) || 0 } : null;
+}
+const manualT = x=>(x.cd && x.cd.updated_at) ? Date.parse(x.cd.updated_at) || 0 : 0;
 boardState = function(x){
   const cd = x.cd || {};
-  if(workNow(x)) return "work";
+  const aw = autoWork(x);
+  if(aw && aw.t >= manualT(x)) return "work";
   if(cd.settled) return "gone";
-  if(cd.standby && !["お茶", "欠勤"].includes(cd.status)) return "wait";
+  if(cd.status === "仕事中") return "work";
+  if(cd.standby && !["お茶", "欠勤", "出勤前"].includes(cd.status)) return "wait";
   return "gone";
 };
 boardCol = function(x, state){
-  if(state === "work"){
-    const b = workNow(x), a = (b && b.r.area) || "";
-    return STANDBY.find(s=>a.includes(s)) || (x.cd && STANDBY.includes(x.cd.standby) ? x.cd.standby : "出張・他エリア");
-  }
   const sb = (x.cd && x.cd.standby) || "";
-  return STANDBY.includes(sb) ? sb : (sb ? "出張・他エリア" : "");
+  const inList = s => STANDBY.includes(s) ? s : (s ? "出張・他エリア" : "");
+  if(state === "work"){
+    const aw = autoWork(x);
+    if(aw && aw.t >= manualT(x)){ const a = aw.r.area || ""; return STANDBY.find(s=>a.includes(s)) || inList(sb) || "出張・他エリア"; }
+    return inList(sb) || "出張・他エリア";
+  }
+  return inList(sb);
 };
 const autoLeft = new Set();
 renderBoard = function(){
@@ -2379,14 +2394,18 @@ async function moveCast(cid, target){
   const x = tlRows().find(r=>r.c && r.c.id === cid); if(!x) return;
   const [kind, area] = target.split("|");
   const seat = seatsOk ? seatOf(cid) : null;
-  if(kind === "work"){ toast("仕事中は、予約の時間に自動で入ります"); return; }
+  if(kind === "work"){   // つまんで仕事中へ（新しい情報で上書き）
+    if(seat) await leaveSeat(seat.id, true);
+    if(await saveDayPart(cid, { standby: area, status: "仕事中" })) toast(castLabel(x) + " → " + area + "で仕事中");
+    return;
+  }
   if(kind === "gone"){
     if(seat) await leaveSeat(seat.id, true);
     if(await saveDayPart(cid, { standby: "", status: "" })) toast(castLabel(x) + " → 今いない");
     return;
   }
   if(seat && area !== "鶯谷") await leaveSeat(seat.id, true);
-  if(await saveDayPart(cid, { standby: area, status: "" })) toast(castLabel(x) + " → " + area + "で待機" + (workNow(x) ? "（予約中なので、終わるまでは仕事中に出ます）" : ""));
+  if(await saveDayPart(cid, { standby: area, status: "" })) toast(castLabel(x) + " → " + area + "で待機");
 }
 async function cycleGone(cid){
   const cd = castDays[cid] || {};
@@ -2522,7 +2541,7 @@ renderListTable = function(){
   const STATE = { wait: "待機中", work: "仕事中", gone: "今いない" };
   const head = `<tr><th>時間</th><th>店舗</th><th>コース・エリア</th><th>お客さん・電話</th><th>状態・やること</th><th>キャストに</th><th>対応ログ</th></tr>`;
   const block = (title, sub, list, cid)=>`<div class="cblock">
-      <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
+      <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid ? dayStatusSel(cid) : ""}${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
       ${list.length ? `<div class="wrapx"><table class="list">${head}${list.map(r=>`<tr class="r" onclick="openForm(${r.id})">${resCells(r)}</tr>`).join("")}</table></div>` : `<div class="none">予約なし</div>`}</div>`;
   const noCast = rows.filter(r=>!r.cast_id).sort(byStart);
   const mode = $("s_sort").value;
@@ -2533,6 +2552,57 @@ renderListTable = function(){
         return block("【" + esc(castLabel(x)) + "】", esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart) : [], x.c ? x.c.id : "");
       }).join("") : `<div class="gate">${mode === "freeNow" ? "今すぐ行けるキャストはいません" : mode === "booked" ? "予約があるキャストはいません" : "この日のキャストがいません"}</div>`);
 };
+
+/* ---------- 本日のキャスト一覧：今の状態のプルダウン（今どこに誰がとつながっている）
+   ふつう／出勤前／お茶／欠勤。出勤前・お茶・欠勤にすると「今いない」へ（新しい情報で上書き） ---------- */
+function dayStatusSel(cid){
+  const cd = castDays[cid] || {}, cur = goneKind(cd);
+  if(!KB.CAN_EDIT) return cur ? `<span class="st">${esc(cur)}</span>` : "";
+  return `<select class="daysel ${cur === "お茶" ? "tea" : cur === "欠勤" ? "absent" : cur === "出勤前" ? "pre" : ""}" onclick="event.stopPropagation()" onchange="setDayStatus('${cid}',this.value)">
+    ${[["", "ふつう"], ["出勤前", "出勤前"], ["お茶", "🍵 お茶"], ["欠勤", "❌ 欠勤"]].map(([v, l])=>`<option value="${v}" ${cur === v ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+}
+async function setDayStatus(cid, v){
+  const seat = seatsOk ? seatOf(cid) : null;
+  if(v && seat) await leaveSeat(seat.id, true);
+  await saveDayPart(cid, v ? { status: v, standby: "" } : { status: "" });
+}
+
+/* ---------- 🔔 確認電話が来ていない予約（画面のいちばん上に赤く）
+   ・予約の1時間前なのに「前日確認電話」「1H前確認電話」のまま
+   ・前日20:15をすぎたのに、次の営業日の予約が「前日確認電話」のまま
+   メールは SQL 103（5分ごと）。画面は2分ごとに見なおす ---------- */
+let callAlertRows = [];
+function addDays(ymd, n){ const d = new Date(ymd + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+async function loadCallAlerts(){
+  try{
+    const today = KB.bizDateOf();
+    callAlertRows = q(await sb.from("kb_reservations").select("id,biz_date,start_at,cast_id,status,store_key")
+      .in("biz_date", [today, addDays(today, 1)]).in("status", ["pre_call", "hour_call"]).eq("deleted", false)) || [];
+  }catch(e){ callAlertRows = []; }
+  renderCallAlerts();
+}
+function renderCallAlerts(){
+  const el = $("callAlerts"); if(!el || !M.casts) return;
+  const now = Date.now(), jst = new Date(now + 9 * 3600 * 1000);
+  const items = [];
+  callAlertRows.forEach(r=>{
+    const st = r.start_at ? Date.parse(r.start_at) : null;
+    if(st && now >= st - 3600000 && now < st) items.push({ r, kind: "1時間前の確認電話がまだ" });
+    else if(r.status === "pre_call" && (!st || now < st)){
+      const due = Date.parse(addDays(r.biz_date, -1) + "T20:15:00+09:00");
+      if(now >= due) items.push({ r, kind: "前日の確認電話がまだ" });
+    }
+  });
+  el.innerHTML = items.length ? `<div class="callalert">🔔 確認電話が来ていない予約があります${items.map(({ r, kind })=>`
+      <button type="button" onclick="openAlertRes(${r.id},'${r.biz_date}')"><b>${esc(kind)}</b>　${r.biz_date !== day ? esc(r.biz_date.slice(5).replace("-", "/")) + " " : ""}${r.start_at ? hm(r.start_at) : "時間未定"}　${esc(castName(r.cast_id))}　<u>開く</u></button>`).join("")}</div>` : "";
+}
+async function openAlertRes(id, bd){
+  if(bd !== day){ $("day").value = bd; await loadDay(); }
+  const r = rows.find(x=>x.id === id); if(r) openForm(id);
+}
+loadCallAlerts(); setInterval(loadCallAlerts, 120000);
+const __loadDayA = loadDay;
+loadDay = async function(){ await __loadDayA(); renderCallAlerts(); };
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
