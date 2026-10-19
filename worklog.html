@@ -438,27 +438,46 @@ const SUM_REPOS = REPOS.concat([
   { repo:"sakurashift-dev",        label:"サクラシフト（試作）" },
   { repo:"sakuramoong-onboarding", label:"新人さん向け" },
 ]);
-async function fetchAllCommits(repo){
-  let out = [];
+// GitHub はログインなしだと 1時間に60回までしか読めない → 読んだ記録はこのブラウザに覚えておき、次からは新しい分だけ読む
+// 覚えておくもの：アプリごとに { at: 読んだ時刻, list: [{ sha, date }] }。30分以内に読んだアプリは、読みにいかない
+let rateReset = null;
+function cacheGet(){ try{ return JSON.parse(localStorage.getItem("wlCommitCache") || "{}"); }catch(e){ return {}; } }
+function cacheSet(c){ try{ localStorage.setItem("wlCommitCache", JSON.stringify(c)); }catch(e){} }
+async function ghPage(repo, page, since){
+  const res = await fetch(`https://api.github.com/repos/${OWNER}/${repo}/commits?per_page=100&page=${page}` + (since ? "&since=" + encodeURIComponent(since) : ""));
+  if(!res.ok){ const r = res.headers.get("x-ratelimit-reset"); if(r) rateReset = new Date(Number(r) * 1000); throw new Error("GitHub " + res.status); }
+  return (await res.json()).map(c=>({ sha: c.sha, date: c.commit.author.date }));
+}
+async function fetchAllCommits(repo, cache){
+  const old = cache[repo];
+  if(old && Date.now() - old.at < 30 * 60000) return old.list;      // 30分以内に読んだ → そのまま
+  let list = [];
+  const since = old && old.list.length ? old.list.reduce((m, c)=>c.date > m ? c.date : m, "") : null;
   for(let page = 1; page <= 10; page++){
-    const res = await fetch(`https://api.github.com/repos/${OWNER}/${repo}/commits?per_page=100&page=${page}`);
-    if(!res.ok) throw new Error("GitHub " + res.status);
-    const list = await res.json();
-    out = out.concat(list);
-    if(list.length < 100) break;
+    const got = await ghPage(repo, page, since);
+    list = list.concat(got);
+    if(got.length < 100) break;
   }
-  return out;
+  if(old){ const seen = new Set(old.list.map(c=>c.sha)); list = old.list.concat(list.filter(c=>!seen.has(c.sha))); }
+  cache[repo] = { at: Date.now(), list };
+  return list;
 }
 async function loadSummary(){
   const el = document.getElementById("sum");
-  let commits = [], failed = [];
-  await Promise.all(SUM_REPOS.map(async r=>{
-    try{ (await fetchAllCommits(r.repo)).forEach(c=>commits.push({ repo: r, at: new Date(c.commit.author.date) })); }
-    catch(e){ failed.push(r.label); }
-  }));
+  let commits = [], failed = [], stale = [];
+  const cache = cacheGet();
+  for(const r of SUM_REPOS){   // 1つずつ読む（上限にかかったら、そこから先は覚えている記録を使う）
+    let list = null;
+    if(!rateReset){ try{ list = await fetchAllCommits(r.repo, cache); }catch(e){} }
+    if(!list && cache[r.repo]){ list = cache[r.repo].list; stale.push(r.label); }
+    if(!list){ failed.push(r.label); continue; }
+    list.forEach(c=>commits.push({ repo: r, at: new Date(c.date) }));
+  }
+  cacheSet(cache);
   let done = [];
   try{ const { data } = await sb.from("mgr_items").select("app,title,done_at,created_at").eq("kind", "done").order("done_at"); done = data || []; }catch(e){}
-  if(!commits.length){ el.innerHTML = `<div class="empty">GitHub の記録を読めませんでした（1時間に読める回数の上限かもしれません。少したってから開き直してください）</div>`; return; }
+  const resetTxt = rateReset ? `${String(rateReset.getHours()).padStart(2, "0")}:${String(rateReset.getMinutes()).padStart(2, "0")}ごろ` : "1時間ほどたってから";
+  if(!commits.length){ el.innerHTML = `<div class="empty">GitHub の記録を読めませんでした。<br>GitHub は1時間に読める回数に上限があります。${resetTxt}に開き直してください。<br><small>（一度読めたら、このブラウザが覚えておくので、次からはほとんど読みにいきません）</small></div>`; return; }
   commits.sort((a, b)=>a.at - b.at);
   const ymd = d=>jst(d).toISOString().slice(0, 10), hh = d=>jst(d).getUTCHours();
   const hm = d=>{ const j = jst(d); return String(j.getUTCHours()).padStart(2, "0") + ":" + String(j.getUTCMinutes()).padStart(2, "0"); };
@@ -498,7 +517,8 @@ async function loadSummary(){
       <div class="c"><div class="k">夜（22時〜朝6時）の公開</div><div class="v">${Math.round(night / commits.length * 100)}%</div><div class="s">${night}回</div></div>
       <div class="c"><div class="k">ボードの完了</div><div class="v">${done.length}件</div><div class="s">できたこと</div></div>
     </div>
-    ${failed.length ? `<div class="note2" style="color:#d9534f">※ 読めなかったアプリ：${failed.map(esc).join("、")}（少したってから開き直すと出ます）</div>` : ""}
+    ${failed.length ? `<div class="note2" style="color:#d9534f">※ 読めなかったアプリ：${failed.map(esc).join("、")}（GitHub の読める回数の上限です。${resetTxt}に開き直すと出ます）</div>` : ""}
+    ${stale.length ? `<div class="note2">※ ${stale.map(esc).join("、")} は、前に読んだ記録で出しています（GitHub の上限のため。${resetTxt}に開き直すと新しくなります）</div>` : ""}
     <div class="sbox"><h3>📅 月ごと</h3>
       <table class="st"><tr><th class="l">月</th><th>作業した日</th><th>公開した回数</th><th>作業時間の目安</th></tr>
       ${Object.keys(months).sort().map(m=>{ const o = months[m]; return `<tr><td class="l">${m.slice(0, 4)}年${Number(m.slice(5))}月</td><td>${o.days}日</td><td>${o.commits}回</td><td>${h1(o.hours)}時間〜</td></tr>`; }).join("")}
