@@ -270,6 +270,24 @@
   .placepick{background:#F2F8FF;border:1.5px solid #9cc6ee;border-radius:12px;padding:8px 10px;margin:8px 0;}
   .placepick .pp{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;margin:3px 4px 0 0;font-family:inherit;font-size:13px;font-weight:800;padding:5px 10px;border:1.5px solid #9cc6ee;border-radius:10px;background:#fff;color:#1f5d99;cursor:pointer;text-align:left;}
   .placepick .pp.on{background:#1f5d99;color:#fff;} .placepick .pp .fee{color:#C62850;} .placepick .pp.on .fee{color:#FFE0E8;} .placepick .pp small{font-weight:700;opacity:.75;} .placepick .pp.new{border-style:dashed;}
+  /* 本日のキャスト一覧：予約のカード */
+  .modal-bg.silent{display:none !important;}
+  .rescard{background:#fff;border:2px solid #EAD7DD;border-radius:14px;margin:8px 0;overflow:hidden;}
+  .rescard.cx{opacity:.55;} .rescard.cx .rc-time{text-decoration:line-through;}
+  .rc-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#FBF3F6;border-bottom:1.5px solid #EAD7DD;padding:8px 10px;}
+  .rc-time{font-family:inherit;font-size:20px;font-weight:800;padding:2px 6px;border:1.5px solid #EAD7DD;border-radius:8px;color:var(--ink);background:#fff;} .rc-end{font-size:15px;font-weight:700;color:var(--sub);}
+  .rc-store{font-size:14px;font-weight:800;white-space:nowrap;} .rc-top .told{font-size:12.5px;} .rc-open{font-family:inherit;font-size:13px;font-weight:800;border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:5px 12px;cursor:pointer;}
+  .rc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0;}
+  .rc-box{padding:8px 10px;border-right:1.5px solid #F1E3E7;font-size:14px;} .rc-box:last-child{border-right:none;}
+  .rc-h{font-size:12px;font-weight:800;color:var(--sub);margin-bottom:4px;} .rc-row{margin:3px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+  .rc-row select,.rc-num{font-family:inherit;font-size:14px;padding:3px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;} .rc-num{width:56px;}
+  .rc-total{margin-top:6px;font-size:14px;} .rc-total b{font-size:18px;color:#e5638c;}
+  .payurl{display:inline-block;font-size:12.5px;font-weight:800;color:#B0213F;background:#FFE8EC;border-radius:8px;padding:3px 8px;word-break:break-all;}
+  .rc-biko{background:#FFFCEB;} .bikobox{max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:4px;}
+  .bk1{background:#fff;border:1.5px solid #F2D27A;border-radius:10px;padding:6px 8px;} .bk1 .t{font-size:15px;line-height:1.5;white-space:pre-wrap;} .bk1 .s{font-size:11px;color:var(--sub);text-align:right;margin-top:2px;}
+  .bikobox .none{font-size:13px;color:var(--sub);} .addbiko{margin-top:6px;font-family:inherit;font-size:13.5px;font-weight:800;border:1.5px solid #F2D27A;background:#fff;color:#8a6d00;border-radius:99px;padding:4px 14px;cursor:pointer;}
+  .proflink{display:inline-block;margin-top:6px;font-size:14px;font-weight:800;color:#1f5d99;background:#F2F8FF;border:1.5px solid #9cc6ee;border-radius:10px;padding:6px 12px;text-decoration:none;}
+  .rc-row .mini{font-family:inherit;font-size:12px;font-weight:800;padding:2px 10px;border:1.5px solid var(--line);border-radius:99px;background:#fff;color:var(--sub);cursor:pointer;}
   .seats{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:8px;overflow-x:auto;}
   .seat{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px;}
   .seat.on{border-color:#6c5ce7;background:#F4F2FF;}
@@ -446,11 +464,11 @@
 
     <!-- ① 電話番号（最初に台帳の履歴を見る） -->
     <div class="step">
-      <h3><span class="n">1</span>お客さんの名前・電話番号（台帳で履歴を見る）</h3>
-      <div class="row1"><div class="f"><label>お客さんの名前</label><input id="f_name" maxlength="40" oninput="recalc()"></div></div>
+      <h3><span class="n">1</span>電話番号・お客さんの名前（台帳で履歴を見る）</h3>
       <div class="row1"><div class="f"><label>電話番号</label>
         <div style="display:flex;gap:6px"><input id="f_phone" type="tel" inputmode="tel" placeholder="09012345678" onchange="lookupCustomer()">
           <button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="lookupCustomer()">🔍 調べる</button></div></div></div>
+      <div class="row1"><div class="f"><label>お客さんの名前</label><input id="f_name" maxlength="40" oninput="recalc()"></div></div>
       <div id="custInfo"></div>
       <div class="f" style="margin-top:8px"><label>種別</label><div class="chips" id="f_visit"></div></div>
       <div class="f" style="margin-top:8px"><label>お客様のこと（当てはまれば押す）</label><div class="chips" id="f_guest"></div></div>
@@ -3394,6 +3412,133 @@ saveNextFee = async function(clear){
     await pushLog(id, n == null ? "この場所の次回の交通費を消した" : "この場所の次回の交通費 → " + yen(n) + (note ? "（" + note + "）" : ""));
     toast(n == null ? "消しました" : "保存しました"); renderList();
   }catch(e){ toast("保存できませんでした（SQL 109 は実行ずみ？）：" + (e.message || e)); }
+};
+
+/* ============================================================
+   2026/10/20：本日のキャスト一覧の予約を「カード」に。開かずにその場で直せる
+   ・開始時刻・コース・延長・支払い・カードの進み具合・場所・お客さん・状態・キャストに伝えた・備考
+   ・料金が変わるもの（時刻・コース・延長・支払い）は、裏で予約を開いて計算しなおして保存（足りないことがあれば予約が開く）
+   ・カードで「URL未送信」のときは、決済の管理画面のURLを出す
+   ・備考は1つずつ四角い枠で（右下に だれ・いつ）。決まった高さでスクロール
+   ============================================================ */
+const PAY_ADMIN_URL = "https://pay-admin.star-pay.jp/kanri/index.php";
+const PAY_LABEL = { cash: "現金", card: "カード（×1.15）", card_paid: "カード済み" };
+
+// 料金が変わるものを、裏で予約を開いて直して保存する
+let quickBusy = false;
+async function quickEdit(id, apply, msg){
+  if(!KB.CAN_EDIT || quickBusy) return;
+  quickBusy = true;
+  const bg = $("formBg");
+  bg.classList.add("silent");
+  try{
+    openForm(id);
+    apply();
+    recalc();
+    await saveRes();
+    if(bg.classList.contains("show")){ bg.classList.remove("silent"); }   // 足りないところがある → 予約を開いて、何が足りないか（受付の知らせ）を見せる
+    else if(msg) toast(msg);
+  }catch(e){ bg.classList.remove("silent"); toast("保存できませんでした：" + (e.message || e)); }
+  finally{ bg.classList.remove("silent"); quickBusy = false; }
+}
+function qStart(id, v){ quickEdit(id, ()=>{ $("f_start").value = v; }, "開始時刻 → " + v); }
+function qCourse(id, v){ quickEdit(id, ()=>{ $("f_course").value = v; }, "コース → " + v); }
+function qExt(id, v){ quickEdit(id, ()=>{ $("f_ext").value = Math.max(0, +v || 0); }, "延長 → " + (+v || 0) + "回"); }
+function qPay(id, v){ quickEdit(id, ()=>{ setPay(v); }, "支払い → " + (PAY_LABEL[v] || v)); }
+
+function memoBoxes(r){
+  const logs = logOf(r).slice().reverse();
+  return `<div class="bikobox">${logs.length ? logs.map(l=>`<div class="bk1"><div class="t">${esc(l.text)}</div><div class="s">${esc(l.by || "")} ${esc(whenShort(l.at))}</div></div>`).join("")
+      : `<div class="none">まだ備考はありません（受付：${esc(r.created_by || "")} ${whenShort(r.created_at)}）</div>`}</div>
+    ${KB.CAN_EDIT ? `<button type="button" class="addbiko" onclick="event.stopPropagation();addLogPrompt(${r.id})">＋ 備考を書く</button>` : ""}`;
+}
+function resCard(r){
+  const c = r.kb_customers || {}, ed = KB.CAN_EDIT, cx = ["cancel", "tobi"].includes(r.status);
+  const prices = M.prices.filter(p=>p.store_key === r.store_key);
+  const stSel = ed
+    ? `<select class="stsel st ${r.status}" onchange="quickStatus(${r.id},this.value)">${statusKeys(r.status).map(k=>`<option value="${k}" ${k === r.status ? "selected" : ""}>${STATUS[k]}</option>`).join("")}</select>`
+    : `<span class="st ${r.status}">${STATUS[r.status] || r.status}</span>`;
+  const told = r.cast_notified_at
+    ? `<button class="told on" onclick="toggleNotified(${r.id})" title="押すと取り消し">✅ キャストに伝えた<small>${esc(r.cast_notified_by || "")} ${whenShort(r.cast_notified_at)}</small></button>`
+    : `<button class="told" onclick="toggleNotified(${r.id})">⚠️ キャストにまだ<small>押すと「伝えた」</small></button>`;
+  const ops = (r.options || []).filter(o=>!["af", "gyakuaf"].includes(o.code)).map(o=>o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・");
+  const afw = [r.af_wish === "yes" ? "AF" : "", r.rev_af_wish === "yes" ? "逆AF" : ""].filter(Boolean).join("・");
+  const cardStep = r.payment !== "cash" ? cardSel(r).replace(/^<br>/, "") : "";
+  const payUrl = r.payment === "card" && (r.card_step || "unsent") === "unsent" ? `<a class="payurl" href="${PAY_ADMIN_URL}" target="_blank" rel="noopener">💳 決済URLを作る（${esc(PAY_ADMIN_URL)}）</a>` : "";
+  return `<div class="rescard ${cx ? "cx" : ""}">
+    <div class="rc-top">
+      ${ed ? `<input type="time" class="rc-time" value="${hm(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}
+      <span class="rc-end">〜${hm(r.end_at)}</span>
+      <span class="rc-store">${r.dummy_name ? "🎭" + esc(r.dummy_name) + "・" : ""}${esc(storeLabel(r.store_key) || "")}</span>
+      ${stSel}${told}
+      <span style="flex:1"></span>
+      <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ くわしく開く</button>
+    </div>
+    <div class="rc-grid">
+      <div class="rc-box"><div class="rc-h">💴 コース・料金</div>
+        <div class="rc-row">${ed ? `<select onchange="qCourse(${r.id},this.value)">${prices.map(p=>`<option value="${esc(p.course)}" ${p.course === r.course ? "selected" : ""}>${esc(p.course)}${/^\d+$/.test(p.course) ? "分" : ""}</option>`).join("")}${prices.some(p=>p.course === r.course) ? "" : `<option selected>${esc(r.course || "")}</option>`}</select>` : esc(r.course)}
+          延長 ${ed ? `<input type="number" min="0" class="rc-num" value="${r.extension_count || 0}" onchange="qExt(${r.id},this.value)">` : (r.extension_count || 0)}回
+          ${r.free_kind ? `<small>${esc(FREE_SUFFIX[r.free_kind] || "")}</small>` : ""}</div>
+        <div class="rc-row"><small>OP：${esc(ops || "なし")}${afw ? "　希望：" + esc(afw) : ""}</small> ${ed ? `<button type="button" class="mini" onclick="openForm(${r.id})">OPを直す</button>` : ""}</div>
+        <div class="rc-row">${ed ? `<select onchange="qPay(${r.id},this.value)">${Object.keys(PAY_LABEL).map(k=>`<option value="${k}" ${k === r.payment ? "selected" : ""}>${PAY_LABEL[k]}</option>`).join("")}</select>` : esc(PAY_LABEL[r.payment] || "")}
+          ${cardStep}</div>
+        ${payUrl ? `<div class="rc-row">${payUrl}</div>` : ""}
+        <div class="rc-total">総額 <b>${showMoney || true ? yen(r.total) : ""}</b></div>
+      </div>
+      <div class="rc-box"><div class="rc-h">👤 お客さん</div>
+        <div class="rc-row"><b>${c.ng ? "⚠️" : ""}${esc(c.name || "（名前なし）")}</b> <small>${(VISIT.find(v=>v[0] === r.visit_kind) || [])[1] || ""}</small></div>
+        ${c.phone ? `<div class="rc-row"><span class="tel">📞 ${esc(c.phone)}</span></div>` : ""}
+        ${custCell(r)}
+      </div>
+      <div class="rc-box"><div class="rc-h">🏨 場所</div>
+        <div class="rc-row"><b>${esc(r.area || "（エリアなし）")}</b></div>
+        ${placeCell(r)}
+        ${todosHtml(r)}
+      </div>
+      <div class="rc-box rc-biko"><div class="rc-h">📝 備考</div>${memoBoxes(r)}</div>
+    </div>
+  </div>`;
+}
+renderListTable = function(){
+  const el = $("list"); if(!el || !M.casts) return;
+  const byStart = (a, b)=>String(a.start_at).localeCompare(String(b.start_at));
+  const casts = sortRows(tlRows());
+  const STATE = { wait: "待機中", work: "仕事中", start: "予約スタート", precall: "出勤前連絡", gone: "今いない" };
+  const block = (title, sub, list, cid, cls)=>`<div class="cblock ${cls || ""}" ${cid ? `id="cb-${cid}"` : ""}>
+      <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button><button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
+      ${cid ? attendHtml(cid) : ""}
+      ${list.length ? list.map(resCard).join("") : `<div class="none">予約なし</div>`}</div>`;
+  const noCast = rows.filter(r=>!r.cast_id).sort(byStart);
+  const mode = $("s_sort").value;
+  el.innerHTML = (noCast.length ? block("キャスト未定", "", noCast, "") : "")
+    + (casts.length ? casts.map(x=>{
+        const st = boardState(x), col = boardCol(x, st), gk = goneKind(x.cd);
+        const sub = `${x.shift ? "出勤 " + tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) + (x.shiftOrig ? "（予定 " + tlLabel(x.shiftOrig.start) + "〜" + tlLabel(x.shiftOrig.end) + "）" : "") : "シフトなし"}・${STATE[st]}${st !== "gone" && col ? "（" + col + "）" : gk ? "（" + gk + "）" : ""}`;
+        const cls = st === "gone" ? (gk === "お茶" ? "tea" : gk === "欠勤" ? "absent" : "away") : "";
+        return block("【" + esc(castLabel(x)) + "】", esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart) : [], x.c ? x.c.id : "", cls);
+      }).join("") : `<div class="gate">${mode === "freeNow" ? "今すぐ行けるキャストはいません" : mode === "booked" ? "予約があるキャストはいません" : "この日のキャストがいません"}</div>`)
+    + cancelSection();
+};
+
+/* ---------- 受付：指名キャストは あいうえお順 ---------- */
+const __fillCastSel = fillCastSel;
+fillCastSel = function(){
+  __fillCastSel();
+  const sel = $("f_cast"), grp = sel.querySelector("optgroup");
+  if(!grp) return;
+  const kana = id=>{ const c = M.casts.find(x=>x.id === id) || {}; return String(c.kana || c.official_name || c.temp_name || ""); };
+  const opts = [...grp.querySelectorAll("option")].sort((a, b)=>kana(a.value).localeCompare(kana(b.value), "ja"));
+  const cur = sel.value; opts.forEach(o=>grp.appendChild(o)); sel.value = cur;
+};
+
+/* ---------- 受付：キャストの特記事項・NG・条件は、その子のプロフ（キャストプロフの内勤画面）で見る ---------- */
+const PROF_STAFF_URL = "https://sakuramoong-app.github.io/cast-sakura-profile/staff.html";
+const __onCastL = onCast;
+onCast = function(){
+  __onCastL.apply(this, arguments);
+  const c = M.casts.find(x=>x.id === $("f_cast").value);
+  if(!c || !c.prof_id) return;   // プロフとつながっていない子は、今までどおり（たたんで出す）
+  $("castInfo").innerHTML = `<a class="proflink" href="${PROF_STAFF_URL}?cast=${encodeURIComponent(c.prof_id)}" target="_blank" rel="noopener">📂 ${esc(c.official_name || c.temp_name)}のプロフを開く（特記事項・NG・条件・ホテル）</a>`;
 };
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
