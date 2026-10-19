@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>集計│サクラG</title>
+<link rel="icon" type="image/png" href="../favicon.png?v=3">
+<link rel="stylesheet" href="kb.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="kb_common.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  body{font-size:14.5px;}
+  .wrap.wide{max-width:1280px;}
+  header.kbh .navinhead{flex:1;} header.kbh .navinhead .kbnav{margin:0;}
+  .lockbox{max-width:420px;margin:40px auto;text-align:center;}
+  .lockbox h2{font-size:17px;color:var(--pink-deep);margin-bottom:10px;}
+  .lockbox input{width:100%;font-size:16px;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;margin-bottom:10px;font-family:inherit;}
+  .lockbox .msg{color:var(--red);font-weight:700;font-size:13px;margin-top:8px;min-height:18px;}
+  .ctrl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:10px;}
+  .ctrl select{font-family:inherit;font-size:14px;padding:6px 10px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);}
+  .ctrl .lab{font-weight:800;font-size:13px;color:var(--sub);}
+  .ctrl .sp{flex:1;}
+  .tabs{display:flex;gap:6px;margin:6px 0 12px;flex-wrap:wrap;}
+  .tabs button{flex:1;min-width:120px;border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:10px;font-family:inherit;font-size:14.5px;font-weight:800;color:var(--sub);cursor:pointer;}
+  .tabs button.on{background:var(--pink);border-color:var(--pink);color:#fff;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:12px;}
+  .cards .c{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;}
+  .cards .k{font-size:12px;color:var(--sub);font-weight:800;}
+  .cards .v{font-size:19px;font-weight:800;margin-top:2px;}
+  .cards .v.pink{color:var(--pink-deep);} .cards .v.green{color:#1f9d6b;}
+  .cards .s{font-size:11.5px;color:var(--sub);margin-top:2px;}
+  .box{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:12px;}
+  .box h3{font-size:15px;color:var(--pink-deep);margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .box h3 small{font-size:12px;color:var(--sub);font-weight:700;}
+  .box h3 .r{margin-left:auto;display:flex;gap:4px;}
+  .seg button{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:4px 12px;font-family:inherit;font-size:12.5px;font-weight:800;color:var(--sub);cursor:pointer;}
+  .seg button.on{background:var(--lav);border-color:var(--lav);color:#fff;}
+  .chartwrap{position:relative;height:300px;}
+  .chartwrap.tall{height:380px;}
+  .tw{overflow:auto;max-height:560px;}
+  table.t{border-collapse:collapse;width:100%;font-size:13px;white-space:nowrap;}
+  table.t th,table.t td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:right;}
+  table.t th{background:#FBF3F6;color:var(--sub);font-size:12px;position:sticky;top:0;z-index:1;cursor:default;}
+  table.t th.sort{cursor:pointer;} table.t th.sort:hover{color:var(--pink-deep);}
+  table.t td.l,table.t th.l{text-align:left;}
+  table.t tr.sum td{font-weight:800;background:#FFF8FA;}
+  table.t td.up{color:#1f9d6b;} table.t td.down{color:var(--red);}
+  table.t td a{color:var(--pink-deep);font-weight:800;text-decoration:none;cursor:pointer;}
+  table.t tr.absent td{color:var(--red);} table.t tr.ocha td{color:#1f9d6b;}
+  .hint{font-size:12px;color:var(--sub);margin-top:6px;line-height:1.6;}
+  .mark{font-weight:800;} .mark.a{color:#1f9d6b;} .mark.b{color:#2b7bd6;} .mark.c{color:#c98a00;} .mark.d{color:var(--red);}
+  .grid2x{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media (max-width:800px){ .grid2x{grid-template-columns:1fr;} }
+  .areaRank{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;}
+  .areaRank .ar{border:1.5px solid var(--line);border-radius:12px;padding:8px 10px;}
+  .areaRank .ar b{display:block;margin-bottom:4px;}
+  .areaRank ol{padding-left:20px;font-size:13px;line-height:1.7;}
+  .feeRow{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;}
+  .feeRow input{font-family:inherit;font-size:13px;padding:6px 8px;border:1.5px solid var(--line);border-radius:9px;}
+  .livebadge{display:inline-block;background:var(--mint-soft);color:#1f7a55;border-radius:99px;padding:2px 10px;font-size:12px;font-weight:800;}
+</style>
+</head>
+<body>
+<div class="wrap wide">
+  <header class="kbh"><h1>📈 集計</h1><div id="navArea" class="navinhead"></div></header>
+  <div id="gate" class="gate">読み込み中…</div>
+
+  <!-- 合言葉 -->
+  <div id="lock" class="card lockbox" style="display:none">
+    <h2>🔒 集計は合言葉で開きます</h2>
+    <input type="password" id="pw" placeholder="合言葉" autocomplete="off" onkeydown="if(event.key==='Enter')unlock()">
+    <button class="btn btn-primary" onclick="unlock()">開く</button>
+    <div class="msg" id="lockMsg"></div>
+  </div>
+
+  <div id="main" style="display:none">
+    <div class="ctrl">
+      <span class="lab">期間</span>
+      <select id="fromYm" onchange="render()"></select><span>〜</span><select id="toYm" onchange="render()"></select>
+      <span class="seg" id="quick">
+        <button type="button" onclick="quick('thisMonth')">今月</button><button type="button" onclick="quick('lastMonth')">先月</button>
+        <button type="button" onclick="quick('thisYear')">今年</button><button type="button" onclick="quick('lastYear')">去年</button>
+        <button type="button" onclick="quick('last12')">直近12か月</button><button type="button" onclick="quick('all')">全部</button>
+      </span>
+      <span class="sp"></span>
+      <span class="lab">新しい記録簿の数字</span>
+      <select id="liveYm" onchange="changeLive()"></select>
+    </div>
+    <div class="tabs" id="tabs">
+      <button type="button" data-t="sales" class="on" onclick="tab('sales')">💴 売上</button>
+      <button type="button" data-t="cast" onclick="tab('cast')">💗 キャスト</button>
+      <button type="button" data-t="area" onclick="tab('area')">📍 エリア</button>
+      <button type="button" data-t="media" onclick="tab('media')">📣 媒体</button>
+    </div>
+    <div id="v_sales"></div>
+    <div id="v_cast" style="display:none"></div>
+    <div id="v_area" style="display:none"></div>
+    <div id="v_media" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   📈 集計（記録簿）
+   ・過去の数字：売上管理.xlsx から入れた kb_hist_*（SQL 116・117）
+   ・新しい記録簿の数字：「新しい記録簿の数字」で選んだ月から（kb_reservations・kb_cast_days・shift_weeks）
+     選んだ月より前は過去の数字、選んだ月からは新しい記録簿の数字を使う（同じ月を2回数えない）
+   ・店落ち＝暫定的な残額（総額 − 報酬）＋ 雑費
+   ・深夜＝開始が 22:00〜（朝6時まで）
+   ・開くには合言葉（SQL 118 で決める。ハッシュだけ保存）
+   ============================================================ */
+const { sb, q, esc, yen, toast } = KB;
+const $ = id => document.getElementById(id);
+const H = { daily: [], month: [], cmonth: [], cday: [], area: [], band: [], media: [], fees: [] };
+let L = { res: [], days: [] };   // 新しい記録簿から作った数字
+let liveYm = "";                 // この月から新しい記録簿の数字（"" ＝ 使わない）
+let curTab = "sales";
+const charts = {};
+const AREAS = ["池袋", "鶯谷", "五反田", "渋谷", "錦糸町", "出張", "自宅"];
+const COLORS = ["#e5638c", "#A88BFF", "#5FD0A0", "#F2C94C", "#5BA8F0", "#FF9F6B", "#9C8B8F", "#3CC6C6", "#C77DFF", "#8BC34A", "#FF6F91", "#607D8B"];
+
+/* ---------- 小さな道具 ---------- */
+const ymOf = d => String(d).slice(0, 7);
+const n0 = v => Number(v) || 0;
+const fmtH = h => h == null ? "" : (Math.round(h * 10) / 10).toLocaleString("ja-JP");
+const pct = (a, b) => b ? Math.round(a / b * 1000) / 10 + "%" : "−";
+const yen0 = v => (Math.round(n0(v))).toLocaleString("ja-JP");
+function ymLabel(ym){ const [y, m] = ym.split("-"); return y + "年" + Number(m) + "月"; }
+function ymAdd(ym, k){ const [y, m] = ym.split("-").map(Number); const t = new Date(Date.UTC(y, m - 1 + k, 1)); return t.toISOString().slice(0, 7); }
+function ymRange(a, b){ const out = []; for(let x = a; x <= b; x = ymAdd(x, 1)) out.push(x); return out; }
+function nowYm(){ return KB.bizDateOf().slice(0, 7); }
+function isLive(ym){ return !!liveYm && ym >= liveYm; }
+function hourTxt(h){ if(h == null || h === "") return ""; h = Number(h); const x = h >= 24 ? h - 24 : h; return String(Math.round(x * 10) / 10); }
+function chart(id, cfg){
+  if(charts[id]) charts[id].destroy();
+  const el = $(id); if(!el || !window.Chart) return;
+  cfg.options = Object.assign({ responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+    plugins: { legend: { labels: { font: { family: "inherit" } } } } }, cfg.options || {});
+  charts[id] = new Chart(el, cfg);
+}
+const yenAxis = { ticks: { callback: v => (v >= 10000 || v <= -10000) ? (v / 10000).toLocaleString("ja-JP") + "万" : v } };
+async function fetchAll(table, cols, orderCol, build){
+  let out = [], from = 0;
+  for(;;){
+    let qy = sb.from(table).select(cols).order(orderCol).range(from, from + 999);
+    if(build) qy = build(qy);
+    const d = q(await qy) || [];
+    out = out.concat(d);
+    if(d.length < 1000) break;
+    from += 1000;
+  }
+  return out;
+}
+
+/* ---------- 開くとき：ログイン → 合言葉 ---------- */
+async function init(){
+  $("navArea").innerHTML = KB.nav("stats.html");
+  if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
+  $("gate").style.display = "none";
+  let ok = false; try{ ok = sessionStorage.getItem("kbStatsOK") === "1"; }catch(e){}
+  if(ok) return start();
+  $("lock").style.display = ""; $("pw").focus();
+}
+async function unlock(){
+  const p = $("pw").value; if(!p){ $("lockMsg").textContent = "合言葉を入れてください"; return; }
+  $("lockMsg").textContent = "たしかめています…";
+  try{
+    const ok = q(await sb.rpc("kb_stats_check", { p_pass: p }));
+    if(!ok){ $("lockMsg").textContent = "合言葉がちがいます（まだ決めていなければ SQL 118 で決めてください）"; return; }
+    try{ sessionStorage.setItem("kbStatsOK", "1"); }catch(e){}
+    $("pw").value = ""; $("lock").style.display = "none"; start();
+  }catch(e){ $("lockMsg").textContent = "たしかめられませんでした（SQL 115 は実行ずみ？）：" + (e.message || e); }
+}
+
+async function start(){
+  $("gate").style.display = ""; $("gate").textContent = "過去の数字を読みこみ中…";
+  try{
+    const [daily, month, cmonth, cday, area, band, media, fees] = await Promise.all([
+      fetchAll("kb_hist_daily", "*", "d"), fetchAll("kb_hist_month", "*", "ym"),
+      fetchAll("kb_hist_cast_month", "*", "ym"), fetchAll("kb_hist_cast_day", "*", "d"),
+      fetchAll("kb_hist_cast_area", "*", "ym"), fetchAll("kb_hist_cast_band", "*", "ym"),
+      fetchAll("kb_hist_media", "*", "ym"), fetchAll("kb_media_fees", "*", "from_ym"),
+    ]);
+    Object.assign(H, { daily, month, cmonth, cday, area, band, media, fees });
+  }catch(e){ $("gate").textContent = "読みこめませんでした（SQL 115・116・117 は実行ずみ？）：" + (e.message || e); return; }
+  // 期間の選ぶ欄
+  const first = [H.daily[0] && ymOf(H.daily[0].d), H.month[0] && ymOf(H.month[0].ym)].filter(Boolean).sort()[0] || "2019-01";
+  const last = nowYm();
+  const opts = ymRange(first, last).reverse().map(ym=>`<option value="${ym}">${ymLabel(ym)}</option>`).join("");
+  $("fromYm").innerHTML = opts; $("toYm").innerHTML = opts;
+  let saved = ""; try{ saved = localStorage.getItem("kbStatsLiveYm") || ""; }catch(e){}
+  $("liveYm").innerHTML = `<option value="">使わない（過去の数字だけ）</option>` + ymRange("2026-10", ymAdd(last, 1)).map(ym=>`<option value="${ym}">${ymLabel(ym)}から使う</option>`).join("");
+  $("liveYm").value = saved; liveYm = $("liveYm").value;
+  quick("thisYear", true);
+  await loadLive();
+  $("gate").style.display = "none"; $("main").style.display = "";
+  render();
+}
+function quick(k, silent){
+  const now = nowYm(), y = now.slice(0, 4);
+  const all = [...$("fromYm").options].map(o=>o.value);
+  const set = (a, b)=>{ $("fromYm").value = all.includes(a) ? a : all[all.length - 1]; $("toYm").value = all.includes(b) ? b : all[0]; };
+  if(k === "thisMonth") set(now, now);
+  if(k === "lastMonth") set(ymAdd(now, -1), ymAdd(now, -1));
+  if(k === "thisYear") set(y + "-01", now);
+  if(k === "lastYear") set((y - 1) + "-01", (y - 1) + "-12");
+  if(k === "last12") set(ymAdd(now, -11), now);
+  if(k === "all") set(all[all.length - 1], all[0]);
+  if(!silent) render();
+}
+async function changeLive(){
+  liveYm = $("liveYm").value;
+  try{ localStorage.setItem("kbStatsLiveYm", liveYm); }catch(e){}
+  $("gate").style.display = ""; $("gate").textContent = "新しい記録簿の数字を読みこみ中…";
+  await loadLive();
+  $("gate").style.display = "none";
+  render();
+}
+function range(){ let a = $("fromYm").value, b = $("toYm").value; if(a > b) [a, b] = [b, a]; return { from: a, to: b, months: ymRange(a, b) }; }
+
+/* ============================================================
+   新しい記録簿の数字を作る（予約・勤怠・シフト → 1予約ずつ／1キャスト1日ずつ）
+   ============================================================ */
+function weekKeyOfYmd(s){ const [y, m, d] = s.split("-").map(Number); const dt = new Date(Date.UTC(y, m - 1, d)); const dow = dt.getUTCDay(); dt.setUTCDate(dt.getUTCDate() + (dow === 0 ? -6 : 1 - dow)); return dt.toISOString().slice(0, 10); }
+const SHIFT_OK = ["input_waiting", "inputting", "confirmed", "change_requested", "change_inputting", "change_confirmed"];
+async function loadLive(){
+  L = { res: [], days: [] };
+  if(!liveYm) return;
+  const start = liveYm + "-01";
+  try{
+    const [res, cds, shifts, casts, rules, media] = await Promise.all([
+      fetchAll("kb_reservations", "id,biz_date,cast_id,area,start_at,status,visit_kind,media,total,course_back,option_back,extra_back,back_override", "id", x=>x.gte("biz_date", start).eq("deleted", false)),
+      fetchAll("kb_cast_days", "*", "biz_date", x=>x.gte("biz_date", start)),
+      fetchAll("shift_weeks", "cast_name,wk,data", "wk", x=>x.gte("wk", weekKeyOfYmd(start))),
+      fetchAll("master_casts", "id,official_name,temp_name,shift_name", "id"),
+      fetchAll("kb_cast_rules", "*", "id", x=>x.eq("active", true)),
+      fetchAll("kb_media", "code,label", "code"),
+    ]);
+    const nameOf = id => { const c = casts.find(x=>x.id === id); return c ? (c.official_name || c.temp_name || c.shift_name) : "（不明）"; };
+    const idOfShift = nm => { const c = casts.find(x=>x.shift_name === nm || x.official_name === nm); return c ? c.id : null; };
+    const mediaLabel = code => { const m = media.find(x=>x.code === code); return m ? m.label : code; };
+    const today = KB.bizDateOf();
+    // シフト（受理したものだけ）
+    const plan = {};   // "日|キャストID" → {start,end}
+    shifts.forEach(r=>{
+      if(!SHIFT_OK.includes(r.data && r.data.status)) return;
+      const id = idOfShift(r.cast_name); if(!id) return;
+      Object.entries((r.data && r.data.shifts) || {}).forEach(([d, s])=>{ if(d >= start && d <= today && s && s.start != null && s.end != null) plan[d + "|" + id] = { start: Number(s.start), end: Number(s.end) }; });
+    });
+    const cdOf = {}; cds.forEach(c=>{ cdOf[c.biz_date + "|" + c.cast_id] = c; });
+    const live = res.filter(r=>r.status !== "cancel" && r.status !== "tobi" && r.cast_id);
+    const resOf = {}; live.forEach(r=>{ (resOf[r.biz_date + "|" + r.cast_id] = resOf[r.biz_date + "|" + r.cast_id] || []).push(r); });
+    const keys = new Set([...Object.keys(plan), ...Object.keys(resOf), ...cds.filter(c=>c.biz_date <= today).map(c=>c.biz_date + "|" + c.cast_id)]);
+    keys.forEach(k=>{
+      const [d, id] = k.split("|"); const p = plan[k], cd = cdOf[k] || {}, rs = resOf[k] || [];
+      if(!p && !rs.length) return;   // シフトも予約もない日は数えない
+      const absent = cd.status === "欠勤" || (cd.attend_log || []).some(a=>a.kind === "欠勤");
+      const real = p ? { start: cd.shift_start_ov != null ? Number(cd.shift_start_ov) : p.start, end: cd.shift_end_ov != null ? Number(cd.shift_end_ov) : p.end } : null;
+      let reward = 0, option = 0, total = 0;
+      rs.forEach(r=>{ total += n0(r.total); if(r.back_override != null) reward += n0(r.back_override); else { reward += n0(r.course_back) + n0(r.extra_back); option += n0(r.option_back); } });
+      // 雑費：精算済ならそのときの額。まだなら 手で直した額 → 自動（免除の曜日は0）
+      const dow = new Date(d + "T12:00:00Z").getUTCDay();
+      const exempt = rules.some(x=>x.cast_id === id && x.kind === "zappi_exempt" && ((x.params || {}).days || []).includes(dow) && (x.valid_from || "2000-01-01") <= d && (!x.valid_to || x.valid_to > d));
+      const zappi = cd.settle_snapshot && cd.settle_snapshot.zappi != null ? n0(cd.settle_snapshot.zappi)
+                  : cd.zappi_override != null ? n0(cd.zappi_override) : (exempt || !rs.length ? 0 : Math.min(3000, Math.floor((reward + option) / 10500) * 500));
+      const drop = total - reward - option + zappi;
+      const cast = nameOf(id);
+      L.days.push({ d, cast, work_hours: absent || !real ? 0 : real.end - real.start,
+        plan_shift: p ? hourTxt(p.start) + "-" + hourTxt(p.end) : "", real_shift: real && !absent ? hourTxt(real.start) + "-" + hourTxt(real.end) : "",
+        status: absent ? "欠勤" : (!rs.length ? "お茶" : ""),
+        late_h: p && real && real.start > p.start ? real.start - p.start : null, early_h: p && real && real.end < p.end ? p.end - real.end : null,
+        drop_yen: drop, reward: reward + option,
+        n_new: rs.filter(r=>r.visit_kind === "new").length, n_repeat: rs.filter(r=>r.visit_kind === "repeat").length, n_honshi: rs.filter(r=>r.visit_kind === "honshi").length, cnt: rs.length });
+      // 1予約ずつ（雑費は、その日の予約で同じだけ分ける）
+      rs.forEach(r=>{
+        const back = r.back_override != null ? n0(r.back_override) : n0(r.course_back) + n0(r.extra_back) + n0(r.option_back);
+        const j = new Date(new Date(r.start_at).getTime() + 9 * 3600 * 1000).getUTCHours();
+        L.res.push({ d, ym: ymOf(d), cast, area: r.area || "（なし）", band: r.start_at && (j >= 22 || j < 6) ? "深夜" : "昼",
+          visit: r.visit_kind, media: (r.media || []).map(mediaLabel), total: n0(r.total), drop: n0(r.total) - back + zappi / rs.length });
+      });
+    });
+  }catch(e){ toast("新しい記録簿の数字を読めませんでした：" + (e.message || e)); }
+}
+
+/* ============================================================
+   過去＋新しい記録簿をまとめて取りだす
+   ============================================================ */
+function salesOfMonth(ym){
+  if(isLive(ym)) return L.res.filter(r=>r.ym === ym).reduce((a, r)=>a + r.total, 0);
+  const m = H.month.find(x=>ymOf(x.ym) === ym); if(m) return n0(m.sales);
+  return H.daily.filter(x=>ymOf(x.d) === ym).reduce((a, x)=>a + n0(x.sales), 0);
+}
+function hasSales(ym){ return isLive(ym) ? L.res.some(r=>r.ym === ym) : (H.month.some(x=>ymOf(x.ym) === ym) || H.daily.some(x=>ymOf(x.d) === ym)); }
+function dailySales(months){
+  const set = new Set(months), out = {};
+  H.daily.forEach(x=>{ const ym = ymOf(x.d); if(set.has(ym) && !isLive(ym)) out[x.d] = n0(x.sales); });
+  L.res.forEach(r=>{ if(set.has(r.ym) && isLive(r.ym)) out[r.d] = (out[r.d] || 0) + r.total; });
+  return out;
+}
+// キャスト×月（実働時間・店落ち・報酬・本数・新規・店リ・本指名・出勤/お茶/欠勤日数）
+function castMonths(months){
+  const set = new Set(months), out = [];
+  H.cmonth.forEach(x=>{ const ym = ymOf(x.ym); if(set.has(ym) && !isLive(ym)) out.push(Object.assign({}, x, { ym })); });
+  const agg = {};
+  L.days.forEach(x=>{
+    const ym = ymOf(x.d); if(!set.has(ym) || !isLive(ym)) return;
+    const k = ym + "|" + x.cast;
+    const a = agg[k] = agg[k] || { ym, cast_name: x.cast, work_hours: 0, drop_yen: 0, reward: 0, cnt: 0, n_new: 0, n_repeat: 0, n_honshi: 0, days_work: 0, days_ocha: 0, days_absent: 0 };
+    a.work_hours += x.work_hours; a.drop_yen += x.drop_yen; a.reward += x.reward; a.cnt += x.cnt; a.n_new += x.n_new; a.n_repeat += x.n_repeat; a.n_honshi += x.n_honshi;
+    if(x.status === "欠勤") a.days_absent++; else { a.days_work++; if(x.status === "お茶") a.days_ocha++; }
+  });
+  return out.concat(Object.values(agg));
+}
+function castDays(cast, months){
+  const set = new Set(months);
+  return H.cday.filter(x=>x.cast_name === cast && set.has(ymOf(x.d)) && !isLive(ymOf(x.d)))
+    .concat(L.days.filter(x=>x.cast === cast && set.has(ymOf(x.d)) && isLive(ymOf(x.d))).map(x=>Object.assign({ cast_name: x.cast }, x)))
+    .sort((a, b)=>String(a.d).localeCompare(String(b.d)));
+}
+// キャスト×エリア／キャスト×昼深夜（月）
+function groupRows(kind, months){
+  const set = new Set(months), src = kind === "area" ? H.area : H.band, out = [];
+  src.forEach(x=>{ const ym = ymOf(x.ym); if(set.has(ym) && !isLive(ym)) out.push({ ym, cast: x.cast_name, key: kind === "area" ? x.area : x.band, cnt: n0(x.cnt), drop: n0(x.drop_yen) }); });
+  L.res.forEach(r=>{ if(set.has(r.ym) && isLive(r.ym)) out.push({ ym: r.ym, cast: r.cast, key: kind === "area" ? r.area : r.band, cnt: 1, drop: r.drop }); });
+  return out;
+}
+// 媒体×エリア（月）。新しい記録簿は、媒体がいくつかあるときは店落ちを同じだけ分ける
+function mediaRows(months){
+  const set = new Set(months), out = [];
+  H.media.forEach(x=>{ const ym = ymOf(x.ym); if(set.has(ym) && !isLive(ym)) out.push({ ym, media: x.media, area: x.area, cnt: n0(x.cnt), drop: n0(x.drop_yen) }); });
+  L.res.forEach(r=>{
+    if(!set.has(r.ym) || !isLive(r.ym)) return;
+    const ms = r.media.length ? r.media : ["媒体未記入"];
+    ms.forEach(m=>out.push({ ym: r.ym, media: m, area: r.area, cnt: 1, drop: r.drop / ms.length }));
+  });
+  return out;
+}
+function sumBy(rows, keyFn, valFn){ const o = {}; rows.forEach(r=>{ const k = keyFn(r); o[k] = (o[k] || 0) + valFn(r); }); return o; }
+
+/* ============================================================
+   画面
+   ============================================================ */
+function tab(t){
+  curTab = t;
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.t === t));
+  ["sales", "cast", "area", "media"].forEach(k=>{ $("v_" + k).style.display = k === t ? "" : "none"; });
+  render();
+}
+function render(){
+  if(curTab === "sales") renderSales();
+  if(curTab === "cast") renderCast();
+  if(curTab === "area") renderArea();
+  if(curTab === "media") renderMedia();
+}
+function liveNote(){ return liveYm ? `<span class="livebadge">${ymLabel(liveYm)}からは新しい記録簿の数字</span>` : ""; }
+
+/* ---------- 💴 売上 ---------- */
+let salesUnit = "month";
+function renderSales(){
+  const R = range(), months = R.months;
+  const sales = months.reduce((a, ym)=>a + salesOfMonth(ym), 0);
+  const cm = castMonths(months);
+  const drop = cm.reduce((a, x)=>a + n0(x.drop_yen), 0), reward = cm.reduce((a, x)=>a + n0(x.reward), 0);
+  const cnt = cm.reduce((a, x)=>a + n0(x.cnt), 0), nw = cm.reduce((a, x)=>a + n0(x.n_new), 0), rp = cm.reduce((a, x)=>a + n0(x.n_repeat), 0), hn = cm.reduce((a, x)=>a + n0(x.n_honshi), 0);
+  const days = Object.keys(dailySales(months)).length;
+  // 前年の同じ期間
+  const prevSales = months.reduce((a, ym)=>a + salesOfMonth(ymAdd(ym, -12)), 0);
+  const el = $("v_sales");
+  el.innerHTML = `
+    <div class="cards">
+      <div class="c"><div class="k">売上</div><div class="v pink">${yen(sales)}</div><div class="s">前年の同じ期間 ${prevSales ? pct(sales, prevSales) : "−"}</div></div>
+      <div class="c"><div class="k">1日平均の売上</div><div class="v">${days ? yen(Math.round(sales / days)) : "−"}</div><div class="s">${days}日ぶん</div></div>
+      <div class="c"><div class="k">店落ち</div><div class="v green">${yen(Math.round(drop))}</div><div class="s">キャスト別の数字がある月だけ</div></div>
+      <div class="c"><div class="k">キャスト報酬</div><div class="v">${yen(Math.round(reward))}</div></div>
+      <div class="c"><div class="k">本数</div><div class="v">${cnt.toLocaleString("ja-JP")}本</div></div>
+      <div class="c"><div class="k">新規／店リピ／本指名</div><div class="v" style="font-size:16px">${nw}／${rp}／${hn}</div><div class="s">${pct(nw, cnt)}／${pct(rp, cnt)}／${pct(hn, cnt)}</div></div>
+    </div>
+    <div class="box"><h3>📈 売上の推移 <small>${ymLabel(R.from)}〜${ymLabel(R.to)}</small> ${liveNote()}
+      <span class="r seg">${[["day", "日"], ["month", "月"], ["year", "年"]].map(([k, l])=>`<button type="button" class="${salesUnit === k ? "on" : ""}" onclick="salesUnit='${k}';renderSales()">${l}</button>`).join("")}</span></h3>
+      <div class="chartwrap tall"><canvas id="ch_sales"></canvas></div>
+      <div class="hint">${salesUnit === "month" ? "棒＝その月の売上、線＝前の年の同じ月" : salesUnit === "day" ? "1日ずつの売上（営業日。朝6時まで）" : "年ごとの売上（期間に入っている月だけ足しています）"}</div></div>
+    <div class="box"><h3>📅 年間比較（月ごとの売上）</h3><div class="tw" id="yearTable"></div></div>
+    <div class="grid2x">
+      <div class="box"><h3>🌙 22時を境に（昼／深夜）<small>開始が22:00〜は深夜</small></h3><div class="chartwrap"><canvas id="ch_band"></canvas></div><div class="tw" id="bandTable" style="margin-top:8px"></div></div>
+      <div class="box"><h3>🙋 新規・店リピ・本指名</h3><div class="chartwrap"><canvas id="ch_visit"></canvas></div><div class="tw" id="visitTable" style="margin-top:8px"></div></div>
+    </div>`;
+  // 推移のグラフ
+  if(salesUnit === "day"){
+    const ds = dailySales(months), keys = Object.keys(ds).sort();
+    chart("ch_sales", { type: "line", data: { labels: keys.map(d=>d.slice(5).replace("-", "/")), datasets: [{ label: "売上", data: keys.map(k=>ds[k]), borderColor: COLORS[0], backgroundColor: "rgba(229,99,140,.12)", fill: true, pointRadius: keys.length > 90 ? 0 : 2, tension: .2 }] }, options: { scales: { y: yenAxis } } });
+  }else if(salesUnit === "month"){
+    chart("ch_sales", { data: { labels: months.map(ymLabel), datasets: [
+      { type: "bar", label: "売上", data: months.map(salesOfMonth), backgroundColor: "rgba(229,99,140,.75)", borderRadius: 6 },
+      { type: "line", label: "前の年", data: months.map(ym=>salesOfMonth(ymAdd(ym, -12)) || null), borderColor: COLORS[1], pointRadius: 2, tension: .2 } ] }, options: { scales: { y: yenAxis } } });
+  }else{
+    const ys = [...new Set(months.map(m=>m.slice(0, 4)))];
+    chart("ch_sales", { type: "bar", data: { labels: ys.map(y=>y + "年"), datasets: [{ label: "売上", data: ys.map(y=>months.filter(m=>m.startsWith(y)).reduce((a, m)=>a + salesOfMonth(m), 0)), backgroundColor: "rgba(229,99,140,.75)", borderRadius: 6 }] }, options: { scales: { y: yenAxis } } });
+  }
+  // 年間比較の表（期間に入っている年）
+  const years = [...new Set(months.map(m=>m.slice(0, 4)))];
+  const cell = (y, m)=>{ const ym = y + "-" + String(m).padStart(2, "0"); return hasSales(ym) ? salesOfMonth(ym) : null; };
+  let h = `<table class="t"><tr><th class="l">月</th>${years.map(y=>`<th>${y}年</th><th>前年比</th>`).join("")}</tr>`;
+  for(let m = 1; m <= 12; m++){
+    h += `<tr><td class="l">${m}月</td>` + years.map(y=>{ const v = cell(y, m), p = cell(y - 1, m); const r = v != null && p ? v / p - 1 : null;
+      return `<td>${v != null ? yen0(v) : ""}</td><td class="${r == null ? "" : r >= 0 ? "up" : "down"}">${r == null ? "" : (r >= 0 ? "+" : "") + Math.round(r * 1000) / 10 + "%"}</td>`; }).join("") + `</tr>`;
+  }
+  h += `<tr class="sum"><td class="l">合計</td>` + years.map(y=>{ let v = 0, p = 0; for(let m = 1; m <= 12; m++){ const a = cell(y, m), b = cell(y - 1, m); if(a != null){ v += a; if(b) p += b; } }
+    const r = p ? v / p - 1 : null; return `<td>${yen0(v)}</td><td class="${r == null ? "" : r >= 0 ? "up" : "down"}">${r == null ? "" : (r >= 0 ? "+" : "") + Math.round(r * 1000) / 10 + "%"}</td>`; }).join("") + `</tr></table>`;
+  $("yearTable").innerHTML = h + `<div class="hint">前年比は、前の年の同じ月とくらべた増減。合計の前年比は、両方の年に数字がある月だけでくらべています</div>`;
+  // 昼／深夜
+  const band = groupRows("band", months);
+  const bm = months.filter(ym=>band.some(b=>b.ym === ym));
+  const bv = (ym, k, f)=>band.filter(b=>b.ym === ym && b.key === k).reduce((a, b)=>a + b[f], 0);
+  chart("ch_band", { type: "bar", data: { labels: bm.map(ymLabel), datasets: [
+    { label: "昼 店落ち", data: bm.map(ym=>Math.round(bv(ym, "昼", "drop"))), backgroundColor: "rgba(242,201,76,.8)", stack: "s" },
+    { label: "深夜 店落ち", data: bm.map(ym=>Math.round(bv(ym, "深夜", "drop"))), backgroundColor: "rgba(91,80,160,.8)", stack: "s" } ] }, options: { scales: { y: Object.assign({ stacked: true }, yenAxis), x: { stacked: true } } } });
+  $("bandTable").innerHTML = bm.length ? `<table class="t"><tr><th class="l">月</th><th>昼 本数</th><th>深夜 本数</th><th>昼 単価</th><th>深夜 単価</th><th>深夜の割合</th></tr>` + bm.map(ym=>{
+    const dc = bv(ym, "昼", "cnt"), nc = bv(ym, "深夜", "cnt"), dd = bv(ym, "昼", "drop"), nd = bv(ym, "深夜", "drop");
+    return `<tr><td class="l">${ymLabel(ym)}</td><td>${dc}</td><td>${nc}</td><td>${dc ? yen0(dd / dc) : ""}</td><td>${nc ? yen0(nd / nc) : ""}</td><td>${pct(nd, dd + nd)}</td></tr>`; }).join("") + `</table><div class="hint">単価＝店落ち÷本数。深夜の割合は店落ちで</div>` : `<div class="hint">この期間の昼／深夜の数字はありません（過去の数字は2026年1月から）</div>`;
+  // 新規・店リピ・本指名
+  const vm = months.filter(ym=>cm.some(x=>x.ym === ym));
+  const vv = (ym, f)=>cm.filter(x=>x.ym === ym).reduce((a, x)=>a + n0(x[f]), 0);
+  chart("ch_visit", { type: "bar", data: { labels: vm.map(ymLabel), datasets: [
+    { label: "新規", data: vm.map(ym=>vv(ym, "n_new")), backgroundColor: "rgba(95,208,160,.85)", stack: "s" },
+    { label: "店リピ", data: vm.map(ym=>vv(ym, "n_repeat")), backgroundColor: "rgba(168,139,255,.85)", stack: "s" },
+    { label: "本指名", data: vm.map(ym=>vv(ym, "n_honshi")), backgroundColor: "rgba(229,99,140,.85)", stack: "s" } ] }, options: { scales: { y: { stacked: true }, x: { stacked: true } } } });
+  $("visitTable").innerHTML = vm.length ? `<table class="t"><tr><th class="l">月</th><th>新規</th><th>店リピ</th><th>本指名</th><th>合計</th><th>新規率</th><th>店リピ率</th><th>本指名率</th></tr>` + vm.map(ym=>{
+    const a = vv(ym, "n_new"), b = vv(ym, "n_repeat"), c = vv(ym, "n_honshi"), t = a + b + c;
+    return `<tr><td class="l">${ymLabel(ym)}</td><td>${a}</td><td>${b}</td><td>${c}</td><td>${t}</td><td>${pct(a, t)}</td><td>${pct(b, t)}</td><td>${pct(c, t)}</td></tr>`; }).join("") + `</table>` : `<div class="hint">この期間のキャスト別の数字はありません（過去の数字は2025年1月から）</div>`;
+}
+
+/* ---------- 💗 キャスト ---------- */
+let castSort = { k: "drop_yen", dir: -1 }, castSel = "", castDayYm = "";
+const CAST_COLS = [["cast_name", "キャスト", "l"], ["days_work", "出勤日数"], ["work_hours", "実働時間"], ["days_ocha", "お茶"], ["days_absent", "欠勤"], ["cnt", "本数"],
+  ["n_new", "新規"], ["n_repeat", "店リピ"], ["n_honshi", "本指名"], ["drop_yen", "店落ち"], ["reward", "報酬"], ["wage", "時給換算"], ["per_h", "本/時間"], ["mark", "効率"]];
+function castTotals(months){
+  const by = {};
+  castMonths(months).forEach(x=>{
+    const a = by[x.cast_name] = by[x.cast_name] || { cast_name: x.cast_name, days_work: 0, work_hours: 0, days_ocha: 0, days_absent: 0, cnt: 0, n_new: 0, n_repeat: 0, n_honshi: 0, drop_yen: 0, reward: 0 };
+    ["days_work", "work_hours", "days_ocha", "days_absent", "cnt", "n_new", "n_repeat", "n_honshi", "drop_yen", "reward"].forEach(f=>{ a[f] += n0(x[f]); });
+  });
+  const list = Object.values(by).filter(a=>a.work_hours || a.cnt || a.drop_yen || a.days_absent);
+  const H_ = list.reduce((s, a)=>s + a.work_hours, 0), W_ = list.reduce((s, a)=>s + a.reward, 0);
+  const avg = H_ ? W_ / H_ : 0;
+  list.forEach(a=>{ a.wage = a.work_hours ? a.reward / a.work_hours : 0; a.per_h = a.work_hours ? a.cnt / a.work_hours : 0;
+    const r = avg ? a.wage / avg : 0; a.mark = !a.work_hours ? "" : r >= 1.2 ? "◎" : r >= 0.9 ? "○" : r >= 0.6 ? "△" : "×"; a.markR = r; });
+  return { list, avg };
+}
+let castNames = [];   // 名前を押したとき用（名前に ' などが入っていても大丈夫なように番号で渡す）
+function renderCast(){
+  castNames = [];
+  const R = range(), { list, avg } = castTotals(R.months);
+  const k = castSort.k;
+  list.sort((a, b)=>{ const x = k === "mark" ? a.markR : a[k], y = k === "mark" ? b.markR : b[k]; return (typeof x === "string" ? String(x).localeCompare(String(y), "ja") : (x || 0) - (y || 0)) * castSort.dir; });
+  const tot = f=>list.reduce((s, a)=>s + n0(a[f]), 0);
+  const fmt = (a, f)=>{
+    if(f === "cast_name") return `<a onclick="pickCast(${castNames.push(a.cast_name) - 1})">${esc(a.cast_name)}</a>`;
+    if(f === "work_hours") return fmtH(a.work_hours);
+    if(f === "drop_yen" || f === "reward" || f === "wage") return yen0(a[f]);
+    if(f === "per_h") return a.per_h ? a.per_h.toFixed(2) : "";
+    if(f === "mark") return `<span class="mark ${{ "◎": "a", "○": "b", "△": "c", "×": "d" }[a.mark] || ""}">${a.mark}</span>`;
+    return n0(a[f]) || "";
+  };
+  $("v_cast").innerHTML = `
+    <div class="box"><h3>💗 キャスト別 <small>${ymLabel(R.from)}〜${ymLabel(R.to)}・見出しを押すと並びかえ・名前を押すとくわしく</small> ${liveNote()}</h3>
+      <div class="tw"><table class="t"><tr>${CAST_COLS.map(([f, l, c])=>`<th class="sort ${c || ""}" onclick="sortCast('${f}')">${l}${castSort.k === f ? (castSort.dir < 0 ? " ▼" : " ▲") : ""}</th>`).join("")}</tr>
+      ${list.map(a=>`<tr>${CAST_COLS.map(([f, , c])=>`<td class="${c || ""}">${fmt(a, f)}</td>`).join("")}</tr>`).join("")}
+      <tr class="sum"><td class="l">合計（${list.length}人）</td><td>${tot("days_work")}</td><td>${fmtH(tot("work_hours"))}</td><td>${tot("days_ocha")}</td><td>${tot("days_absent")}</td><td>${tot("cnt")}</td><td>${tot("n_new")}</td><td>${tot("n_repeat")}</td><td>${tot("n_honshi")}</td><td>${yen0(tot("drop_yen"))}</td><td>${yen0(tot("reward"))}</td><td>${yen0(avg)}</td><td></td><td></td></tr>
+      </table></div>
+      <div class="hint">実働時間＝出勤した日（お茶の日も入る）の勤務時間。欠勤の日は入りません。時給換算＝報酬÷実働時間。<br>効率：全体の平均時給（${yen0(avg)}円）とくらべて ◎1.2倍以上 ○0.9倍以上 △0.6倍以上 ×それより下</div></div>
+    <div id="castDetail"></div>`;
+  if(castSel) renderCastDetail();
+}
+function sortCast(f){ castSort = { k: f, dir: castSort.k === f ? -castSort.dir : (f === "cast_name" ? 1 : -1) }; renderCast(); }
+function pickCast(i){ castSel = castNames[i]; castDayYm = ""; renderCastDetail(); $("castDetail").scrollIntoView({ behavior: "smooth", block: "start" }); }
+function renderCastDetail(){
+  const R = range(), nm = castSel;
+  const cm = castMonths(R.months).filter(x=>x.cast_name === nm);
+  const ms = R.months.filter(ym=>cm.some(x=>x.ym === ym));
+  const v = (ym, f)=>n0((cm.find(x=>x.ym === ym) || {})[f]);
+  // 年ごと
+  const years = [...new Set(ms.map(m=>m.slice(0, 4)))];
+  const yv = (y, f)=>ms.filter(m=>m.startsWith(y)).reduce((a, m)=>a + v(m, f), 0);
+  // 日ごと（月を選ぶ）
+  const dayMonths = R.months.filter(ym=>castDays(nm, [ym]).length);
+  if(!dayMonths.includes(castDayYm)) castDayYm = dayMonths[dayMonths.length - 1] || "";
+  const days = castDayYm ? castDays(nm, [castDayYm]) : [];
+  const row = (lab, get)=>`<tr><td class="l">${lab}</td><td>${n0(get("days_work")) || ""}</td><td>${fmtH(get("work_hours"))}</td><td>${n0(get("days_ocha")) || ""}</td><td>${n0(get("days_absent")) || ""}</td><td>${n0(get("cnt")) || ""}</td><td>${n0(get("n_new")) || ""}</td><td>${n0(get("n_repeat")) || ""}</td><td>${n0(get("n_honshi")) || ""}</td><td>${yen0(get("drop_yen"))}</td><td>${yen0(get("reward"))}</td><td>${get("work_hours") ? yen0(get("reward") / get("work_hours")) : ""}</td></tr>`;
+  const head = `<tr><th class="l"></th><th>出勤日数</th><th>実働時間</th><th>お茶</th><th>欠勤</th><th>本数</th><th>新規</th><th>店リピ</th><th>本指名</th><th>店落ち</th><th>報酬</th><th>時給換算</th></tr>`;
+  $("castDetail").innerHTML = `
+    <div class="box"><h3>👤 ${esc(nm)} <small>${ymLabel(R.from)}〜${ymLabel(R.to)}</small><span class="r"><button class="btn btn-ghost btn-sm" onclick="castSel='';$('castDetail').innerHTML=''">✖ とじる</button></span></h3>
+      <div class="chartwrap"><canvas id="ch_cast"></canvas></div>
+      <div class="grid2x" style="margin-top:10px">
+        <div><b style="font-size:13px">月ごと</b><div class="tw"><table class="t">${head}${ms.map(ym=>row(ymLabel(ym), f=>v(ym, f))).join("")}</table></div></div>
+        <div><b style="font-size:13px">年ごと</b><div class="tw"><table class="t">${head}${years.map(y=>row(y + "年", f=>yv(y, f))).join("")}</table></div></div>
+      </div>
+      <div style="margin-top:12px"><b style="font-size:13px">日ごと</b>
+        ${dayMonths.length ? `<select onchange="castDayYm=this.value;renderCastDetail()" style="margin-left:8px;font-family:inherit;padding:4px 8px;border-radius:8px;border:1.5px solid var(--line)">${dayMonths.map(ym=>`<option value="${ym}" ${ym === castDayYm ? "selected" : ""}>${ymLabel(ym)}</option>`).join("")}</select>` : ""}
+        ${days.length ? `<div class="tw"><table class="t"><tr><th class="l">日付</th><th>出勤時間</th><th>元のシフト</th><th>実際のシフト</th><th class="l">状態</th><th>出勤ずれ</th><th>退勤ずれ</th><th>店落ち</th><th>報酬</th><th>新規</th><th>店リピ</th><th>本指名</th><th>本数</th></tr>
+          ${days.map(x=>{ const d = new Date(x.d + "T12:00:00Z"); const st = x.status || "";
+            return `<tr class="${st === "欠勤" ? "absent" : st === "お茶" ? "ocha" : ""}"><td class="l">${d.getUTCMonth() + 1}/${d.getUTCDate()}(${"日月火水木金土"[d.getUTCDay()]})</td><td>${fmtH(x.work_hours)}</td><td>${esc(x.plan_shift || "")}</td><td>${esc(x.real_shift || "")}</td><td class="l">${esc(st)}</td>
+              <td>${x.late_h ? fmtH(x.late_h) : ""}</td><td>${x.early_h ? fmtH(x.early_h) : ""}</td><td>${yen0(x.drop_yen)}</td><td>${yen0(x.reward)}</td><td>${n0(x.n_new) || ""}</td><td>${n0(x.n_repeat) || ""}</td><td>${n0(x.n_honshi) || ""}</td><td>${n0(x.cnt) || ""}</td></tr>`; }).join("")}</table></div>
+          <div class="hint">出勤ずれ・退勤ずれは、元のシフトとくらべて何時間ずれたか（遅刻・早退など）。過去の日ごとの数字は2026年1月から</div>` : `<div class="hint">この期間の日ごとの数字はありません（過去の日ごとの数字は2026年1月から）</div>`}
+      </div></div>`;
+  chart("ch_cast", { data: { labels: ms.map(ymLabel), datasets: [
+    { type: "bar", label: "店落ち", data: ms.map(ym=>Math.round(v(ym, "drop_yen"))), backgroundColor: "rgba(95,208,160,.8)", borderRadius: 4, yAxisID: "y" },
+    { type: "bar", label: "報酬", data: ms.map(ym=>Math.round(v(ym, "reward"))), backgroundColor: "rgba(229,99,140,.7)", borderRadius: 4, yAxisID: "y" },
+    { type: "line", label: "本数", data: ms.map(ym=>v(ym, "cnt")), borderColor: COLORS[1], yAxisID: "y2", tension: .2 },
+    { type: "line", label: "実働時間", data: ms.map(ym=>Math.round(v(ym, "work_hours"))), borderColor: COLORS[3], yAxisID: "y2", tension: .2, borderDash: [4, 3] } ] },
+    options: { scales: { y: Object.assign({ position: "left" }, yenAxis), y2: { position: "right", grid: { drawOnChartArea: false } } } } });
+}
+
+/* ---------- 📍 エリア ---------- */
+let areaMetric = "cnt";
+function renderArea(){
+  const R = range(), rows = groupRows("area", R.months);
+  const ms = R.months.filter(ym=>rows.some(r=>r.ym === ym));
+  const areas = [...new Set(rows.map(r=>r.key))].sort((a, b)=>{ const i = AREAS.indexOf(a), j = AREAS.indexOf(b); return (i < 0 ? 99 : i) - (j < 0 ? 99 : j) || String(a).localeCompare(String(b), "ja"); });
+  const val = (ym, a)=>rows.filter(r=>r.ym === ym && r.key === a).reduce((s, r)=>s + r[areaMetric], 0);
+  const tot = a=>rows.filter(r=>r.key === a).reduce((s, r)=>s + r[areaMetric], 0);
+  const fmt = v=>areaMetric === "cnt" ? v : yen0(v);
+  // エリア別のキャストランキング
+  const rank = areas.map(a=>{ const by = sumBy(rows.filter(r=>r.key === a), r=>r.cast, r=>r[areaMetric]); return [a, Object.entries(by).sort((x, y)=>y[1] - x[1]).slice(0, 10)]; });
+  $("v_area").innerHTML = `
+    <div class="box"><h3>📍 エリアごと <small>${ymLabel(R.from)}〜${ymLabel(R.to)}</small> ${liveNote()}
+      <span class="r seg">${[["cnt", "本数"], ["drop", "店落ち"]].map(([k, l])=>`<button type="button" class="${areaMetric === k ? "on" : ""}" onclick="areaMetric='${k}';renderArea()">${l}</button>`).join("")}</span></h3>
+      <div class="chartwrap tall"><canvas id="ch_area"></canvas></div>
+      <div class="tw" style="margin-top:8px"><table class="t"><tr><th class="l">月</th>${areas.map(a=>`<th>${esc(a)}</th>`).join("")}<th>合計</th></tr>
+        ${ms.map(ym=>`<tr><td class="l">${ymLabel(ym)}</td>${areas.map(a=>`<td>${fmt(val(ym, a)) || ""}</td>`).join("")}<td>${fmt(areas.reduce((s, a)=>s + val(ym, a), 0))}</td></tr>`).join("")}
+        <tr class="sum"><td class="l">合計</td>${areas.map(a=>`<td>${fmt(tot(a))}</td>`).join("")}<td>${fmt(areas.reduce((s, a)=>s + tot(a), 0))}</td></tr></table></div>
+      ${ms.length ? "" : `<div class="hint">この期間のエリアの数字はありません（過去の数字は2026年1月から）</div>`}</div>
+    <div class="box"><h3>🏆 エリア別 キャストランキング（${areaMetric === "cnt" ? "本数" : "店落ち"}・TOP10）</h3>
+      <div class="areaRank">${rank.map(([a, list])=>`<div class="ar"><b>${esc(a)}</b><ol>${list.map(([c, v])=>`<li>${esc(c)}　${fmt(Math.round(v))}${areaMetric === "cnt" ? "本" : "円"}</li>`).join("")}</ol></div>`).join("")}</div></div>`;
+  chart("ch_area", { type: "bar", data: { labels: ms.map(ymLabel), datasets: areas.map((a, i)=>({ label: a, data: ms.map(ym=>Math.round(val(ym, a))), backgroundColor: COLORS[i % COLORS.length], stack: "s" })) },
+    options: { scales: { y: Object.assign({ stacked: true }, areaMetric === "drop" ? yenAxis : {}), x: { stacked: true } } } });
+}
+
+/* ---------- 📣 媒体 ---------- */
+let mediaMetric = "cnt";
+function feeOf(media, area, ym){
+  const list = H.fees.filter(f=>f.media === media && f.area === area && ymOf(f.from_ym) <= ym).sort((a, b)=>String(b.from_ym).localeCompare(String(a.from_ym)));
+  return list[0] ? n0(list[0].monthly_fee) : null;
+}
+function renderMedia(){
+  const R = range(), rows = mediaRows(R.months);
+  const ms = R.months.filter(ym=>rows.some(r=>r.ym === ym));
+  const byMedia = sumBy(rows, r=>r.media, r=>r[mediaMetric]);
+  const medias = Object.keys(byMedia).sort((a, b)=>byMedia[b] - byMedia[a]);
+  const val = (ym, m)=>rows.filter(r=>r.ym === ym && r.media === m).reduce((s, r)=>s + r[mediaMetric], 0);
+  const fmt = v=>mediaMetric === "cnt" ? Math.round(v) : yen0(v);
+  // 媒体×エリア（期間の合計）
+  const ma = sumBy(rows, r=>r.media + "|" + r.area, r=>r.cnt), md = sumBy(rows, r=>r.media + "|" + r.area, r=>r.drop);
+  const pairs = Object.keys(ma).concat(Object.keys(md)).filter((k, i, a)=>a.indexOf(k) === i).sort((a, b)=>(md[b] || 0) - (md[a] || 0));
+  // 掲載料がある媒体の収支（媒体名がふくまれるものを足す：ヘブン ＝ ヘブン＋ヘブンネット予約）
+  const feeKeys = [...new Set(H.fees.map(f=>f.media + "|" + f.area))];
+  const bal = feeKeys.map(k=>{ const [m, a] = k.split("|");
+    const months = R.months.map(ym=>{ const drop = rows.filter(r=>r.ym === ym && r.area === a && String(r.media).includes(m)).reduce((s, r)=>s + r.drop, 0); const fee = feeOf(m, a, ym); return { ym, drop, fee, bal: fee == null ? null : drop - fee }; });
+    return { m, a, months }; });
+  $("v_media").innerHTML = `
+    <div class="box"><h3>📣 媒体ごと <small>${ymLabel(R.from)}〜${ymLabel(R.to)}</small> ${liveNote()}
+      <span class="r seg">${[["cnt", "本数"], ["drop", "店落ち"]].map(([k, l])=>`<button type="button" class="${mediaMetric === k ? "on" : ""}" onclick="mediaMetric='${k}';renderMedia()">${l}</button>`).join("")}</span></h3>
+      <div class="chartwrap tall"><canvas id="ch_media"></canvas></div>
+      <div class="tw" style="margin-top:8px"><table class="t"><tr><th class="l">媒体</th>${ms.map(ym=>`<th>${ymLabel(ym)}</th>`).join("")}<th>合計</th><th>月平均</th></tr>
+        ${medias.map(m=>`<tr><td class="l">${esc(m)}</td>${ms.map(ym=>`<td>${fmt(val(ym, m)) || ""}</td>`).join("")}<td>${fmt(byMedia[m])}</td><td>${ms.length ? fmt(byMedia[m] / ms.length) : ""}</td></tr>`).join("")}</table></div>
+      ${ms.length ? "" : `<div class="hint">この期間の媒体の数字はありません（過去の数字は2026年1月から）</div>`}</div>
+    <div class="grid2x">
+      <div class="box"><h3>🗂 媒体 × 登録エリア（期間の合計）</h3><div class="tw"><table class="t"><tr><th class="l">媒体</th><th class="l">エリア</th><th>本数</th><th>店落ち</th><th>1本あたり</th></tr>
+        ${pairs.map(k=>{ const [m, a] = k.split("|"); const c = ma[k] || 0, d = md[k] || 0; return `<tr><td class="l">${esc(m)}</td><td class="l">${esc(a)}</td><td>${Math.round(c) || ""}</td><td>${yen0(d)}</td><td>${c ? yen0(d / c) : ""}</td></tr>`; }).join("")}</table></div></div>
+      <div class="box"><h3>💰 掲載料と収支 <small>店落ち − 掲載料</small></h3>
+        ${bal.map(b=>`<b style="font-size:13px">${esc(b.m)}（${esc(b.a)}）</b><div class="tw"><table class="t" style="margin-bottom:10px"><tr><th class="l">月</th><th>店落ち</th><th>掲載料</th><th>収支</th></tr>
+          ${b.months.filter(x=>x.drop || x.fee).map(x=>`<tr><td class="l">${ymLabel(x.ym)}</td><td>${yen0(x.drop)}</td><td>${x.fee == null ? "" : yen0(x.fee)}</td><td class="${x.bal == null ? "" : x.bal >= 0 ? "up" : "down"}">${x.bal == null ? "" : yen0(x.bal)}</td></tr>`).join("")}</table></div>`).join("") || `<div class="hint">掲載料がまだ入っていません</div>`}
+        <div class="hint">店落ちは、媒体名に「${esc("ヘブン")}」などがふくまれるものを足しています（ヘブン＝ヘブン＋ヘブンネット予約）</div>
+        <details style="margin-top:8px"><summary style="cursor:pointer;font-weight:800;font-size:13px">⚙️ 掲載料を入れる・直す</summary>
+          <div class="tw"><table class="t"><tr><th class="l">媒体</th><th class="l">エリア</th><th>いつから</th><th>月の掲載料</th><th class="l">メモ</th><th></th></tr>
+            ${H.fees.map(f=>`<tr><td class="l">${esc(f.media)}</td><td class="l">${esc(f.area)}</td><td>${ymLabel(ymOf(f.from_ym))}</td><td>${yen0(f.monthly_fee)}</td><td class="l">${esc(f.note || "")}</td><td><button class="btn btn-danger btn-sm" onclick="delFee(${f.id})">消す</button></td></tr>`).join("")}</table></div>
+          <div class="feeRow"><input id="fe_media" placeholder="媒体（例：ヘブン）" style="width:130px"><input id="fe_area" placeholder="エリア（例：池袋）" style="width:110px">
+            <input type="month" id="fe_from"><input type="number" id="fe_fee" placeholder="月の掲載料" style="width:120px"><input id="fe_note" placeholder="メモ" style="width:140px">
+            <button class="btn btn-primary btn-sm" onclick="addFee()">＋ 足す</button></div>
+          <div class="hint">「いつから」の月から、次に変わるまで毎月その掲載料で計算します（プランアップしたら、その月から新しい行を足す）</div></details></div>
+    </div>`;
+  const top = medias.slice(0, 10);
+  chart("ch_media", { type: "line", data: { labels: ms.map(ymLabel), datasets: top.map((m, i)=>({ label: m, data: ms.map(ym=>Math.round(val(ym, m))), borderColor: COLORS[i % COLORS.length], backgroundColor: COLORS[i % COLORS.length], tension: .2 })) },
+    options: { scales: { y: mediaMetric === "drop" ? yenAxis : {} } } });
+}
+async function addFee(){
+  const media = $("fe_media").value.trim(), area = $("fe_area").value.trim(), from = $("fe_from").value, fee = Number($("fe_fee").value);
+  if(!media || !from || !(fee >= 0)){ toast("媒体・いつから・掲載料を入れてください"); return; }
+  try{
+    q(await sb.from("kb_media_fees").upsert({ media, area, from_ym: from + "-01", monthly_fee: Math.round(fee), note: $("fe_note").value.trim() }, { onConflict: "media,area,from_ym" }));
+    H.fees = await fetchAll("kb_media_fees", "*", "from_ym"); toast("掲載料を入れました"); renderMedia();
+  }catch(e){ toast("入れられませんでした：" + (e.message || e)); }
+}
+async function delFee(id){
+  if(!confirm("この掲載料の行を消しますか？")) return;
+  try{ q(await sb.from("kb_media_fees").delete().eq("id", id)); H.fees = H.fees.filter(f=>f.id !== id); renderMedia(); }
+  catch(e){ toast("消せませんでした：" + (e.message || e)); }
+}
+
+init();
+</script>
+<!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
+</body>
+</html>
