@@ -68,6 +68,7 @@
   <div class="tabs">
     <button class="tab on" id="tabBoard" onclick="showTab('board')">📋 ボード</button>
     <button class="tab" id="tabLog" onclick="showTab('log')">🕒 作業ログ（自動）</button>
+    <button class="tab" id="tabSum" onclick="showTab('sum')">📊 実績まとめ</button>
   </div>
 
   <!-- ===== ボード ===== -->
@@ -96,6 +97,11 @@
     時刻は、その作業を公開した時刻です（日本時間）。</p>
     <div class="filters" id="filters"></div>
     <div id="list"><div class="empty">読み込み中…</div></div>
+  </div>
+
+  <!-- ===== 実績まとめ（GitHub の記録＋ボードの完了から） ===== -->
+  <div id="sumView" style="display:none">
+    <div id="sum"><div class="empty">読み込み中…（GitHub の記録をぜんぶ読むので、少しかかります）</div></div>
   </div>
 </div>
 <a class="back" href="./">🏠 ポータル</a>
@@ -157,12 +163,16 @@ function render(){
 }
 // 作業ログは、タブを開いたときに1回だけ読む
 let logLoaded = false;
+let sumLoaded = false;
 function showTab(t){
   document.getElementById("tabBoard").classList.toggle("on", t === "board");
   document.getElementById("tabLog").classList.toggle("on", t === "log");
+  document.getElementById("tabSum").classList.toggle("on", t === "sum");
   document.getElementById("boardView").style.display = t === "board" ? "" : "none";
   document.getElementById("logView").style.display = t === "log" ? "" : "none";
+  document.getElementById("sumView").style.display = t === "sum" ? "" : "none";
   if(t === "log" && !logLoaded){ logLoaded = true; load(); }
+  if(t === "sum" && !sumLoaded){ sumLoaded = true; loadSummary(); }
 }
 </script>
 
@@ -390,6 +400,121 @@ let dragging = false;
 
 document.getElementById("qText").addEventListener("keydown", e=>{ if(e.key === "Enter" && !e.isComposing){ e.preventDefault(); quickAdd(); } });
 loadBoard();
+</script>
+
+<style>
+  .sumcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:12px;}
+  .sumcards .c{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;}
+  .sumcards .k{font-size:11.5px;font-weight:800;color:var(--sub);}
+  .sumcards .v{font-size:20px;font-weight:800;color:var(--pink-deep);margin-top:2px;}
+  .sumcards .s{font-size:11px;color:var(--sub);margin-top:2px;}
+  .sbox{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:12px;}
+  .sbox h3{font-size:14.5px;color:var(--pink-deep);margin-bottom:8px;}
+  .st{width:100%;border-collapse:collapse;font-size:13px;}
+  .st th,.st td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:right;white-space:nowrap;}
+  .st th{color:var(--sub);font-size:11.5px;background:#FBF3F6;}
+  .st .l{text-align:left;white-space:normal;}
+  .st tr.tot td{font-weight:800;background:#FFF8FA;}
+  .bars{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;align-items:end;height:110px;margin-top:6px;}
+  .bars .b{background:var(--pink);border-radius:4px 4px 0 0;min-height:1px;position:relative;}
+  .bars .b.night{background:#8b7fd6;}
+  .barlab{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;font-size:10px;color:var(--sub);text-align:center;margin-top:2px;}
+  .donelist{font-size:13px;line-height:1.7;}
+  .donelist b{display:block;margin-top:8px;color:var(--ink);}
+  .donelist li{margin-left:18px;}
+  .donelist small{color:var(--sub);}
+  .note2{font-size:11.5px;color:var(--sub);line-height:1.7;margin-top:6px;}
+  @media print{ .tabs,.back,#boardView,#logView,.noprint{display:none !important;} #sumView{display:block !important;} body{background:#fff;} }
+</style>
+<script>
+/* ============================================================
+   📊 実績まとめ
+   ・GitHub の全アプリの公開の記録（コミット）をぜんぶ読んで、日・月・アプリ・時間帯で数える
+   ・ボードの「完了」から、できたことの一覧
+   作業した時間の「目安」＝その日の最初の公開〜最後の公開の幅（公開の前にも作業しているので、実際はこれより長い）
+   ============================================================ */
+const SUM_REPOS = REPOS.concat([
+  { repo:"sakurashift",            label:"サクラシフト（はじめの版）" },
+  { repo:"sakurashift-dev",        label:"サクラシフト（試作）" },
+  { repo:"sakuramoong-onboarding", label:"新人さん向け" },
+]);
+async function fetchAllCommits(repo){
+  let out = [];
+  for(let page = 1; page <= 10; page++){
+    const res = await fetch(`https://api.github.com/repos/${OWNER}/${repo}/commits?per_page=100&page=${page}`);
+    if(!res.ok) throw new Error("GitHub " + res.status);
+    const list = await res.json();
+    out = out.concat(list);
+    if(list.length < 100) break;
+  }
+  return out;
+}
+async function loadSummary(){
+  const el = document.getElementById("sum");
+  let commits = [], failed = [];
+  await Promise.all(SUM_REPOS.map(async r=>{
+    try{ (await fetchAllCommits(r.repo)).forEach(c=>commits.push({ repo: r, at: new Date(c.commit.author.date) })); }
+    catch(e){ failed.push(r.label); }
+  }));
+  let done = [];
+  try{ const { data } = await sb.from("mgr_items").select("app,title,done_at,created_at").eq("kind", "done").order("done_at"); done = data || []; }catch(e){}
+  if(!commits.length){ el.innerHTML = `<div class="empty">GitHub の記録を読めませんでした（1時間に読める回数の上限かもしれません。少したってから開き直してください）</div>`; return; }
+  commits.sort((a, b)=>a.at - b.at);
+  const ymd = d=>jst(d).toISOString().slice(0, 10), hh = d=>jst(d).getUTCHours();
+  const hm = d=>{ const j = jst(d); return String(j.getUTCHours()).padStart(2, "0") + ":" + String(j.getUTCMinutes()).padStart(2, "0"); };
+  // 日ごと（朝6時までは前の日として数える＝夜中の作業をまとめる）
+  const workDay = d=>{ const j = jst(d); if(j.getUTCHours() < 6) j.setUTCDate(j.getUTCDate() - 1); return j.toISOString().slice(0, 10); };
+  const days = {};
+  commits.forEach(c=>{ const k = workDay(c.at); (days[k] = days[k] || []).push(c); });
+  const dayKeys = Object.keys(days).sort();
+  const span = k=>{ const a = days[k]; return (a[a.length - 1].at - a[0].at) / 3600000; };
+  const totalSpan = dayKeys.reduce((s, k)=>s + span(k), 0);
+  const first = commits[0].at, last = commits[commits.length - 1].at;
+  const fmtD = d=>{ const j = jst(d); return `${j.getUTCFullYear()}/${j.getUTCMonth() + 1}/${j.getUTCDate()}`; };
+  const h1 = v=>(Math.round(v * 10) / 10).toLocaleString("ja-JP");
+  // 夜（22時〜朝6時）の公開の数
+  const night = commits.filter(c=>{ const h = hh(c.at); return h >= 22 || h < 6; }).length;
+  // 月ごと
+  const months = {};
+  dayKeys.forEach(k=>{ const m = k.slice(0, 7); const o = months[m] = months[m] || { days: 0, commits: 0, hours: 0 }; o.days++; o.commits += days[k].length; o.hours += span(k); });
+  // アプリごと
+  const apps = SUM_REPOS.map(r=>{ const cs = commits.filter(c=>c.repo.repo === r.repo); if(!cs.length) return null;
+    return { label: r.label, n: cs.length, days: new Set(cs.map(c=>workDay(c.at))).size, from: cs[0].at, to: cs[cs.length - 1].at }; }).filter(Boolean).sort((a, b)=>b.n - a.n);
+  // 時間帯・曜日
+  const byHour = Array(24).fill(0); commits.forEach(c=>byHour[hh(c.at)]++);
+  const maxH = Math.max(...byHour, 1);
+  const byDow = Array(7).fill(0); dayKeys.forEach(k=>byDow[new Date(k + "T00:00:00Z").getUTCDay()]++);
+  // できたこと（ボードの完了）
+  const doneBy = {}; done.forEach(d=>{ (doneBy[d.app || "その他"] = doneBy[d.app || "その他"] || []).push(d); });
+
+  el.innerHTML = `
+    <p class="lead">アプリを作った記録のまとめです。<b>数字は GitHub に公開した記録（自動）から数えています。</b>
+      <button class="chip noprint" style="margin-left:6px" onclick="window.print()">🖨 印刷・PDFにする</button></p>
+    <div class="sumcards">
+      <div class="c"><div class="k">期間</div><div class="v" style="font-size:15px">${fmtD(first)}〜${fmtD(last)}</div><div class="s">${Math.round((last - first) / 86400000) + 1}日間</div></div>
+      <div class="c"><div class="k">作業した日</div><div class="v">${dayKeys.length}日</div><div class="s">公開した日（朝6時までは前の日）</div></div>
+      <div class="c"><div class="k">公開した回数</div><div class="v">${commits.length.toLocaleString("ja-JP")}回</div><div class="s">${apps.length}つのアプリ</div></div>
+      <div class="c"><div class="k">作業時間の目安</div><div class="v">${h1(totalSpan)}時間〜</div><div class="s">各日の最初〜最後の公開の幅の合計</div></div>
+      <div class="c"><div class="k">夜（22時〜朝6時）の公開</div><div class="v">${Math.round(night / commits.length * 100)}%</div><div class="s">${night}回</div></div>
+      <div class="c"><div class="k">ボードの完了</div><div class="v">${done.length}件</div><div class="s">できたこと</div></div>
+    </div>
+    ${failed.length ? `<div class="note2" style="color:#d9534f">※ 読めなかったアプリ：${failed.map(esc).join("、")}（少したってから開き直すと出ます）</div>` : ""}
+    <div class="sbox"><h3>📅 月ごと</h3>
+      <table class="st"><tr><th class="l">月</th><th>作業した日</th><th>公開した回数</th><th>作業時間の目安</th></tr>
+      ${Object.keys(months).sort().map(m=>{ const o = months[m]; return `<tr><td class="l">${m.slice(0, 4)}年${Number(m.slice(5))}月</td><td>${o.days}日</td><td>${o.commits}回</td><td>${h1(o.hours)}時間〜</td></tr>`; }).join("")}
+      <tr class="tot"><td class="l">合計</td><td>${dayKeys.length}日</td><td>${commits.length}回</td><td>${h1(totalSpan)}時間〜</td></tr></table>
+      <div class="note2">作業時間の目安＝その日の最初の公開から最後の公開までの時間。最初の公開の前にも作業していて、公開が1回だけの日は0時間になるので、<b>実際の作業時間はこれより長くなります。</b></div></div>
+    <div class="sbox"><h3>📱 アプリごと</h3>
+      <table class="st"><tr><th class="l">アプリ</th><th>公開した回数</th><th>作業した日</th><th>はじめ</th><th>さいご</th></tr>
+      ${apps.map(a=>`<tr><td class="l">${esc(a.label)}</td><td>${a.n}回</td><td>${a.days}日</td><td>${fmtD(a.from)}</td><td>${fmtD(a.to)}</td></tr>`).join("")}</table></div>
+    <div class="sbox"><h3>🕐 公開した時間帯</h3>
+      <div class="bars">${byHour.map((n, h)=>`<div class="b ${h >= 22 || h < 6 ? "night" : ""}" style="height:${n / maxH * 100}%" title="${h}時台 ${n}回"></div>`).join("")}</div>
+      <div class="barlab">${byHour.map((n, h)=>`<div>${h % 3 === 0 ? h : ""}</div>`).join("")}</div>
+      <div class="note2">紫＝夜（22時〜朝6時）。曜日ごとの作業した日：${["日", "月", "火", "水", "木", "金", "土"].map((w, i)=>`${w} ${byDow[i]}日`).join("・")}</div></div>
+    <div class="sbox"><h3>✅ できたこと（ボードの完了）</h3>
+      <div class="donelist">${Object.keys(doneBy).map(app=>`<b>${esc(app)}（${doneBy[app].length}件）</b><ul>${doneBy[app].map(d=>`<li>${esc(d.title)} <small>${d.done_at ? fmtD(new Date(d.done_at)) : ""}</small></li>`).join("")}</ul>`).join("") || `<div class="none">まだありません</div>`}</div>
+      <div class="note2">ボードは2026年10月15日から使い始めたので、それより前にできたものは、ここには入っていません（作業ログには全部あります）。</div></div>`;
+}
 </script>
 </body>
 </html>
