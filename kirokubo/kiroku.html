@@ -3748,13 +3748,36 @@ paintNewHotel = function(){
   if(!isBiz()) return __paintNewHotelBz();
   const el = $("newHotelBox"); if(!el) return;
   const name = hotelNameFromAddr($("f_address").value);
-  el.innerHTML = name && name.length >= 2 && !bizFind() ? `<div class="hist" style="margin:6px 0 0">🏢 「${esc(name)}」は、予約を保存するとビジホの履歴に入ります（地図のURLも入れておくと次から自動）</div>` : "";
+  if(!KB.CAN_EDIT || !name || name.length < 2 || bizFind()){ el.innerHTML = ""; return; }
+  const q2 = encodeURIComponent(($("f_area").value.trim() || "") + " " + name);
+  el.innerHTML = `<div class="newhotel">🆕 「<b>${esc(name)}</b>」はビジホの履歴にありません。ビジホとして足しますか？（足さなくても、予約を保存すると自動で入ります）
+    <div class="row2" style="margin-top:6px">
+      <div class="f"><label>ビジホの名前</label><input id="nb_name" value="${esc(name)}" maxlength="80"></div>
+      <div class="f"><label>メモ（例：フロント通らずに入れる）</label><input id="nb_note" maxlength="200"></div>
+    </div>
+    <div class="f" style="margin-top:6px"><label>地図のURL　<a href="https://www.google.com/maps/search/?api=1&query=${q2}" target="_blank" rel="noopener">🔍 Googleマップで調べる</a>（開いたら「共有」→「リンクをコピー」して貼る）</label>
+      <input id="nb_map" placeholder="https://maps.app.goo.gl/…"></div>
+    <div style="text-align:right;margin-top:6px"><button type="button" class="btn btn-primary btn-sm" onclick="addBizFromForm()">🏢 ビジホの履歴に足す</button></div></div>`;
 };
+async function addBizFromForm(){
+  const name = $("nb_name").value.trim(), area = $("f_area").value.trim(), map = $("nb_map").value.trim(), note = $("nb_note").value.trim();
+  if(!name){ toast("ビジホの名前を入れてください"); return; }
+  if(!area){ toast("先にエリアを選んでください"); return; }
+  if(map && !/^https?:\/\//i.test(map)){ toast("地図のURLは https:// から始まるものを貼ってください"); return; }
+  try{
+    const row = q(await sb.from("kb_biz_hotels").insert({ area, hotel_name: name, map_url: map, note, updated_by: KB.operatorName() }).select("*").single());
+    M.biz.unshift(row || { area, hotel_name: name, map_url: map, note });
+    if($("f_map")) $("f_map").dataset.auto = "1";
+    $("newHotelBox").innerHTML = ""; fillHotelList(); autoMap(); paintBiz(); recalc();
+    toast("「" + name + "」をビジホの履歴に足しました");
+  }catch(e){ toast("足せませんでした（SQL 112 は実行ずみ？）：" + (e.message || e)); }
+}
 // 前回の確認を、ビジホの確認の枠に出す
 const __paintBizBz = paintBiz;
 paintBiz = function(){
   __paintBizBz();
   const h = isBiz() && bizFind(), box = document.querySelector("#bizBox .bh");
+  if(h && box && h.note) box.insertAdjacentHTML("afterend", `<div class="hist" style="margin:0 0 4px">📝 ${esc(h.note)}</div>`);
   if(h && box && h.last_check && h.last_check.twin) box.insertAdjacentHTML("afterend", `<div class="hist" style="margin:0 0 4px">前回（${esc(h.last_used || "")}）：${esc(bizText(h.last_check))}${h.use_count ? "（これまで" + h.use_count + "回）" : ""}</div>`);
 };
 const __checkNewHotelBz = checkNewHotel;
