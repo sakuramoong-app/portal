@@ -257,6 +257,10 @@
   .movebox .movenow{display:block;width:100%;margin-top:3px;font-family:inherit;font-size:12px;padding:3px 6px;border:1.5px solid #9ED8DF;border-radius:6px;}
   /* 有料オプションの一覧を直す（店長） */
   .optadm{display:flex;gap:6px;align-items:center;padding:4px 0;border-bottom:1px dashed var(--line);} .optadm input{font-family:inherit;font-size:13px;padding:5px 8px;border:1.5px solid var(--line);border-radius:8px;} .optadm .l{flex:1;} .optadm .p,.optadm .b{width:90px;text-align:right;}
+  /* 一覧でそのまま直す（ホテル・種類・NG客・次回の交通費）／リストにないホテル */
+  .inl{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;} .inl select,.inl input{font-family:inherit;font-size:12px;padding:3px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;} .inl input{min-width:120px;flex:1;}
+  .inl .mini{font-family:inherit;font-size:11.5px;font-weight:800;padding:2px 8px;border:1.5px solid var(--line);border-radius:99px;background:#fff;color:var(--sub);cursor:pointer;} .inl .mini.ng{background:#FFE8EC;border-color:#F09AAA;color:#B0213F;}
+  .newhotel{background:#FFF8E6;border:2px dashed #FFB547;border-radius:12px;padding:8px 10px;margin:6px 0;font-size:13.5px;}
   .seats{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:8px;overflow-x:auto;}
   .seat{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px;}
   .seat.on{border-color:#6c5ce7;background:#F4F2FF;}
@@ -480,8 +484,11 @@
         <div class="f"><label>エリア</label>
           <select id="f_areaSel" onchange="onAreaSel()"></select>
           <input id="f_area" maxlength="60" placeholder="場所（駅・地名など。例：川崎）" style="display:none;margin-top:6px" oninput="showAreaFee();recalc()"></div>
-        <div class="f"><label>ホテル・自宅（部屋番号）</label><input id="f_address" maxlength="200" list="hotelList" oninput="recalc()"><datalist id="hotelList"></datalist></div>
+        <div class="f"><label>ホテル・自宅（部屋番号）</label>
+          <div style="display:flex;gap:6px"><select id="f_place" style="max-width:110px" onchange="checkNewHotel()"><option value="">（種類）</option><option value="love">ラブホ</option><option value="biz">ビジホ</option><option value="home">自宅</option></select>
+          <input id="f_address" maxlength="200" list="hotelList" oninput="recalc();checkNewHotel()" style="flex:1"></div><datalist id="hotelList"></datalist></div>
       </div>
+      <div id="newHotelBox"></div>
       <div id="areaInfo"></div>
       <div class="row2">
         <div class="f"><label>交通費（お客さんから）</label><input type="number" id="f_transport" min="0" value="0" oninput="recalc()"></div>
@@ -608,7 +615,7 @@ async function init(){
       sb.from("kb_rank_history").select("cast_id,grp,rank,valid_from,id,hearing_text,by_name,at"),
       sb.from("kb_dummy_names").select("*").eq("active", true).order("sort").order("id"),
       sb.from("kb_cast_checks").select("*").eq("active", true).order("sort").order("id"),
-      sb.from("prof_hotels").select("area,hotel_name,map_url,store_status,note").order("seq"),
+      sb.from("prof_hotels").select("hotel_id,area,hotel_name,map_url,store_status,note").order("seq"),
     ]);
     const [stores, casts, prices, back, options, rules, settings, media, courseInfo, rankHist, dummies, castChecks, hotels] = r.map(q);
     M = { stores, casts, prices, options, rules, media, courseInfo, rankHist: rankHist || [], dummies: dummies || [], castChecks: castChecks || [], hotels: hotels || [], back: {}, set: {} };
@@ -629,7 +636,7 @@ async function loadDay(){
   $("dayInfo").textContent = `${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) の営業日（朝6時まで）`;
   try{
     const [res, note] = await Promise.all([
-      sb.from("kb_reservations").select("*, kb_customers(id,name,phone,ng)").eq("biz_date", day).eq("deleted", false).order("start_at"),
+      sb.from("kb_reservations").select("*, kb_customers(*)").eq("biz_date", day).eq("deleted", false).order("start_at"),
       sb.from("kb_day_notes").select("notice").eq("biz_date", day).maybeSingle(),
     ]);
     rows = q(res) || [];
@@ -1395,6 +1402,7 @@ async function saveRes(){
       visit_kind: visit, free_kind: c.free, nh_rate: $("f_nh").checked,
       start_at: s ? s.toISOString() : null, end_at: s ? new Date(s.getTime() + mins*60000).toISOString() : null,
       area: $("f_area").value.trim(), address: $("f_address").value.trim(), course: c.course,
+      ...(("place_kind" in (rows[0] || editing || {})) || ($("f_place") && $("f_place").value) ? { place_kind: $("f_place") ? $("f_place").value : "" } : {}),
       extension_count: c.ext, date_count: c.date, options: c.opts, media: mediaSel,
       base_price: c.price, admission: c.admission, nomination_fee: c.nomination, extension_fee: c.extFee + c.dateFee,
       transport: c.transport, option_total: c.optionTotal, discount: c.discount, discount_note: $("f_discnote").value.trim(),
@@ -2632,8 +2640,8 @@ function resCells(r){
     ${KB.CAN_EDIT ? `<button class="addlog" onclick="event.stopPropagation();addLogPrompt(${r.id})">＋ ログ</button>` : ""}</div>`;
   return `<td><b>${hm(r.start_at)}</b>〜${hm(r.end_at)}</td>
     <td>${r.dummy_name ? `<small style="color:#6c5896">🎭${esc(r.dummy_name)}</small><br>` : ""}${esc(String(storeLabel(r.store_key) || "").slice(0, 3))}</td>
-    <td>${esc(r.course)}${/^\d+$/.test(r.course) ? "分" : ""}${r.free_kind ? "・" + FREE_SUFFIX[r.free_kind] : ""}${r.extension_count ? " 延長" + r.extension_count : ""}${r.payment !== "cash" ? " 💳" : ""}<br><small style="color:var(--sub)">${esc(r.area || "")}</small>${cardSel(r)}</td>
-    <td>${c.ng ? "⚠️" : ""}${esc(c.name || "")}<small style="color:var(--sub)"> ${(VISIT.find(v=>v[0] === r.visit_kind) || [])[1] || ""}</small>${c.phone ? `<br><span class="tel">📞 ${esc(c.phone)}</span>` : ""}</td>
+    <td>${esc(r.course)}${/^\d+$/.test(r.course) ? "分" : ""}${r.free_kind ? "・" + FREE_SUFFIX[r.free_kind] : ""}${r.extension_count ? " 延長" + r.extension_count : ""}${r.payment !== "cash" ? " 💳" : ""}<br><small style="color:var(--sub)">${esc(r.area || "")}</small>${placeCell(r)}${cardSel(r)}</td>
+    <td>${c.ng ? "⚠️" : ""}${esc(c.name || "")}<small style="color:var(--sub)"> ${(VISIT.find(v=>v[0] === r.visit_kind) || [])[1] || ""}</small>${c.phone ? `<br><span class="tel">📞 ${esc(c.phone)}</span>` : ""}${custCell(r)}</td>
     <td>${stSel}${todosHtml(r)}</td><td>${told}</td><td>${logHtml}</td>`;
 }
 renderListTable = function(){
@@ -3051,6 +3059,131 @@ async function reloadShifts(){
 
 // 勤怠の小窓も、外を押したら閉じる（ほかの小窓と同じ）
 KB.closeOnBackdrop($("attendBg"), ()=>$("attendBg").classList.remove("show"));
+
+/* ============================================================
+   2026/10/20：エリアの順番・場所の種類・リストにないホテルを足す・次回の交通費・一覧でそのまま直す
+   ============================================================ */
+// エリアの順番：池袋・鶯谷・五反田・渋谷・錦糸町・出張 → そのほか
+const AREA_ORDER = ["池袋", "鶯谷", "五反田", "渋谷", "錦糸町", "出張"];
+const __areaList = areaList;
+areaList = function(){
+  const rank = a=>{ const i = AREA_ORDER.findIndex(x=>String(a).includes(x)); return i < 0 ? 99 : i; };
+  return __areaList().sort((a, b)=>rank(a) - rank(b) || String(a).localeCompare(String(b), "ja"));
+};
+const PLACE = { love: "ラブホ", biz: "ビジホ", home: "自宅" };
+
+// 予約を開いたとき：場所の種類
+const __openFormPl = openForm;
+openForm = function(id){
+  __openFormPl(id);
+  const r = id ? rows.find(x=>x.id === id) : null;
+  if($("f_place")) $("f_place").value = (r && r.place_kind) || "";
+  checkNewHotel();
+};
+
+/* ---------- リストにないホテル：店として／キャストとして OK・NG で足す（地図のURLも） ---------- */
+let newHotelTimer = null;
+function checkNewHotel(){ clearTimeout(newHotelTimer); newHotelTimer = setTimeout(paintNewHotel, 400); }
+function hotelNameFromAddr(s){ return String(s || "").replace(/[\s　]*[0-9０-９]+[号室]*[\s　]*$/, "").trim(); }   // 「ホテル〇〇 302」→「ホテル〇〇」
+function paintNewHotel(){
+  const el = $("newHotelBox"); if(!el) return;
+  const area = $("f_area").value.trim(), name = hotelNameFromAddr($("f_address").value);
+  const kind = $("f_place") ? $("f_place").value : "";
+  if(!KB.CAN_EDIT || !name || name.length < 2 || kind === "home"){ el.innerHTML = ""; return; }
+  const key = s=>String(s || "").replace(/[\s　]/g, "");
+  if((M.hotels || []).some(h=>key(name).includes(key(h.hotel_name)) || key(h.hotel_name).includes(key(name)))){ el.innerHTML = ""; return; }
+  const c = M.casts.find(x=>x.id === $("f_cast").value);
+  const q2 = encodeURIComponent((area || "") + " " + name);
+  el.innerHTML = `<div class="newhotel">🆕 「<b>${esc(name)}</b>」はホテルリストにありません。リストに足しますか？
+    <div class="row2" style="margin-top:6px">
+      <div class="f"><label>ホテルの名前</label><input id="nh_name" value="${esc(name)}" maxlength="80"></div>
+      <div class="f"><label>どう足す？</label><select id="nh_kind">
+        <option value="">足さない</option><option value="store_ok">✅ 店としてOK</option><option value="store_ng">🚫 店としてNG</option><option value="none">足すだけ（OK・NGは決めない）</option>
+        ${c && c.prof_id ? `<option value="cast_ok">💗 ${esc(c.official_name || c.temp_name)}としてOK</option><option value="cast_ng">🙅 ${esc(c.official_name || c.temp_name)}としてNG</option>` : ""}</select></div>
+    </div>
+    <div class="f" style="margin-top:6px"><label>地図のURL　<a href="https://www.google.com/maps/search/?api=1&query=${q2}" target="_blank" rel="noopener">🔍 Googleマップで調べる</a>（開いたら「共有」→「リンクをコピー」して貼る）</label>
+      <input id="nh_map" placeholder="https://maps.app.goo.gl/…"></div>
+    <div style="text-align:right;margin-top:6px"><button type="button" class="btn btn-primary btn-sm" onclick="addHotelFromForm()">🏨 ホテルリストに足す</button></div></div>`;
+}
+async function addHotelFromForm(){
+  const kind = $("nh_kind").value, name = $("nh_name").value.trim(), area = $("f_area").value.trim(), map = $("nh_map").value.trim();
+  if(!kind){ toast("「どう足す？」を選んでください"); return; }
+  if(!name){ toast("ホテルの名前を入れてください"); return; }
+  if(!area){ toast("先にエリアを選んでください"); return; }
+  if(map && !/^https?:\/\//i.test(map)){ toast("地図のURLは https:// から始まるものを貼ってください"); return; }
+  const c = M.casts.find(x=>x.id === $("f_cast").value);
+  const row = { hotel_id: "h" + Date.now().toString(36), area, hotel_name: name, map_url: map,
+    store_status: kind === "store_ok" ? "ok" : kind === "store_ng" ? "ng" : "", note: "記録簿の受付で追加（" + KB.operatorName() + "）" };
+  try{
+    q(await sb.from("prof_hotels").insert(row));
+    if((kind === "cast_ok" || kind === "cast_ng") && c && c.prof_id){
+      q(await sb.rpc("kb_set_cast_hotel", { p_prof_id: c.prof_id, p_hotel_id: row.hotel_id, p_pref: kind === "cast_ok" ? "ok" : "ng" }));
+    }
+    M.hotels.push(row); $("newHotelBox").innerHTML = ""; paintAreaInfo(); recalc();
+    toast("「" + name + "」をホテルリストに足しました");
+  }catch(e){ toast("足せませんでした（SQL 108 は実行ずみ？）：" + (e.message || e)); }
+}
+
+/* ---------- 🚕 次回の交通費（お客さんごと）：電話番号で調べたら出して、交通費に入れる ---------- */
+const __lookupCustomerT = lookupCustomer;
+lookupCustomer = async function(keepName){
+  await __lookupCustomerT(keepName);
+  const c = curCustomer;
+  if(c && c.next_transport != null){
+    $("custInfo").insertAdjacentHTML("beforeend", `<div class="warn">🚕 このお客さんは<b>次回の交通費 ${yen(c.next_transport)}</b>${c.next_transport_note ? "（" + esc(c.next_transport_note) + "）" : ""}</div>`);
+    if(!editing && !(+$("f_transport").value)){ $("f_transport").value = c.next_transport; recalc(); }
+  }
+};
+
+/* ---------- 本日のキャスト一覧で、予約を開かずに直す（ホテル・部屋番号・場所の種類・NG客・次回の交通費） ---------- */
+function placeCell(r){
+  if(!KB.CAN_EDIT) return r.address ? `<br><small>${esc((PLACE[r.place_kind] ? PLACE[r.place_kind] + " " : "") + r.address)}</small>` : "";
+  return `<div class="inl" onclick="event.stopPropagation()">
+    <select onchange="inlineSave(${r.id},'place_kind',this.value)"><option value="">種類</option>${Object.keys(PLACE).map(k=>`<option value="${k}" ${r.place_kind === k ? "selected" : ""}>${PLACE[k]}</option>`).join("")}</select>
+    <input value="${esc(r.address || "")}" placeholder="ホテル・部屋番号" onchange="inlineSave(${r.id},'address',this.value.trim())"></div>`;
+}
+async function inlineSave(id, field, v){
+  const label = field === "address" ? "ホテル・部屋 → " + (v || "（なし）") : "場所の種類 → " + (PLACE[v] || "（なし）");
+  if(await pushLog(id, label, { [field]: v })){ toast("保存しました"); renderList(); }
+}
+function custCell(r){
+  const c = r.kb_customers || {};
+  if(!r.customer_id || !KB.CAN_EDIT) return c.ng ? `<br><small style="color:#B0213F">⚠️ NG：${esc(c.ng_reason || "")}</small>` : "";
+  return `<div class="inl" onclick="event.stopPropagation()">
+    <button type="button" class="mini ${c.ng ? "ng" : ""}" onclick="custNg(${r.id})">${c.ng ? "⚠️ NG客：" + esc(c.ng_reason || "理由なし") : "🚫 NGにする"}</button>
+    <button type="button" class="mini" onclick="custNextFee(${r.id})">🚕 次回の交通費${c.next_transport != null ? "：" + yen(c.next_transport) : ""}</button></div>`;
+}
+async function updCustomer(id, patch, msg){
+  const r = rows.find(x=>x.id === id); if(!r || !r.customer_id) return;
+  try{
+    q(await sb.from("kb_customers").update(Object.assign({ updated_by: KB.operatorName() }, patch)).eq("id", r.customer_id));
+    rows.filter(x=>x.customer_id === r.customer_id).forEach(x=>{ x.kb_customers = Object.assign({}, x.kb_customers || {}, patch); });
+    await pushLog(id, msg); toast(msg); renderList();
+  }catch(e){ toast("保存できませんでした（SQL 108 は実行ずみ？）：" + (e.message || e)); }
+}
+function custNg(id){
+  const r = rows.find(x=>x.id === id), c = (r && r.kb_customers) || {};
+  if(c.ng){
+    const v = prompt("NGの理由を直す（空にして OK を押すと、NGを外します）", c.ng_reason || "");
+    if(v === null) return;
+    if(!v.trim()) updCustomer(id, { ng: false, ng_reason: "" }, "NG客を外した");
+    else updCustomer(id, { ng_reason: v.trim() }, "NGの理由 → " + v.trim());
+    return;
+  }
+  const v = prompt("このお客さんをNGにします。理由は？（例：キャストから「怖かった」と連絡）", "");
+  if(v === null) return;
+  updCustomer(id, { ng: true, ng_reason: v.trim() || "理由なし" }, "NG客にした：" + (v.trim() || "理由なし"));
+}
+function custNextFee(id){
+  const r = rows.find(x=>x.id === id), c = (r && r.kb_customers) || {};
+  const v = prompt("次にこのお客さんの予約を受けるときの交通費（円）。空にして OK で消します", c.next_transport != null ? c.next_transport : "");
+  if(v === null) return;
+  if(!String(v).trim()){ updCustomer(id, { next_transport: null, next_transport_note: "" }, "次回の交通費を消した"); return; }
+  const n = Math.max(0, parseInt(String(v).replace(/[^\d]/g, ""), 10) || 0);
+  const note = prompt("メモ（例：思ったより遠かった・タクシー代がかかった）", c.next_transport_note || "");
+  if(note === null) return;
+  updCustomer(id, { next_transport: n, next_transport_note: note.trim() }, "次回の交通費 → " + yen(n) + (note.trim() ? "（" + note.trim() + "）" : ""));
+}
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
