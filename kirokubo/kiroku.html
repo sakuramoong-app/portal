@@ -300,6 +300,19 @@
   /* 日付：曜日つきの文字を見せて、押すとカレンダー */
   .datebox{position:relative;display:inline-flex;align-items:center;font-size:16px;font-weight:800;color:var(--pink-deep);background:#fff;border:1.5px solid #FFC2D1;border-radius:99px;padding:3px 14px;cursor:pointer;white-space:nowrap;}
   .datebox input[type=date]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0;}
+  .datebox .dmd{color:#B0124F;font-size:19px;} .datebox .dwk{color:#B0124F;font-size:16px;margin-left:1px;}
+  .datebox .dwk.sat{color:#1E6FD9;} .datebox .dwk.sun{color:#E0245E;}
+  .datebox .dtoday{background:var(--pink-deep);color:#fff;font-size:11.5px;border-radius:99px;padding:1px 8px;margin-left:6px;}
+  .datebox .calico{margin-left:6px;font-size:17px;}
+  /* ビジホの確認 */
+  .bizbox{background:#EEF5FF;border:2px solid #8DB8F0;border-radius:12px;padding:8px 12px;margin-top:8px;}
+  .bizbox .bh{font-weight:800;font-size:13.5px;color:#1C4F8F;margin-bottom:4px;}
+  .bizbox .bq{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:14px;font-weight:700;padding:3px 0;}
+  .bizbox .bq>span{min-width:170px;} .bizbox .bq.miss>span{color:#d9534f;} .bizbox .bq.miss>span::before{content:"⚠️ ";}
+  .bizbox .ynp{border:1.5px solid #B9CBE3;background:#fff;border-radius:99px;padding:4px 12px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .bizbox .ynp.on{background:#1E6FD9;border-color:#1E6FD9;color:#fff;}
+  small.bizinfo{display:block;color:#1C4F8F;font-weight:700;}
+  .msg{min-height:96px !important;}
   .seats{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:8px;overflow-x:auto;}
   .seat{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px;}
   .seat.on{border-color:#6c5ce7;background:#F4F2FF;}
@@ -371,7 +384,7 @@
     <div class="viewbar">
       <div class="daybar bigday">
         <button class="btn btn-ghost btn-sm" onclick="moveDay(-1)">◀</button>
-        <label class="datebox" onclick="try{$('day').showPicker()}catch(e){}" title="押すとカレンダー"><span id="dayLabel"></span><input type="date" id="day" onchange="loadDay()"></label>
+        <label class="datebox" onclick="try{$('day').showPicker()}catch(e){}" title="押すとカレンダー"><span id="dayLabel"></span><span class="calico">📅</span><input type="date" id="day" onchange="loadDay()"></label>
         <button class="btn btn-ghost btn-sm" onclick="moveDay(1)">▶</button>
         <span class="bd" id="dayInfo" style="display:none"></span>
         <button class="btn btn-ghost btn-sm" onclick="goToday()">今日（営業日）</button>
@@ -513,7 +526,6 @@
       <div class="f"><label>キャスト（フリーのときは行く人を選ぶ）</label><select id="f_cast" onchange="onCast()"></select>
         <label style="display:block;font-size:12px;color:var(--sub);margin-top:4px"><input type="checkbox" id="f_castAll" onchange="fillCastSel()" style="width:auto;display:inline;vertical-align:middle;margin-right:4px"> シフトにない人も出す（ふだんは、その日の出勤のキャストだけ）</label></div>
       <div id="castChecks"></div>
-      <div id="castInfo"></div>
     </div>
 
     <!-- ③ 日時・エリア・コース -->
@@ -543,6 +555,7 @@
           <div style="display:flex;gap:6px"><select id="f_place" style="max-width:110px" onchange="checkNewHotel()"><option value="">（種類）</option><option value="love">ラブホ</option><option value="biz">ビジホ</option><option value="home">自宅</option></select>
           <input id="f_address" maxlength="200" list="hotelList" oninput="recalc();checkNewHotel()" style="flex:1"></div><datalist id="hotelList"></datalist></div>
       </div>
+      <div id="bizBox"></div>
       <div class="f" style="margin-top:6px"><label>📍 地図のURL（自宅やリストにない場所のとき。お客さんの場所として覚えます）</label><input id="f_map" maxlength="500" placeholder="https://maps.app.goo.gl/…（登録されているホテルなら自動で入ります）" oninput="this.dataset.auto='';recalc()"></div>
       <div id="newHotelBox"></div>
       <div id="areaInfo"></div>
@@ -556,6 +569,7 @@
     <!-- ④ 希望プレイ・オプション・総額 -->
     <div class="step">
       <h3><span class="n">4</span>希望プレイ・オプション・総額のご案内</h3>
+      <div id="castInfo"></div>
       <div style="background:#FFF4E5;border:2px solid #FFB547;border-radius:12px;padding:8px 12px;margin-bottom:8px">
         <div style="font-weight:800;font-size:13.5px;color:#a35a00;margin-bottom:4px">🔸 AF・逆AF のご希望（必ず聞く）</div>
         <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:14.5px;font-weight:700">
@@ -573,11 +587,12 @@
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="openOptAdd()">＋ 一覧にオプションを足す</button><button type="button" class="btn btn-ghost btn-sm edit-only" onclick="openOptEdit()">⚙️ 一覧を直す・消す（店長）</button></div>
       </details>
-      <div class="row1"><div class="f"><label>支払い方法</label><div class="chips" id="f_payChips"></div>
-        <select id="f_pay" style="display:none" onchange="recalc()"><option value="cash">現金</option><option value="card">カード（×1.15）</option><option value="card_paid">カード精算済</option></select></div></div>
-      <div class="row1"><div class="f"><label>割引（円）・割引の名前</label>
-        <div style="display:flex;gap:6px"><input type="number" id="f_discount" min="0" value="0" oninput="recalc()" style="max-width:140px"><input id="f_discnote" placeholder="例：口コミ割" maxlength="60"></div></div></div>
+      <div class="row1"><div class="f"><label>支払い方法</label>
+        <select id="f_pay" style="max-width:220px" onchange="recalc()"><option value="cash">現金</option><option value="card">カード（×1.15）</option><option value="card_paid">カード精算済</option></select></div></div>
       <div class="calc" id="calc"></div>
+      <div class="row1" style="margin-top:8px"><div class="f"><label>割引（円）・割引の名前</label>
+        <div style="display:flex;gap:6px"><input type="number" id="f_discount" min="0" value="0" oninput="recalc()" style="max-width:140px"><input id="f_discnote" placeholder="例：口コミ割" maxlength="60"></div></div></div>
+      <details id="backDet" class="calc" style="margin-top:8px"><summary style="cursor:pointer;font-weight:800;font-size:14px">💗 キャストの報酬<span id="backSum"></span>（受付では見なくてOK）</summary><div id="calcBack"></div></details>
     </div>
 
     <!-- ⑤ 媒体・お客さんの名前 -->
@@ -593,11 +608,10 @@
       <div class="row2" style="margin-top:10px">
         <div class="f"><label>状態</label><select id="f_status" class="stsel st pick" onchange="stColor()"></select></div>
       </div>
-      <div class="f" style="margin:4px 0 8px"><label class="bikoh">📝 備考（だれが・いつ・どんな対応／いちばん大事なメモ）</label><div id="formLog"></div></div>
       <div class="row2" style="display:none">
         <div></div>
       </div>
-      <div class="f" style="margin-top:4px"><label>📨 キャストへの予約連絡（コピーして送る）</label></div>
+      <div class="f" style="margin-top:4px"><label>📨 キャストへの予約連絡（コピーしてLINEで送る）</label></div>
       <textarea class="msg" id="msg" readonly></textarea>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px">
         <button class="btn btn-ghost btn-sm" onclick="copyMsg()">📋 文面をコピー</button>
@@ -605,18 +619,18 @@
           <input type="checkbox" id="f_notified"> ✅ キャストに伝えた</label>
         <span class="hist" id="notifiedInfo" style="margin:0"></span>
       </div>
+      <div class="f" style="margin:12px 0 8px"><label class="bikoh">📝 備考（だれが・いつ・どんな対応／いちばん大事なメモ）</label><div id="formLog"></div></div>
     </div>
 
     <!-- あとで書くこと -->
     <details id="laterBox" style="background:#FAF7F8;border-radius:14px;padding:10px 14px">
-      <summary style="cursor:pointer;font-weight:800;font-size:14px">📝 あとで書くこと（NG客・お客さんメモ・確認電話メモ・備考）</summary>
+      <summary style="cursor:pointer;font-weight:800;font-size:14px">🚫 NG登録</summary>
       <div class="row2" style="margin-top:8px">
         <div class="f"><label>NG客</label>
           <select id="f_ng"><option value="0">NGではない</option><option value="1">⚠️ NG客</option></select></div>
         <div class="f"><label>NGの理由・お客さんメモ</label><input id="f_custnote" maxlength="200"></div>
       </div>
-      <div class="row1"><div class="f"><label>確認電話のメモ</label><input id="f_confirm" maxlength="60" placeholder="例：前日OK・1H前OK"></div></div>
-      <div class="row1"><div class="f"><label>そのほかのメモ</label><textarea id="f_note"></textarea></div></div>
+      <input type="hidden" id="f_confirm"><textarea id="f_note" style="display:none"></textarea><!-- 前のメモは消さずに残すだけ（書くのは備考へ） -->
     </details>
     <div style="margin-top:12px"><button class="btn btn-danger edit-only" id="delBtn" onclick="removeRes()">🗑 この予約を削除</button></div>
     <div class="hist" id="logInfo"></div>
@@ -772,7 +786,7 @@ function openForm(id){
   $("f_notified").checked = !!r.cast_notified_at;
   $("notifiedInfo").textContent = r.cast_notified_at ? (r.cast_notified_by || "") + " " + new Date(r.cast_notified_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
   // あとで書くこと：NG客・メモ・備考が入っていれば開いておく
-  $("laterBox").open = !!((r.kb_customers && r.kb_customers.ng) || r.note || r.confirm_call);
+  $("laterBox").open = !!(r.kb_customers && r.kb_customers.ng);
   $("f_free").value = r.free_kind || "";
   $("f_ext").value = r.extension_count || 0; $("f_date").value = r.date_count || 0;
   $("f_nh").checked = !!r.nh_rate; $("f_adm").checked = (r.admission || 0) > 0;
@@ -1363,8 +1377,9 @@ function recalc(){
     ${c.transport?`<div class="row"><span>交通費</span><b>${yen(c.transport)}</b></div>`:""}
     ${c.discount?`<div class="row"><span>割引</span><b>−${yen(c.discount)}</b></div>`:""}
     ${c.pay!=="cash"?`<div class="row"><span>カード（×${(M.set.card||{}).rate||1.15}）</span><b></b></div>`:""}
-    <div class="row total"><span>総額</span><b>${yen(c.total)}</b></div>
-    <h3>💗 キャストの報酬</h3>
+    <div class="row total"><span>総額</span><b>${yen(c.total)}</b></div>`;
+  if($("backSum")) $("backSum").textContent = "：" + yen(ov !== "" ? (Number(ov) || 0) : back);
+  $("calcBack").innerHTML = `
     <div class="row back"><span>コースのバック</span><b>${yen(c.courseBack)}</b></div>
     <div class="row back"><span>OPのバック</span><b>${yen(c.optionBack)}</b></div>
     <div class="row back"><span>延長・入会金・特例</span><b>${yen(c.extra)}</b></div>
@@ -1460,6 +1475,7 @@ async function saveRes(){
       start_at: s ? s.toISOString() : null, end_at: s ? new Date(s.getTime() + mins*60000).toISOString() : null,
       area: $("f_area").value.trim(), address: $("f_address").value.trim(), course: c.course,
       ...(("place_kind" in (rows[0] || editing || {})) || ($("f_place") && $("f_place").value) ? { place_kind: $("f_place") ? $("f_place").value : "" } : {}),
+      ...(("biz_check" in (rows[0] || editing || {})) || ($("f_place") && $("f_place").value === "biz") ? { biz_check: $("f_place") && $("f_place").value === "biz" ? bizState : null } : {}),
       extension_count: c.ext, date_count: c.date, options: c.opts, media: mediaSel,
       base_price: c.price, admission: c.admission, nomination_fee: c.nomination, extension_fee: c.extFee + c.dateFee,
       transport: c.transport, option_total: c.optionTotal, discount: c.discount, discount_note: $("f_discnote").value.trim(),
@@ -3649,9 +3665,62 @@ const __openFormM = openForm;
 openForm = function(id){ __openFormM(id); const m = $("f_map"); if(m){ m.dataset.auto = m.value ? "" : "1"; autoMap(); } };
 
 // 日付は「10/21(水)」のように曜日つきで出す（押すとカレンダー）
-function paintDayLabel(){ const el = $("dayLabel"); if(!el || !day) return; const d = new Date(day + "T12:00:00Z"); el.textContent = (d.getUTCMonth() + 1) + "/" + d.getUTCDate() + "(" + "日月火水木金土"[d.getUTCDay()] + ")" + (day === KB.bizDateOf() ? " 今日" : ""); }
+function paintDayLabel(){
+  const el = $("dayLabel"); if(!el || !day) return;
+  const d = new Date(day + "T12:00:00Z"), w = d.getUTCDay();
+  el.innerHTML = `<b class="dmd">${d.getUTCMonth() + 1}/${d.getUTCDate()}</b><b class="dwk ${w === 0 ? "sun" : w === 6 ? "sat" : ""}">(${"日月火水木金土"[w]})</b>` + (day === KB.bizDateOf() ? `<span class="dtoday">今日</span>` : "");
+}
 const __loadDayDL = loadDay;
 loadDay = async function(){ day = $("day").value; paintDayLabel(); await __loadDayDL(); paintDayLabel(); };
+
+/* ============================================================
+   2026/10/20：受付画面の整理（支払いはふつうの選ぶ欄／ビジホの確認／キャストへの連絡はLINEで一言）
+   ============================================================ */
+renderPayChips = function(){};   // 支払い方法は、ボタンではなくふつうの選ぶ欄
+
+/* ---------- 🏢 ビジホの確認：2名部屋で取っている？ → 取っていなければ 下迎え？・キャストが使うタオル あり／なし（必ず） ---------- */
+let bizState = { twin: "", pickup: "", towel: "" };
+const BIZ_Q = [["twin", "2名部屋で取っている？", [["yes", "取っている"], ["no", "取っていない"]]],
+  ["pickup", "下迎え？", [["yes", "下迎え"], ["no", "下迎えではない"]]],
+  ["towel", "キャストが使うタオル", [["yes", "ある"], ["no", "ない"]]]];
+function bizNeed(){ return bizState.twin === "no" ? ["twin", "pickup", "towel"] : ["twin"]; }
+function bizMissing(){ return !!($("f_place") && $("f_place").value === "biz" && bizNeed().some(k=>!bizState[k])); }
+function bizText(b){ return b.twin === "yes" ? "2名部屋" : "1名部屋・" + (b.pickup === "yes" ? "下迎え" : "下迎えではない") + "・タオル" + (b.towel === "yes" ? "あり" : "なし"); }
+function paintBiz(){
+  const el = $("bizBox"); if(!el) return;
+  if(!$("f_place") || $("f_place").value !== "biz"){ el.innerHTML = ""; return; }
+  const need = bizNeed();
+  el.innerHTML = `<div class="bizbox"><div class="bh">🏢 ビジホの確認（必ず聞く）</div>` + BIZ_Q.filter(x=>need.includes(x[0])).map(([k, label, opts])=>
+    `<div class="bq ${bizState[k] ? "" : "miss"}"><span>${label}</span>${opts.map(([v, l])=>`<button type="button" class="ynp ${bizState[k] === v ? "on" : ""}" onclick="setBiz('${k}','${v}')">${l}</button>`).join("")}</div>`).join("") + `</div>`;
+}
+function setBiz(k, v){ bizState[k] = v; if(k === "twin" && v === "yes"){ bizState.pickup = ""; bizState.towel = ""; } paintBiz(); }
+const __checkNewHotelB = checkNewHotel;
+checkNewHotel = function(){ __checkNewHotelB(); paintBiz(); };
+const __openFormB = openForm;
+openForm = function(id){
+  const r = id ? rows.find(x=>x.id === id) : null;
+  bizState = Object.assign({ twin: "", pickup: "", towel: "" }, (r && r.biz_check) || {});
+  __openFormB(id);
+  paintBiz();
+};
+const __saveResB = saveRes;
+saveRes = async function(){
+  const cx = ["cancel", "tobi"].includes($("f_status").value);
+  if(!cx && bizMissing()){ toast("🏢 ビジホの確認（2名部屋・下迎え・タオル）を選んでください"); $("bizBox").scrollIntoView({ block: "center" }); return; }
+  return __saveResB();
+};
+// 一覧の予約にも、ビジホの確認を小さく出す
+const __placeCellB = placeCell;
+placeCell = function(r){ const b = r.biz_check; return __placeCellB(r) + (r.place_kind === "biz" && b && b.twin ? `<small class="bizinfo">🏢 ${bizText(b)}</small>` : ""); };
+
+/* ---------- 📨 キャストへの予約連絡：LINEで一言（くわしくはアプリで見てもらう） ---------- */
+buildMsg = function(c){
+  const cast = M.casts.find(x=>x.id === $("f_cast").value);
+  const d = new Date(day + "T12:00:00Z"), st = $("f_start").value;
+  $("msg").value = `${cast ? (cast.official_name || cast.temp_name) + "さん" : "おつかれさまです"}
+ご予約いただきましたので、アプリでご確認お願いいたします。
+（${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st || "--:--"}〜）`;
+};
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
