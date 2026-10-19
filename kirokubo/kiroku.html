@@ -32,7 +32,7 @@
   .viewbar .bigday{margin:0;}
   .viewbar .bigday input[type=date]{font-size:22px;font-weight:800;padding:6px 14px;color:var(--pink-deep);border:2px solid #FFC2D1;}
   .viewbar .bigday .bd{font-size:16px;font-weight:800;}
-  .stickybar{position:sticky;top:0;z-index:60;background:var(--bg);padding:6px 4px 2px;margin:0 -4px;box-shadow:0 6px 10px -8px rgba(0,0,0,.18);}
+  .stickybar{position:sticky;top:0;z-index:40;background:var(--bg);padding:6px 4px 2px;margin:0 -4px;box-shadow:0 6px 10px -8px rgba(0,0,0,.18);}
   .stickybar .tabs{margin:4px 0 6px;}
   header.kbh .navinhead{flex:1;} header.kbh .navinhead .kbnav{margin:0;}
   /* しまえる箱（今日の数字・今どこに誰が） */
@@ -172,6 +172,7 @@
   .st.hour_call{background:#FFD3E3;color:#c9356a;}
   .st.wait_guest,.st.wait_cast{background:#fff;color:#555;border:1.5px solid #cfc7ca;}
   .st.working{background:#EADCFB;color:#6c3fb5;}
+  .st.moving{background:#D4F1F4;color:#0F7C8A;}
   .st.done{background:#E5E3E4;color:#777;}
   .st.cancel{background:#FFE0C2;color:#c25e00;}
   .st.tobi{background:#FFD0D0;color:#c62828;}
@@ -247,6 +248,14 @@
   .cblock.cxbox{border-style:dashed;border-color:#E5A0B0;background:#FFF8FA;}
   .attend{display:flex;flex-direction:column;gap:3px;margin:2px 0 6px;} .attend .ak{font-size:12.5px;background:#FFF8E6;border-radius:8px;padding:3px 8px;} .attend .ak.absent{background:#FFE8EC;} .attend .ak small{color:var(--sub);}
 .ynb{margin-left:4px;cursor:pointer;} .ynb input{display:none;} .ynb span{display:inline-block;min-width:40px;text-align:center;border:2px solid #FFB547;border-radius:10px;padding:2px 10px;background:#fff;font-size:16px;font-weight:800;} .ynb input:checked + span{background:#e5638c;border-color:#e5638c;color:#fff;}
+  /* 状態：まだ選んでいない → 点滅 */
+  select.st.pick{background:#FFF0F0;color:#C62850;border:2px solid #E5486C;animation:pickblink 1s ease-in-out infinite;}
+  @keyframes pickblink{0%,100%{box-shadow:0 0 0 0 rgba(229,72,108,.0);}50%{box-shadow:0 0 0 4px rgba(229,72,108,.45);}}
+  /* 移動中（今どこに誰がの札） */
+  .movebox{margin-top:4px;font-size:12px;font-weight:800;color:#0F7C8A;background:#E6F7F9;border-radius:8px;padding:3px 6px;}
+  .movebox .movenow{display:block;width:100%;margin-top:3px;font-family:inherit;font-size:12px;padding:3px 6px;border:1.5px solid #9ED8DF;border-radius:6px;}
+  /* 有料オプションの一覧を直す（店長） */
+  .optadm{display:flex;gap:6px;align-items:center;padding:4px 0;border-bottom:1px dashed var(--line);} .optadm input{font-family:inherit;font-size:13px;padding:5px 8px;border:1.5px solid var(--line);border-radius:8px;} .optadm .l{flex:1;} .optadm .p,.optadm .b{width:90px;text-align:right;}
   .seats{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:8px;overflow-x:auto;}
   .seat{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px;}
   .seat.on{border-color:#6c5ce7;background:#F4F2FF;}
@@ -305,7 +314,7 @@
     <!-- 👑 社長用（「社長」で入ったときだけ） -->
     <details class="fold" id="ownerBox" style="display:none"><summary>👑 社長用：今日の集計</summary><div id="ownerGrid"></div></details>
     <!-- 🗺 今どこに誰が（いつも上に・ひらいておく） -->
-    <details class="fold" id="viewBoard" open><summary>🗺 今どこに誰が<small>名前をつまんで移動・長押しでその子の予約を追加・今いないは押すと色が変わる</small></summary>
+    <details class="fold" id="viewBoard" open><summary>🗺 今どこに誰が<small>名前をつまんで移動・長押しでその子の予約を追加・ダブルクリックで本日のキャスト一覧のその子の枠へ・今いないは押すと色が変わる</small></summary>
       <div class="wrapx"><div id="boardGrid"></div></div>
     </details>
     <!-- ここ（タブ・日付・並び）は、下に読み進めても上に残る -->
@@ -330,6 +339,9 @@
     </div>
     <div class="sum" id="sum"></div>
 
+    <!-- 有料オプションの一覧：足す（内勤みんな）・直す/消す（店長） -->
+    <div class="modal-bg" id="optBg"><div class="modal" style="max-width:620px"><button class="x" onclick="$('optBg').classList.remove('show')" aria-label="閉じる">×</button>
+      <h2 id="optTitle">有料オプション</h2><div id="optBody"></div></div></div>
     <!-- 📝 勤怠の記録（欠勤・遅刻・早退・時間変更の理由） -->
     <div class="modal-bg" id="attendBg"><div class="modal" style="max-width:460px"><button class="x" onclick="$('attendBg').classList.remove('show')" aria-label="閉じる">×</button>
       <h2 id="attendTitle">📝 勤怠の記録</h2>
@@ -337,6 +349,11 @@
         <div class="f"><label>なに？</label><select id="at_kind"><option>欠勤</option><option>遅刻</option><option>早退</option><option>時間変更</option></select></div>
         <div class="f"><label>時間（あれば）</label><input id="at_time" maxlength="30" placeholder="例：30分遅れ・20時まで・19→21時"></div>
       </div>
+      <div class="row2" id="at_shiftBox" style="margin-top:8px">
+        <div class="f"><label>出勤を何時に変える？</label><input type="time" id="at_start" step="300"></div>
+        <div class="f"><label>退勤を何時に変える？</label><input type="time" id="at_end" step="300"></div>
+      </div>
+      <div class="hint2" style="font-size:12px;color:var(--sub)">遅刻・早退・時間変更は、ここで出勤／退勤の時刻を変えると、今どこに誰が・一覧・全体を見たいの出勤時間が変わります（サクラシフトの元の時間は残るので、あとで集計できます）</div>
       <div class="f" style="margin-top:8px"><label>理由</label><textarea id="at_reason" maxlength="300" placeholder="例：体調不良／電車の遅延／家の用事"></textarea></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
         <button class="btn btn-ghost" onclick="$('attendBg').classList.remove('show')">やめる</button>
@@ -486,6 +503,7 @@
           <span></span><input type="text" id="f_xop_label" placeholder="ほかのOP（自由入力）" oninput="recalc()">
           <span></span><input type="number" id="f_xop_price" placeholder="料金" oninput="recalc()"><input type="number" id="f_xop_back" placeholder="バック" oninput="recalc()">
         </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="openOptAdd()">＋ 一覧にオプションを足す</button><button type="button" class="btn btn-ghost btn-sm edit-only" onclick="openOptEdit()">⚙️ 一覧を直す・消す（店長）</button></div>
       </details>
       <div class="row1"><div class="f"><label>支払い方法</label><div class="chips" id="f_payChips"></div>
         <select id="f_pay" style="display:none" onchange="recalc()"><option value="cash">現金</option><option value="card">カード（×1.15）</option><option value="card_paid">カード精算済</option></select></div></div>
@@ -505,7 +523,7 @@
       <h3><span class="n">6</span>最終確認（お客さんに読み上げ）</h3>
       <div id="finalSummary" class="final"></div>
       <div class="row2" style="margin-top:10px">
-        <div class="f"><label>状態</label><select id="f_status"></select></div>
+        <div class="f"><label>状態</label><select id="f_status" class="stsel st pick" onchange="stColor()"></select></div>
       </div>
       <div class="f" style="margin:4px 0 8px"><label>📝 対応ログ（だれが・いつ・どんな対応）</label><div id="formLog"></div></div>
       <div class="row2" style="display:none">
@@ -553,7 +571,7 @@
 const { sb, q, esc, yen, toast } = KB;
 const $ = id => document.getElementById(id);
 const DOW = ["日","月","火","水","木","金","土"];
-const STATUS = { wait_cast_reply:"キャスト返事待ち", wait_guest_reply:"お客様返事待ち", wait_foreign_call:"外国人1コール待ち", pre_call:"前日確認電話", hour_call:"1H前確認電話", wait_guest:"客ホテル入室待ち", wait_cast:"キャストホテル入室待ち", working:"仕事中", done:"終了", cancel:"キャンセル", tobi:"トビ", checking:"確認中（旧）", wait_hotel:"ホテル連絡待ち（旧）" };   // 並びが流れの順
+const STATUS = { pre_call:"前日確認電話", hour_call:"1H前確認電話", moving:"移動中", wait_guest:"客ホテル入室待ち", wait_cast:"キャストホテル入室待ち", working:"仕事中", done:"終了", wait_cast_reply:"キャスト返事待ち", wait_guest_reply:"お客様返事待ち", wait_foreign_call:"外国人1コール待ち", cancel:"キャンセル", tobi:"トビ", checking:"確認中（旧）", wait_hotel:"ホテル連絡待ち（旧）" };   // 並び：前日確認〜終了 → 返事待ち → キャンセル・トビ
 const STATUS_OLD = ["checking", "wait_hotel"];   // 今は選べない（前の予約のために残している）
 const VISIT = [["new","新規"],["repeat","店リピ"],["honshi","本指名"]];
 const FREE_SUFFIX = { "":"", free:"フリー", special_free:"特別フリー", event_free:"イベフリー" };
@@ -679,8 +697,9 @@ function openForm(id){
   }).join("");
   $("f_cast").value = r.cast_id || "";
   $("f_start").value = r.start_at ? hm(r.start_at) : "";
-  $("f_status").innerHTML = Object.keys(STATUS).filter(k=>!STATUS_OLD.includes(k) || k === r.status).map(k=>`<option value="${k}">${STATUS[k]}</option>`).join("");
-  $("f_status").value = r.status || "wait_cast_reply";
+  $("f_status").innerHTML = `<option value="">⚠️ 選択してください</option>` + Object.keys(STATUS).filter(k=>!STATUS_OLD.includes(k) || k === r.status).map(k=>`<option value="${k}">${STATUS[k]}</option>`).join("");
+  $("f_status").value = r.status || "";
+  stColor();
   // キャストに伝えたか
   $("f_notified").checked = !!r.cast_notified_at;
   $("notifiedInfo").textContent = r.cast_notified_at ? (r.cast_notified_by || "") + " " + new Date(r.cast_notified_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
@@ -1166,7 +1185,7 @@ async function lookupCustomer(keepName){
     if(!c){ custPast = []; $("custInfo").innerHTML = `<div class="info">🆕 はじめての電話番号です（保存すると新しいお客さんとして登録します）</div>`; if(!editing) setVisit("new"); return; }
     if(!keepName || !$("f_name").value) $("f_name").value = c.name || "";
     $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = c.ng_reason || c.note || "";
-    const past = q(await sb.from("kb_reservations").select("biz_date,store_key,cast_id,dummy_name,course,status").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(10)) || [];
+    const past = q(await sb.from("kb_reservations").select("id,biz_date,store_key,cast_id,dummy_name,course,status").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(10)) || [];
     custPast = past;
     const casts = [...new Set(past.map(p=>castName(p.cast_id)))];
     $("custInfo").innerHTML = (c.ng ? `<div class="warn">⚠️ NG客です：${esc(c.ng_reason||"理由なし")}</div>` : "") +
@@ -1174,7 +1193,7 @@ async function lookupCustomer(keepName){
        指名したことのあるキャスト：${casts.map(esc).join("、") || "なし"}<br>※ 台帳（エクセル）の過去データは、あとで入れます</div>`;
     if(!editing){
       const cid = $("f_cast").value;
-      setVisit(cid && past.some(p=>p.cast_id===cid) ? "honshi" : (past.length ? "repeat" : "new"));
+      setVisit(visitFrom(past, cid));
     }
   }catch(e){ $("custInfo").innerHTML = `<div class="warn">お客さんを探せませんでした：${esc(e.message||e)}</div>`; }
 }
@@ -1328,6 +1347,7 @@ async function saveRes(){
   if(!$("f_cast").value){ toast(isDummyStore($("f_store").value) ? "実際に行くキャストを選んでください" : "キャストを選んでください"); return; }
   if(isDummyStore($("f_store").value) && !$("f_dummy").value){ toast("ダミー名を選んでください（一覧になければ ⚙️ から足せます）"); return; }
   // 受付ルール：📣は全部チェック／✅はチェックするまで「〜待ち」でしか保存できない／⌛受けない長さは保存できない（キャンセル・トビは除く）
+  if(!$("f_status").value){ toast("⚠️ 状態を選んでください"); $("f_status").scrollIntoView({ block: "center" }); return; }
   const cancelLike = ["cancel", "tobi"].includes($("f_status").value);
   const waiting = String($("f_status").value).startsWith("wait_");
   const ck = checksForSave();
@@ -2300,7 +2320,7 @@ async function addFormLog(){
 const __openForm2 = openForm;
 openForm = function(id){
   __openForm2(id);
-  if(!id) $("f_status").value = "wait_cast_reply";   // 新しい予約は「キャスト返事待ち」から
+  if(!id){ $("f_status").value = ""; stColor(); }   // 新しい予約は「選択してください」から（点滅）
   renderFormLog();
 };
 
@@ -2431,7 +2451,7 @@ renderBoard = function(){
       seat = `<div class="seatbtns">🪑${[1, 2, 3, 4, 5].map(n=>{ const u = used.find(l=>l.seat === n); return `<button type="button" class="${mine && mine.seat === n ? "on" : ""}" ${u && u.cast_id !== cid ? "disabled" : ""} onclick="sitDown(${n},'${cid}')">${n}</button>`; }).join("")}
         ${mine ? `<button type="button" class="out" onclick="leaveSeat(${mine.id})">退席</button><small>${hm(mine.start_at)}〜</small>` : ""}</div>`;
     }
-    return `<div class="chipc ${cls}" data-cid="${cid}" data-st="${st}">【${esc(castLabel(x))}】${esc(sh)}${st === "gone" && gk ? `<small>（${gk}）</small>` : ""}${x.cd && x.cd.settled ? "<small>（精算済）</small>" : ""}${pill}${seat}</div>`;
+    return `<div class="chipc ${cls}" data-cid="${cid}" data-st="${st}">【${esc(castLabel(x))}】${esc(sh)}${st === "gone" && gk ? `<small>（${gk}）</small>` : ""}${x.cd && x.cd.settled ? "<small>（精算済）</small>" : ""}${pill}${movingHtml(x)}${seat}</div>`;
   };
   const th = c=>`<th class="${AREA_CLASS[c] || ""}">${esc(c)}${c === "鶯谷" ? ` <button type="button" class="logbtn" onclick="openSeatLog()">📜 ログ</button>` : ""}</th>`;
   el.innerHTML = `<table class="board"><tr><th class="corner"></th>${cols.map(th).join("")}</tr>`
@@ -2485,7 +2505,7 @@ async function cycleGone(cid){
   function clearOver(){ if(over){ over.classList.remove("dropon"); over = null; } }
   document.addEventListener("pointerdown", e=>{
     const chip = e.target.closest && e.target.closest("#boardGrid .chipc[data-cid]");
-    if(!chip || e.target.closest("button") || !chip.dataset.cid) return;
+    if(!chip || e.target.closest("button,input,select") || !chip.dataset.cid) return;
     st = { chip, cid: chip.dataset.cid, gone: chip.dataset.st === "gone", x: e.clientX, y: e.clientY, moved: false, long: false };
     st.timer = setTimeout(()=>{ if(st && !st.moved){ st.long = true; try{ navigator.vibrate && navigator.vibrate(30); }catch(_){} if(KB.CAN_EDIT) newBookingFor(st.cid, ""); } }, 600);
   });
@@ -2624,7 +2644,7 @@ renderListTable = function(){
   el.innerHTML = (noCast.length ? block("キャスト未定", "", noCast, "") : "")
     + (casts.length ? casts.map(x=>{
         const st = boardState(x), col = boardCol(x, st), gk = goneKind(x.cd);
-        const sub = `${x.shift ? "出勤 " + tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) : "シフトなし"}・${STATE[st]}${st !== "gone" && col ? "（" + col + "）" : gk ? "（" + gk + "）" : ""}`;
+        const sub = `${x.shift ? "出勤 " + tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) + (x.shiftOrig ? "（予定 " + tlLabel(x.shiftOrig.start) + "〜" + tlLabel(x.shiftOrig.end) + "）" : "") : "シフトなし"}・${STATE[st]}${st !== "gone" && col ? "（" + col + "）" : gk ? "（" + gk + "）" : ""}`;
         const cls = st === "gone" ? (gk === "お茶" ? "tea" : gk === "欠勤" ? "absent" : "away") : "";
         return block("【" + esc(castLabel(x)) + "】", esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart) : [], x.c ? x.c.id : "", cls);
       }).join("") : `<div class="gate">${mode === "freeNow" ? "今すぐ行けるキャストはいません" : mode === "booked" ? "予約があるキャストはいません" : "この日のキャストがいません"}</div>`) + cancelSection();
@@ -2794,7 +2814,157 @@ onCast = function(){
   __onCastV.apply(this, arguments);
   if(!custPast) return;
   const cid = $("f_cast").value;
-  setVisit(!custPast.length ? "new" : (cid && custPast.some(p=>p.cast_id === cid) ? "honshi" : "repeat"));
+  setVisit(visitFrom(custPast, cid));
+};
+
+/* ============================================================
+   2026/10/20 のつづき
+   ============================================================ */
+// 状態のプルダウン：予約一覧と同じ色。まだ選んでいないときは「選択してください」が点滅
+function stColor(){ const el = $("f_status"); if(el) el.className = "stsel st " + (el.value || "pick"); }
+
+// 本指名・店リピ：その予約より前に「終了」した予約だけで決める（今の予約・キャンセル・トビは数えない）
+function visitFrom(past, cid){
+  const prev = (past || []).filter(p=>p.status === "done" && !(editing && p.id === editing.id));
+  if(!prev.length) return "new";
+  return cid && prev.some(p=>p.cast_id === cid) ? "honshi" : "repeat";
+}
+// 予約を開いたとき、そのお客さんのこれまでを読んでおく（キャストを変えたら決めなおせるように。開いただけでは変えない）
+const __openFormP = openForm;
+openForm = function(id){
+  __openFormP(id);
+  const r = id ? rows.find(x=>x.id === id) : null;
+  if(r && r.customer_id){
+    sb.from("kb_reservations").select("id,cast_id,status").eq("customer_id", r.customer_id).eq("deleted", false)
+      .then(res=>{ if(editing && editing.id === id && !res.error) custPast = res.data || []; });
+  }
+};
+
+// 受付ルールの「いつ出す？」：店リピ・本指名のとき
+const __ruleApplies = ruleApplies;
+ruleApplies = function(x){
+  if(x.cond === "repeat") return visit === "repeat";
+  if(x.cond === "honshi") return visit === "honshi";
+  return __ruleApplies(x);
+};
+
+/* ---------- 有料オプションの一覧：足すのは内勤みんな・直す/消すのは店長だけ ---------- */
+function curOptSel(){ try{ return calc().opts.map(o=>({ code: o.code, group: o.group, qty: o.qty, price: o.price, back: o.back, label: o.label })); }catch(e){ return []; } }
+function rerenderOpts(){ const keep = curOptSel(); onStore({ options: keep, dummy_name: $("f_dummy") ? $("f_dummy").value : "" }); recalc(); }
+const UNIT = [["once", "1回"], ["per_item", "枚数で"], ["per_cast", "キャストの人数で"]];
+function openOptAdd(){
+  const g = storeGroup($("f_store").value);
+  $("optTitle").textContent = "＋ 有料オプションを一覧に足す（" + ({ sakurana: "サクラナ系", cutie: "キューティ", gokumon: "極門" }[g] || g) + "）";
+  $("optBody").innerHTML = `<div class="row2"><div class="f"><label>名前</label><input id="na_label" maxlength="40" placeholder="例：ローション追加"></div>
+      <div class="f"><label>数え方</label><select id="na_unit">${UNIT.map(([v, l])=>`<option value="${v}">${l}</option>`).join("")}</select></div></div>
+    <div class="row2" style="margin-top:8px"><div class="f"><label>料金（1回あたり）</label><input type="number" id="na_price" min="0" value="0"></div>
+      <div class="f"><label>バック（1回あたり）</label><input type="number" id="na_back" min="0" value="0"></div></div>
+    <div class="f" style="margin-top:8px"><label>メモ（あれば）</label><input id="na_note" maxlength="100"></div>
+    <label style="display:block;margin-top:6px;font-size:13px"><input type="checkbox" id="na_manual"> 内容で料金が変わる（受付のたびに金額を直せるようにする）</label>
+    <div class="hint2" style="font-size:12px;color:var(--sub);margin-top:6px">足したものを直したり消したりできるのは店長だけです。</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="btn btn-ghost" onclick="$('optBg').classList.remove('show')">やめる</button>
+      <button class="btn btn-primary" onclick="saveOptAdd('${g}')">＋ 足す</button></div>`;
+  $("optBg").classList.add("show");
+}
+async function saveOptAdd(g){
+  const label = $("na_label").value.trim();
+  if(!label){ toast("名前を入れてください"); return; }
+  if(M.options.some(o=>o.store_group === g && o.label === label)){ toast("同じ名前のオプションがもうあります"); return; }
+  const row = { store_group: g, code: "x" + Date.now().toString(36), label, unit: $("na_unit").value, price: Math.max(0, +$("na_price").value || 0),
+    back: Math.max(0, +$("na_back").value || 0), note: $("na_note").value.trim(), manual: $("na_manual").checked,
+    sort: Math.max(0, ...M.options.filter(o=>o.store_group === g).map(o=>o.sort || 0)) + 1 };
+  try{
+    const r = q(await sb.from("kb_options").insert(row).select().single());
+    M.options.push(r); $("optBg").classList.remove("show"); rerenderOpts(); $("optDetails").open = true;
+    toast("「" + label + "」を一覧に足しました");
+  }catch(e){ toast("足せませんでした：" + (e.message || e)); }
+}
+function openOptEdit(){
+  if(!KB.CAN_EDIT){ toast("直せるのは店長だけです"); return; }
+  const g = storeGroup($("f_store").value), list = M.options.filter(o=>o.store_group === g && !["af", "gyakuaf"].includes(o.code));
+  $("optTitle").textContent = "⚙️ 有料オプションの一覧を直す・消す（店長）";
+  $("optBody").innerHTML = `<div class="hint2" style="font-size:12px;color:var(--sub);margin-bottom:6px">直したら「保存」。消しても、今までの予約の記録はそのまま残ります。</div>`
+    + list.map(o=>`<div class="optadm" data-code="${esc(o.code)}">
+      <input class="l" value="${esc(o.label)}" maxlength="40"><input class="p" type="number" value="${o.price}" title="料金"><input class="b" type="number" value="${o.back}" title="バック">
+      <button class="btn btn-ghost btn-sm" onclick="saveOptEdit('${g}','${esc(o.code)}',this)">保存</button><button class="btn btn-ghost btn-sm" onclick="delOpt('${g}','${esc(o.code)}')">🗑</button></div>`).join("");
+  $("optBg").classList.add("show");
+}
+async function saveOptEdit(g, code, btn){
+  const box = btn.closest(".optadm"), label = box.querySelector(".l").value.trim();
+  if(!label) return;
+  const patch = { label, price: Math.max(0, +box.querySelector(".p").value || 0), back: Math.max(0, +box.querySelector(".b").value || 0) };
+  try{ q(await sb.from("kb_options").update(patch).eq("store_group", g).eq("code", code)); Object.assign(M.options.find(o=>o.store_group === g && o.code === code), patch); rerenderOpts(); toast("保存しました"); }
+  catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+async function delOpt(g, code){
+  const o = M.options.find(x=>x.store_group === g && x.code === code); if(!o) return;
+  if(!confirm("「" + o.label + "」を一覧から消しますか？（今までの予約の記録はそのまま）")) return;
+  try{ q(await sb.from("kb_options").delete().eq("store_group", g).eq("code", code)); M.options = M.options.filter(x=>x !== o); rerenderOpts(); openOptEdit(); toast("消しました"); }
+  catch(e){ toast("消せませんでした：" + (e.message || e)); }
+}
+KB.closeOnBackdrop($("optBg"), ()=>$("optBg").classList.remove("show"));
+
+/* ---------- 遅刻・早退・時間変更：その日の出勤・退勤の時刻を変える（サクラシフトの元の時間は残す） ---------- */
+const toHour = s=>{ if(!s) return null; const [h, m] = s.split(":").map(Number); let v = h + m / 60; if(v < 8) v += 24; return Math.round(v * 100) / 100; };
+const fromHour = v=>{ if(v == null || v === "") return ""; v = Number(v); const h = Math.floor(v) % 24, m = Math.round((v - Math.floor(v)) * 60); return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0"); };
+const __tlRowsS = tlRows;
+tlRows = function(){
+  return __tlRowsS().map(x=>{
+    const cd = x.cd || {};
+    if(x.shift && (cd.shift_start_ov != null || cd.shift_end_ov != null) && !x.shiftOrig){
+      x.shiftOrig = x.shift;
+      x.shift = Object.assign({}, x.shift, { start: cd.shift_start_ov != null ? Number(cd.shift_start_ov) : x.shift.start, end: cd.shift_end_ov != null ? Number(cd.shift_end_ov) : x.shift.end });
+    }
+    return x;
+  });
+};
+const __openAttend = openAttend;
+openAttend = function(cid, kind){
+  __openAttend(cid, kind);
+  const cd = castDays[cid] || {};
+  $("at_start").value = fromHour(cd.shift_start_ov); $("at_end").value = fromHour(cd.shift_end_ov);
+  const sync = ()=>{ $("at_shiftBox").style.display = $("at_kind").value === "欠勤" ? "none" : ""; };
+  $("at_kind").onchange = sync; sync();
+};
+saveAttend = async function(){
+  const cid = attendCid; if(!cid) return;
+  const kind = $("at_kind").value, reason = $("at_reason").value.trim(), time = $("at_time").value.trim();
+  if(!reason){ toast("理由を書いてください（わからなければ「不明」）"); return; }
+  const st = kind === "欠勤" ? null : toHour($("at_start").value), en = kind === "欠勤" ? null : toHour($("at_end").value);
+  const shiftTxt = [st != null ? "出勤→" + fromHour(st) : "", en != null ? "退勤→" + fromHour(en) : ""].filter(Boolean).join("・");
+  const log = (((castDays[cid] || {}).attend_log) || []).concat([{ kind, reason, time: [time, shiftTxt].filter(Boolean).join("／"), at: new Date().toISOString(), by: KB.operatorName() }]);
+  const patch = { attend_log: log };
+  if(kind === "欠勤") Object.assign(patch, { status: "欠勤", standby: "" });
+  if(st != null) patch.shift_start_ov = st;
+  if(en != null) patch.shift_end_ov = en;
+  if(await saveDayPart(cid, patch)){ $("attendBg").classList.remove("show"); toast("記録しました"); }
+};
+
+/* ---------- 🚶 移動中：予約の状態を「移動中」にしたら、今どこに誰がの札に「移動前のエリア → ※移動中※」と今いる場所の欄 ---------- */
+function movingRes(cid){ return rows.find(r=>r.cast_id === cid && r.status === "moving"); }
+function movingHtml(x){
+  if(!x.c || !movingRes(x.c.id)) return "";
+  const cd = x.cd || {};
+  return `<div class="movebox">${esc(cd.move_from || "？")} → <b>※移動中※</b>
+    ${KB.CAN_EDIT ? `<input class="movenow" value="${esc(cd.move_now || "")}" placeholder="今いる場所（例：池袋駅）" onchange="saveDayPart('${x.c.id}',{ move_now: this.value.trim() })">` : (cd.move_now ? `<br>📍${esc(cd.move_now)}` : "")}</div>`;
+}
+// 移動中にしたとき、移動前のエリアを覚えておく
+async function markMoving(cid){
+  const x = tlRows().find(r=>r.c && r.c.id === cid); if(!x) return;
+  const st = boardState(x), from = boardCol(x, st) || (x.cd && x.cd.standby) || "";
+  await saveDayPart(cid, { move_from: from, move_now: "" });
+}
+const __quickStatusM = quickStatus;
+quickStatus = async function(id, st){
+  const r = rows.find(x=>x.id === id), was = r && r.status;
+  await __quickStatusM(id, st);
+  if(r && r.cast_id && st === "moving" && was !== "moving") markMoving(r.cast_id);
+};
+const __saveResM = saveRes;
+saveRes = async function(){
+  const st = $("f_status").value, cid = $("f_cast").value, was = editing ? editing.status : "";
+  await __saveResM();
+  if(cid && st === "moving" && was !== "moving") markMoving(cid);
 };
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>

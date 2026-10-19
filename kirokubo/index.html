@@ -488,7 +488,7 @@ async function saveTerms(){
    cond：いつ出すか（always・new・foreign・josou・female・couple・option・store・long） */
 const RULE_KIND = { announce: "📣 お客様に案内", confirm: "✅ 確認してから受ける", after: "⏳ 予約のあとにやること", know: "🤫 知っておくだけ" };
 const RULE_KIND_COLOR = { announce: "#FFF4E5", confirm: "#E8F4FF", after: "#EEF9EE", know: "#F3F0F5" };
-const RULE_COND = { always: "いつも", new: "新規のとき", foreign: "外国人のお客様", josou: "女装のお客様", female: "女性のお客様", couple: "カップル",
+const RULE_COND = { always: "いつも", new: "新規のとき", repeat: "店リピのとき", honshi: "本指名のとき", foreign: "外国人のお客様", josou: "女装のお客様", female: "女性のお客様", couple: "カップル",
                     option: "オプションを選んだとき", store: "この店のとき", long: "○分以上のコース" };
 function condLabel(x){
   if(x.cond === "option") return "「" + x.cond_value + "」を選んだとき";
