@@ -88,7 +88,7 @@
       <select id="liveYm" onchange="changeLive()"></select>
     </div>
     <div class="tabs" id="tabs">
-      <button type="button" data-t="sales" class="on" onclick="tab('sales')">💴 売上</button>
+      <button type="button" data-t="sales" class="on" onclick="tab('sales')">💴 店落ち</button>
       <button type="button" data-t="cast" onclick="tab('cast')">💗 キャスト</button>
       <button type="button" data-t="area" onclick="tab('area')">📍 エリア</button>
       <button type="button" data-t="media" onclick="tab('media')">📣 媒体</button>
@@ -183,6 +183,10 @@ async function start(){
       fetchAll("kb_hist_media", "*", "ym"), fetchAll("kb_media_fees", "*", "from_ym"),
     ]);
     Object.assign(H, { daily, month, cmonth, cday, area, band, media, fees });
+    // 中抜けで「セリナ1」「セリナ2」のように分けていた名前は、1人にまとめる（数字を取った名前のキャストがいるとき）
+    const known = new Set(cmonth.map(x=>x.cast_name).concat(cday.map(x=>x.cast_name)));
+    const fix = x=>{ const m = String(x.cast_name).match(/^(.+?)[0-9０-９]+$/); if(m && known.has(m[1])) x.cast_name = m[1]; };
+    area.forEach(fix); band.forEach(fix);
   }catch(e){ $("gate").textContent = "読みこめませんでした（SQL 115・116・117 は実行ずみ？）：" + (e.message || e); return; }
   // 期間の選ぶ欄
   const first = [H.daily[0] && ymOf(H.daily[0].d), H.month[0] && ymOf(H.month[0].ym)].filter(Boolean).sort()[0] || "2019-01";
@@ -277,7 +281,7 @@ async function loadLive(){
         const back = r.back_override != null ? n0(r.back_override) : n0(r.course_back) + n0(r.extra_back) + n0(r.option_back);
         const j = new Date(new Date(r.start_at).getTime() + 9 * 3600 * 1000).getUTCHours();
         L.res.push({ d, ym: ymOf(d), cast, area: r.area || "（なし）", band: r.start_at && (j >= 22 || j < 6) ? "深夜" : "昼",
-          visit: r.visit_kind, media: (r.media || []).map(mediaLabel), total: n0(r.total), drop: n0(r.total) - back + zappi / rs.length });
+          visit: r.visit_kind, media: (r.media || []).map(mediaLabel), total: n0(r.total), prov: n0(r.total) - back, drop: n0(r.total) - back + zappi / rs.length });
       });
     });
   }catch(e){ toast("新しい記録簿の数字を読めませんでした：" + (e.message || e)); }
@@ -286,16 +290,24 @@ async function loadLive(){
 /* ============================================================
    過去＋新しい記録簿をまとめて取りだす
    ============================================================ */
-function salesOfMonth(ym){
-  if(isLive(ym)) return L.res.filter(r=>r.ym === ym).reduce((a, r)=>a + r.total, 0);
+// 店のお金の見方は2つ（どちらも「総額」ではない）
+//   drop ＝ 店落ち（暫定的な残額 ＋ 雑費）… 過去はキャスト別の月の数字（2025年1月〜）・日ごとは【名前】シート（2026年1月〜）
+//   prov ＝ 暫定的な残額（総額 − 報酬。雑費なし）… 過去は売上管理.xlsx の「年間比較」・日ごとのシート（2018年12月〜）
+let salesMetric = "drop";
+const METRIC_LABEL = { drop: "店落ち（雑費込み）", prov: "暫定的な残額（雑費なし）" };
+function valOfMonth(ym, met){
+  met = met || salesMetric;
+  if(isLive(ym)){ const rs = L.res.filter(r=>r.ym === ym); return rs.length ? rs.reduce((a, r)=>a + (met === "drop" ? r.drop : r.prov), 0) : null; }
+  if(met === "drop"){ const rows = H.cmonth.filter(x=>ymOf(x.ym) === ym && x.drop_yen != null); return rows.length ? rows.reduce((a, x)=>a + n0(x.drop_yen), 0) : null; }
   const m = H.month.find(x=>ymOf(x.ym) === ym); if(m) return n0(m.sales);
-  return H.daily.filter(x=>ymOf(x.d) === ym).reduce((a, x)=>a + n0(x.sales), 0);
+  const ds = H.daily.filter(x=>ymOf(x.d) === ym); return ds.length ? ds.reduce((a, x)=>a + n0(x.sales), 0) : null;
 }
-function hasSales(ym){ return isLive(ym) ? L.res.some(r=>r.ym === ym) : (H.month.some(x=>ymOf(x.ym) === ym) || H.daily.some(x=>ymOf(x.d) === ym)); }
-function dailySales(months){
+function dailyVals(months, met){
+  met = met || salesMetric;
   const set = new Set(months), out = {};
-  H.daily.forEach(x=>{ const ym = ymOf(x.d); if(set.has(ym) && !isLive(ym)) out[x.d] = n0(x.sales); });
-  L.res.forEach(r=>{ if(set.has(r.ym) && isLive(r.ym)) out[r.d] = (out[r.d] || 0) + r.total; });
+  if(met === "drop") H.cday.forEach(x=>{ const ym = ymOf(x.d); if(set.has(ym) && !isLive(ym) && x.drop_yen != null) out[x.d] = (out[x.d] || 0) + n0(x.drop_yen); });
+  else H.daily.forEach(x=>{ const ym = ymOf(x.d); if(set.has(ym) && !isLive(ym)) out[x.d] = n0(x.sales); });
+  L.res.forEach(r=>{ if(set.has(r.ym) && isLive(r.ym)) out[r.d] = (out[r.d] || 0) + (met === "drop" ? r.drop : r.prov); });
   return out;
 }
 // キャスト×月（実働時間・店落ち・報酬・本数・新規・店リ・本指名・出勤/お茶/欠勤日数）
@@ -359,47 +371,53 @@ function liveNote(){ return liveYm ? `<span class="livebadge">${ymLabel(liveYm)}
 let salesUnit = "month";
 function renderSales(){
   const R = range(), months = R.months;
-  const sales = months.reduce((a, ym)=>a + salesOfMonth(ym), 0);
+  const sumM = (ms, met)=>ms.reduce((a, ym)=>a + n0(valOfMonth(ym, met)), 0);
+  const cntM = (ms, met)=>ms.filter(ym=>valOfMonth(ym, met) != null).length;
+  const drop = sumM(months, "drop"), prov = sumM(months, "prov"), sel = salesMetric === "drop" ? drop : prov;
   const cm = castMonths(months);
-  const drop = cm.reduce((a, x)=>a + n0(x.drop_yen), 0), reward = cm.reduce((a, x)=>a + n0(x.reward), 0);
+  const reward = cm.reduce((a, x)=>a + n0(x.reward), 0);
   const cnt = cm.reduce((a, x)=>a + n0(x.cnt), 0), nw = cm.reduce((a, x)=>a + n0(x.n_new), 0), rp = cm.reduce((a, x)=>a + n0(x.n_repeat), 0), hn = cm.reduce((a, x)=>a + n0(x.n_honshi), 0);
-  const days = Object.keys(dailySales(months)).length;
-  // 前年の同じ期間
-  const prevSales = months.reduce((a, ym)=>a + salesOfMonth(ymAdd(ym, -12)), 0);
+  const days = Object.keys(dailyVals(months)).length;
+  // 前年の同じ期間（両方に数字がある月だけでくらべる）
+  const both = months.filter(ym=>valOfMonth(ym) != null && valOfMonth(ymAdd(ym, -12)) != null);
+  const yoy = both.length ? pct(sumM(both), sumM(both.map(ym=>ymAdd(ym, -12)))) : "−";
   const el = $("v_sales");
   el.innerHTML = `
     <div class="cards">
-      <div class="c"><div class="k">売上</div><div class="v pink">${yen(sales)}</div><div class="s">前年の同じ期間 ${prevSales ? pct(sales, prevSales) : "−"}</div></div>
-      <div class="c"><div class="k">1日平均の売上</div><div class="v">${days ? yen(Math.round(sales / days)) : "−"}</div><div class="s">${days}日ぶん</div></div>
-      <div class="c"><div class="k">店落ち</div><div class="v green">${yen(Math.round(drop))}</div><div class="s">キャスト別の数字がある月だけ</div></div>
+      <div class="c"><div class="k">店落ち（雑費込み）</div><div class="v pink">${cntM(months, "drop") ? yen(Math.round(drop)) : "−"}</div><div class="s">${cntM(months, "drop")}か月ぶん（2025年1月から）</div></div>
+      <div class="c"><div class="k">暫定的な残額（雑費なし）</div><div class="v">${cntM(months, "prov") ? yen(Math.round(prov)) : "−"}</div><div class="s">${cntM(months, "prov")}か月ぶん（2018年12月から）</div></div>
+      <div class="c"><div class="k">前年の同じ月とくらべて</div><div class="v green">${yoy}</div><div class="s">${METRIC_LABEL[salesMetric]}で</div></div>
+      <div class="c"><div class="k">1日平均</div><div class="v">${days ? yen(Math.round(Object.values(dailyVals(months)).reduce((a, b)=>a + b, 0) / days)) : "−"}</div><div class="s">${days}日ぶん・${METRIC_LABEL[salesMetric]}</div></div>
       <div class="c"><div class="k">キャスト報酬</div><div class="v">${yen(Math.round(reward))}</div></div>
       <div class="c"><div class="k">本数</div><div class="v">${cnt.toLocaleString("ja-JP")}本</div></div>
       <div class="c"><div class="k">新規／店リピ／本指名</div><div class="v" style="font-size:16px">${nw}／${rp}／${hn}</div><div class="s">${pct(nw, cnt)}／${pct(rp, cnt)}／${pct(hn, cnt)}</div></div>
     </div>
-    <div class="box"><h3>📈 売上の推移 <small>${ymLabel(R.from)}〜${ymLabel(R.to)}</small> ${liveNote()}
-      <span class="r seg">${[["day", "日"], ["month", "月"], ["year", "年"]].map(([k, l])=>`<button type="button" class="${salesUnit === k ? "on" : ""}" onclick="salesUnit='${k}';renderSales()">${l}</button>`).join("")}</span></h3>
+    <div class="box"><h3>📈 ${METRIC_LABEL[salesMetric]}の推移 <small>${ymLabel(R.from)}〜${ymLabel(R.to)}</small> ${liveNote()}
+      <span class="r"><span class="seg">${[["drop", "店落ち"], ["prov", "暫定的な残額"]].map(([k, l])=>`<button type="button" class="${salesMetric === k ? "on" : ""}" onclick="salesMetric='${k}';renderSales()">${l}</button>`).join("")}</span>
+      <span class="seg" style="margin-left:8px">${[["day", "日"], ["month", "月"], ["year", "年"]].map(([k, l])=>`<button type="button" class="${salesUnit === k ? "on" : ""}" onclick="salesUnit='${k}';renderSales()">${l}</button>`).join("")}</span></span></h3>
       <div class="chartwrap tall"><canvas id="ch_sales"></canvas></div>
-      <div class="hint">${salesUnit === "month" ? "棒＝その月の売上、線＝前の年の同じ月" : salesUnit === "day" ? "1日ずつの売上（営業日。朝6時まで）" : "年ごとの売上（期間に入っている月だけ足しています）"}</div></div>
-    <div class="box"><h3>📅 年間比較（月ごとの売上）</h3><div class="tw" id="yearTable"></div></div>
+      <div class="hint">${salesUnit === "month" ? "棒＝その月、線＝前の年の同じ月" : salesUnit === "day" ? "1日ずつ（営業日。朝6時まで）" : "年ごと（期間に入っている月だけ足しています）"}。
+        店落ち＝暫定的な残額（総額 − 報酬）＋ 雑費。<br>過去の数字：店落ちは2025年1月から（日ごとは2026年1月から）、暫定的な残額は2018年12月から（売上管理.xlsx の年間比較）。長い期間の前年比は「暫定的な残額」で見てください</div></div>
+    <div class="box"><h3>📅 年間比較（月ごとの${METRIC_LABEL[salesMetric]}）</h3><div class="tw" id="yearTable"></div></div>
     <div class="grid2x">
       <div class="box"><h3>🌙 22時を境に（昼／深夜）<small>開始が22:00〜は深夜</small></h3><div class="chartwrap"><canvas id="ch_band"></canvas></div><div class="tw" id="bandTable" style="margin-top:8px"></div></div>
       <div class="box"><h3>🙋 新規・店リピ・本指名</h3><div class="chartwrap"><canvas id="ch_visit"></canvas></div><div class="tw" id="visitTable" style="margin-top:8px"></div></div>
     </div>`;
   // 推移のグラフ
   if(salesUnit === "day"){
-    const ds = dailySales(months), keys = Object.keys(ds).sort();
-    chart("ch_sales", { type: "line", data: { labels: keys.map(d=>d.slice(5).replace("-", "/")), datasets: [{ label: "売上", data: keys.map(k=>ds[k]), borderColor: COLORS[0], backgroundColor: "rgba(229,99,140,.12)", fill: true, pointRadius: keys.length > 90 ? 0 : 2, tension: .2 }] }, options: { scales: { y: yenAxis } } });
+    const ds = dailyVals(months), keys = Object.keys(ds).sort();
+    chart("ch_sales", { type: "line", data: { labels: keys.map(d=>d.slice(5).replace("-", "/")), datasets: [{ label: METRIC_LABEL[salesMetric], data: keys.map(k=>ds[k]), borderColor: COLORS[0], backgroundColor: "rgba(229,99,140,.12)", fill: true, pointRadius: keys.length > 90 ? 0 : 2, tension: .2 }] }, options: { scales: { y: yenAxis } } });
   }else if(salesUnit === "month"){
     chart("ch_sales", { data: { labels: months.map(ymLabel), datasets: [
-      { type: "bar", label: "売上", data: months.map(salesOfMonth), backgroundColor: "rgba(229,99,140,.75)", borderRadius: 6 },
-      { type: "line", label: "前の年", data: months.map(ym=>salesOfMonth(ymAdd(ym, -12)) || null), borderColor: COLORS[1], pointRadius: 2, tension: .2 } ] }, options: { scales: { y: yenAxis } } });
+      { type: "bar", label: METRIC_LABEL[salesMetric], data: months.map(ym=>valOfMonth(ym)), backgroundColor: "rgba(229,99,140,.75)", borderRadius: 6 },
+      { type: "line", label: "前の年", data: months.map(ym=>valOfMonth(ymAdd(ym, -12))), borderColor: COLORS[1], pointRadius: 2, tension: .2 } ] }, options: { scales: { y: yenAxis } } });
   }else{
     const ys = [...new Set(months.map(m=>m.slice(0, 4)))];
-    chart("ch_sales", { type: "bar", data: { labels: ys.map(y=>y + "年"), datasets: [{ label: "売上", data: ys.map(y=>months.filter(m=>m.startsWith(y)).reduce((a, m)=>a + salesOfMonth(m), 0)), backgroundColor: "rgba(229,99,140,.75)", borderRadius: 6 }] }, options: { scales: { y: yenAxis } } });
+    chart("ch_sales", { type: "bar", data: { labels: ys.map(y=>y + "年"), datasets: [{ label: METRIC_LABEL[salesMetric], data: ys.map(y=>sumM(months.filter(m=>m.startsWith(y)))), backgroundColor: "rgba(229,99,140,.75)", borderRadius: 6 }] }, options: { scales: { y: yenAxis } } });
   }
   // 年間比較の表（期間に入っている年）
   const years = [...new Set(months.map(m=>m.slice(0, 4)))];
-  const cell = (y, m)=>{ const ym = y + "-" + String(m).padStart(2, "0"); return hasSales(ym) ? salesOfMonth(ym) : null; };
+  const cell = (y, m)=>valOfMonth(y + "-" + String(m).padStart(2, "0"));
   let h = `<table class="t"><tr><th class="l">月</th>${years.map(y=>`<th>${y}年</th><th>前年比</th>`).join("")}</tr>`;
   for(let m = 1; m <= 12; m++){
     h += `<tr><td class="l">${m}月</td>` + years.map(y=>{ const v = cell(y, m), p = cell(y - 1, m); const r = v != null && p ? v / p - 1 : null;
