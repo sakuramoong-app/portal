@@ -237,6 +237,13 @@
   .cblock .ch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;} .cblock .ch b{font-size:16px;} .cblock .ch small{color:var(--sub);font-weight:700;}
   .cblock .none{font-size:12.5px;color:var(--sub);padding:2px 4px;}
 /* 🔔 確認電話の通知 */  .callalert{background:#FFE8EC;border:2px solid #E5486C;border-radius:14px;padding:8px 12px;margin:8px 0;color:#B0213F;font-weight:800;font-size:15px;}  .callalert button{display:block;width:100%;text-align:left;margin-top:6px;font-family:inherit;font-size:14px;font-weight:700;color:#7a1328;background:#fff;border:1.5px solid #F09AAA;border-radius:10px;padding:6px 10px;cursor:pointer;}  /* 本日のキャスト一覧：今の状態 */  .daysel{font-family:inherit;font-size:13px;font-weight:800;padding:4px 8px;border:1.5px solid var(--line);border-radius:99px;background:#fff;}  .daysel.pre{background:#EEE8FB;border-color:#B9A6E8;} .daysel.tea{background:#E6F6E6;border-color:#9AD39A;} .daysel.absent{background:#FFE8EC;border-color:#F09AAA;}
+  /* カード決済の進み具合・キャンセル/トビ・勤怠 */
+  select.cardst,span.cardst{margin-top:4px;font-family:inherit;font-size:12px;font-weight:800;padding:3px 8px;border-radius:99px;border:1.5px solid var(--line);background:#fff;}
+  .cardst.unsent{background:#FFE8EC;border-color:#F09AAA;color:#B0213F;} .cardst.sent{background:#FFF4E5;border-color:#FFB547;color:#a35a00;} .cardst.paid{background:#E6F6E6;border-color:#9AD39A;color:#2E7A35;}
+  table.list tr.cx td{opacity:.55;text-decoration:line-through;} table.list tr.cx td select{text-decoration:none;}
+  .cblock.cxbox{border-style:dashed;border-color:#E5A0B0;background:#FFF8FA;}
+  .attend{display:flex;flex-direction:column;gap:3px;margin:2px 0 6px;} .attend .ak{font-size:12.5px;background:#FFF8E6;border-radius:8px;padding:3px 8px;} .attend .ak.absent{background:#FFE8EC;} .attend .ak small{color:var(--sub);}
+.ynb{margin-left:4px;cursor:pointer;} .ynb input{display:none;} .ynb span{display:inline-block;min-width:40px;text-align:center;border:2px solid #FFB547;border-radius:10px;padding:2px 10px;background:#fff;font-size:16px;font-weight:800;} .ynb input:checked + span{background:#e5638c;border-color:#e5638c;color:#fff;}
   .seats{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:8px;overflow-x:auto;}
   .seat{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px;}
   .seat.on{border-color:#6c5ce7;background:#F4F2FF;}
@@ -321,6 +328,19 @@
     </div>
     <div class="sum" id="sum"></div>
 
+    <!-- 📝 勤怠の記録（欠勤・遅刻・早退・時間変更の理由） -->
+    <div class="modal-bg" id="attendBg"><div class="modal" style="max-width:460px"><button class="x" onclick="$('attendBg').classList.remove('show')" aria-label="閉じる">×</button>
+      <h2 id="attendTitle">📝 勤怠の記録</h2>
+      <div class="row2">
+        <div class="f"><label>なに？</label><select id="at_kind"><option>欠勤</option><option>遅刻</option><option>早退</option><option>時間変更</option></select></div>
+        <div class="f"><label>時間（あれば）</label><input id="at_time" maxlength="30" placeholder="例：30分遅れ・20時まで・19→21時"></div>
+      </div>
+      <div class="f" style="margin-top:8px"><label>理由</label><textarea id="at_reason" maxlength="300" placeholder="例：体調不良／電車の遅延／家の用事"></textarea></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button class="btn btn-ghost" onclick="$('attendBg').classList.remove('show')">やめる</button>
+        <button class="btn btn-primary" onclick="saveAttend()">💾 記録する</button></div>
+      <div class="hint2" style="margin-top:6px;font-size:12px;color:var(--sub)">欠勤にすると、今どこに誰がの「今いない（欠勤）」に入ります。シフトの時間そのものはサクラシフトで直してください。</div>
+    </div></div>
     <!-- 🪑 鶯谷待機席のログ（今どこに誰がの「📜 ログ」から） -->
     <div class="modal-bg" id="seatLogBg"><div class="modal"><button class="x" onclick="$('seatLogBg').classList.remove('show')" aria-label="閉じる">×</button>
       <h2>🪑 鶯谷待機席のログ</h2><div id="seatBox"></div></div></div>
@@ -380,8 +400,9 @@
 
     <!-- ① 電話番号（最初に台帳の履歴を見る） -->
     <div class="step">
-      <h3><span class="n">1</span>電話番号（台帳で履歴を見る）</h3>
-      <div class="row1"><div class="f">
+      <h3><span class="n">1</span>お客さんの名前・電話番号（台帳で履歴を見る）</h3>
+      <div class="row1"><div class="f"><label>お客さんの名前</label><input id="f_name" maxlength="40" oninput="recalc()"></div></div>
+      <div class="row1"><div class="f"><label>電話番号</label>
         <div style="display:flex;gap:6px"><input id="f_phone" type="tel" inputmode="tel" placeholder="09012345678" onchange="lookupCustomer()">
           <button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="lookupCustomer()">🔍 調べる</button></div></div></div>
       <div id="custInfo"></div>
@@ -451,8 +472,8 @@
       <div style="background:#FFF4E5;border:2px solid #FFB547;border-radius:12px;padding:8px 12px;margin-bottom:8px">
         <div style="font-weight:800;font-size:13.5px;color:#a35a00;margin-bottom:4px">🔸 AF・逆AF のご希望（必ず聞く）</div>
         <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:14.5px;font-weight:700">
-          <span>AF：<label><input type="radio" name="f_afw" value="yes" onchange="onAfWish()"> 希望あり</label> <label><input type="radio" name="f_afw" value="no" onchange="onAfWish()"> なし</label></span>
-          <span>逆AF：<label><input type="radio" name="f_rafw" value="yes" onchange="onAfWish()"> 希望あり</label> <label><input type="radio" name="f_rafw" value="no" onchange="onAfWish()"> なし</label></span>
+          <span>AF：<label class="ynb"><input type="radio" name="f_afw" value="yes" onchange="onAfWish()"><span>〇</span></label><label class="ynb"><input type="radio" name="f_afw" value="no" onchange="onAfWish()"><span>×</span></label></span>
+          <span>逆AF：<label class="ynb"><input type="radio" name="f_rafw" value="yes" onchange="onAfWish()"><span>〇</span></label><label class="ynb"><input type="radio" name="f_rafw" value="no" onchange="onAfWish()"><span>×</span></label></span>
         </div>
       </div>
       <div class="row1"><div class="f"><label>希望プレイ</label><input id="f_play" maxlength="200" placeholder="例：潮吹き・言葉責め など" oninput="recalc()"></div></div>
@@ -473,9 +494,8 @@
 
     <!-- ⑤ 媒体・お客さんの名前 -->
     <div class="step">
-      <h3><span class="n">5</span>媒体・お客さんの名前</h3>
+      <h3><span class="n">5</span>媒体</h3>
       <div class="row1"><div class="f"><label>媒体（いくつでも）</label><div class="chips" id="f_media"></div></div></div>
-      <div class="row1"><div class="f"><label>お客さんの名前</label><input id="f_name" maxlength="40" oninput="recalc()"></div></div>
     </div>
 
     <!-- ⑥ 最終確認 -->
@@ -538,6 +558,8 @@ const FREE_SUFFIX = { "":"", free:"フリー", special_free:"特別フリー", e
 
 let M = {};              // マスタ一式
 let day = "", rows = [], editing = null, curCustomer = null, visit = "new", mediaSel = [];
+let backOv = "", backOvFor = -1;   // 報酬を手で直した値（予約ごと）
+let custPast = null;   // 電話番号で見つけたお客さんの、これまでの予約（キャストを変えたら本指名・店リピを決めなおす）
 let showMoney = false;
 
 $("navArea").innerHTML = KB.nav("reception.html");
@@ -698,7 +720,8 @@ function onStore(r){
   $("f_opts").innerHTML = M.options.filter(o=>o.store_group===g).map(o=>{
     const s = sel.find(x=>x.code===o.code && x.group===g);
     const qty = s ? s.qty : 1;
-    return `<div class="opt">
+    // AF・逆AF は上の「必ず聞く」で選ぶので、ここには出さない（チェックだけ自動）
+    return `<div class="opt" ${["af", "gyakuaf"].includes(o.code) ? 'style="display:none"' : ""}>
       <input type="checkbox" id="o_${o.code}" ${s?"checked":""} onchange="recalc()">
       <label class="lbl" for="o_${o.code}">${esc(o.label)}${o.note?`<br><small>${esc(o.note)}</small>`:""}</label>
       <input type="number" id="oq_${o.code}" min="1" value="${qty}" title="${o.unit==="per_item"?"枚数":o.unit==="per_cast"?"キャストの人数":"回数"}" oninput="recalc()" ${o.unit==="once"?'style="visibility:hidden"':""}>
@@ -855,7 +878,7 @@ function onAfWish(){
   recalc();
 }
 function optSummary(){
-  const n = [...document.querySelectorAll("#f_opts input[type=checkbox]:checked")].length + ($("f_xop_label").value.trim() ? 1 : 0);
+  const n = [...document.querySelectorAll("#f_opts input[type=checkbox]:checked")].filter(b=>!["o_af", "o_gyakuaf"].includes(b.id)).length + ($("f_xop_label").value.trim() ? 1 : 0);
   $("optCount").textContent = n ? `（${n}件 選択中）` : "";
   if(n) $("optDetails").open = true;
 }
@@ -1134,14 +1157,15 @@ const digits = s => String(s||"").replace(/[^\d]/g, "");
 async function lookupCustomer(keepName){
   const phone = digits($("f_phone").value);
   $("f_phone").value = phone;
-  if(phone.length < 6){ curCustomer = null; $("custInfo").innerHTML = ""; return; }
+  if(phone.length < 6){ curCustomer = null; custPast = null; $("custInfo").innerHTML = ""; return; }
   try{
     const c = q(await sb.from("kb_customers").select("*").eq("phone", phone).order("id").limit(1).maybeSingle());
     curCustomer = c || null;
-    if(!c){ $("custInfo").innerHTML = `<div class="info">🆕 はじめての電話番号です（保存すると新しいお客さんとして登録します）</div>`; if(!editing) setVisit("new"); return; }
+    if(!c){ custPast = []; $("custInfo").innerHTML = `<div class="info">🆕 はじめての電話番号です（保存すると新しいお客さんとして登録します）</div>`; if(!editing) setVisit("new"); return; }
     if(!keepName || !$("f_name").value) $("f_name").value = c.name || "";
     $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = c.ng_reason || c.note || "";
     const past = q(await sb.from("kb_reservations").select("biz_date,store_key,cast_id,dummy_name,course,status").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(10)) || [];
+    custPast = past;
     const casts = [...new Set(past.map(p=>castName(p.cast_id)))];
     $("custInfo").innerHTML = (c.ng ? `<div class="warn">⚠️ NG客です：${esc(c.ng_reason||"理由なし")}</div>` : "") +
       `<div class="hist">これまで ${past.length}件${past.length>=10?"以上":""}（新しい順）：${past.map(p=>`${p.biz_date.slice(5).replace("-","/")} ${esc(storeLabel(p.store_key))} ${p.dummy_name ? "🎭" + esc(p.dummy_name) + "→" : ""}${esc(castName(p.cast_id))} ${esc(p.course)}${p.status==="cancel"?"(キャンセル)":p.status==="tobi"?"(トビ)":""}`).join("、") || "なし"}<br>
@@ -1181,7 +1205,10 @@ function calc(){
     const special = cast && rulesOn(cast.id).find(r=>r.kind==="op_price" && r.params.op===o.code && (!r.params.group || r.params.group===g));
     if(special){ p = special.params.price; b = special.params.back; why.push(`${o.label}：特例 ${yen(p)}（バック${yen(b)}）`); }
     const qty = o.unit === "once" ? 1 : Math.max(1, +$("oq_"+o.code).value||1);
-    opts.push({ group:g, code:o.code, label:o.label, qty, price:p, back:b, manual:o.manual });
+    // サクラナの「AF・逆AF」1つのOPは、希望したほうだけの名前に（どちらかだけなら、どちらかだけ出す）
+    let label = o.label;
+    if(o.code === "af" && !$("o_gyakuaf")){ const a = radioVal("f_afw") === "yes", ra = radioVal("f_rafw") === "yes"; label = a && !ra ? "AF" : ra && !a ? "逆AF" : o.label; }
+    opts.push({ group:g, code:o.code, label, qty, price:p, back:b, manual:o.manual });
   });
   if($("f_xop_label").value.trim()){
     opts.push({ group:g, code:"custom", label:$("f_xop_label").value.trim(), qty:1, price:+$("f_xop_price").value||0, back:+$("f_xop_back").value||0, manual:true });
@@ -1229,7 +1256,9 @@ function recalc(){
   if(!$("f_store").value) return;
   optSummary();
   const c = last = calc();
-  const ov = editing && editing.back_override != null ? editing.back_override : "";
+  // 報酬を手で直した値（打ったら覚えておく。描きなおしても消えない）
+  if(backOvFor !== (editing ? editing.id : 0)){ backOvFor = editing ? editing.id : 0; backOv = editing && editing.back_override != null ? String(editing.back_override) : ""; }
+  const ov = backOv;
   const back = c.courseBack + c.optionBack + c.extra;
   $("calc").innerHTML = `
     <h3>💴 お客さんの料金</h3>
@@ -1247,8 +1276,10 @@ function recalc(){
     <div class="row back"><span>コースのバック</span><b>${yen(c.courseBack)}</b></div>
     <div class="row back"><span>OPのバック</span><b>${yen(c.optionBack)}</b></div>
     <div class="row back"><span>延長・入会金・特例</span><b>${yen(c.extra)}</b></div>
-    <div class="row total"><span>報酬</span><b>${yen(back)}</b></div>
-    <div class="f" style="margin-top:8px"><label>報酬を手で直す（空なら自動）</label><input type="number" id="f_backov" value="${ov}" ${KB.CAN_EDIT?"":"disabled"}></div>
+    <div class="row total"><span>報酬${ov !== "" ? "（自動の計算）" : ""}</span><b ${ov !== "" ? 'style="text-decoration:line-through;opacity:.5"' : ""}>${yen(back)}</b></div>
+    ${ov !== "" ? `<div class="row total"><span>報酬（手で直した）</span><b>${yen(Number(ov) || 0)}</b></div>` : ""}
+    <div class="f" style="margin-top:8px"><label>報酬を手で直す（空なら自動）…特例などで、報酬の合計をこの金額にしたいとき。精算もこの金額になります</label>
+      <input type="number" id="f_backov" value="${esc(ov)}" ${KB.CAN_EDIT?"":"disabled"} oninput="backOv=this.value" onchange="recalc()" placeholder="例：15000"></div>
     <div class="why">${esc(c.why.join("\n"))}</div>`;
   // コースの説明（極門など）
   const info = M.courseInfo.find(i=>i.store_key===c.store && String(c.course).startsWith(i.course_type));
@@ -2113,6 +2144,7 @@ const __openFormR = openForm;
 openForm = function(id){
   const r = id ? rows.find(x=>x.id === id) : null;
   guestFlags = new Set((r && r.guest_flags) || []);
+  backOvFor = -1; custPast = null;   // 新しく開いたら、手で直した報酬・お客さんの履歴は読みなおす
   $("castChecks").dataset.cast = "";
   __openFormR(id);
   renderGuestChips();
@@ -2153,7 +2185,8 @@ function renderToday(){
   const st = Object.values(castDays || {}).map(c=>c.status || "");
   const t = (k, v)=>`<div class="t"><div class="k">${k}</div><div class="v">${v}</div></div>`;
   el.innerHTML = t("今日の店落ち（暫定＋雑費）", yen(total - back + zappi)) + t("カード合計", yen(card)) + t("予約件数", live.length + "件")
-    + t("予約のあるキャスト", ids.length + "名") + t("お茶", st.filter(s=>s === "お茶").length + "名") + t("欠勤", st.filter(s=>s === "欠勤").length + "名");
+    + t("予約のあるキャスト", ids.length + "名") + t("お茶", st.filter(s=>s === "お茶").length + "名") + t("欠勤", st.filter(s=>s === "欠勤").length + "名")
+    + t("キャンセル・トビ", rows.filter(r=>r.status === "cancel").length + "件・" + rows.filter(r=>r.status === "tobi").length + "件");
 }
 const __renderListT = renderList;
 renderList = function(){ __renderListT(); renderToday(); renderOwner(); };
@@ -2569,7 +2602,7 @@ function resCells(r){
     ${KB.CAN_EDIT ? `<button class="addlog" onclick="event.stopPropagation();addLogPrompt(${r.id})">＋ ログ</button>` : ""}</div>`;
   return `<td><b>${hm(r.start_at)}</b>〜${hm(r.end_at)}</td>
     <td>${r.dummy_name ? `<small style="color:#6c5896">🎭${esc(r.dummy_name)}</small><br>` : ""}${esc(String(storeLabel(r.store_key) || "").slice(0, 3))}</td>
-    <td>${esc(r.course)}${/^\d+$/.test(r.course) ? "分" : ""}${r.free_kind ? "・" + FREE_SUFFIX[r.free_kind] : ""}${r.extension_count ? " 延長" + r.extension_count : ""}${r.payment !== "cash" ? " 💳" : ""}<br><small style="color:var(--sub)">${esc(r.area || "")}</small></td>
+    <td>${esc(r.course)}${/^\d+$/.test(r.course) ? "分" : ""}${r.free_kind ? "・" + FREE_SUFFIX[r.free_kind] : ""}${r.extension_count ? " 延長" + r.extension_count : ""}${r.payment !== "cash" ? " 💳" : ""}<br><small style="color:var(--sub)">${esc(r.area || "")}</small>${cardSel(r)}</td>
     <td>${c.ng ? "⚠️" : ""}${esc(c.name || "")}<small style="color:var(--sub)"> ${(VISIT.find(v=>v[0] === r.visit_kind) || [])[1] || ""}</small>${c.phone ? `<br><span class="tel">📞 ${esc(c.phone)}</span>` : ""}</td>
     <td>${stSel}${todosHtml(r)}</td><td>${told}</td><td>${logHtml}</td>`;
 }
@@ -2581,8 +2614,9 @@ renderListTable = function(){
   const head = `<tr><th>時間</th><th>店舗</th><th>コース・エリア</th><th>お客さん・電話</th><th>状態・やること</th><th>キャストに</th><th>対応ログ</th></tr>`;
   // 今いない（不在・お茶・欠勤）は、枠ぜんたいをグレー・緑・赤に（今どこに誰がとつながっている）
   const block = (title, sub, list, cid, cls)=>`<div class="cblock ${cls || ""}" ${cid ? `id="cb-${cid}"` : ""}>
-      <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
-      ${list.length ? `<div class="wrapx"><table class="list">${head}${list.map(r=>`<tr class="r" onclick="openForm(${r.id})">${resCells(r)}</tr>`).join("")}</table></div>` : `<div class="none">予約なし</div>`}</div>`;
+      <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button>` : ""}${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
+      ${cid ? attendHtml(cid) : ""}
+      ${list.length ? `<div class="wrapx"><table class="list">${head}${list.map(r=>`<tr class="r ${["cancel", "tobi"].includes(r.status) ? "cx" : ""}" onclick="openForm(${r.id})">${resCells(r)}</tr>`).join("")}</table></div>` : `<div class="none">予約なし</div>`}</div>`;
   const noCast = rows.filter(r=>!r.cast_id).sort(byStart);
   const mode = $("s_sort").value;
   el.innerHTML = (noCast.length ? block("キャスト未定", "", noCast, "") : "")
@@ -2591,7 +2625,7 @@ renderListTable = function(){
         const sub = `${x.shift ? "出勤 " + tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) : "シフトなし"}・${STATE[st]}${st !== "gone" && col ? "（" + col + "）" : gk ? "（" + gk + "）" : ""}`;
         const cls = st === "gone" ? (gk === "お茶" ? "tea" : gk === "欠勤" ? "absent" : "away") : "";
         return block("【" + esc(castLabel(x)) + "】", esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart) : [], x.c ? x.c.id : "", cls);
-      }).join("") : `<div class="gate">${mode === "freeNow" ? "今すぐ行けるキャストはいません" : mode === "booked" ? "予約があるキャストはいません" : "この日のキャストがいません"}</div>`);
+      }).join("") : `<div class="gate">${mode === "freeNow" ? "今すぐ行けるキャストはいません" : mode === "booked" ? "予約があるキャストはいません" : "この日のキャストがいません"}</div>`) + cancelSection();
 };
 
 /* ---------- 本日のキャスト一覧：今の状態のプルダウン（今どこに誰がとつながっている）
@@ -2690,6 +2724,76 @@ async function openAlertRes(id, bd){
 loadCallAlerts(); setInterval(loadCallAlerts, 120000);
 const __loadDayA = loadDay;
 loadDay = async function(){ await __loadDayA(); renderCallAlerts(); };
+
+/* ---------- 💳 カード決済の進み具合（本日のキャスト一覧で、プルダウンで変える） ---------- */
+const CARD_STEP = [["unsent", "💳 URL未送信"], ["sent", "📨 URL送信済み"], ["paid", "✅ 決済済み"]];
+function cardSel(r){
+  if(r.payment === "cash" || !("card_step" in r)) return "";
+  const cur = r.card_step || (r.payment === "card_paid" ? "paid" : "unsent");
+  if(!KB.CAN_EDIT) return `<br><span class="cardst ${cur}">${(CARD_STEP.find(x=>x[0] === cur) || [])[1] || ""}</span>`;
+  return `<br><select class="cardst ${cur}" onclick="event.stopPropagation()" onchange="setCardStep(${r.id},this.value)">${CARD_STEP.map(([v, l])=>`<option value="${v}" ${cur === v ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+}
+async function setCardStep(id, v){
+  const l = (CARD_STEP.find(x=>x[0] === v) || [])[1] || v;
+  if(await pushLog(id, "カード：" + l, { card_step: v })){ toast("カード：" + l); renderList(); }
+}
+
+/* ---------- 🚫 キャンセル・トビ（売上には入れない。あったことは見えるように） ---------- */
+function cancelSection(){
+  const list = rows.filter(r=>r.status === "cancel" || r.status === "tobi").sort((a, b)=>String(a.start_at).localeCompare(String(b.start_at)));
+  if(!list.length) return "";
+  const n = s => list.filter(r=>r.status === s).length;
+  return `<div class="cblock cxbox"><div class="ch"><b>🚫 キャンセル・トビ</b><small>キャンセル ${n("cancel")}件・トビ ${n("tobi")}件（売上・報酬には入りません）</small></div>
+    <div class="wrapx"><table class="list"><tr><th>時間</th><th>キャスト</th><th>状態</th><th>コース</th><th>お客さん</th><th>対応ログ（新しい順）</th></tr>
+    ${list.map(r=>{ const c = r.kb_customers || {}, lg = logOf(r).slice().reverse()[0];
+      return `<tr class="r" onclick="openForm(${r.id})"><td>${hm(r.start_at)}〜${hm(r.end_at)}</td><td><b>${esc(castName(r.cast_id))}</b></td>
+        <td><span class="st ${r.status}">${STATUS[r.status]}</span></td><td>${esc(r.course)}${/^\d+$/.test(r.course) ? "分" : ""}</td>
+        <td>${esc(c.name || "")}${c.phone ? `<br><span class="tel">📞 ${esc(c.phone)}</span>` : ""}</td>
+        <td><small>${lg ? esc(whenShort(lg.at) + " " + (lg.by || "") + " " + lg.text) : ""}</small></td></tr>`; }).join("")}</table></div></div>`;
+}
+
+/* ---------- 📝 勤怠（欠勤・遅刻・早退・シフト時間変更）の理由 ---------- */
+const ATTEND_KINDS = ["欠勤", "遅刻", "早退", "時間変更"];
+function attendHtml(cid){
+  const log = ((castDays[cid] || {}).attend_log) || [];
+  if(!log.length) return "";
+  return `<div class="attend">${log.map(a=>`<span class="ak ${a.kind === "欠勤" ? "absent" : ""}">📝 <b>${esc(a.kind)}</b>${a.time ? "（" + esc(a.time) + "）" : ""}：${esc(a.reason || "理由なし")}<small> ${esc(a.by || "")} ${whenShort(a.at)}</small></span>`).join("")}</div>`;
+}
+let attendCid = null;
+function openAttend(cid, kind){
+  if(!KB.CAN_EDIT){ toast("作成中のため、書けるのは店長だけです"); return; }
+  attendCid = cid;
+  $("attendTitle").textContent = "📝 勤怠の記録：" + castName(cid);
+  $("at_kind").value = kind || "遅刻"; $("at_time").value = ""; $("at_reason").value = "";
+  $("attendBg").classList.add("show");
+  setTimeout(()=>$("at_reason").focus(), 50);
+}
+async function saveAttend(){
+  const cid = attendCid; if(!cid) return;
+  const kind = $("at_kind").value, reason = $("at_reason").value.trim(), time = $("at_time").value.trim();
+  if(!reason){ toast("理由を書いてください（わからなければ「不明」）"); return; }
+  const log = (((castDays[cid] || {}).attend_log) || []).concat([{ kind, reason, time, at: new Date().toISOString(), by: KB.operatorName() }]);
+  const patch = { attend_log: log };
+  if(kind === "欠勤") Object.assign(patch, { status: "欠勤", standby: "" });   // 欠勤は今どこに誰がの「今いない（欠勤）」へ
+  if(await saveDayPart(cid, patch)){ $("attendBg").classList.remove("show"); toast("記録しました"); }
+}
+// 今いないの札で「欠勤」にしたときは、理由を聞く
+const __cycleGone = cycleGone;
+cycleGone = async function(cid){
+  const cd = castDays[cid] || {};
+  const next = GONE_CYCLE[(GONE_CYCLE.indexOf(goneKind(cd)) + 1) % GONE_CYCLE.length];
+  if(next === "欠勤"){ openAttend(cid, "欠勤"); return; }
+  await saveDayPart(cid, { status: next });
+};
+
+/* ---------- キャストを変えたら、本指名・店リピを決めなおす（電話番号で調べたお客さんのとき） ---------- */
+const __onCastV = onCast;
+onCast = function(){
+  __onCastV.apply(this, arguments);
+  if(!custPast) return;
+  const cid = $("f_cast").value;
+  setVisit(!custPast.length ? "new" : (cid && custPast.some(p=>p.cast_id === cid) ? "honshi" : "repeat"));
+};
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
