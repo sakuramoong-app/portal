@@ -1366,7 +1366,7 @@ renderList = function(){
   const card = live.filter(r=>r.payment !== "cash").reduce((a, r)=>a + (r.total || 0), 0);
   $("stats").className = "stats" + (showMoney ? "" : " hide");
   $("tax").className = "tax" + (showMoney ? "" : " hide");
-  $("moneyBtn").textContent = showMoney ? "🙈 金額をかくす" : "👁 金額を見る";
+  if($("moneyBtn")) $("moneyBtn").textContent = showMoney ? "🙈 金額をかくす" : "👁 金額を見る";
   $("stats").innerHTML = `
     <div class="stat"><div class="k">本日売上</div><div class="v pink m">${yen(total)}</div></div>
     <div class="stat"><div class="k">予約件数</div><div class="v">${live.length}件</div></div>
@@ -2461,7 +2461,7 @@ function dayTitle(){
   return `📅 ${d.getUTCMonth() + 1}月${d.getUTCDate()}日（${w}）${day === KB.bizDateOf() ? "・今日" : ""}`;
 }
 const __loadDayV = loadDay;
-loadDay = async function(){ if($("viewDay")) $("viewDay").textContent = dayTitle(); await __loadDayV(); if($("viewDay")) $("viewDay").textContent = dayTitle(); };
+loadDay = async function(){ if($("viewDay")) $("viewDay").textContent = dayTitle(); await __loadDayV(); if($("viewDay")) $("viewDay").textContent = dayTitle(); renderList(); };   // シフトを読んだあとに一覧を描きなおす
 
 // 並び・絞り（本日のキャスト一覧・全体を見たい 共通）：予約があるキャストのみ／今すぐ行けるキャスト を追加
 function freeNowOf(x){
