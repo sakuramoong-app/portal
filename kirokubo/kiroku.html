@@ -247,6 +247,7 @@
   table.list tr.cx td{opacity:.55;text-decoration:line-through;} table.list tr.cx td select{text-decoration:none;}
   .cblock.cxbox{border-style:dashed;border-color:#E5A0B0;background:#FFF8FA;}
   .attend{display:flex;flex-direction:column;gap:3px;margin:2px 0 6px;} .attend .ak{font-size:12.5px;background:#FFF8E6;border-radius:8px;padding:3px 8px;} .attend .ak.absent{background:#FFE8EC;} .attend .ak small{color:var(--sub);}
+  .attend .ak .undo{margin-left:8px;font-family:inherit;font-size:11.5px;font-weight:800;padding:1px 8px;border:1.5px solid #F09AAA;border-radius:99px;background:#fff;color:#B0213F;cursor:pointer;}
 .ynb{margin-left:4px;cursor:pointer;} .ynb input{display:none;} .ynb span{display:inline-block;min-width:40px;text-align:center;border:2px solid #FFB547;border-radius:10px;padding:2px 10px;background:#fff;font-size:16px;font-weight:800;} .ynb input:checked + span{background:#e5638c;border-color:#e5638c;color:#fff;}
   /* 状態：まだ選んでいない → 点滅 */
   select.st.pick{background:#FFF0F0;color:#C62850;border:2px solid #E5486C;animation:pickblink 1s ease-in-out infinite;}
@@ -2936,7 +2937,7 @@ saveAttend = async function(){
   if(!reason){ toast("理由を書いてください（わからなければ「不明」）"); return; }
   const st = kind === "欠勤" ? null : toHour($("at_start").value), en = kind === "欠勤" ? null : toHour($("at_end").value);
   const shiftTxt = [st != null ? "出勤→" + fromHour(st) : "", en != null ? "退勤→" + fromHour(en) : ""].filter(Boolean).join("・");
-  const log = (((castDays[cid] || {}).attend_log) || []).concat([{ kind, reason, time: [time, shiftTxt].filter(Boolean).join("／"), at: new Date().toISOString(), by: KB.operatorName() }]);
+  const log = (((castDays[cid] || {}).attend_log) || []).concat([{ kind, reason, time: [time, shiftTxt].filter(Boolean).join("／"), st, en, at: new Date().toISOString(), by: KB.operatorName() }]);
   const patch = { attend_log: log };
   if(kind === "欠勤") Object.assign(patch, { status: "欠勤", standby: "" });
   if(st != null) patch.shift_start_ov = st;
@@ -2992,6 +2993,36 @@ openForm = function(id){
   __openFormC(id);
   fillCastSel();
 };
+
+/* ---------- 📝 勤怠の取り消し（「やっぱりやめた！」）：その記録を消して、欠勤・出勤時間の変更も元にもどす ---------- */
+// 記録から、変えた出勤・退勤の時刻を読む（前の記録は文字から）
+function attendShift(a){
+  const pick = (v, re)=>{ if(v != null) return Number(v); const m = String(a.time || "").match(re); return m ? toHour(m[1]) : null; };
+  return { st: pick(a.st, /出勤→(\d{1,2}:\d{2})/), en: pick(a.en, /退勤→(\d{1,2}:\d{2})/) };
+}
+attendHtml = function(cid){
+  const log = ((castDays[cid] || {}).attend_log) || [];
+  if(!log.length) return "";
+  return `<div class="attend">${log.map((a, i)=>`<span class="ak ${a.kind === "欠勤" ? "absent" : ""}">📝 <b>${esc(a.kind)}</b>${a.time ? "（" + esc(a.time) + "）" : ""}：${esc(a.reason || "理由なし")}<small> ${esc(a.by || "")} ${whenShort(a.at)}</small>
+    ${KB.CAN_EDIT ? `<button type="button" class="undo" onclick="event.stopPropagation();undoAttend('${cid}',${i})">✖ 取り消し</button>` : ""}</span>`).join("")}</div>`;
+};
+async function undoAttend(cid, i){
+  const cd = castDays[cid] || {}, log = (cd.attend_log || []).slice(), a = log[i];
+  if(!a) return;
+  if(!confirm(`「${a.kind}」の記録を取り消しますか？` + (a.kind === "欠勤" ? "\n（欠勤ではなくなり、今どこに誰がの「今いない（不在）」にもどります）" : "\n（変えた出勤・退勤の時刻も元にもどします）"))) return;
+  log.splice(i, 1);
+  const patch = { attend_log: log };
+  if(a.kind === "欠勤" && !log.some(x=>x.kind === "欠勤") && cd.status === "欠勤") patch.status = "";
+  // 出勤・退勤の時刻：残っている記録のうち、いちばん新しいものにもどす（なければシフトの時間）
+  const sh = attendShift(a);
+  if(sh.st != null || sh.en != null){
+    let st = null, en = null;
+    log.forEach(x=>{ const s = attendShift(x); if(s.st != null) st = s.st; if(s.en != null) en = s.en; });
+    if(sh.st != null) patch.shift_start_ov = st;
+    if(sh.en != null) patch.shift_end_ov = en;
+  }
+  if(await saveDayPart(cid, patch)) toast("取り消しました");
+}
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
