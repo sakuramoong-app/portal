@@ -3713,20 +3713,20 @@ placeCell = function(r){ const b = r.biz_check; return __placeCellB(r) + (r.plac
 
 /* ---------- 🏢 ビジホの履歴（ラブホのホテルリストとは別：kb_biz_hotels）
    種類が「ビジホ」のとき：ホテル名の候補・地図のURL・前回の確認はビジホの履歴から。保存すると自動で履歴に入る ---------- */
-M.biz = [];
-(async ()=>{ try{ M.biz = q(await sb.from("kb_biz_hotels").select("*").order("last_used", { ascending: false })) || []; }catch(e){ M.biz = []; } })();
+let bizHotels = [];   // M は読みこみのたびに作りなおされるので、別に持つ
+(async ()=>{ try{ bizHotels = q(await sb.from("kb_biz_hotels").select("*").order("last_used", { ascending: false })) || []; }catch(e){ bizHotels = []; } })();
 const isBiz = ()=>!!($("f_place") && $("f_place").value === "biz");
 const bkey = s=>String(s || "").replace(/[\s　]/g, "");
 function bizFind(){
   const area = $("f_area").value.trim(), addr = bkey($("f_address").value);
   if(!addr) return null;
-  return M.biz.filter(h=>!area || !h.area || h.area === area).sort((a, b)=>String(b.hotel_name).length - String(a.hotel_name).length)
+  return bizHotels.filter(h=>!area || !h.area || h.area === area).sort((a, b)=>String(b.hotel_name).length - String(a.hotel_name).length)
     .find(h=>addr.includes(bkey(h.hotel_name))) || null;
 }
 // ホテル名の候補：ビジホのときはビジホの履歴
 function fillHotelList(){
   const area = $("f_area").value.trim();
-  const list = isBiz() ? M.biz.filter(h=>!area || h.area === area) : (M.hotels || []).filter(h=>h.area === area);
+  const list = isBiz() ? bizHotels.filter(h=>!area || h.area === area) : (M.hotels || []).filter(h=>h.area === area);
   $("hotelList").innerHTML = list.map(h=>`<option value="${esc(h.hotel_name)}">`).join("");
 }
 const __paintAreaInfoBz = paintAreaInfo;
@@ -3766,7 +3766,7 @@ async function addBizFromForm(){
   if(map && !/^https?:\/\//i.test(map)){ toast("地図のURLは https:// から始まるものを貼ってください"); return; }
   try{
     const row = q(await sb.from("kb_biz_hotels").insert({ area, hotel_name: name, map_url: map, note, updated_by: KB.operatorName() }).select("*").single());
-    M.biz.unshift(row || { area, hotel_name: name, map_url: map, note });
+    bizHotels.unshift(row || { area, hotel_name: name, map_url: map, note });
     if($("f_map")) $("f_map").dataset.auto = "1";
     $("newHotelBox").innerHTML = ""; fillHotelList(); autoMap(); paintBiz(); recalc();
     toast("「" + name + "」をビジホの履歴に足しました");
@@ -3791,10 +3791,10 @@ saveRes = async function(){
   await __saveResBz();
   if(!biz || cx || !name || $("formBg").classList.contains("show")) return;   // 保存できなかったときは何もしない
   try{
-    const ex = M.biz.find(h=>h.area === area && bkey(h.hotel_name) === bkey(name));
+    const ex = bizHotels.find(h=>h.area === area && bkey(h.hotel_name) === bkey(name));
     const patch = { map_url: map || (ex && ex.map_url) || "", last_check: chk, last_used: day, updated_at: new Date().toISOString(), updated_by: KB.operatorName() };
     if(ex){ patch.use_count = (ex.use_count || 0) + (wasEdit ? 0 : 1); q(await sb.from("kb_biz_hotels").update(patch).eq("id", ex.id)); Object.assign(ex, patch); }
-    else { const row = q(await sb.from("kb_biz_hotels").insert({ area, hotel_name: name, use_count: 1, ...patch }).select("*").single()); if(row) M.biz.unshift(row); }
+    else { const row = q(await sb.from("kb_biz_hotels").insert({ area, hotel_name: name, use_count: 1, ...patch }).select("*").single()); if(row) bizHotels.unshift(row); }
   }catch(e){ toast("予約は保存しました。ビジホの履歴には入れられませんでした（SQL 112 は実行ずみ？）"); }
 };
 
