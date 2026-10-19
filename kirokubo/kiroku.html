@@ -1718,6 +1718,7 @@ function tlCell(castId, h){
   newBookingFor(castId, String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0"));
 }
 function newBookingFor(castId, time){
+  openForm(null);
   if(castId && ![...$("f_cast").options].some(o=>o.value === castId)){ $("f_castAll").checked = true; fillCastSel(); }
   $("f_cast").value = castId; onCast();
   if(time) $("f_start").value = time;
