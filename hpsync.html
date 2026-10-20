@@ -27,10 +27,22 @@
 <div class="wrap">
   <h1>🌐 公式HP 自動反映（テスト）</h1>
   <p class="lead">サクラシフトのシフトを、公式HPの管理画面に自動で入れるしくみの準備中です。<br>
-    いまは<b>「管理画面に入れるか」と「スケジュールを読めるか」をたしかめるだけ</b>です。管理画面の中身は何も変えません。</p>
+    上の「読んでみる」は、管理画面を読むだけです（何も変えません）。下の「書きこみテスト」は、「入れる」を押したときだけ管理画面を変えます。</p>
   <div class="box">
     <button class="btn" id="go" onclick="runTest()">🔍 サクラムーン池袋の管理画面を読んでみる</button>
     <div id="out" style="margin-top:12px"></div>
+  </div>
+
+  <div class="box">
+    <h2 style="font-size:16px;color:var(--pink-deep);margin-bottom:6px">✍️ 書きこみテスト（サクラシフト → 公式HP）</h2>
+    <p class="lead" style="margin:0 0 10px">サクラシフトで<b>受理したシフト</b>を、公式HPに入れます。まず「確認する」で、今のHPと入れる予定を見くらべます（ここまでは何も変わりません）。<br>
+      「この内容で公式HPに入れる」を押すと、管理画面に保存して『更新』まで自動でします。</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select id="wk" onchange="loadWeek()" style="font-family:inherit;font-size:14px;padding:6px 10px;border-radius:10px;border:1.5px solid var(--line)"></select>
+      <select id="cast" style="font-family:inherit;font-size:14px;padding:6px 10px;border-radius:10px;border:1.5px solid var(--line);min-width:200px"></select>
+      <button class="btn" onclick="doPreview()" id="pvBtn">👀 確認する</button>
+    </div>
+    <div id="pv" style="margin-top:12px"></div>
   </div>
 </div>
 <a class="back" href="./">🏠 ポータル</a>
@@ -60,6 +72,99 @@ async function runTest(){
   }catch(e){ out.innerHTML = `<span class="ng">❌ ${esc(e.message || e)}</span>`; }
   finally{ btn.disabled = false; }
 }
+
+/* ---------- 書きこみテスト ---------- */
+const STORE = "sakuramoon";
+const SHIFT_OK = ["input_waiting", "inputting", "confirmed", "change_requested", "change_inputting", "change_confirmed"];
+let casts = [], weekRows = [], lastReq = null;
+const DOW = "日月火水木金土";
+function jstToday(){ const j = new Date(Date.now() + 9 * 3600e3); if(j.getUTCHours() < 6) j.setUTCDate(j.getUTCDate() - 1); return j.toISOString().slice(0, 10); }
+function mondayOf(ymd){ const d = new Date(ymd + "T00:00:00Z"), w = d.getUTCDay(); d.setUTCDate(d.getUTCDate() + (w === 0 ? -6 : 1 - w)); return d.toISOString().slice(0, 10); }
+function addDays(ymd, n){ const d = new Date(ymd + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+const md = ymd => { const d = new Date(ymd + "T00:00:00Z"); return (d.getUTCMonth() + 1) + "/" + d.getUTCDate() + "(" + DOW[d.getUTCDay()] + ")"; };
+const hl = h => { h = Number(h); const x = h >= 24 ? h - 24 : h; return Math.floor(x) + ":" + String(Math.round((x % 1) * 60)).padStart(2, "0"); };
+async function initWrite(){
+  const mon = mondayOf(jstToday());
+  document.getElementById("wk").innerHTML = [0, 1, 2, 3, 4].map(i=>{ const w = addDays(mon, i * 7); return `<option value="${w}">${md(w)}〜${md(addDays(w, 6))}${i === 0 ? "（今週）" : i === 1 ? "（来週）" : ""}</option>`; }).join("");
+  const { data } = await sb.from("master_casts").select("id,official_name,temp_name,shift_name,stores,status");
+  casts = (data || []).filter(c=>c.stores && c.stores[STORE] && c.stores[STORE].siteNo);
+  await loadWeek();
+}
+async function loadWeek(){
+  const wk = document.getElementById("wk").value;
+  const { data } = await sb.from("shift_weeks").select("cast_name,data").eq("wk", wk);
+  weekRows = data || [];
+  const opts = casts.map(c=>{
+    const row = weekRows.find(r=>r.cast_name === c.shift_name || r.cast_name === c.official_name);
+    const ok = row && SHIFT_OK.includes(row.data && row.data.status);
+    const n = ok ? Object.keys((row.data && row.data.shifts) || {}).filter(d=>{ const s = row.data.shifts[d]; return s && s.start != null && s.end != null; }).length : 0;
+    return { c, ok, n };
+  }).sort((a, b)=>(b.ok - a.ok) || String(a.c.official_name || "").localeCompare(String(b.c.official_name || ""), "ja"));
+  document.getElementById("cast").innerHTML = opts.map(o=>`<option value="${o.c.id}">${esc(o.c.official_name || o.c.temp_name)}（HP ${esc(o.c.stores[STORE].siteNo)}）${o.ok ? "・受理ずみ " + o.n + "日" : "・受理したシフトなし"}</option>`).join("");
+  document.getElementById("pv").innerHTML = "";
+}
+function buildReq(){
+  const wk = document.getElementById("wk").value, c = casts.find(x=>x.id === document.getElementById("cast").value);
+  if(!c) return null;
+  const row = weekRows.find(r=>r.cast_name === c.shift_name || r.cast_name === c.official_name);
+  const ok = row && SHIFT_OK.includes(row.data && row.data.status);
+  const sh = ok ? (row.data.shifts || {}) : {};
+  const days = [0, 1, 2, 3, 4, 5, 6].map(i=>{ const d = addDays(wk, i), s = sh[d]; return s && s.start != null && s.end != null ? { date: d, start: Number(s.start), end: Number(s.end) } : { date: d, off: true }; })
+    .filter(x=>x.date >= jstToday());   // 過ぎた日は入れない
+  return { c, ok, body: { action: "preview", store: STORE, casts: [{ no: Number(c.stores[STORE].siteNo), label: c.official_name || c.temp_name, days }] } };
+}
+async function callFn(body){
+  const { data, error } = await sb.functions.invoke("hp-shift-sync", { body });
+  let r = data;
+  if(error){ try{ r = await error.context.json(); }catch(e){ r = { ok: false, error: error.message }; } }
+  return r || { ok: false, error: "返事がありません" };
+}
+async function doPreview(){
+  const pv = document.getElementById("pv"), q = buildReq();
+  if(!q){ pv.innerHTML = `<span class="ng">キャストを選んでください</span>`; return; }
+  if(!q.ok){ pv.innerHTML = `<span class="ng">この週は、サクラシフトで受理したシフトがありません（受理していないシフトは入れません）</span>`; return; }
+  if(!q.body.casts[0].days.length){ pv.innerHTML = `<span class="ng">この週は、もう過ぎた日だけです</span>`; return; }
+  pv.innerHTML = "管理画面を読んでいます…"; document.getElementById("pvBtn").disabled = true;
+  try{
+    const r = await callFn(q.body);
+    if(!r.ok){ pv.innerHTML = `<span class="ng">❌ ${esc(r.error || r.message || r.code || "理由がわかりません")}</span>`; return; }
+    const x = r.casts[0];
+    if(x.error){ pv.innerHTML = `<span class="ng">❌ ${esc(x.error)}</span>`; return; }
+    lastReq = q.body;
+    const nChange = x.rows.filter(z=>z.change && !z.problem && !z.skip).length, nProb = x.rows.filter(z=>z.problem || z.skip).length;
+    const cell = v => `${v.on ? "✅" : "⬜"} ${esc(v.start)}〜${esc(v.end)}`;
+    pv.innerHTML = `<div><b>${esc(x.label)}</b> → 管理画面では <b>${esc(x.no)} ${esc(x.name)}</b> ${x.name && x.name !== x.label ? `<span class="ng">（名前がちがいます。同じ人ですか？）</span>` : ""}</div>
+      <table><tr><th>日</th><th>サクラシフト</th><th>今の公式HP</th><th>入れたあと</th><th></th></tr>
+      ${x.rows.map(z=>{ const w = q.body.casts[0].days.find(d=>d.date === z.date);
+        return `<tr style="${z.change ? "background:#FFF6D6" : ""}"><td>${md(z.date)}</td><td>${w.off ? "お休み" : hl(w.start) + "〜" + hl(w.end)}</td>
+        <td>${z.now ? cell(z.now) : ""}</td><td>${z.next ? cell(z.next) : ""}</td>
+        <td>${z.skip ? `<span class="ng">${esc(z.skip)}</span>` : z.problem ? `<span class="ng">⚠️ ${esc(z.problem)}</span>` : z.change ? "<b>変わる</b>" : "そのまま"}</td></tr>`; }).join("")}</table>
+      <p class="lead" style="margin-top:8px">黄色の行が変わります（${nChange}日）。${nProb ? `<span class="ng">⚠️ ${nProb}日は入れられません（理由は右）</span>` : ""}<br>✅＝予（出勤予定）にチェック、⬜＝チェックなし</p>
+      ${nChange ? `<div style="background:#FFF0F5;border:2px solid #FFC2D1;border-radius:12px;padding:10px 12px"><b>この内容で公式HPに入れますか？</b><br>
+        <button class="btn" style="margin-top:8px" id="apBtn" onclick="doApply()">🌐 この内容で公式HPに入れる</button>
+        <button class="btn" style="margin-top:8px;background:#fff;color:var(--ink);border:1.5px solid var(--line)" onclick="document.getElementById('pv').innerHTML=''">やめる</button></div>`
+        : `<div class="ok">公式HPはもう同じ内容です。入れることはありません。</div>`}
+      <div id="ap" style="margin-top:10px"></div>`;
+  }catch(e){ pv.innerHTML = `<span class="ng">❌ ${esc(e.message || e)}</span>`; }
+  finally{ document.getElementById("pvBtn").disabled = false; }
+}
+async function doApply(){
+  if(!lastReq) return;
+  const ap = document.getElementById("ap"), b = document.getElementById("apBtn");
+  b.disabled = true; ap.innerHTML = "管理画面に保存して、ホームページを更新しています…（1分ほどかかることがあります）";
+  try{
+    let by = ""; try{ by = localStorage.getItem("currentOperator") || ""; }catch(e){}
+    const r = await callFn(Object.assign({}, lastReq, { action: "apply", by }));
+    if(!r.results){ ap.innerHTML = `<span class="ng">❌ ${esc(r.error || r.message || r.code || "理由がわかりません")}</span>`; return; }
+    ap.innerHTML = r.results.map(x=>x.ok
+        ? `<div class="ok">✅ ${esc(x.label)}：${x.changed ? x.changed + "日ぶん保存して、たしかめました" : esc(x.note || "変えるところなし")}</div>`
+        : `<div class="ng">❌ ${esc(x.label)}：うまく入らなかった日 ${esc((x.failedDates || []).join("、"))} ${esc(x.error || "")}</div>`).join("")
+      + ((r.results[0].problems || []).length ? `<div class="ng">⚠️ 入れなかった日：${esc(r.results[0].problems.join("／"))}</div>` : "")
+      + (r.published ? (r.published.ok ? `<div class="ok">✅ 『更新』もしました。20秒ほどで公式HPに出ます</div>` : `<div class="ng">⚠️ 『更新』がうまくいかなかったかもしれません。管理画面の「更新ページへ」から更新してください</div>`) : "");
+    b.style.display = "none";
+  }catch(e){ ap.innerHTML = `<span class="ng">❌ ${esc(e.message || e)}</span>`; b.disabled = false; }
+}
+initWrite();
 </script>
 </body>
 </html>
