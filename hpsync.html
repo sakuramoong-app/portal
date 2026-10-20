@@ -42,6 +42,11 @@
       <select id="cast" style="font-family:inherit;font-size:14px;padding:6px 10px;border-radius:10px;border:1.5px solid var(--line);min-width:200px"></select>
       <button class="btn" onclick="doPreview()" id="pvBtn">👀 確認する</button>
     </div>
+    <div id="testBox" style="display:none;margin-top:10px;background:#F1EAFA;border-radius:12px;padding:10px 12px">
+      <div style="font-weight:800;font-size:13px;margin-bottom:6px">🧪 テスト用：管理画面の在籍番号と、入れる予定を手で決める（サクラシフトは使わない）</div>
+      <label style="font-size:13px">在籍番号 <input type="number" id="tNo" min="1" max="90" style="width:80px;font-size:14px;padding:4px 6px"></label>
+      <table id="tDays" style="margin-top:6px"></table>
+    </div>
     <div id="pv" style="margin-top:12px"></div>
   </div>
 </div>
@@ -100,11 +105,34 @@ async function loadWeek(){
     const n = ok ? Object.keys((row.data && row.data.shifts) || {}).filter(d=>{ const s = row.data.shifts[d]; return s && s.start != null && s.end != null; }).length : 0;
     return { c, ok, n };
   }).sort((a, b)=>(b.ok - a.ok) || String(a.c.official_name || "").localeCompare(String(b.c.official_name || ""), "ja"));
-  document.getElementById("cast").innerHTML = opts.map(o=>`<option value="${o.c.id}">${esc(o.c.official_name || o.c.temp_name)}（HP ${esc(o.c.stores[STORE].siteNo)}）${o.ok ? "・受理ずみ " + o.n + "日" : "・受理したシフトなし"}</option>`).join("");
+  document.getElementById("cast").onchange = paintTest;
+  document.getElementById("cast").innerHTML = `<option value="__test">🧪 テスト用（在籍番号と予定を手で入れる）</option>` + opts.map(o=>`<option value="${o.c.id}">${esc(o.c.official_name || o.c.temp_name)}（HP ${esc(o.c.stores[STORE].siteNo)}）${o.ok ? "・受理ずみ " + o.n + "日" : "・受理したシフトなし"}</option>`).join("");
   document.getElementById("pv").innerHTML = "";
+  if(document.getElementById("cast").value === "__test" && opts.some(o=>o.ok)) document.getElementById("cast").value = opts.find(o=>o.ok).c.id;
+  paintTest();
+}
+// テスト用：その週の7日ぶん、出勤・退勤を手で選ぶ（チェックなし＝お休み）
+const HOURS = []; for(let h = 6; h <= 29; h += 0.5) HOURS.push(h);
+function paintTest(){
+  const on = document.getElementById("cast").value === "__test";
+  document.getElementById("testBox").style.display = on ? "" : "none";
+  document.getElementById("pv").innerHTML = "";
+  if(!on) return;
+  const wk = document.getElementById("wk").value, opt = sel => HOURS.map(h=>`<option value="${h}" ${h === sel ? "selected" : ""}>${hl(h)}</option>`).join("");
+  document.getElementById("tDays").innerHTML = `<tr><th>日</th><th>出勤する</th><th>出勤</th><th>退勤</th></tr>` + [0, 1, 2, 3, 4, 5, 6].map(i=>{ const d = addDays(wk, i);
+    return `<tr><td>${md(d)}</td><td><input type="checkbox" id="tOn${i}"></td><td><select id="tS${i}">${opt(12)}</select></td><td><select id="tE${i}">${opt(17)}</select></td></tr>`; }).join("");
 }
 function buildReq(){
-  const wk = document.getElementById("wk").value, c = casts.find(x=>x.id === document.getElementById("cast").value);
+  const wk = document.getElementById("wk").value;
+  if(document.getElementById("cast").value === "__test"){
+    const no = Number(document.getElementById("tNo").value);
+    if(!(no >= 1 && no <= 90)) return null;
+    const days = [0, 1, 2, 3, 4, 5, 6].map(i=>{ const d = addDays(wk, i);
+      return document.getElementById("tOn" + i).checked ? { date: d, start: Number(document.getElementById("tS" + i).value), end: Number(document.getElementById("tE" + i).value) } : { date: d, off: true }; })
+      .filter(x=>x.date >= jstToday());
+    return { c: null, ok: true, body: { action: "preview", store: STORE, casts: [{ no, label: "テスト（" + no + "）", days }] } };
+  }
+  const c = casts.find(x=>x.id === document.getElementById("cast").value);
   if(!c) return null;
   const row = weekRows.find(r=>r.cast_name === c.shift_name || r.cast_name === c.official_name);
   const ok = row && SHIFT_OK.includes(row.data && row.data.status);
@@ -121,7 +149,7 @@ async function callFn(body){
 }
 async function doPreview(){
   const pv = document.getElementById("pv"), q = buildReq();
-  if(!q){ pv.innerHTML = `<span class="ng">キャストを選んでください</span>`; return; }
+  if(!q){ pv.innerHTML = `<span class="ng">${document.getElementById("cast").value === "__test" ? "在籍番号（1〜90）を入れてください" : "キャストを選んでください"}</span>`; return; }
   if(!q.ok){ pv.innerHTML = `<span class="ng">この週は、サクラシフトで受理したシフトがありません（受理していないシフトは入れません）</span>`; return; }
   if(!q.body.casts[0].days.length){ pv.innerHTML = `<span class="ng">この週は、もう過ぎた日だけです</span>`; return; }
   pv.innerHTML = "管理画面を読んでいます…"; document.getElementById("pvBtn").disabled = true;
