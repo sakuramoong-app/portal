@@ -52,7 +52,11 @@ async function runTest(){
       + pages.map(([p, list])=>`<div style="margin-top:8px"><b>スケジュール「${esc(p)}」：${list.length}人</b> <small>${list.map(c=>esc(c.no + " " + c.name)).join("、")}</small></div>`).join("")
       + (r.sample ? `<div style="margin-top:10px"><b>読みとりの見本：${esc(r.sample.no)} ${esc(r.sample.name)}（今日から7日）</b>
         <table><tr><th>日</th><th>予</th><th>出勤</th><th>退勤</th></tr>${r.sample.days.map(d=>`<tr><td>+${d.d}日</td><td>${d.on ? "✅" : ""}</td><td>${esc(d.start || "?")}</td><td>${esc(d.end || "?")}</td></tr>`).join("")}</table>
-        <p class="lead">↑ 管理画面の同じキャストの予定と合っていれば、読みとりは大丈夫です。</p></div>` : "");
+        <p class="lead">↑ 管理画面の同じキャストの予定と合っていれば、読みとりは大丈夫です。</p></div>` : "")
+      + `<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:800;font-size:13px">🔧 原因を探す用（IDとパスワードは隠してあります）</summary>
+        <p class="lead">うまく読めていないときは、下の「📋 コピー」を押して、そのまま Claude に貼って送ってください。</p>
+        <textarea id="dbg" readonly style="width:100%;height:160px;font-size:11px">${esc(JSON.stringify({ pages: r.pages, sample: r.sample, debug: r.debug, pager: r.pager }))}</textarea>
+        <button class="btn" style="margin-top:6px;padding:6px 14px;font-size:12px" onclick="navigator.clipboard.writeText(document.getElementById('dbg').value).then(()=>alert('コピーしました'))">📋 コピー</button></details>`;
   }catch(e){ out.innerHTML = `<span class="ng">❌ ${esc(e.message || e)}</span>`; }
   finally{ btn.disabled = false; }
 }
