@@ -161,7 +161,10 @@ async function doPreview(){
     lastReq = q.body;
     const nChange = x.rows.filter(z=>z.change && !z.problem && !z.skip).length, nProb = x.rows.filter(z=>z.problem || z.skip).length;
     const cell = v => `${v.on ? "✅" : "⬜"} ${esc(v.start)}〜${esc(v.end)}`;
-    pv.innerHTML = `<div><b>${esc(x.label)}</b> → 管理画面では <b>${esc(x.no)} ${esc(x.name)}</b> ${x.name && x.name !== x.label ? `<span class="ng">（名前がちがいます。同じ人ですか？）</span>` : ""}</div>
+    // 名前のちがい：テスト用は出さない。「近藤ムム」と「ムム」のように、片方がもう片方に入っていれば同じ人とみなす
+    const nk = s => String(s || "").replace(/[\s　（）()0-9]/g, "");
+    const differ = !q.c ? false : !!(x.name && !(nk(x.name).includes(nk(x.label)) || nk(x.label).includes(nk(x.name))));
+    pv.innerHTML = `<div><b>${esc(x.label)}</b> → 管理画面では <b>${esc(x.no)} ${esc(x.name)}</b> ${differ ? `<span class="ng">（名前がちがいます。同じ人ですか？）</span>` : ""}</div>
       <table><tr><th>日</th><th>サクラシフト</th><th>今の公式HP</th><th>入れたあと</th><th></th></tr>
       ${x.rows.map(z=>{ const w = q.body.casts[0].days.find(d=>d.date === z.date);
         return `<tr style="${z.change ? "background:#FFF6D6" : ""}"><td>${md(z.date)}</td><td>${w.off ? "お休み" : hl(w.start) + "〜" + hl(w.end)}</td>
