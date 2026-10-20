@@ -25,7 +25,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>🌐 公式HP 自動反映（テスト）</h1>
+  <h1>🌐 公式HP 自動反映（記録・テスト）</h1>
   <p class="lead">サクラシフトのシフトを、公式HPの管理画面に自動で入れるしくみの準備中です。<br>
     上の「読んでみる」は、管理画面を読むだけです（何も変えません）。下の「書きこみテスト」は、「入れる」を押したときだけ管理画面を変えます。</p>
   <div class="box">
@@ -36,6 +36,14 @@
       <option value="__all">ぜんぶのお店（ログインできるかだけ）</option></select>
     <button class="btn" id="go" onclick="runTest()">🔍 管理画面を読んでみる</button>
     <div id="out" style="margin-top:12px"></div>
+  </div>
+
+  <div class="box" id="log">
+    <h2 style="font-size:16px;color:var(--pink-deep);margin-bottom:6px">📜 公式HPに入れた記録（新しい順・100件）</h2>
+    <p class="lead" style="margin:0 0 8px">だれが・だれのシフトを・どのお店に・どの日を入れたか。うまくいった（✅）も、エラー（❌）も残ります。</p>
+    <label style="font-size:13px"><input type="checkbox" id="logNg" onchange="loadLog()"> ❌ エラーだけ</label>
+    <button class="btn" style="padding:6px 14px;font-size:12px;margin-left:8px" onclick="loadLog()">🔄 読みなおす</button>
+    <div id="logList" style="margin-top:8px">読みこみ中…</div>
   </div>
 
   <div class="box">
@@ -214,6 +222,27 @@ async function doApply(){
   }catch(e){ ap.innerHTML = `<span class="ng">❌ ${esc(e.message || e)}</span>`; b.disabled = false; }
 }
 initWrite();
+
+/* ---------- 📜 記録 ---------- */
+async function loadLog(){
+  const el = document.getElementById("logList");
+  try{
+    let q = sb.from("hp_sync_log").select("*").order("at", { ascending: false }).limit(100);
+    if(document.getElementById("logNg").checked) q = q.eq("ok", false);
+    const { data, error } = await q;
+    if(error){ el.innerHTML = `<span class="ng">記録を読めませんでした（SQL 121 は実行ずみ？）：${esc(error.message)}</span>`; return; }
+    if(!data.length){ el.innerHTML = `<span class="lead">まだ記録はありません</span>`; return; }
+    const when = t => { const d = new Date(new Date(t).getTime() + 9 * 3600e3); return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`; };
+    const daysTxt = r => ((r.casts && r.casts[0] && r.casts[0].days) || []).map(d=>md(d.date) + (d.off ? "休" : hl(d.start) + "〜" + hl(d.end))).join("・");
+    const isOk = r => r.ok === true || (r.ok == null && (r.results || []).every(x=>x.ok !== false));
+    el.innerHTML = `<table><tr><th>日時</th><th>だれが</th><th>だれの</th><th>お店</th><th>結果</th><th>入れた日</th></tr>` + data.map(r=>{
+      const ch = (r.results || []).reduce((a, x)=>a + (x.changed || 0), 0);
+      return `<tr><td>${when(r.at)}</td><td>${esc(r.by_name || "")}</td><td>${esc(r.cast_name || (r.casts || []).map(c=>c.label).join("、"))}</td><td>${esc(r.store_label || r.store_key)}</td>
+        <td>${isOk(r) ? `<span class="ok">✅ ${ch}日</span>${r.published === false ? ' <span class="ng">更新？</span>' : ""}` : `<span class="ng">❌ ${esc(r.error_text || "うまく入らなかった日あり")}</span>`}</td>
+        <td style="white-space:normal;font-size:12px">${esc(daysTxt(r))}</td></tr>`; }).join("") + `</table>`;
+  }catch(e){ el.innerHTML = `<span class="ng">${esc(e.message || e)}</span>`; }
+}
+loadLog();
 </script>
 </body>
 </html>
