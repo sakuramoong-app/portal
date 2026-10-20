@@ -46,7 +46,7 @@ async function runTest(){
     const { data, error } = await sb.functions.invoke("hp-shift-sync", { body: { action: "test", store: "sakuramoon" } });
     let r = data;
     if(error){ try{ r = await error.context.json(); }catch(e){ r = { ok: false, error: error.message }; } }
-    if(!r || !r.ok){ out.innerHTML = `<span class="ng">❌ できませんでした：${esc(r && r.error)}</span>`; return; }
+    if(!r || !r.ok){ out.innerHTML = `<span class="ng">❌ できませんでした：${esc((r && (r.error || r.message || r.msg || r.code)) || (error && error.message) || "理由がわかりません")}</span>`; return; }
     const pages = Object.entries(r.pages);
     out.innerHTML = `<div class="ok">✅ ${esc(r.store)} の管理画面に入れました</div>`
       + pages.map(([p, list])=>`<div style="margin-top:8px"><b>スケジュール「${esc(p)}」：${list.length}人</b> <small>${list.map(c=>esc(c.no + " " + c.name)).join("、")}</small></div>`).join("")
