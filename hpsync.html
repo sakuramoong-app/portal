@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>公式HP自動反映│サクラG</title>
+<link rel="icon" type="image/png" href="favicon.png?v=3">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{ color-scheme: light; --bg:#FBF7F8; --ink:#5C4B4F; --sub:#9C8B8F; --line:#F1E3E7; --pink:#FF9EC0; --pink-deep:#e5638c; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:"Hiragino Maru Gothic ProN","M PLUS Rounded 1c","Yu Gothic",sans-serif;background:var(--bg);color:var(--ink);}
+  .wrap{max-width:820px;margin:0 auto;padding:18px 16px 70px;}
+  h1{font-size:20px;font-weight:800;color:var(--pink-deep);}
+  .lead{font-size:13px;color:var(--sub);margin:6px 0 14px;line-height:1.7;}
+  .box{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;}
+  .btn{border:none;border-radius:99px;padding:10px 18px;background:var(--pink-deep);color:#fff;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;}
+  .btn:disabled{opacity:.5;}
+  .ok{color:#1f9d6b;font-weight:800;} .ng{color:#d9534f;font-weight:800;}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px;}
+  th,td{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left;}
+  th{color:var(--sub);font-size:12px;background:#FBF3F6;}
+  .back{position:fixed;left:12px;bottom:12px;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🌐 公式HP 自動反映（テスト）</h1>
+  <p class="lead">サクラシフトのシフトを、公式HPの管理画面に自動で入れるしくみの準備中です。<br>
+    いまは<b>「管理画面に入れるか」と「スケジュールを読めるか」をたしかめるだけ</b>です。管理画面の中身は何も変えません。</p>
+  <div class="box">
+    <button class="btn" id="go" onclick="runTest()">🔍 サクラムーン池袋の管理画面を読んでみる</button>
+    <div id="out" style="margin-top:12px"></div>
+  </div>
+</div>
+<a class="back" href="./">🏠 ポータル</a>
+<script>
+const sb = supabase.createClient("https://tuxqpqokbvkrckgxcfdn.supabase.co", "sb_publishable_PyvCZHSzYlaqauYbdZybng_zbftghak");
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function runTest(){
+  const out = document.getElementById("out"), btn = document.getElementById("go");
+  btn.disabled = true; out.innerHTML = "読んでいます…（30秒ほどかかることがあります）";
+  try{
+    const { data: s } = await sb.auth.getSession();
+    if(!s || !s.session){ out.innerHTML = `<span class="ng">ポータルからログインしてから開いてください</span>`; return; }
+    const { data, error } = await sb.functions.invoke("hp-shift-sync", { body: { action: "test", store: "sakuramoon" } });
+    let r = data;
+    if(error){ try{ r = await error.context.json(); }catch(e){ r = { ok: false, error: error.message }; } }
+    if(!r || !r.ok){ out.innerHTML = `<span class="ng">❌ できませんでした：${esc(r && r.error)}</span>`; return; }
+    const pages = Object.entries(r.pages);
+    out.innerHTML = `<div class="ok">✅ ${esc(r.store)} の管理画面に入れました</div>`
+      + pages.map(([p, list])=>`<div style="margin-top:8px"><b>スケジュール「${esc(p)}」：${list.length}人</b> <small>${list.map(c=>esc(c.no + " " + c.name)).join("、")}</small></div>`).join("")
+      + (r.sample ? `<div style="margin-top:10px"><b>読みとりの見本：${esc(r.sample.no)} ${esc(r.sample.name)}（今日から7日）</b>
+        <table><tr><th>日</th><th>予</th><th>出勤</th><th>退勤</th></tr>${r.sample.days.map(d=>`<tr><td>+${d.d}日</td><td>${d.on ? "✅" : ""}</td><td>${esc(d.start || "?")}</td><td>${esc(d.end || "?")}</td></tr>`).join("")}</table>
+        <p class="lead">↑ 管理画面の同じキャストの予定と合っていれば、読みとりは大丈夫です。</p></div>` : "");
+  }catch(e){ out.innerHTML = `<span class="ng">❌ ${esc(e.message || e)}</span>`; }
+  finally{ btn.disabled = false; }
+}
+</script>
+</body>
+</html>
