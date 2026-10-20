@@ -29,7 +29,12 @@
   <p class="lead">サクラシフトのシフトを、公式HPの管理画面に自動で入れるしくみの準備中です。<br>
     上の「読んでみる」は、管理画面を読むだけです（何も変えません）。下の「書きこみテスト」は、「入れる」を押したときだけ管理画面を変えます。</p>
   <div class="box">
-    <button class="btn" id="go" onclick="runTest()">🔍 サクラムーン池袋の管理画面を読んでみる</button>
+    <select id="testStore" style="font-family:inherit;font-size:14px;padding:8px 10px;border-radius:10px;border:1.5px solid var(--line);margin-right:6px">
+      <option value="sakuramoon">サクラムーン池袋</option><option value="lana_uguisu">ラナ鶯谷</option><option value="lana_kinshi">ラナ錦糸町</option>
+      <option value="dressgarden">渋谷ドレスガーデン</option><option value="peachmoon">五反田ピーチムーン</option><option value="gyakuanal">五反田逆アナル倶楽部</option>
+      <option value="cutie">キューティキューティ</option><option value="eighteen">エイティーン</option><option value="gokumon">極門</option>
+      <option value="__all">ぜんぶのお店（ログインできるかだけ）</option></select>
+    <button class="btn" id="go" onclick="runTest()">🔍 管理画面を読んでみる</button>
     <div id="out" style="margin-top:12px"></div>
   </div>
 
@@ -60,7 +65,18 @@ async function runTest(){
   try{
     const { data: s } = await sb.auth.getSession();
     if(!s || !s.session){ out.innerHTML = `<span class="ng">ポータルからログインしてから開いてください</span>`; return; }
-    const { data, error } = await sb.functions.invoke("hp-shift-sync", { body: { action: "test", store: "sakuramoon" } });
+    const store = document.getElementById("testStore").value;
+    if(store === "__all"){   // ぜんぶのお店：ログインできて、何人いるかだけ
+      const sel = document.getElementById("testStore"), rows = [];
+      for(const o of [...sel.options].filter(o=>o.value !== "__all")){
+        out.innerHTML = `${esc(o.text)} を読んでいます…（${rows.length + 1}／${sel.options.length - 1}）` + rows.join("");
+        const r = await callFn({ action: "test", store: o.value });
+        const n = r.ok ? Object.values(r.pages).reduce((a, l)=>a + l.length, 0) : 0;
+        rows.push(`<div class="${r.ok ? "ok" : "ng"}">${r.ok ? "✅" : "❌"} ${esc(o.text)}：${r.ok ? n + "人" : esc(r.error || r.message || "読めませんでした")}</div>`);
+      }
+      out.innerHTML = rows.join(""); return;
+    }
+    const { data, error } = await sb.functions.invoke("hp-shift-sync", { body: { action: "test", store } });
     let r = data;
     if(error){ try{ r = await error.context.json(); }catch(e){ r = { ok: false, error: error.message }; } }
     if(!r || !r.ok){ out.innerHTML = `<span class="ng">❌ できませんでした：${esc((r && (r.error || r.message || r.msg || r.code)) || (error && error.message) || "理由がわかりません")}</span>`; return; }
@@ -79,9 +95,9 @@ async function runTest(){
 }
 
 /* ---------- 書きこみテスト ---------- */
-const STORE = "sakuramoon";
+let STORE = "sakuramoon";   // 上の「お店」で選んだお店（ぜんぶ のときはサクラムーン）
 const SHIFT_OK = ["input_waiting", "inputting", "confirmed", "change_requested", "change_inputting", "change_confirmed"];
-let casts = [], weekRows = [], lastReq = null;
+let casts = [], allCasts = [], weekRows = [], lastReq = null;
 const DOW = "日月火水木金土";
 function jstToday(){ const j = new Date(Date.now() + 9 * 3600e3); if(j.getUTCHours() < 6) j.setUTCDate(j.getUTCDate() - 1); return j.toISOString().slice(0, 10); }
 function mondayOf(ymd){ const d = new Date(ymd + "T00:00:00Z"), w = d.getUTCDay(); d.setUTCDate(d.getUTCDate() + (w === 0 ? -6 : 1 - w)); return d.toISOString().slice(0, 10); }
@@ -92,13 +108,15 @@ async function initWrite(){
   const mon = mondayOf(jstToday());
   document.getElementById("wk").innerHTML = [0, 1, 2, 3, 4].map(i=>{ const w = addDays(mon, i * 7); return `<option value="${w}">${md(w)}〜${md(addDays(w, 6))}${i === 0 ? "（今週）" : i === 1 ? "（来週）" : ""}</option>`; }).join("");
   const { data } = await sb.from("master_casts").select("id,official_name,temp_name,shift_name,stores,status");
-  casts = (data || []).filter(c=>c.stores && c.stores[STORE] && c.stores[STORE].siteNo);
+  allCasts = data || [];
+  document.getElementById("testStore").addEventListener("change", ()=>{ const v = document.getElementById("testStore").value; STORE = v === "__all" ? "sakuramoon" : v; loadWeek(); });
   await loadWeek();
 }
 async function loadWeek(){
   const wk = document.getElementById("wk").value;
   const { data } = await sb.from("shift_weeks").select("cast_name,data").eq("wk", wk);
   weekRows = data || [];
+  casts = allCasts.filter(c=>c.stores && c.stores[STORE] && c.stores[STORE].siteNo);
   const opts = casts.map(c=>{
     const row = weekRows.find(r=>r.cast_name === c.shift_name || r.cast_name === c.official_name);
     const ok = row && SHIFT_OK.includes(row.data && row.data.status);
