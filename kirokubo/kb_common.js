@@ -9,7 +9,18 @@
   const SUPABASE_KEY = "sb_publishable_PyvCZHSzYlaqauYbdZybng_zbftghak";
   const STAFF_EMAIL = "naikin@sakuramoong.internal";
   const MANAGER_NAME = "きゃ";
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
+  // 端末の合い鍵（このブラウザで1回だけ作って覚えておく）。見るたびにサーバーへ送り、登録した端末か確かめてもらう（SQL 125）
+  function deviceKey(){
+    let k = "";
+    try{ k = localStorage.getItem("kbDeviceKey") || ""; }catch(e){}
+    if(k.length < 40){
+      const a = new Uint8Array(32); crypto.getRandomValues(a);
+      k = Array.from(a, b=>b.toString(16).padStart(2, "0")).join("");
+      try{ localStorage.setItem("kbDeviceKey", k); }catch(e){}
+    }
+    return k;
+  }
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }, global: { headers: { "x-device-key": deviceKey() } } });
 
   function loginAt(s){
     try{
@@ -18,11 +29,32 @@
       return t;
     }catch(e){ return 0; }
   }
-  async function staffSession(){
+  async function staffSession(opts){
     const { data } = await sb.auth.getSession();
     const s = data && data.session;
     if(!s || String(s.user.email||"").toLowerCase() !== STAFF_EMAIL) return null;
-    return Date.now() < (loginAt(s) + 20*3600) * 1000 ? s : null;
+    if(Date.now() >= (loginAt(s) + 20*3600) * 1000) return null;
+    // 「登録した端末だけ」が ON で、この端末が登録されていない → 見せない（端末の登録ページは別）
+    if(!(opts && opts.skipDevice)){
+      const st = await deviceStatus();
+      if(st && st.lock_on && !st.registered){ deviceBlock(); return null; }
+    }
+    return s;
+  }
+  let _devSt;
+  async function deviceStatus(){
+    if(_devSt !== undefined) return _devSt;
+    try{ const r = await sb.rpc("device_status"); _devSt = r.error ? null : ((r.data && r.data[0]) || null); }catch(e){ _devSt = null; }
+    return _devSt;
+  }
+  function deviceBlock(){
+    const d = document.createElement("div");
+    d.style.cssText = "position:fixed;inset:0;z-index:99999;background:#FBF7F8;display:flex;align-items:center;justify-content:center;padding:24px;font-family:inherit";
+    d.innerHTML = `<div style="max-width:440px;background:#fff;border:2px solid #FFC2D1;border-radius:18px;padding:22px;text-align:center;line-height:1.8">
+      <div style="font-size:40px">🔒</div><div style="font-size:17px;font-weight:800;color:#e5638c;margin:6px 0">この端末は登録されていません</div>
+      <div style="font-size:13.5px;color:#5C4B4F">お客さんの情報があるページは、お店で登録した端末だけで見られます。<br>この端末を使う場合は、店長に登録してもらってください。</div>
+      <div style="margin-top:14px"><a href="device.html" style="font-weight:800;color:#e5638c">🔑 端末の登録ページへ（店長用）</a></div></div>`;
+    document.body.appendChild(d);
   }
   function operatorName(){ try{ return localStorage.getItem("currentOperator") || ""; }catch(e){ return ""; } }
   // 作成中は、店長（きゃ）のときだけ直せる。ほかの内勤は見るだけ（画面の上での分け方）
@@ -59,5 +91,5 @@
     bg.addEventListener("click", e=>{ if(e.target === bg && down) close(); });
   }
 
-  window.KB = { sb, staffSession, operatorName, CAN_EDIT, MANAGER_NAME, q, esc, yen, toast, bizDateOf, nav, wipBanner, closeOnBackdrop };
+  window.KB = { sb, staffSession, deviceStatus, operatorName, CAN_EDIT, MANAGER_NAME, q, esc, yen, toast, bizDateOf, nav, wipBanner, closeOnBackdrop };
 })();

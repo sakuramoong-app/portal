@@ -237,7 +237,9 @@
 const SUPABASE_URL = "https://tuxqpqokbvkrckgxcfdn.supabase.co";
 const SUPABASE_KEY = "sb_publishable_PyvCZHSzYlaqauYbdZybng_zbftghak";
 const STAFF_EMAIL = "naikin@sakuramoong.internal";
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
+// 端末の合い鍵（kb_common.js と同じ。連絡先は登録した端末だけで見られる：SQL 125）
+const DEVICE_KEY = (()=>{ let k = ""; try{ k = localStorage.getItem("kbDeviceKey") || ""; }catch(e){} if(k.length < 40){ const a = new Uint8Array(32); crypto.getRandomValues(a); k = Array.from(a, b=>b.toString(16).padStart(2, "0")).join(""); try{ localStorage.setItem("kbDeviceKey", k); }catch(e){} } return k; })();
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }, global: { headers: { "x-device-key": DEVICE_KEY } } });
 
 const STATUS = { interview:"面接中", new:"入店前", active:"在籍", break:"お休み中", left:"退店" };
 const TABS = [["active","在籍"],["new","入店前"],["interview","面接中"],["break","お休み中"],["left","退店"],["all","全部"]];

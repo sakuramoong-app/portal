@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>端末の登録│サクラG</title>
+<link rel="icon" type="image/png" href="../favicon.png?v=3">
+<link rel="stylesheet" href="kb.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="kb_common.js"></script>
+<style>
+  body{font-size:14.5px;}
+  .wrap{max-width:760px;}
+  .box{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;}
+  .box h2{font-size:16px;color:var(--pink-deep);margin-bottom:8px;}
+  .big{font-size:17px;font-weight:800;}
+  .ok{color:#1f9d6b;font-weight:800;} .ng{color:#d9534f;font-weight:800;}
+  .lead{font-size:13px;color:var(--sub);line-height:1.7;margin-bottom:8px;}
+  table{border-collapse:collapse;width:100%;font-size:13px;}
+  th,td{border-bottom:1px solid var(--line);padding:6px;text-align:left;}
+  th{background:#FBF3F6;color:var(--sub);font-size:12px;}
+  tr.off td{color:#bbb;text-decoration:line-through;}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;}
+  .row .f{flex:1;min-width:180px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="kbh"><h1>🔑 端末の登録</h1></header>
+  <div id="gate" class="gate">読み込み中…</div>
+  <div id="main" style="display:none">
+    <div class="box">
+      <h2>この端末</h2>
+      <div id="me" class="big"></div>
+      <div id="lockState" style="margin-top:6px"></div>
+      <p class="lead" style="margin-top:8px">お客さんの情報があるもの（記録簿・顧客台帳・集計・キャスト台帳の連絡先）は、「登録した端末だけ」を ON にすると、ここで登録した端末でしか見られなくなります。<br>
+        登録は端末（ブラウザ）ごとです。同じパソコンでも、Chrome と Edge は別の端末になります。ブラウザのデータ（サイトのデータ）を消すと、登録しなおしが必要です。</p>
+    </div>
+    <div class="box" id="regBox">
+      <h2>この端末を登録する</h2>
+      <div class="row">
+        <div class="f"><label>端末の名前（だれが見ても分かるように）</label><input id="label" maxlength="60" placeholder="例：お店PC① 受付／店長スマホ"></div>
+        <div class="f"><label>端末の合言葉（店長だけが知っている）</label><input id="pass1" type="password" autocomplete="off"></div>
+        <button class="btn btn-primary" onclick="register()">🔑 登録する</button>
+      </div>
+    </div>
+    <div class="box">
+      <h2>登録した端末</h2>
+      <div id="list">読み込み中…</div>
+    </div>
+    <div class="box">
+      <h2>「登録した端末だけ」の ON / OFF</h2>
+      <p class="lead">ON にすると、登録していない端末では、記録簿・顧客台帳・集計・キャスト台帳の連絡先が見られなくなります。<br>
+        ON にできるのは、登録した端末からだけです（自分が入れなくならないように）。</p>
+      <div class="row">
+        <div class="f"><label>端末の合言葉</label><input id="pass2" type="password" autocomplete="off"></div>
+        <button class="btn btn-primary" onclick="setLock(true)">🔒 ON にする</button>
+        <button class="btn btn-ghost" onclick="setLock(false)">🔓 OFF にする</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+const { sb, q, esc, toast } = KB;
+const $ = id => document.getElementById(id);
+const when = t => { if(!t) return "−"; const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+let st = null;
+async function init(){
+  if(!(await KB.staffSession({ skipDevice: true }))){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
+  $("gate").style.display = "none"; $("main").style.display = "";
+  await refresh();
+}
+async function refresh(){
+  try{
+    const r = await sb.rpc("device_status");
+    if(r.error) throw r.error;
+    st = (r.data && r.data[0]) || {};
+  }catch(e){ $("me").innerHTML = `<span class="ng">読めませんでした（SQL 125 は実行ずみ？）：${esc(e.message || e)}</span>`; return; }
+  $("me").innerHTML = st.registered ? `<span class="ok">✅ 登録ずみ：${esc(st.label)}</span>` : `<span class="ng">⬜ まだ登録されていません</span>`;
+  $("lockState").innerHTML = st.lock_on ? `<span class="ok">🔒「登録した端末だけ」は ON です</span>` : `<span class="ng">🔓「登録した端末だけ」は OFF です（今はどこからでも見られます）</span>`;
+  if(st.registered) $("label").value = st.label;
+  try{
+    const l = q(await sb.rpc("device_list")) || [];
+    $("list").innerHTML = l.length ? `<table><tr><th>名前</th><th>登録</th><th>最後に使った</th><th></th></tr>` + l.map(d=>`<tr class="${d.revoked ? "off" : ""}">
+      <td>${esc(d.label)}${d.this_device ? " <b>（この端末）</b>" : ""}</td><td>${when(d.created_at)} ${esc(d.created_by || "")}</td><td>${when(d.last_seen)}</td>
+      <td>${d.revoked ? `<button class="btn btn-ghost btn-sm" onclick="revoke(${d.id},false)">もどす</button>` : `<button class="btn btn-danger btn-sm" onclick="revoke(${d.id},true)">外す</button>`}</td></tr>`).join("") + `</table>`
+      : `<span class="lead">まだありません</span>`;
+  }catch(e){ $("list").innerHTML = `<span class="lead">${esc(e.message || e)}</span>`; }
+}
+async function register(){
+  const label = $("label").value.trim(), pass = $("pass1").value;
+  if(!label){ toast("端末の名前を入れてください"); return; }
+  if(!pass){ toast("端末の合言葉を入れてください"); return; }
+  try{ q(await sb.rpc("device_register", { p_pass: pass, p_label: label, p_by: KB.operatorName() })); $("pass1").value = ""; toast("この端末を登録しました"); refresh(); }
+  catch(e){ toast(e.message || String(e)); }
+}
+async function revoke(id, on){
+  const pass = prompt(on ? "この端末の登録を外します。端末の合言葉を入れてください" : "登録をもどします。端末の合言葉を入れてください");
+  if(!pass) return;
+  try{ q(await sb.rpc("device_revoke", { p_pass: pass, p_id: id, p_revoked: on })); toast(on ? "外しました" : "もどしました"); refresh(); }
+  catch(e){ toast(e.message || String(e)); }
+}
+async function setLock(on){
+  const pass = $("pass2").value; if(!pass){ toast("端末の合言葉を入れてください"); return; }
+  if(on && !confirm("「登録した端末だけ」を ON にします。登録していない端末では、記録簿・顧客台帳・集計・キャスト台帳の連絡先が見られなくなります。よろしいですか？")) return;
+  try{ q(await sb.rpc("device_lock_set", { p_pass: pass, p_on: on, p_by: KB.operatorName() })); $("pass2").value = ""; toast(on ? "ON にしました" : "OFF にしました"); refresh(); }
+  catch(e){ toast(e.message || String(e)); }
+}
+init();
+</script>
+<!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
+</body>
+</html>
