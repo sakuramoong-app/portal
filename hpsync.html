@@ -40,7 +40,7 @@
 
   <div class="box">
     <h2 style="font-size:16px;color:var(--pink-deep);margin-bottom:6px">🔎 キャストのプロフを読んでみる（公式HPの管理画面の「編集」画面）</h2>
-    <p class="lead" style="margin:0 0 8px">上の「お店」で選んだお店の、在籍番号のキャストの「編集」画面を読むだけです（何も変えません）。プロフに取りこむ準備です。</p>
+    <p class="lead" style="margin:0 0 8px">上の「お店」で選んだお店の、在籍番号のキャストの「編集」画面を読むだけです（何も変えません）。キャストプロフに取りこむときと同じ読み方です。</p>
     <label style="font-size:13px">在籍番号 <input type="number" id="peekNo" min="1" max="90" style="width:80px;font-size:14px;padding:4px 6px"></label>
     <button class="btn" style="padding:7px 14px;font-size:13px;margin-left:6px" onclick="peekCast()">🔎 読んでみる</button>
     <div id="peekOut" style="margin-top:10px"></div>
@@ -237,13 +237,16 @@ async function peekCast(){
   if(store === "__all"){ out.innerHTML = `<span class="ng">上の「お店」で、お店を1つ選んでください</span>`; return; }
   if(!no){ out.innerHTML = `<span class="ng">在籍番号を入れてください</span>`; return; }
   out.innerHTML = "読んでいます…（30秒ほど）";
-  const r = await callFn({ action: "cast_peek", store, no });
-  if(!r.ok){ out.innerHTML = `<span class="ng">❌ ${esc(r.error || r.message || "読めませんでした")}</span>` + (r.btns ? `<p class="lead">下をコピーして Claude に送ってください</p><textarea readonly style="width:100%;height:100px;font-size:11px">${esc(JSON.stringify(r.btns))}</textarea>` : ""); return; }
-  out.innerHTML = `<div class="ok">✅ ${esc(r.store)} の ${esc(r.no)}番の編集画面を読みました（欄 ${r.fields.length}個）</div>
-    <table><tr><th>欄の名前</th><th>中身</th></tr>${r.fields.slice(0, 300).map(f=>`<tr><td>${esc(f.k)}</td><td style="white-space:pre-wrap">${esc(f.v)}</td></tr>`).join("")}</table>
-    <p class="lead" style="margin-top:8px">下の「📋 コピー」を押して、そのまま Claude に貼って送ってください（ID・パスワードは入っていません）。</p>
-    <textarea id="peekTxt" readonly style="width:100%;height:120px;font-size:11px">${esc(JSON.stringify(r))}</textarea>
-    <button class="btn" style="margin-top:6px;padding:6px 14px;font-size:12px" onclick="navigator.clipboard.writeText(document.getElementById('peekTxt').value).then(()=>alert('コピーしました'))">📋 コピー</button>`;
+  const r = await callFn({ action: "cast_profiles", store, nos: [no] });
+  const p = r.ok && r.profiles && r.profiles[0];
+  if(!p || p.error){ out.innerHTML = `<span class="ng">❌ ${esc((p && p.error) || r.error || r.message || "読めませんでした（ロボットを新しくデプロイした？）")}</span>`; return; }
+  const L = { name:"名前", age:"年齢", size:"３サイズ", psize:"Pサイズ", personality:"性格", hobby:"趣味", erogenous:"性感帯", charm:"チャームポイント", state:"状態（竿/玉）", hair:"髪の毛", comment:"本人から一言", mgrComment:"店長から一言" };
+  const opts = Object.entries(p.options || {});
+  out.innerHTML = `<div class="ok">✅ ${esc(r.store)} の ${esc(p.no)}番を読みました（${p.published ? "掲載中" : "非公開"}）</div>
+    <table><tr><th>欄</th><th>中身</th></tr>${Object.entries(L).map(([k, l])=>`<tr><td>${l}</td><td style="white-space:pre-wrap">${esc(p[k] || "")}</td></tr>`).join("")}
+    <tr><td>アイコン</td><td>${esc((p.icons || []).join("・"))}</td></tr>
+    <tr><td>オプション（${opts.length}）</td><td>${opts.map(([t, v])=>esc(t) + "：" + esc(v)).join("<br>")}</td></tr></table>
+    <p class="lead" style="margin-top:8px">この中身がキャストプロフの「🌐 公式HPから取りこむ」で入ります。</p>`;
 }
 
 /* ---------- 📜 記録 ---------- */
