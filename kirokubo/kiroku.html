@@ -1221,9 +1221,12 @@ function renderCastChecks(c){
   const ann = by("announce"), conf = by("confirm").slice(), after = by("after"), know = by("know");
   // 前回このキャストを指名したのが3年以上前 → 「以前このキャストを指名したことがあるか」を必ず聞く（下の checkOldNomi）
   if(typeof oldNomi !== "undefined" && oldNomi && oldNomi.cid === c.id) ann.unshift({ text: oldNomi.text });
+  // このお客さんは、このキャストNG（顧客台帳）→ 受けない
+  const custNg = typeof custCastNg !== "undefined" && custCastNg && custCastNg.cid === c.id ? custCastNg : null;
   // ⌛ 長いコース
   const mins = formMinutes(), warn = ngWarnings(c);
   let longNg = false;
+  if(custNg){ longNg = true; warn.unshift(`🙅 このお客さんは、このキャストNGです${custNg.reason ? "（" + custNg.reason + "）" : ""}。別のキャストにしてください`); }
   if(c.long_max && mins > c.long_max){
     if(c.long_over === "ng"){ longNg = true; warn.unshift(`⌛ ${c.long_max}分までのキャストです（それより長いコースは受けない）`); }
     else conf.unshift({ text: `⌛ ${c.long_max}分を超えるので、キャストに確認した` });
@@ -1442,7 +1445,7 @@ async function saveRes(){
   const cancelLike = ["cancel", "tobi"].includes($("f_status").value);
   const waiting = String($("f_status").value).startsWith("wait_");
   const ck = checksForSave();
-  if(!cancelLike && ck.longNg){ toast("🚫 このキャストは、このコースの長さを受けません"); $("castChecks").scrollIntoView({ block: "center" }); return; }
+  if(!cancelLike && ck.longNg){ toast("🚫 このキャストでは受けられません（赤い枠の理由を見てください）"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.missAnnounce){ toast("📣 お客様に案内することに、まだチェックがついていません"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.missConfirm && !waiting){ toast("✅ キャストに確認してから受けるものがあります。確認したらチェック、まだなら状態を「キャスト返事待ち」に"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   const checks = ck.list;
@@ -3834,15 +3837,20 @@ showView = function(v){ const r = __showViewNow.apply(this, arguments); if(v ===
 
 /* ---------- 前回このキャストを指名したのが3年以上前なら、「以前このキャストを指名したことがあるか」を必ず聞く ----------
    （お客さんが覚えていないことがあるので、本指名・店リピの決め方をお客様に確認する）。終了した予約で、いちばん新しいもの */
-var oldNomi = null, oldNomiSeq = 0;
+var oldNomi = null, oldNomiSeq = 0, custCastNg = null;
 async function checkOldNomi(){
   const seq = ++oldNomiSeq;
   const cid = $("f_cast").value, custId = (curCustomer && curCustomer.id) || (editing && editing.customer_id) || null;
-  let found = null;
+  let found = null, ng = null;
   if(cid && custId){
     try{
       let qy = sb.from("kb_reservations").select("id,biz_date").eq("customer_id", custId).eq("cast_id", cid).eq("status", "done").eq("deleted", false).order("biz_date", { ascending: false }).limit(2);
       const rows2 = (q(await qy) || []).filter(r=>!(editing && r.id === editing.id));
+      // 台帳エクセルから取りこんだ過去の利用も（顧客台帳。表がまだないときは気にしない）
+      try{ const h = await sb.from("kb_cust_history").select("biz_date").eq("customer_id", custId).eq("cast_id", cid).eq("status", "done").order("biz_date", { ascending: false }).limit(1); if(!h.error && h.data && h.data[0]) rows2.push(h.data[0]); }catch(e){}
+      rows2.sort((a, b)=>String(b.biz_date).localeCompare(String(a.biz_date)));
+      // このお客さんは、このキャストNG？（顧客台帳）
+      try{ const n = await sb.from("kb_cust_cast_ng").select("reason").eq("customer_id", custId).eq("cast_id", cid).limit(1); if(!n.error && n.data && n.data[0]) ng = { cid, reason: n.data[0].reason || "" }; }catch(e){}
       const last = rows2[0];
       if(last){
         const lim = new Date((day || KB.bizDateOf()) + "T00:00:00Z"); lim.setUTCFullYear(lim.getUTCFullYear() - 3);
@@ -3854,16 +3862,21 @@ async function checkOldNomi(){
     }catch(e){}
   }
   if(seq !== oldNomiSeq) return;   // とちゅうでキャストやお客さんが変わった
-  const changed = JSON.stringify(found) !== JSON.stringify(oldNomi);
-  oldNomi = found;
+  const changed = JSON.stringify(found) !== JSON.stringify(oldNomi) || JSON.stringify(ng) !== JSON.stringify(custCastNg);
+  oldNomi = found; custCastNg = ng;
   if(changed) renderCastChecks(M.casts.find(x=>x.id === $("f_cast").value));
 }
 const __lookupCustomerON = lookupCustomer;
-lookupCustomer = async function(){ const r = await __lookupCustomerON.apply(this, arguments); checkOldNomi(); return r; };
+lookupCustomer = async function(){
+  const r = await __lookupCustomerON.apply(this, arguments);
+  // 顧客台帳で開くリンク
+  if(curCustomer && $("custInfo") && !$("custLedgerLink")) $("custInfo").insertAdjacentHTML("afterbegin", `<div id="custLedgerLink" style="margin-bottom:4px"><a href="customers.html?id=${curCustomer.id}" target="_blank" rel="noopener" style="font-weight:800;color:var(--pink-deep)">👥 顧客台帳で開く（これまでの利用・キャストNG・メモ）</a></div>`);
+  checkOldNomi(); return r;
+};
 const __onCastON = onCast;
 onCast = function(){ const r = __onCastON.apply(this, arguments); checkOldNomi(); return r; };
 const __openFormON = openForm;
-openForm = function(id){ oldNomi = null; const r = __openFormON.apply(this, arguments); checkOldNomi(); return r; };
+openForm = function(id){ oldNomi = null; custCastNg = null; const r = __openFormON.apply(this, arguments); checkOldNomi(); return r; };
 
 function buildMsgShort(c){
   const cast = M.casts.find(x=>x.id === $("f_cast").value);

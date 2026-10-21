@@ -44,7 +44,7 @@
   }
   // ページの上の切りかえ
   function nav(active){
-    const items = [["kiroku.html","🆕 新しい記録簿（ためし中）"],["reception.html","🧾 受付"],["settle.html","💴 精算"],["index.html","📒 キャスト台帳"],["stats.html","📈 集計"]];
+    const items = [["kiroku.html","🆕 新しい記録簿（ためし中）"],["reception.html","🧾 受付"],["settle.html","💴 精算"],["index.html","📒 キャスト台帳"],["customers.html","👥 顧客台帳"],["stats.html","📈 集計"]];
     return `<nav class="kbnav">${items.map(([h,l])=>`<a href="${h}" class="${h===active?"on":""}">${l}</a>`).join("")}</nav>`;
   }
   function wipBanner(){

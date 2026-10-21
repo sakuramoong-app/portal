@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>顧客台帳│サクラG</title>
+<link rel="icon" type="image/png" href="../favicon.png?v=3">
+<link rel="stylesheet" href="kb.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="kb_common.js"></script>
+<style>
+  body{font-size:14.5px;}
+  .wrap.wide{max-width:1280px;}
+  header.kbh .navinhead{flex:1;} header.kbh .navinhead .kbnav{margin:0;}
+  .cols{display:grid;grid-template-columns:minmax(320px,420px) 1fr;gap:12px;align-items:start;}
+  @media (max-width:900px){ .cols{grid-template-columns:1fr;} }
+  .search{display:flex;gap:6px;margin-bottom:8px;}
+  .search input{flex:1;font-family:inherit;font-size:16px;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;}
+  .flt{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;}
+  .list{background:#fff;border:1.5px solid var(--line);border-radius:14px;overflow:hidden;max-height:76vh;overflow-y:auto;}
+  .li{padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer;}
+  .li:hover{background:#FFF8FA;} .li.on{background:var(--pink-soft);}
+  .li .nm{font-weight:800;} .li .sub{font-size:12px;color:var(--sub);margin-top:2px;}
+  .badge{display:inline-block;border-radius:99px;padding:1px 8px;font-size:11.5px;font-weight:800;margin-left:4px;}
+  .b-ng{background:#FFE3E3;color:#B0213F;} .b-cng{background:#FFF0E0;color:#A35A00;}
+  .detail{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:14px;}
+  .detail h2{font-size:18px;color:var(--pink-deep);margin-bottom:4px;}
+  .csec{margin-top:14px;} .csec h3{font-size:14.5px;color:var(--sub);margin-bottom:6px;}
+  .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;}
+  .stats .c{background:#FBF7F8;border-radius:12px;padding:8px 10px;} .stats .k{font-size:11.5px;color:var(--sub);font-weight:800;} .stats .v{font-size:16px;font-weight:800;}
+  .ngbox{background:#FFE8EC;border:2px solid #E5486C;border-radius:12px;padding:8px 10px;color:#B0213F;font-weight:800;}
+  table.h{border-collapse:collapse;width:100%;font-size:12.5px;}
+  table.h th,table.h td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left;vertical-align:top;}
+  table.h th{background:#FBF3F6;color:var(--sub);font-size:11.5px;position:sticky;top:0;}
+  table.h tr.cancel td{background:#FFF1DE;} table.h tr.tobi td{background:#FFE1E1;} table.h tr.flowed td{background:#E6F6E8;}
+  table.h tr.castng td{color:#D0021B;font-weight:800;}
+  table.h td.memo{white-space:pre-wrap;max-width:320px;}
+  .mark{display:inline-block;background:#FFF3B0;border:1.5px solid #E8C200;border-radius:6px;padding:0 5px;font-size:11px;font-weight:800;color:#7a5d00;margin-left:4px;}
+  .src{font-size:10.5px;color:var(--sub);}
+  .f2{display:grid;grid-template-columns:1fr 1fr;gap:8px;} @media (max-width:640px){ .f2{grid-template-columns:1fr;} }
+  .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+  .pl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 0;border-bottom:1px dashed var(--line);font-size:13px;}
+  .empty{color:var(--sub);padding:20px;text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap wide">
+  <header class="kbh"><h1>👥 顧客台帳</h1><div id="navArea" class="navinhead"></div></header>
+  <div id="wipArea"></div>
+  <div id="gate" class="gate">読み込み中…</div>
+  <div id="main" style="display:none">
+    <div class="cols">
+      <div>
+        <div class="search"><input id="q" placeholder="電話番号（下3けたからでも）か名前で探す" oninput="debounceSearch()" autocomplete="off"></div>
+        <div class="flt">
+          <button class="chip on" data-f="all" onclick="setFilter('all')">ぜんぶ</button>
+          <button class="chip" data-f="ng" onclick="setFilter('ng')">⚠️ NG客</button>
+          <button class="chip" data-f="cng" onclick="setFilter('cng')">🙅 キャストNGあり</button>
+          <button class="btn btn-ghost btn-sm edit-only" onclick="newCustomer()">＋ お客さんを足す</button>
+        </div>
+        <div class="list" id="list"><div class="empty">読み込み中…</div></div>
+        <div class="hint" id="listHint" style="font-size:12px;color:var(--sub);margin-top:6px"></div>
+      </div>
+      <div id="detail" class="detail"><div class="empty">左からお客さんを選んでください</div></div>
+    </div>
+  </div>
+</div>
+<script>
+/* ============================================================
+   👥 顧客台帳
+   ・電話番号（下3けたからでも）か名前で探す。NG客・キャストNGありで絞れる
+   ・1人ずつ：名前・電話・NG（理由）・メモ・キャストごとのNG・よく使う場所・利用の履歴・数字
+   ・履歴＝新しい記録簿の予約 ＋ 台帳エクセルから取りこんだ過去の利用（kb_cust_history）
+     台帳エクセルで目立たせてあったところ（赤い文字・塗りつぶし）と備考も、そのまま目立たせて出す
+   ・直せるのは、作成中は店長（きゃ）だけ
+   ============================================================ */
+const { sb, q, esc, yen, toast } = KB;
+const $ = id => document.getElementById(id);
+let M = { casts: [], stores: [] }, results = [], cur = null, filter = "all", timer = null;
+const STATUS = { done: "", cancel: "キャンセル", tobi: "トビ", flowed: "流れた" };
+const castLabel = id => { const c = M.casts.find(x=>x.id === id); return c ? (c.official_name || c.temp_name) : ""; };
+const storeLabel = k => { const s = M.stores.find(x=>x.key === k); return s ? s.label : k; };
+const md = d => { if(!d) return ""; const [y, m, dd] = String(d).split("-"); return `${y}/${Number(m)}/${Number(dd)}`; };
+const fmtPhone = p => { p = String(p || ""); return p.length === 11 ? p.slice(0, 3) + "-" + p.slice(3, 7) + "-" + p.slice(7) : p.length === 10 ? p.slice(0, 2) + "-" + p.slice(2, 6) + "-" + p.slice(6) : p; };
+
+async function init(){
+  $("navArea").innerHTML = KB.nav("customers.html");
+  if(!KB.CAN_EDIT) document.body.classList.add("readonly");
+  $("wipArea").innerHTML = KB.wipBanner();
+  if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
+  try{
+    const [casts, stores] = await Promise.all([
+      sb.from("master_casts").select("id,official_name,temp_name,kana,status").order("kana"),
+      sb.from("master_stores").select("key,label").order("sort"),
+    ]);
+    M.casts = q(casts) || []; M.stores = q(stores) || [];
+  }catch(e){ $("gate").textContent = "読み込みに失敗しました：" + (e.message || e); return; }
+  $("gate").style.display = "none"; $("main").style.display = "";
+  await search();
+  const id = Number(new URLSearchParams(location.search).get("id"));   // 記録簿から「?id=」で開いたとき
+  if(id) openCustomer(id);
+}
+function debounceSearch(){ clearTimeout(timer); timer = setTimeout(search, 300); }
+function setFilter(f){ filter = f; document.querySelectorAll(".flt .chip").forEach(b=>b.classList.toggle("on", b.dataset.f === f)); paintList(); }
+async function search(){
+  const t = $("q").value.trim();
+  try{
+    results = q(await sb.rpc("kb_customer_search", { p_q: t, p_limit: t ? 100 : 60 })) || [];
+    $("listHint").textContent = t ? `${results.length}人見つかりました${results.length >= 100 ? "（100人まで表示）" : ""}` : "最近のお客さん（新しく来た順）。電話番号か名前で探せます";
+  }catch(e){ results = []; $("listHint").textContent = "探せませんでした（SQL 124 は実行ずみ？）：" + (e.message || e); }
+  paintList();
+}
+function paintList(){
+  const list = results.filter(r=>filter === "all" || (filter === "ng" && r.ng) || (filter === "cng" && r.cast_ng > 0));
+  $("list").innerHTML = list.length ? list.map(r=>`<div class="li ${cur && cur.id === r.id ? "on" : ""}" onclick="openCustomer(${r.id})">
+      <div class="nm">${esc(r.name || "（名前なし）")}${r.ng ? '<span class="badge b-ng">⚠️ NG客</span>' : ""}${r.cast_ng ? `<span class="badge b-cng">🙅 キャストNG ${r.cast_ng}</span>` : ""}</div>
+      <div class="sub">📞 ${esc(fmtPhone(r.phone))}　${r.visits ? `${r.visits}回・最後 ${md(r.last_date)}・合計 ${yen(r.total)}` : "まだ利用なし"}</div></div>`).join("")
+    : `<div class="empty">見つかりません</div>`;
+}
+
+/* ---------- 1人ずつ ---------- */
+async function openCustomer(id){
+  $("detail").innerHTML = `<div class="empty">読み込み中…</div>`;
+  try{
+    const [c, res, hist, ngs, places] = await Promise.all([
+      sb.from("kb_customers").select("*").eq("id", id).maybeSingle(),
+      sb.from("kb_reservations").select("id,biz_date,store_key,dummy_name,cast_id,course,extension_count,area,address,total,status,payment,memo_log,visit_kind").eq("customer_id", id).eq("deleted", false).order("biz_date", { ascending: false }).limit(500),
+      sb.from("kb_cust_history").select("*").eq("customer_id", id).order("biz_date", { ascending: false }).limit(1000),
+      sb.from("kb_cust_cast_ng").select("*").eq("customer_id", id).order("at"),
+      sb.from("kb_customer_places").select("*").eq("customer_id", id).order("last_used", { ascending: false }),
+    ]);
+    cur = q(c); if(!cur){ $("detail").innerHTML = `<div class="empty">見つかりません</div>`; return; }
+    cur._res = q(res) || []; cur._hist = hist.error ? [] : (hist.data || []); cur._ngs = ngs.error ? [] : (ngs.data || []); cur._places = q(places) || [];
+  }catch(e){ $("detail").innerHTML = `<div class="empty">読めませんでした：${esc(e.message || e)}</div>`; return; }
+  paintList(); paintDetail();
+}
+function rowsOf(c){
+  // 新しい記録簿の予約と、台帳エクセルの過去の利用を、同じ形にして新しい順に
+  const a = c._res.map(r=>({ src: "new", date: r.biz_date, store: storeLabel(r.store_key) + (r.dummy_name ? " 🎭" + r.dummy_name : ""), cast: castLabel(r.cast_id), cast_id: r.cast_id,
+    course: r.course + (/^\d+$/.test(r.course) ? "分" : "") + (r.extension_count ? " 延長" + r.extension_count : ""), place: [r.area, r.address].filter(Boolean).join(" "), total: r.total,
+    status: ["cancel", "tobi"].includes(r.status) ? r.status : r.status === "done" ? "done" : "yet", card: r.payment !== "cash",
+    memo: (r.memo_log || []).map(m=>m.text).join("\n"), castng: false, marks: null }));
+  const b = c._hist.map(h=>({ src: "excel", date: h.biz_date, store: h.store_key ? storeLabel(h.store_key) : h.store_raw, cast: h.cast_id ? castLabel(h.cast_id) : h.cast_raw, cast_id: h.cast_id,
+    course: h.course, place: [h.area, h.place].filter(Boolean).join(" "), total: h.total, status: h.status, card: h.card, memo: h.memo, castng: h.cast_ng, marks: h.marks }));
+  return a.concat(b).sort((x, y)=>String(y.date || "").localeCompare(String(x.date || "")));
+}
+function paintDetail(){
+  const c = cur, all = rowsOf(c), done = all.filter(r=>r.status === "done");
+  const total = done.reduce((s, r)=>s + (Number(r.total) || 0), 0);
+  const byCast = {}; done.forEach(r=>{ if(r.cast) byCast[r.cast] = (byCast[r.cast] || 0) + 1; });
+  const top = Object.entries(byCast).sort((a, b)=>b[1] - a[1]).slice(0, 5);
+  const cnt = k=>all.filter(r=>r.status === k).length;
+  const ed = KB.CAN_EDIT ? "" : "disabled";
+  $("detail").innerHTML = `
+    <h2>${esc(c.name || "（名前なし）")} <small style="font-size:13px;color:var(--sub)">📞 ${esc(fmtPhone(c.phone))}</small></h2>
+    ${c.ng ? `<div class="ngbox">⚠️ NG客：${esc(c.ng_reason || "理由なし")}</div>` : ""}
+    ${c._ngs.length ? `<div class="ngbox" style="background:#FFF4E5;border-color:#FFB547;color:#A35A00;margin-top:6px">🙅 キャストNG：${c._ngs.map(n=>esc(n.cast_id ? castLabel(n.cast_id) : n.cast_name) + (n.reason ? "（" + esc(n.reason) + "）" : "")).join("、")}</div>` : ""}
+    <div class="csec"><div class="stats">
+      <div class="c"><div class="k">利用回数</div><div class="v">${done.length}回</div></div>
+      <div class="c"><div class="k">合計</div><div class="v">${yen(total)}</div></div>
+      <div class="c"><div class="k">はじめて</div><div class="v" style="font-size:14px">${md(done.length ? done[done.length - 1].date : "") || "−"}</div></div>
+      <div class="c"><div class="k">最後</div><div class="v" style="font-size:14px">${md(done.length ? done[0].date : "") || "−"}</div></div>
+      <div class="c"><div class="k">キャンセル／トビ</div><div class="v">${cnt("cancel")}／${cnt("tobi")}</div></div>
+    </div>
+    ${top.length ? `<div style="font-size:13px;margin-top:6px">よく指名するキャスト：${top.map(([n, k])=>esc(n) + " " + k + "回").join("、")}</div>` : ""}</div>
+
+    <div class="csec"><h3>📝 お客さんのこと</h3>
+      <div class="f2">
+        <div class="f"><label>名前</label><input id="c_name" value="${esc(c.name)}" maxlength="80" ${ed}></div>
+        <div class="f"><label>電話番号（数字だけ）</label><input id="c_phone" value="${esc(c.phone)}" maxlength="20" ${ed}></div>
+      </div>
+      <div class="f2" style="margin-top:6px">
+        <div class="f"><label>NG客</label><select id="c_ng" ${ed}><option value="0">NGではない</option><option value="1" ${c.ng ? "selected" : ""}>⚠️ NG客</option></select></div>
+        <div class="f"><label>NGの理由</label><input id="c_ngr" value="${esc(c.ng_reason)}" maxlength="200" ${ed}></div>
+      </div>
+      <div class="f" style="margin-top:6px"><label>メモ（好み・注意など）</label><textarea id="c_note" ${ed}>${esc(c.note)}</textarea></div>
+      ${KB.CAN_EDIT ? `<div style="text-align:right;margin-top:6px"><button class="btn btn-primary btn-sm" onclick="saveCustomer()">💾 保存</button></div>` : ""}
+    </div>
+
+    <div class="csec"><h3>🙅 キャストごとのNG（このキャストには付けない）</h3>
+      ${c._ngs.length ? c._ngs.map(n=>`<div class="pl"><b>${esc(n.cast_id ? castLabel(n.cast_id) : n.cast_name)}</b><span>${esc(n.reason || "")}</span><span class="src">${n.source === "excel" ? "台帳エクセルより" : esc(n.by_name || "")}</span>
+        ${KB.CAN_EDIT ? `<button class="btn btn-danger btn-sm" onclick="delCastNg(${n.id})">消す</button>` : ""}</div>`).join("") : `<div class="src">なし</div>`}
+      ${KB.CAN_EDIT ? `<div class="row" style="margin-top:6px"><select id="ng_cast" style="font-family:inherit;padding:6px;border-radius:8px;border:1.5px solid var(--line)"><option value="">キャストを選ぶ</option>${M.casts.filter(x=>x.status !== "left").map(x=>`<option value="${x.id}">${esc(x.official_name || x.temp_name)}</option>`).join("")}</select>
+        <input id="ng_reason" placeholder="理由" maxlength="300" style="flex:1;min-width:140px;font-family:inherit;padding:6px 8px;border-radius:8px;border:1.5px solid var(--line)">
+        <button class="btn btn-ghost btn-sm" onclick="addCastNg()">＋ 足す</button></div>` : ""}
+    </div>
+
+    <div class="csec"><h3>📍 よく使う場所</h3>
+      ${c._places.length ? c._places.map(p=>`<div class="pl"><b>${esc(p.area || "")}</b><span>${esc(p.address || "")}</span><span class="src">${p.use_count || 0}回・最後 ${md(p.last_used)}</span>
+        ${p.next_transport != null ? `<span>🚕 次回の交通費 ${yen(p.next_transport)}${p.next_note ? "（" + esc(p.next_note) + "）" : ""}</span>` : ""}${p.map_url ? ` <a href="${esc(p.map_url)}" target="_blank" rel="noopener">📍地図</a>` : ""}</div>`).join("") : `<div class="src">まだありません（予約を保存すると入ります）</div>`}
+    </div>
+
+    <div class="csec"><h3>📜 利用の履歴（新しい順・${all.length}件）</h3>
+      ${all.length ? `<div style="max-height:60vh;overflow:auto"><table class="h"><tr><th>日</th><th>お店</th><th>キャスト</th><th>コース</th><th>場所</th><th>金額</th><th>状態</th><th>備考</th></tr>
+        ${all.map(r=>`<tr class="${r.status} ${r.castng ? "castng" : ""}"><td>${md(r.date)}${r.src === "excel" ? '<br><span class="src">台帳</span>' : ""}</td><td>${esc(r.store)}</td>
+          <td>${esc(r.cast)}${r.castng ? '<br>🙅キャストNG' : ""}</td><td>${esc(r.course)}</td><td>${esc(r.place)}</td><td>${r.total ? yen(r.total) : ""}${r.card ? " 💳" : ""}</td>
+          <td>${esc(STATUS[r.status] || (r.status === "yet" ? "これから" : ""))}${markText(r.marks)}</td><td class="memo">${esc(r.memo || "")}</td></tr>`).join("")}</table></div>`
+        : `<div class="src">まだありません（台帳エクセルの過去の利用は、端末の登録のあとに取りこみます）</div>`}
+    </div>`;
+}
+// 台帳エクセルで目立たせてあったところ（決まりにない色・赤い文字の欄）
+function markText(m){
+  if(!m || !Object.keys(m).length) return "";
+  const out = [];
+  if(m.other_fill) out.push("色つき");
+  if(m.red_cols && m.red_cols.length) out.push("赤字：" + m.red_cols.join("・"));
+  return out.length ? `<br><span class="mark">⚠️ ${esc(out.join("／"))}</span>` : "";
+}
+async function saveCustomer(){
+  const patch = { name: $("c_name").value.trim(), phone: $("c_phone").value.replace(/\D/g, ""), ng: $("c_ng").value === "1", ng_reason: $("c_ngr").value.trim(), note: $("c_note").value, updated_by: KB.operatorName(), updated_at: new Date().toISOString() };
+  if(patch.phone && patch.phone !== cur.phone){
+    const ex = q(await sb.from("kb_customers").select("id,name").eq("phone", patch.phone).neq("id", cur.id).limit(1).maybeSingle());
+    if(ex && !confirm(`この電話番号は「${ex.name || "名前なし"}」さんでも使われています。このまま保存しますか？`)) return;
+  }
+  try{ q(await sb.from("kb_customers").update(patch).eq("id", cur.id)); toast("保存しました"); await openCustomer(cur.id); search(); }
+  catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+async function addCastNg(){
+  const cid = $("ng_cast").value, reason = $("ng_reason").value.trim();
+  if(!cid){ toast("キャストを選んでください"); return; }
+  if(cur._ngs.some(n=>n.cast_id === cid)){ toast("もう入っています"); return; }
+  try{ q(await sb.from("kb_cust_cast_ng").insert({ customer_id: cur.id, cast_id: cid, cast_name: castLabel(cid), reason, source: "manual", by_name: KB.operatorName() })); toast("キャストNGを足しました"); openCustomer(cur.id); }
+  catch(e){ toast("足せませんでした（SQL 124 は実行ずみ？）：" + (e.message || e)); }
+}
+async function delCastNg(id){
+  if(!confirm("このキャストNGを消しますか？")) return;
+  try{ q(await sb.from("kb_cust_cast_ng").delete().eq("id", id)); openCustomer(cur.id); }catch(e){ toast("消せませんでした：" + (e.message || e)); }
+}
+async function newCustomer(){
+  const phone = (prompt("電話番号（数字だけ）") || "").replace(/\D/g, ""); if(!phone) return;
+  const ex = q(await sb.from("kb_customers").select("id").eq("phone", phone).limit(1).maybeSingle());
+  if(ex){ toast("この電話番号のお客さんは、もういます"); openCustomer(ex.id); return; }
+  const name = (prompt("名前") || "").trim();
+  try{ const r = q(await sb.from("kb_customers").insert({ phone, name, updated_by: KB.operatorName() }).select("id").single()); toast("足しました"); await search(); openCustomer(r.id); }
+  catch(e){ toast("足せませんでした：" + (e.message || e)); }
+}
+init();
+</script>
+<!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
+</body>
+</html>
