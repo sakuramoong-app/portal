@@ -1219,6 +1219,8 @@ function renderCastChecks(c){
   const all = M.castChecks.filter(x=>x.cast_id === c.id && ruleApplies(x));
   const by = k => all.filter(x=>(x.kind || "announce") === k);
   const ann = by("announce"), conf = by("confirm").slice(), after = by("after"), know = by("know");
+  // 前回このキャストを指名したのが3年以上前 → 「以前このキャストを指名したことがあるか」を必ず聞く（下の checkOldNomi）
+  if(typeof oldNomi !== "undefined" && oldNomi && oldNomi.cid === c.id) ann.unshift({ text: oldNomi.text });
   // ⌛ 長いコース
   const mins = formMinutes(), warn = ngWarnings(c);
   let longNg = false;
@@ -3829,6 +3831,39 @@ function scrollToNow(){
 }
 const __showViewNow = showView;
 showView = function(v){ const r = __showViewNow.apply(this, arguments); if(v === "tl") setTimeout(scrollToNow, 50); return r; };
+
+/* ---------- 前回このキャストを指名したのが3年以上前なら、「以前このキャストを指名したことがあるか」を必ず聞く ----------
+   （お客さんが覚えていないことがあるので、本指名・店リピの決め方をお客様に確認する）。終了した予約で、いちばん新しいもの */
+var oldNomi = null, oldNomiSeq = 0;
+async function checkOldNomi(){
+  const seq = ++oldNomiSeq;
+  const cid = $("f_cast").value, custId = (curCustomer && curCustomer.id) || (editing && editing.customer_id) || null;
+  let found = null;
+  if(cid && custId){
+    try{
+      let qy = sb.from("kb_reservations").select("id,biz_date").eq("customer_id", custId).eq("cast_id", cid).eq("status", "done").eq("deleted", false).order("biz_date", { ascending: false }).limit(2);
+      const rows2 = (q(await qy) || []).filter(r=>!(editing && r.id === editing.id));
+      const last = rows2[0];
+      if(last){
+        const lim = new Date((day || KB.bizDateOf()) + "T00:00:00Z"); lim.setUTCFullYear(lim.getUTCFullYear() - 3);
+        if(last.biz_date <= lim.toISOString().slice(0, 10)){
+          const c = M.casts.find(x=>x.id === cid), d = last.biz_date.split("-");
+          found = { cid, text: `前回${c ? (c.official_name || c.temp_name) : "このキャスト"}さんを指名したのは ${d[0]}/${Number(d[1])}/${Number(d[2])}（3年以上前）。お客様に「以前このキャストを指名したことはありますか？」と確認した` };
+        }
+      }
+    }catch(e){}
+  }
+  if(seq !== oldNomiSeq) return;   // とちゅうでキャストやお客さんが変わった
+  const changed = JSON.stringify(found) !== JSON.stringify(oldNomi);
+  oldNomi = found;
+  if(changed) renderCastChecks(M.casts.find(x=>x.id === $("f_cast").value));
+}
+const __lookupCustomerON = lookupCustomer;
+lookupCustomer = async function(){ const r = await __lookupCustomerON.apply(this, arguments); checkOldNomi(); return r; };
+const __onCastON = onCast;
+onCast = function(){ const r = __onCastON.apply(this, arguments); checkOldNomi(); return r; };
+const __openFormON = openForm;
+openForm = function(id){ oldNomi = null; const r = __openFormON.apply(this, arguments); checkOldNomi(); return r; };
 
 function buildMsgShort(c){
   const cast = M.casts.find(x=>x.id === $("f_cast").value);
