@@ -229,7 +229,7 @@ function range(){ let a = $("fromYm").value, b = $("toYm").value; if(a > b) [a, 
 function weekKeyOfYmd(s){ const [y, m, d] = s.split("-").map(Number); const dt = new Date(Date.UTC(y, m - 1, d)); const dow = dt.getUTCDay(); dt.setUTCDate(dt.getUTCDate() + (dow === 0 ? -6 : 1 - dow)); return dt.toISOString().slice(0, 10); }
 const SHIFT_OK = ["input_waiting", "inputting", "confirmed", "change_requested", "change_inputting", "change_confirmed"];
 async function loadLive(){
-  L = { res: [], days: [] };
+  L = { res: [], days: [], pay: {} };   // pay＝その日の内勤の日払い（払った分）
   if(!liveYm) return;
   const start = liveYm + "-01";
   try{
@@ -241,6 +241,8 @@ async function loadLive(){
       fetchAll("kb_cast_rules", "*", "id", x=>x.eq("active", true)),
       fetchAll("kb_media", "code,label", "code"),
     ]);
+    // 内勤の日払い（払った分）：日ごとに足しておいて、店落ちから引く
+    try{ (await fetchAll("kb_staff_work", "biz_date,day_paid,paid", "biz_date", x=>x.gte("biz_date", start).eq("paid", true))).forEach(w=>{ L.pay[w.biz_date] = (L.pay[w.biz_date] || 0) + n0(w.day_paid); }); }catch(e){}
     const nameOf = id => { const c = casts.find(x=>x.id === id); return c ? (c.official_name || c.temp_name || c.shift_name) : "（不明）"; };
     const idOfShift = nm => { const c = casts.find(x=>x.shift_name === nm || x.official_name === nm); return c ? c.id : null; };
     const mediaLabel = code => { const m = media.find(x=>x.code === code); return m ? m.label : code; };
@@ -294,7 +296,7 @@ async function loadLive(){
 //   過去は売上管理.xlsx の「年間比較」・日ごとのシート（2018年12月〜）。各日の記録簿の「暫定的な残額の合計＋雑費合計」と同じ数字
 //   （内勤の日払いも引いたあと＝お店に残る額。キャスト別の店落ちを足したものより5〜10%少ないのはそのため）
 function valOfMonth(ym){
-  if(isLive(ym)){ const rs = L.res.filter(r=>r.ym === ym); return rs.length ? rs.reduce((a, r)=>a + r.drop, 0) : null; }
+  if(isLive(ym)){ const rs = L.res.filter(r=>r.ym === ym), pay = Object.entries(L.pay).filter(([d])=>d.slice(0, 7) === ym).reduce((a, [, v])=>a + v, 0); return rs.length || pay ? rs.reduce((a, r)=>a + r.drop, 0) - pay : null; }   // 内勤の日払いを引く
   const m = H.month.find(x=>ymOf(x.ym) === ym); if(m) return n0(m.sales);
   const ds = H.daily.filter(x=>ymOf(x.d) === ym); return ds.length ? ds.reduce((a, x)=>a + n0(x.sales), 0) : null;
 }
@@ -302,6 +304,7 @@ function dailyVals(months){
   const set = new Set(months), out = {};
   H.daily.forEach(x=>{ const ym = ymOf(x.d); if(set.has(ym) && !isLive(ym)) out[x.d] = n0(x.sales); });
   L.res.forEach(r=>{ if(set.has(r.ym) && isLive(r.ym)) out[r.d] = (out[r.d] || 0) + r.drop; });
+  Object.entries(L.pay).forEach(([d, v])=>{ const ym = d.slice(0, 7); if(set.has(ym) && isLive(ym)) out[d] = (out[d] || 0) - v; });   // 内勤の日払いを引く
   return out;
 }
 // キャスト×月（実働時間・店落ち・報酬・本数・新規・店リ・本指名・出勤/お茶/欠勤日数）

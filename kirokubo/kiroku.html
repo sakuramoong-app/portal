@@ -371,6 +371,8 @@
     <div class="notice"><textarea id="notice" placeholder="📢 本日のお知らせ（ここに書くと赤く大きく出ます）" onchange="saveNotice()"></textarea></div>
     <!-- 📊 今日の数字（内勤用・ふだんはしまっておく） -->
     <details class="fold" id="todayBox"><summary>📊 今日の数字</summary><div class="todaygrid" id="todayGrid"></div></details>
+    <!-- 💴 内勤の日払い（その日の分） -->
+    <details class="fold" id="staffPayBox"><summary>💴 内勤の日払い <small id="staffPaySum"></small></summary><div id="staffPayGrid"></div></details>
     <!-- 👑 社長用（「社長」で入ったときだけ） -->
     <details class="fold" id="ownerBox" style="display:none"><summary>👑 社長用：今日の集計</summary><div id="ownerGrid"></div></details>
     <!-- 🗺 今どこに誰が（いつも上に・ひらいておく） -->
@@ -3834,6 +3836,83 @@ function scrollToNow(){
 }
 const __showViewNow = showView;
 showView = function(v){ const r = __showViewNow.apply(this, arguments); if(v === "tl") setTimeout(scrollToNow, 50); return r; };
+
+/* ---------- 💴 内勤の日払い（その日の分。時給の内勤だけ：蘭子・若林・上川）----------
+   ・出勤・退勤は30分きざみ。はじめは内勤カレンダーのシフトから入る（ちがう日は直す）
+   ・金額＝時間×時給。「払った」にして、どこから払ったか（その日の回収金／キキララ）も残す
+   ・集計の店落ちから引く（SQL 127）。いまは内勤みんなが見られる・直せる */
+let staffPay = { rates: [], rows: [] };
+const PAY_SRC = { drop: "その日の回収金", kikirara: "キキララ（両替金）" };
+function parseShiftTime(t){   // 内勤カレンダーの「20-5」「12:30-22」→ { in, out }（日をまたいだら +24）
+  const m = String(t || "").match(/^(\d{1,2})(?::(\d{2}))?-(\d{1,2})(?::(\d{2}))?$/); if(!m) return null;
+  const a = Number(m[1]) + (Number(m[2]) || 0) / 60; let b = Number(m[3]) + (Number(m[4]) || 0) / 60;
+  if(b <= a) b += 24;
+  return { in: a, out: b };
+}
+const halfLabel = h => { const x = h >= 24 ? h - 24 : h; return (h >= 24 ? "翌" : "") + Math.floor(x) + ":" + (x % 1 ? "30" : "00"); };
+async function loadStaffPay(){
+  const box = $("staffPayGrid"); if(!box) return;
+  try{
+    const [rates, work, shifts] = await Promise.all([
+      sb.from("kb_staff_rates").select("*").order("from_date"),
+      sb.from("kb_staff_work").select("*").eq("biz_date", day),
+      sb.from("naikin_shifts").select("staff_id,time").eq("date", day),
+    ]);
+    const rt = q(rates) || [], wk = work.error ? [] : (work.data || []), sh = shifts.error ? [] : (shifts.data || []);
+    const ids = [...new Set(rt.filter(r=>r.from_date <= day).map(r=>r.staff_id))];
+    staffPay.rows = ids.map(id=>{
+      const r = rt.filter(x=>x.staff_id === id && x.from_date <= day).pop();
+      const w = wk.find(x=>x.staff_id === id), s = sh.find(x=>x.staff_id === id), p = s && parseShiftTime(s.time);
+      return { id, name: r.record_name || id, hourly: (w && w.hourly) || r.hourly,
+        in: w && w.clock_in != null ? Number(w.clock_in) : p ? p.in : null, out: w && w.clock_out != null ? Number(w.clock_out) : p ? p.out : null,
+        saved: !!w, fromShift: !w && !!p, paid: !!(w && w.paid), src: (w && w.pay_source) || "", amount: w && w.day_paid ? w.day_paid : null, note: (w && w.note) || "", by: (w && w.paid_by) || "", at: w && w.paid_at };
+    });
+  }catch(e){ box.innerHTML = `<div class="hist">読めませんでした（SQL 127 は実行ずみ？）：${esc(e.message || e)}</div>`; return; }
+  paintStaffPay();
+}
+function paintStaffPay(){
+  const box = $("staffPayGrid"); if(!box) return;
+  const opts = (sel, from)=>{ let h = `<option value="">--</option>`; for(let x = from; x <= 30; x += 0.5) h += `<option value="${x}" ${sel === x ? "selected" : ""}>${halfLabel(x)}</option>`; return h; };
+  const rows = staffPay.rows;
+  const calcAmt = r => r.in != null && r.out != null && r.out > r.in ? Math.round((r.out - r.in) * r.hourly) : 0;
+  const paidSum = rows.filter(r=>r.paid).reduce((a, r)=>a + (r.amount != null ? r.amount : calcAmt(r)), 0);
+  $("staffPaySum").textContent = rows.length ? `払った ${yen(paidSum)}` : "";
+  box.innerHTML = rows.length ? `<div class="wrapx"><table class="list" style="font-size:13.5px"><tr><th>内勤</th><th>出勤</th><th>退勤</th><th>時間</th><th>時給</th><th>日払い</th><th>払った</th><th>どこから</th><th>メモ</th><th></th></tr>
+    ${rows.map((r, i)=>{ const hrs = r.in != null && r.out != null && r.out > r.in ? r.out - r.in : 0, amt = r.amount != null ? r.amount : calcAmt(r);
+      return `<tr style="${r.paid ? "background:#EEF9EE" : ""}"><td><b>${esc(r.name)}</b>${r.fromShift ? '<br><small style="color:var(--sub)">内勤カレンダーより</small>' : ""}</td>
+      <td><select onchange="spSet(${i},'in',this.value)">${opts(r.in, 6)}</select></td><td><select onchange="spSet(${i},'out',this.value)">${opts(r.out, 6.5)}</select></td>
+      <td>${hrs ? hrs + "時間" : ""}</td><td>${yen(r.hourly)}</td>
+      <td><input type="number" value="${amt || ""}" style="width:90px" onchange="spSet(${i},'amount',this.value)"></td>
+      <td><label><input type="checkbox" ${r.paid ? "checked" : ""} onchange="spSet(${i},'paid',this.checked)"> 払った</label>${r.paid && r.by ? `<br><small style="color:var(--sub)">${esc(r.by)}</small>` : ""}</td>
+      <td><select onchange="spSet(${i},'src',this.value)"><option value="">--</option>${Object.entries(PAY_SRC).map(([k, l])=>`<option value="${k}" ${r.src === k ? "selected" : ""}>${l}</option>`).join("")}</select></td>
+      <td><input value="${esc(r.note)}" maxlength="100" style="width:120px" onchange="spSet(${i},'note',this.value)"></td>
+      <td><button type="button" class="btn btn-primary btn-sm" onclick="spSave(${i})">保存</button></td></tr>`; }).join("")}</table></div>
+    <div class="hist" style="margin-top:4px">日払い＝時間×時給（30分きざみ）。金額を手で直すこともできます。「払った」にしたら、どこから払ったか（その日の回収金／キキララ）も選んで保存してください。払った分は、集計の店落ちから引きます。</div>`
+    : `<div class="hist">この日の時給の内勤はいません（時給の表：kb_staff_rates）</div>`;
+}
+function spSet(i, k, v){
+  const r = staffPay.rows[i]; if(!r) return;
+  if(k === "in" || k === "out"){ r[k] = v === "" ? null : Number(v); r.amount = null; }
+  else if(k === "amount") r.amount = v === "" ? null : Math.max(0, Number(v) || 0);
+  else if(k === "paid"){ r.paid = !!v; if(r.paid && !r.src) r.src = "drop"; }
+  else r[k] = v;
+  paintStaffPay();
+}
+async function spSave(i){
+  const r = staffPay.rows[i]; if(!r) return;
+  if(r.in != null && r.out != null && r.out <= r.in){ toast("退勤は出勤より後にしてください"); return; }
+  if(r.paid && !r.src){ toast("どこから払ったか選んでください"); return; }
+  const hrs = r.in != null && r.out != null ? r.out - r.in : null, amt = r.amount != null ? r.amount : (hrs ? Math.round(hrs * r.hourly) : 0);
+  const by = KB.operatorName();
+  try{
+    q(await sb.from("kb_staff_work").upsert({ biz_date: day, staff_id: r.id, clock_in: r.in, clock_out: r.out, hours: hrs, hourly: r.hourly, day_paid: amt,
+      paid: r.paid, pay_source: r.src || "", paid_by: r.paid ? (r.by || by) : "", paid_at: r.paid ? (r.at || new Date().toISOString()) : null,
+      from_shift: r.fromShift, note: r.note || "", updated_by: by, updated_at: new Date().toISOString() }, { onConflict: "biz_date,staff_id" }));
+    toast(r.name + " の日払いを保存しました"); loadStaffPay();
+  }catch(e){ toast("保存できませんでした（SQL 127 は実行ずみ？）：" + (e.message || e)); }
+}
+const __loadDaySP = loadDay;
+loadDay = async function(){ const r = await __loadDaySP.apply(this, arguments); loadStaffPay(); return r; };
 
 /* ---------- 前回このキャストを指名したのが3年以上前なら、「以前このキャストを指名したことがあるか」を必ず聞く ----------
    （お客さんが覚えていないことがあるので、本指名・店リピの決め方をお客様に確認する）。終了した予約で、いちばん新しいもの */
