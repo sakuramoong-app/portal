@@ -238,7 +238,7 @@ async function peekCast(){
   if(!no){ out.innerHTML = `<span class="ng">在籍番号を入れてください</span>`; return; }
   out.innerHTML = "読んでいます…（30秒ほど）";
   const r = await callFn({ action: "cast_peek", store, no });
-  if(!r.ok){ out.innerHTML = `<span class="ng">❌ ${esc(r.error || r.message || "読めませんでした")}</span>`; return; }
+  if(!r.ok){ out.innerHTML = `<span class="ng">❌ ${esc(r.error || r.message || "読めませんでした")}</span>` + (r.btns ? `<p class="lead">下をコピーして Claude に送ってください</p><textarea readonly style="width:100%;height:100px;font-size:11px">${esc(JSON.stringify(r.btns))}</textarea>` : ""); return; }
   out.innerHTML = `<div class="ok">✅ ${esc(r.store)} の ${esc(r.no)}番の編集画面を読みました（欄 ${r.fields.length}個）</div>
     <table><tr><th>欄の名前</th><th>中身</th></tr>${r.fields.slice(0, 300).map(f=>`<tr><td>${esc(f.k)}</td><td style="white-space:pre-wrap">${esc(f.v)}</td></tr>`).join("")}</table>
     <p class="lead" style="margin-top:8px">下の「📋 コピー」を押して、そのまま Claude に貼って送ってください（ID・パスワードは入っていません）。</p>
