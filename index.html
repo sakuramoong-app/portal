@@ -7,6 +7,7 @@
 <link rel="icon" type="image/png" href="favicon.png?v=3">
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="session_guard.js"></script>
 <style>
   /* サクラシフトと同じ色・丸ゴシック */
   :root{
@@ -446,6 +447,13 @@
   (async () => {
     if (await checkExpiry()) showAppView();
     else showOutage(!(await isSupabaseUp()));
+    // 退勤時刻で自動ログアウトしたとき（session_guard.js）
+    if (new URLSearchParams(location.search).get("auto") === "shift") {
+      const r = document.getElementById("result");
+      r.style.color = "var(--text2)";
+      r.textContent = "退勤時刻をすぎたので、自動でログアウトしました。使うときは、もう一度ログインしてください。";
+      history.replaceState(null, "", location.pathname);
+    }
   })();
 </script>
 </body>
