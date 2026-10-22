@@ -47,7 +47,7 @@
   </div>
 
   <div class="box">
-    <h2 style="font-size:16px;color:var(--pink-deep);margin-bottom:6px">📺 媒体に入れるか試す <select id="hvMedia" style="font-size:14px;padding:3px 6px;margin-left:6px"><option value="heaven">ヘブン</option><option value="pure">ぴゅあらば</option></select></h2>
+    <h2 style="font-size:16px;color:var(--pink-deep);margin-bottom:6px">📺 媒体に入れるか試す <select id="hvMedia" style="font-size:14px;padding:3px 6px;margin-left:6px"><option value="heaven">ヘブン</option><option value="pure">ぴゅあらば</option><option value="joho">口コミ情報局</option></select></h2>
     <p class="lead" style="margin:0 0 8px">上の「お店」で選んだお店の媒体の管理画面にログインして、出勤表を読むだけです（何も変えません）。下の「書きこみテスト」は、押したときだけ媒体を変えます。</p>
     <button class="btn" style="padding:7px 14px;font-size:13px" onclick="heavenTest()">📺 読んでみる</button>
     <div id="hvOut" style="margin-top:10px"></div>
@@ -273,7 +273,7 @@ async function heavenTest(){
   const out = document.getElementById("hvOut"), store = document.getElementById("testStore").value;
   if(store === "__all"){ out.innerHTML = `<span class="ng">上の「お店」で、お店を1つ選んでください</span>`; return; }
   out.innerHTML = "読んでいます…（30秒ほど）";
-  const media = document.getElementById("hvMedia").value, mlabel = media === "pure" ? "ぴゅあらば" : "ヘブン";
+  const media = document.getElementById("hvMedia").value, mlabel = { pure: "ぴゅあらば", joho: "口コミ情報局" }[media] || "ヘブン";
   const r = await callFn({ action: media + "_test", store });
   if(!r.ok){ out.innerHTML = `<span class="ng">❌ ${esc(r.error || r.message || "読めませんでした（ロボットを新しくデプロイした？）")}</span>`; return; }
   const s = r.sample, hm = t => !t ? "" : t.includes(":") ? t : t.slice(0, 2) + ":" + t.slice(2);
@@ -296,7 +296,7 @@ async function heavenWrite(off){
   if(store === "__all"){ out.innerHTML = `<span class="ng">上の「お店」で、お店を1つ選んでください</span>`; return; }
   if(!name || !date){ out.innerHTML = `<span class="ng">名前と日を入れてください</span>`; return; }
   const day = off ? { date, off: true } : { date, start: Number(document.getElementById("hvStart").value), end: Number(document.getElementById("hvEnd").value) };
-  const media = document.getElementById("hvMedia").value, mlabel = media === "pure" ? "ぴゅあらば" : "ヘブン";
+  const media = document.getElementById("hvMedia").value, mlabel = { pure: "ぴゅあらば", joho: "口コミ情報局" }[media] || "ヘブン";
   if(!confirm(`${mlabel}の「${name}」の ${date} を${off ? "消し" : "入れ"}ます。いいですか？`)) return;
   out.innerHTML = "入れています…（30秒ほど）";
   const r = await callFn({ action: media + "_apply", store, name, days: [day] });
