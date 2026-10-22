@@ -636,6 +636,7 @@ async function renderConfirm(id){
         ${l.opened_at ? "👀 キャストが開いた：" + fmtDT(l.opened_at) : "👀 まだ開いていません"}　${l.submitted_at ? "📨 答え：" + fmtDT(l.submitted_at) : ""}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
           <button class="btn btn-primary btn-sm" onclick="copyConfirm('${l.token}')">📋 URLとLINEの文をコピー</button>
+          <a class="btn btn-ghost btn-sm" href="${CONFIRM_URL}${l.token}&test=1" target="_blank" rel="noopener" title="「全部適当に埋める」ボタンつきで開く（送ると答えとして残るので、テスト用のキャストで）">🧪 テストで開く</a>
           <button class="btn btn-ghost btn-sm" onclick="makeConfirm(true)">🔁 URLを作り直す（古いURLは使えなくなる）</button></div>`;
     }else{
       h += `<button class="btn btn-primary" style="width:100%" onclick="makeConfirm(false)">🔗 このキャスト専用のURLを作る</button>`;
