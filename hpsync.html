@@ -48,9 +48,21 @@
 
   <div class="box">
     <h2 style="font-size:16px;color:var(--pink-deep);margin-bottom:6px">📺 媒体（ヘブン）に入れるか試す</h2>
-    <p class="lead" style="margin:0 0 8px">上の「お店」で選んだお店のヘブン店舗管理にログインして、出勤表を読むだけです（何も変えません）。</p>
+    <p class="lead" style="margin:0 0 8px">上の「お店」で選んだお店のヘブン店舗管理にログインして、出勤表を読むだけです（何も変えません）。下の「書きこみテスト」は、押したときだけヘブンを変えます。</p>
     <button class="btn" style="padding:7px 14px;font-size:13px" onclick="heavenTest()">📺 ヘブンを読んでみる</button>
     <div id="hvOut" style="margin-top:10px"></div>
+    <div style="margin-top:14px;padding-top:10px;border-top:1px dashed #e6c9d4">
+      <b style="font-size:14px">✏️ ヘブンに1日だけ入れてみる（書きこみテスト）</b>
+      <p class="lead" style="margin:4px 0 8px">ヘブンの出勤表の名前のとおりに入れてください。「入れる」→ヘブンで確かめる→「消す」の順で。</p>
+      <label style="font-size:13px">名前 <input type="text" id="hvName" style="width:110px;font-size:14px;padding:4px 6px"></label>
+      <label style="font-size:13px;margin-left:6px">日 <input type="date" id="hvDate" style="font-size:14px;padding:3px 6px"></label>
+      <label style="font-size:13px;margin-left:6px"><select id="hvStart"></select> 〜 <select id="hvEnd"></select></label>
+      <div style="margin-top:8px">
+        <button class="btn" style="padding:7px 14px;font-size:13px" onclick="heavenWrite(false)">✏️ 入れる</button>
+        <button class="btn" style="padding:7px 14px;font-size:13px;margin-left:6px;background:#888" onclick="heavenWrite(true)">🗑 消す</button>
+      </div>
+      <div id="hvWOut" style="margin-top:8px"></div>
+    </div>
   </div>
 
   <div class="box" id="log">
@@ -269,6 +281,27 @@ async function heavenTest(){
     <p class="lead" style="margin:6px 0">${esc((r.names || []).join("・"))}</p>
     ${s ? `<p style="font-size:13px"><b>見本：${esc(s.name)}</b><br>${days}</p>` : ""}
     ${r.raw ? `<details><summary class="lead" style="cursor:pointer">中身（調べる用）</summary><textarea readonly style="width:100%;height:100px;font-size:11px">${esc(r.raw)}</textarea></details>` : ""}`;
+}
+
+(function(){   // 時刻の選択肢（サクラシフトと同じ：24以上は翌日）
+  const opt = h => `<option value="${h}">${String(Math.floor(h) % 24).padStart(2, "0")}:${h % 1 ? "30" : "00"}</option>`;
+  const hs = []; for(let h = 6; h <= 30; h += 0.5) hs.push(h);
+  const s = document.getElementById("hvStart"), e = document.getElementById("hvEnd");
+  if(s){ s.innerHTML = hs.map(opt).join(""); s.value = "12"; e.innerHTML = hs.map(opt).join(""); e.value = "17"; }
+})();
+async function heavenWrite(off){
+  const out = document.getElementById("hvWOut"), store = document.getElementById("testStore").value;
+  const name = document.getElementById("hvName").value.trim(), date = document.getElementById("hvDate").value;
+  if(store === "__all"){ out.innerHTML = `<span class="ng">上の「お店」で、お店を1つ選んでください</span>`; return; }
+  if(!name || !date){ out.innerHTML = `<span class="ng">名前と日を入れてください</span>`; return; }
+  const day = off ? { date, off: true } : { date, start: Number(document.getElementById("hvStart").value), end: Number(document.getElementById("hvEnd").value) };
+  if(!confirm(`ヘブンの「${name}」の ${date} を${off ? "消し" : "入れ"}ます。いいですか？`)) return;
+  out.innerHTML = "入れています…（30秒ほど）";
+  const r = await callFn({ action: "heaven_apply", store, name, days: [day] });
+  if(!r.results){ out.innerHTML = `<span class="ng">❌ ${esc(r.error || r.message || "うまくいきませんでした")}</span>`; return; }
+  const x = r.results[0];
+  out.innerHTML = x.ok ? `<div class="ok">✅ ${esc(r.name)} の ${esc(x.date)} を${off ? "消しました" : "入れました"}。ヘブンの出勤表で確かめてください</div>`
+    : `<span class="ng">❌ うまく入りませんでした（入れたかった：${esc(x.want)}／ヘブンの返事：${esc(x.got)}）</span>`;
 }
 
 /* ---------- 📜 記録 ---------- */
