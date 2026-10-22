@@ -18,6 +18,7 @@
   const STAFF_EMAIL = "naikin@sakuramoong.internal";
   const OPERATOR_KEY = "currentOperator";
   const EXT_KEY = "portalLogoutExt";   // {op, end, until}：「30分のばす」
+  const OFF_KEY = "sessionGuardOff";   // "1"：この端末は退勤で切らない（店長の家のPC。端末登録のページで合言葉を入れて押す）
   const APP_SESSION_KEYS = ["portalStaffSession", "naikinSession", "naikinSessionExp", "profPortalSession", "roomPortalSession"];
   const STAFF_IDS = { "きゃ": "kya", "すや": "suya", "らん": "ran", "かみ": "kami", "わか": "waka" };
   const AFTER_MIN = 15, WARN_MIN = 10, EXTEND_MIN = 30, BEFORE_START_H = 3;
@@ -75,6 +76,8 @@
     if (!s || !s.user || String(s.user.email || "").toLowerCase() !== STAFF_EMAIL) return null;
     const op = lsGet(OPERATOR_KEY) || "", staffId = STAFF_IDS[op];
     if (!staffId) return null;
+    // 店長の家のPC：端末登録のページで「このPCは退勤で自動ログアウトしない」を押した端末は、きゃのときだけ20時間のまま
+    if (op === "きゃ" && lsGet(OFF_KEY) === "1") return null;
     const list = await shiftsOf(staffId, s.access_token);
     const now = Date.now(), loginAt = loginAtMs(s.access_token);
     // いま入っているシフト（始まる3時間前〜退勤＋15分・延長ぶん）

@@ -50,6 +50,17 @@
       <div id="list">読み込み中…</div>
     </div>
     <div class="box">
+      <h2>🏠 このPCは退勤で自動ログアウトしない（店長の家のPC用）</h2>
+      <p class="lead">ふつうは、内勤カレンダーの退勤時刻＋15分で自動でログアウトします。<br>
+        ここで合言葉を入れて「しない」を押すと、<b>この端末（このブラウザ）だけ</b>、担当が「きゃ」のときは今までどおりログインから20時間になります。お店のPCやスマホでは押さないでください。</p>
+      <div id="offState" style="margin:6px 0"></div>
+      <div class="row">
+        <div class="f"><label>端末の合言葉</label><input id="pass3" type="password" autocomplete="off"></div>
+        <button class="btn btn-primary" onclick="setGuardOff(true)">🏠 このPCは自動ログアウトしない</button>
+        <button class="btn btn-ghost" onclick="setGuardOff(false)">もとにもどす</button>
+      </div>
+    </div>
+    <div class="box">
       <h2>「登録した端末だけ」の ON / OFF</h2>
       <p class="lead">ON にすると、登録していない端末では、記録簿・顧客台帳・集計・キャスト台帳の連絡先が見られなくなります。<br>
         ON にできるのは、登録した端末からだけです（自分が入れなくならないように）。</p>
@@ -107,6 +118,22 @@ async function setLock(on){
   try{ q(await sb.rpc("device_lock_set", { p_pass: pass, p_on: on, p_by: KB.operatorName() })); $("pass2").value = ""; toast(on ? "ON にしました" : "OFF にしました"); refresh(); }
   catch(e){ toast(e.message || String(e)); }
 }
+// 🏠 この端末は退勤で自動ログアウトしない（session_guard.js が見る。このブラウザにだけ覚える）
+function paintGuardOff(){
+  let on = false; try{ on = localStorage.getItem("sessionGuardOff") === "1"; }catch(e){}
+  $("offState").innerHTML = on ? '<b style="color:#1f9d6b">✅ この端末は、きゃのときは自動ログアウトしません（20時間）</b>' : '<span style="color:#8a97a3">この端末は、退勤時刻＋15分で自動ログアウトします（ふつう）</span>';
+}
+async function setGuardOff(on){
+  if(on){
+    const pass = $("pass3").value; if(!pass){ toast("端末の合言葉を入れてください"); return; }
+    try{ if(!q(await sb.rpc("device_pass_ok", { p_pass: pass }))){ toast("端末の合言葉がちがいます"); return; } }
+    catch(e){ toast("確かめられませんでした（SQL 128 は実行ずみ？）：" + (e.message || e)); return; }
+    try{ localStorage.setItem("sessionGuardOff", "1"); }catch(e){}
+    $("pass3").value = ""; toast("この端末は自動ログアウトしないようにしました");
+  } else { try{ localStorage.removeItem("sessionGuardOff"); }catch(e){} toast("もとにもどしました"); }
+  paintGuardOff();
+}
+paintGuardOff();
 init();
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
