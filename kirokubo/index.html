@@ -620,6 +620,7 @@ async function savePrivate(){
 
 /* ---------- 📨 プロフ確認フォーム（既存キャスト） ---------- */
 const CONFIRM_URL = "https://sakuramoong-app.github.io/cast-sakura-profile/confirm.html?t=";
+const CONFIRM_DUE = "10月31日（土）23:59まで";   // URLの期限（SQL 129 と同じ日にする）
 const fmtDT = s=>{ if(!s) return ""; const d = new Date(s); return (d.getMonth() + 1) + "/" + d.getDate() + " " + d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0"); };
 async function renderConfirm(id){
   const box = $("e_confirm");
@@ -659,7 +660,7 @@ async function makeConfirm(isNew){
 }
 function copyConfirm(t){
   const c = casts.find(x=>x.id === editingId) || {};
-  const text = `${nameOf(c)}さん\nお疲れさまです🌸\nキャストさんごとの条件やOK・NGをもっと正確に管理するために、プロフの確認フォームを作りました。\nお手数ですが、下のURLから入力をお願いします🙏（10〜15分くらいです）\n\n${CONFIRM_URL}${t}\n\n※このURLは${nameOf(c)}さん専用です。ほかの人には送らないでください。`;
+  const text = `${nameOf(c)}さん\nお疲れさまです🌸\nキャストさんごとの条件やOK・NGをもっと正確に管理するために、プロフの確認フォームを作りました。\nお手数ですが、下のURLから入力をお願いします🙏（10〜15分くらいです）\n📅 入力の期限：${CONFIRM_DUE}\n\n${CONFIRM_URL}${t}\n\n※このURLは${nameOf(c)}さん専用です。ほかの人には送らないでください。`;
   const done = ()=>toast("URLとLINEの文をコピーしました。LINEに貼りつけて送ってください");
   try{ navigator.clipboard.writeText(text).then(done, ()=>prompt("コピーしてLINEに貼ってください", text)); }catch(e){ prompt("コピーしてLINEに貼ってください", text); }
 }
