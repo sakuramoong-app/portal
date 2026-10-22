@@ -46,6 +46,13 @@
     <div id="peekOut" style="margin-top:10px"></div>
   </div>
 
+  <div class="box">
+    <h2 style="font-size:16px;color:var(--pink-deep);margin-bottom:6px">📺 媒体（ヘブン）に入れるか試す</h2>
+    <p class="lead" style="margin:0 0 8px">上の「お店」で選んだお店のヘブン店舗管理にログインして、出勤表を読むだけです（何も変えません）。</p>
+    <button class="btn" style="padding:7px 14px;font-size:13px" onclick="heavenTest()">📺 ヘブンを読んでみる</button>
+    <div id="hvOut" style="margin-top:10px"></div>
+  </div>
+
   <div class="box" id="log">
     <h2 style="font-size:16px;color:var(--pink-deep);margin-bottom:6px">📜 公式HPに入れた記録（新しい順・100件）</h2>
     <p class="lead" style="margin:0 0 8px">だれが・だれのシフトを・どのお店に・どの日を入れたか。うまくいった（✅）も、エラー（❌）も残ります。</p>
@@ -247,6 +254,20 @@ async function peekCast(){
     <tr><td>アイコン</td><td>${esc((p.icons || []).join("・"))}</td></tr>
     <tr><td>オプション（${opts.length}）</td><td>${opts.map(([t, v])=>esc(t) + "：" + esc(v)).join("<br>")}</td></tr></table>
     <p class="lead" style="margin-top:8px">この中身がキャストプロフの「🌐 公式HPから取りこむ」で入ります。</p>`;
+}
+
+/* ---------- 📺 ヘブン ---------- */
+async function heavenTest(){
+  const out = document.getElementById("hvOut"), store = document.getElementById("testStore").value;
+  if(store === "__all"){ out.innerHTML = `<span class="ng">上の「お店」で、お店を1つ選んでください</span>`; return; }
+  out.innerHTML = "読んでいます…（30秒ほど）";
+  const r = await callFn({ action: "heaven_test", store });
+  if(!r.ok){ out.innerHTML = `<span class="ng">❌ ${esc(r.error || r.message || "読めませんでした（ロボットを新しくデプロイした？）")}</span>`; return; }
+  const s = r.sample, hm = t => t ? t.slice(0, 2) + ":" + t.slice(2) : "";
+  const days = s ? Object.entries(s.days).slice(0, 10).map(([d, x])=>`${Number(d.slice(4, 6))}/${Number(d.slice(6))} ${x.absent ? "休み" : x.start ? hm(x.start) + "〜" + hm(x.end) : (x.msg || "－")}`).join("<br>") : "";
+  out.innerHTML = `<div class="ok">✅ ヘブン（${esc(r.store)}）にログインできました。出勤表の女の子 ${r.count}人</div>
+    <p class="lead" style="margin:6px 0">${esc((r.names || []).join("・"))}</p>
+    ${s ? `<p style="font-size:13px"><b>見本：${esc(s.name)}</b><br>${days}</p>` : ""}`;
 }
 
 /* ---------- 📜 記録 ---------- */
