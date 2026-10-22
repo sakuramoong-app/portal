@@ -101,7 +101,11 @@
   <div id="main" style="display:none">
     <div class="toolbar">
       <input class="search" id="q" placeholder="🔍 名前・読み・別名で検索" oninput="render()">
+      <button class="btn btn-ghost edit-only" id="sendModeBtn" onclick="toggleSendMode()">📨 確認フォームをまとめて送る</button>
     </div>
+    <div id="sendHelp" class="hint" style="display:none;background:#FFF5F8;border-radius:10px;padding:8px 12px;margin:6px 0">
+      📨 各キャストの「📋 コピー」を押すと、その子専用のURL（なければ作る）とLINEの文がコピーされます。そのままLINEに貼って送ってください。<br>
+      コピーした子には「📋 コピー済」が付きます（このPCに覚えておくだけ）。👀＝キャストが開いた、📨＝答えが届いた。</div>
     <div class="tabs" id="tabs"></div>
     <div class="list" id="list"></div>
   </div>
@@ -318,7 +322,7 @@ function render(){
     return `<div class="row" onclick="openEdit('${c.id}')">
       <span class="id">${c.id}</span>
       <span class="nm">${esc(nameOf(c))}<small>${esc(c.kana || (c.official_name ? "" : "仮の名前"))}</small></span>
-      <span class="badges">${ranks}${links}</span>
+      <span class="badges">${ranks}${links}</span>${sendMode ? sendCell(c) : ""}
       <span class="st ${c.status}">${STATUS[c.status]||c.status}</span>
     </div>`;
   }).join("") : `<div class="empty">このタブにはキャストがいません</div>`;
@@ -658,10 +662,47 @@ async function makeConfirm(isNew){
     await renderConfirm(editingId); copyConfirm(t);
   }catch(e){ toast("作れませんでした：" + (e.message || e)); }
 }
-function copyConfirm(t){
-  const c = casts.find(x=>x.id === editingId) || {};
-  const text = `${nameOf(c)}さん\nお疲れさまです🌸\nキャストさんごとの条件やOK・NGをもっと正確に管理するために、プロフの確認フォームを作りました。\nお手数ですが、下のURLから入力をお願いします🙏（10〜15分くらいです）\n📅 入力の期限：${CONFIRM_DUE}\n\n${CONFIRM_URL}${t}\n\n※このURLは${nameOf(c)}さん専用です。ほかの人には送らないでください。`;
-  const done = ()=>toast("URLとLINEの文をコピーしました。LINEに貼りつけて送ってください");
+/* ---------- 📨 確認フォームをまとめて送る（一覧のまま、1人ずつ「📋 コピー」→ LINE に貼る） ---------- */
+let sendMode = false, cfLinks = {}, cfAns = {};
+const SENT_KEY = "kbConfirmCopied";   // {キャストID: コピーした時刻}（このPCだけ）
+function sentMap(){ try{ return JSON.parse(localStorage.getItem(SENT_KEY) || "{}"); }catch(e){ return {}; } }
+async function toggleSendMode(){
+  sendMode = !sendMode;
+  $("sendModeBtn").textContent = sendMode ? "✖ まとめて送るをやめる" : "📨 確認フォームをまとめて送る";
+  $("sendHelp").style.display = sendMode ? "" : "none";
+  if(sendMode) await loadConfirmAll();
+  render();
+}
+async function loadConfirmAll(){
+  try{
+    const ls = q(await sb.from("prof_confirm_links").select("token,cast_id,created_at,expires_at,revoked,opened_at,submitted_at").eq("revoked", false).gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false })) || [];
+    const as = q(await sb.from("prof_confirm_answers").select("cast_id")) || [];
+    cfLinks = {}; ls.forEach(l=>{ if(!cfLinks[l.cast_id]) cfLinks[l.cast_id] = l; });
+    cfAns = {}; as.forEach(a=>{ cfAns[a.cast_id] = (cfAns[a.cast_id] || 0) + 1; });
+  }catch(e){ toast("読みこめませんでした：" + (e.message || e)); }
+}
+function sendCell(c){
+  const l = cfLinks[c.id], sent = sentMap()[c.id];
+  const md = t => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+  const st = [sent ? `<span class="bd" style="background:#E8FBF2;color:#1a6640">📋 コピー済 ${md(sent)}</span>` : "",
+    l && l.opened_at ? `<span class="bd">👀 開いた</span>` : "", cfAns[c.id] ? `<span class="bd" style="background:#FFE0EA;color:#C2185B">📨 答え${cfAns[c.id]}</span>` : ""].join("");
+  return `<span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${st}<button class="btn ${sent ? "btn-ghost" : "btn-primary"} btn-sm" onclick="event.stopPropagation();copyFor('${c.id}', this)">📋 コピー</button></span>`;
+}
+async function copyFor(id, btn){
+  if(!operatorName()){ toast("ポータルで自分の名前を選んでから開いてください"); return; }
+  btn.disabled = true;
+  try{
+    let t = cfLinks[id] && cfLinks[id].token;
+    if(!t){ t = q(await sb.rpc("prof_confirm_create", { p_cast_id: id, p_by: operatorName(), p_new: false })); cfLinks[id] = { token: t, cast_id: id }; }
+    copyConfirm(t, id);
+    const m = sentMap(); m[id] = Date.now(); try{ localStorage.setItem(SENT_KEY, JSON.stringify(m)); }catch(e){}
+    render();
+  }catch(e){ toast("作れませんでした：" + (e.message || e)); btn.disabled = false; }
+}
+function copyConfirm(t, castId){
+  const c = casts.find(x=>x.id === (castId || editingId)) || {};
+  const text =`${nameOf(c)}さん\nお疲れさまです🌸\nキャストさんごとの条件やOK・NGをもっと正確に管理するために、プロフの確認フォームを作りました。\nお手数ですが、下のURLから入力をお願いします🙏（10〜15分くらいです）\n📅 入力の期限：${CONFIRM_DUE}\n\n${CONFIRM_URL}${t}\n\n※このURLは${nameOf(c)}さん専用です。ほかの人には送らないでください。`;
+  const done = ()=>toast(nameOf(c) + "さんのURLとLINEの文をコピーしました。LINEに貼りつけて送ってください");
   try{ navigator.clipboard.writeText(text).then(done, ()=>prompt("コピーしてLINEに貼ってください", text)); }catch(e){ prompt("コピーしてLINEに貼ってください", text); }
 }
 async function showAnswer(aid){
