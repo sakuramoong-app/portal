@@ -34,6 +34,8 @@
     const s = data && data.session;
     if(!s || String(s.user.email||"").toLowerCase() !== STAFF_EMAIL) return null;
     if(Date.now() >= (loginAt(s) + 20*3600) * 1000) return null;
+    // 作成中は、店長（きゃ）だけが開ける（キャスト台帳は別：ほかの内勤も見られる）。画面の上での分け方
+    if(!CAN_EDIT){ managerBlock(); return null; }
     // 「登録した端末だけ」が ON で、この端末が登録されていない → 見せない（端末の登録ページは別）
     if(!(opts && opts.skipDevice)){
       const st = await deviceStatus();
@@ -56,6 +58,15 @@
       <div style="margin-top:14px"><a href="device.html" style="font-weight:800;color:#e5638c">🔑 端末の登録ページへ（店長用）</a></div></div>`;
     document.body.appendChild(d);
   }
+  function managerBlock(){
+    const d = document.createElement("div");
+    d.style.cssText = "position:fixed;inset:0;z-index:99999;background:#FBF7F8;display:flex;align-items:center;justify-content:center;padding:24px;font-family:inherit";
+    d.innerHTML = `<div style="max-width:440px;background:#fff;border:2px solid #FFC2D1;border-radius:18px;padding:22px;text-align:center;line-height:1.8">
+      <div style="font-size:40px">🚧</div><div style="font-size:17px;font-weight:800;color:#e5638c;margin:6px 0">店長が準備中のページです</div>
+      <div style="font-size:13.5px;color:#5C4B4F">できあがるまでは、店長（きゃ）だけが開けます。</div>
+      <div style="margin-top:14px"><a href="index.html" style="font-weight:800;color:#e5638c">📒 キャスト台帳へ</a></div></div>`;
+    document.body.appendChild(d);
+  }
   function operatorName(){ try{ return localStorage.getItem("currentOperator") || ""; }catch(e){ return ""; } }
   // 作成中は、店長（きゃ）のときだけ直せる。ほかの内勤は見るだけ（画面の上での分け方）
   const CAN_EDIT = operatorName() === MANAGER_NAME;
@@ -76,7 +87,8 @@
   }
   // ページの上の切りかえ
   function nav(active){
-    const items = [["kiroku.html","🆕 新しい記録簿（ためし中）"],["reception.html","🧾 受付"],["settle.html","💴 精算"],["index.html","📒 キャスト台帳"],["customers.html","👥 顧客台帳"],["stats.html","📈 集計"]];
+    const all = [["kiroku.html","🆕 新しい記録簿（ためし中）"],["reception.html","🧾 受付"],["settle.html","💴 精算"],["index.html","📒 キャスト台帳"],["customers.html","👥 顧客台帳"],["stats.html","📈 集計"]];
+    const items = CAN_EDIT ? all : all.filter(([h])=>h === "index.html");   // 店長以外はキャスト台帳だけ
     return `<nav class="kbnav">${items.map(([h,l])=>`<a href="${h}" class="${h===active?"on":""}">${l}</a>`).join("")}</nav>`;
   }
   function wipBanner(){
