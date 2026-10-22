@@ -101,7 +101,7 @@
   <div id="main" style="display:none">
     <div class="toolbar">
       <input class="search" id="q" placeholder="🔍 名前・読み・別名で検索" oninput="render()">
-      <button class="btn btn-ghost edit-only" id="sendModeBtn" onclick="toggleSendMode()">📨 確認フォームをまとめて送る</button>
+      <button class="btn btn-ghost" id="sendModeBtn" onclick="toggleSendMode()">📨 確認フォームをまとめて送る</button>
     </div>
     <div id="sendHelp" class="hint" style="display:none;background:#FFF5F8;border-radius:10px;padding:8px 12px;margin:6px 0">
       📨 各キャストの「📋 コピー」を押すと、その子専用のURL（なければ作る）とLINEの文がコピーされます。そのままLINEに貼って送ってください。<br>
@@ -301,7 +301,7 @@ async function load(){
     return;
   }
   $("gate").style.display = "none"; $("main").style.display = "";
-  $("wipSub").textContent = CAN_EDIT ? "👑 店長として開いています（直せます）。" : "店長（きゃ）が準備中のページです。見るだけで、直すことはできません。";
+  $("wipSub").textContent = CAN_EDIT ? "👑 店長として開いています（直せます）。" : "店長（きゃ）が準備中のページです。見ることと「📨 確認フォームをまとめて送る」はできます（台帳を直すのは店長だけ）。";
   render();
 }
 
