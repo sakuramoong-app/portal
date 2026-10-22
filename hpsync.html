@@ -67,7 +67,7 @@
 
   <div class="box">
     <h2 style="font-size:16px;color:var(--pink-deep);margin-bottom:6px">👥 媒体の名前チェック（全員）</h2>
-    <p class="lead" style="margin:0 0 8px">ヘブン・ぴゅあらば・口コミ情報局の出勤表にいる子の名前が、キャスト台帳（公式HPでの名前・正式名・サクラシフトの名前）で見つかるかを調べます。読むだけです。見つからない子は、受理のときに「いません」になります。</p>
+    <p class="lead" style="margin:0 0 8px">サクラシフトで媒体のチェック欄がある子が、その媒体の出勤表で見つかるかを調べます（受理のときと同じ探し方）。読むだけです。見つからない子は、受理のときに「いません」になります。</p>
     <button class="btn" style="padding:7px 14px;font-size:13px" onclick="nameCheck()">👥 チェックする（2〜3分）</button>
     <div id="nmOut" style="margin-top:10px"></div>
   </div>
@@ -314,36 +314,40 @@ async function heavenWrite(off){
 }
 
 /* ---------- 👥 媒体の名前チェック ---------- */
+// 受理のときと同じ探し方で調べる：サクラシフトで その媒体にチェック欄がある子 → 名前の候補 → 媒体の出勤表にいるか
 async function nameCheck(){
   const out = document.getElementById("nmOut");
   const T = [["ヘブンサクラ","heaven","sakuramoon"],["ヘブンラナ","heaven","lana_uguisu"],["(キュ)ぴゅあらば","pure","cutie"],["(キュ)情報局","joho","cutie"],["(極)ぴゅあらば","pure","gokumon"],["(極)情報局","joho","gokumon"]];
-  out.innerHTML = "キャスト台帳を読んでいます…";
-  const { data: mc, error } = await sb.from("master_casts").select("official_name,shift_name,stores");
-  if(error){ out.innerHTML = `<span class="ng">キャスト台帳が読めませんでした：${esc(error.message)}</span>`; return; }
+  out.innerHTML = "キャスト台帳とサクラシフトのキャスト管理を読んでいます…";
+  const [a, b] = await Promise.all([sb.from("master_casts").select("official_name,shift_name,stores"), sb.from("shift_master").select("data").eq("id", 1).maybeSingle()]);
+  if(a.error || b.error){ out.innerHTML = `<span class="ng">読めませんでした：${esc((a.error || b.error).message)}</span>`; return; }
+  const mc = a.data || [], sm = (b.data && b.data.data) || {}, cs = sm.castStores || {}, al = sm.castAliases || {};
   const norm = x => String(x || "").normalize("NFKC").replace(/\s+/g, "");
-  // 受理のときと同じ探し方：そのお店の公式HPでの名前・正式名・サクラシフトの名前・ほかのお店での名前（極門の媒体は極門のダミー名）
-  const known = store => {
-    const m = new Map();
-    for(const c of mc || []){
-      const st = c.stores || {};
-      const ns = store === "gokumon" ? [st.gokumon && st.gokumon.name]
-        : [st[store] && st[store].name, c.official_name, c.shift_name, ...Object.entries(st).filter(([k]) => k !== "eighteen" && k !== "gokumon").map(([, x]) => x && x.name)];
-      ns.filter(Boolean).forEach(n => { if(!m.has(norm(n))) m.set(norm(n), c.shift_name || c.official_name); });
-    }
-    return m;
+  const cands = (cast, store) => {
+    if(store === "gokumon") return [al[cast] && al[cast]["極門"]].filter(Boolean);
+    const row = mc.find(c => c.shift_name === cast) || mc.find(c => c.official_name === cast);
+    const st = (row && row.stores) || {};
+    return [st[store] && st[store].name, row && row.official_name, cast, ...Object.entries(st).filter(([k]) => k !== "eighteen" && k !== "gokumon").map(([, x]) => x && x.name)].filter(Boolean);
   };
   out.innerHTML = "媒体を読んでいます…（いっしょに読みます）";
   const res = await Promise.all(T.map(async ([lab, media, store]) => {
     const r = await callFn({ action: media + "_test", store });
     if(!r.ok) return { lab, error: r.error || r.message || "読めませんでした" };
-    const k = known(store), ok = [], ng = [];
-    (r.names || []).forEach(n => { const who = k.get(norm(n)); if(who) ok.push(n + (norm(who) !== norm(n) ? `（${who}）` : "")); else ng.push(n); });
-    return { lab, ok, ng };
+    const have = new Set((r.names || []).map(norm)), used = new Set();
+    const ok = [], ng = [];
+    Object.keys(cs).filter(c => (cs[c] || []).includes(lab)).forEach(c => {
+      const hit = cands(c, store).find(n => have.has(norm(n)));
+      if(hit){ used.add(norm(hit)); ok.push(c + (norm(hit) !== norm(c) ? `→${hit}` : "")); }
+      else ng.push(c + (store === "gokumon" && !cands(c, store).length ? "（極門のダミー名なし）" : ""));
+    });
+    const extra = (r.names || []).filter(n => !used.has(norm(n)));
+    return { lab, ok, ng, extra };
   }));
-  out.innerHTML = res.map(x => x.error ? `<div class="st"><b>${esc(x.lab)}</b> <span class="ng">❌ ${esc(x.error)}</span></div>`
-    : `<div style="margin:8px 0"><b>${esc(x.lab)}</b>　${x.ng.length ? `<span class="ng">見つからない ${x.ng.length}人：${x.ng.map(esc).join("・")}</span>` : '<span class="ok">✅ 全員見つかります</span>'}
-       <div class="lead" style="font-size:12px">見つかる ${x.ok.length}人：${x.ok.map(esc).join("・")}</div></div>`).join("")
-    + `<p class="lead" style="margin-top:8px">「見つからない」子は、キャスト台帳でその子の「公式HPでの名前」を媒体と同じにすると入るようになります。（極門の媒体は、極門の公式HPでの名前＝ダミー名で見ています）</p>`;
+  out.innerHTML = res.map(x => x.error ? `<div style="margin:8px 0"><b>${esc(x.lab)}</b> <span class="ng">❌ ${esc(x.error)}</span></div>`
+    : `<div style="margin:8px 0"><b>${esc(x.lab)}</b>　${x.ng.length ? `<span class="ng">見つからない ${x.ng.length}人：${x.ng.map(esc).join("・")}</span>` : '<span class="ok">✅ チェック欄のある子は全員見つかります</span>'}
+       <div class="lead" style="font-size:12px">見つかる ${x.ok.length}人：${x.ok.map(esc).join("・")}</div>
+       ${x.extra.length ? `<div class="lead" style="font-size:12px">媒体にいるけど、サクラシフトでこの媒体のチェック欄がない子：${x.extra.map(esc).join("・")}</div>` : ""}</div>`).join("")
+    + `<p class="lead" style="margin-top:8px">「見つからない」子は受理のときに「いません」になります。極門の媒体は、サクラシフトのキャスト管理に入っている極門のダミー名で探します。</p>`;
 }
 
 /* ---------- 📜 記録 ---------- */
