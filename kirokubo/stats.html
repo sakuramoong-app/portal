@@ -67,14 +67,6 @@
   <header class="kbh"><h1>📈 集計</h1><div id="navArea" class="navinhead"></div></header>
   <div id="gate" class="gate">読み込み中…</div>
 
-  <!-- 合言葉 -->
-  <div id="lock" class="card lockbox" style="display:none">
-    <h2>🔒 集計は合言葉で開きます</h2>
-    <input type="password" id="pw" placeholder="合言葉" autocomplete="off" onkeydown="if(event.key==='Enter')unlock()">
-    <button class="btn btn-primary" onclick="unlock()">開く</button>
-    <div class="msg" id="lockMsg"></div>
-  </div>
-
   <div id="main" style="display:none">
     <div class="ctrl">
       <span class="lab">期間</span>
@@ -109,7 +101,7 @@
      選んだ月より前は過去の数字、選んだ月からは新しい記録簿の数字を使う（同じ月を2回数えない）
    ・店落ち＝暫定的な残額（総額 − 報酬）＋ 雑費
    ・深夜＝開始が 22:00〜（朝6時まで）
-   ・開くには合言葉（SQL 118 で決める。ハッシュだけ保存）
+   ・開けるのは登録した端末だけ（SQL 125。合言葉は 10/24 にやめた）
    ============================================================ */
 const { sb, q, esc, yen, toast } = KB;
 const $ = id => document.getElementById(id);
@@ -154,24 +146,11 @@ async function fetchAll(table, cols, orderCol, build){
   return out;
 }
 
-/* ---------- 開くとき：ログイン → 合言葉 ---------- */
+/* ---------- 開くとき：ログイン → 登録した端末か（staffSession の中で確かめる） ---------- */
 async function init(){
   $("navArea").innerHTML = KB.nav("stats.html");
   if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
-  $("gate").style.display = "none";
-  let ok = false; try{ ok = sessionStorage.getItem("kbStatsOK") === "1"; }catch(e){}
-  if(ok) return start();
-  $("lock").style.display = ""; $("pw").focus();
-}
-async function unlock(){
-  const p = $("pw").value; if(!p){ $("lockMsg").textContent = "合言葉を入れてください"; return; }
-  $("lockMsg").textContent = "たしかめています…";
-  try{
-    const ok = q(await sb.rpc("kb_stats_check", { p_pass: p }));
-    if(!ok){ $("lockMsg").textContent = "合言葉がちがいます（まだ決めていなければ SQL 118 で決めてください）"; return; }
-    try{ sessionStorage.setItem("kbStatsOK", "1"); }catch(e){}
-    $("pw").value = ""; $("lock").style.display = "none"; start();
-  }catch(e){ $("lockMsg").textContent = "たしかめられませんでした（SQL 115 は実行ずみ？）：" + (e.message || e); }
+  start();
 }
 
 async function start(){
