@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>台帳エクセルの取りこみ│サクラG</title>
+<link rel="icon" type="image/png" href="../favicon.png?v=3">
+<link rel="stylesheet" href="kb.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
+<script src="kb_common.js"></script>
+<style>
+  body{font-size:14.5px;}
+  .wrap{max-width:760px;}
+  .box{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;}
+  .box h2{font-size:16px;color:var(--pink-deep);margin-bottom:8px;}
+  .lead{font-size:13px;color:var(--sub);line-height:1.7;margin-bottom:8px;}
+  .ok{color:#1f9d6b;font-weight:800;} .ng{color:#d9534f;font-weight:800;}
+  .bar{height:12px;background:#F6E3EA;border-radius:99px;overflow:hidden;margin:8px 0;} .bar > div{height:100%;background:var(--pink);width:0;transition:width .3s;}
+  table{border-collapse:collapse;font-size:13px;} td{padding:3px 10px 3px 0;}
+</style>
+</head>
+<body>
+<!-- 台帳エクセル（★★★台帳…xlsx）を、このPCで変換した JSON（daicho_import.json）から顧客台帳に入れる。
+     お客さんの情報はこのページには入っていない（選んだファイルから読むだけ）。店長だけ・登録した端末から。 -->
+<div class="wrap">
+  <header class="kbh"><h1>📥 台帳エクセルの取りこみ</h1></header>
+  <div id="gate" class="gate">読み込み中…</div>
+  <div id="main" style="display:none">
+    <div class="box">
+      <h2>① ファイルを選ぶ</h2>
+      <p class="lead">Claude が作った <b>daicho_import.json</b> を選んでください（台帳エクセルを、このPCの中で取りこみ用の形にしたものです）。</p>
+      <input type="file" id="file" accept=".json,application/json">
+      <div id="sum" style="margin-top:8px"></div>
+    </div>
+    <div class="box" id="runBox" style="display:none">
+      <h2>② 取りこむ</h2>
+      <p class="lead">前に取りこんだ分（過去の利用・エクセルのキャストNG）は消してから入れなおします。お客さん（名前・電話・NG・メモ）は消えません。<br>
+        数分かかります。終わるまでこの画面を閉じないでください。</p>
+      <button class="btn btn-primary" id="go" onclick="run()">📥 取りこむ</button>
+      <div class="bar"><div id="fill"></div></div>
+      <div id="prog" class="lead"></div>
+      <div id="res"></div>
+    </div>
+  </div>
+</div>
+<script>
+const { sb, q, esc, toast } = KB;
+const $ = id => document.getElementById(id);
+let rows = null;
+const BATCH = 300;
+async function init(){
+  if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（店長だけ・登録した端末から開けます）"; return; }
+  $("gate").style.display = "none"; $("main").style.display = "";
+}
+$("file").addEventListener("change", async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{ rows = JSON.parse(await f.text()); if(!Array.isArray(rows)) throw new Error("形がちがいます"); }
+  catch(err){ $("sum").innerHTML = `<span class="ng">読めませんでした：${esc(err.message || err)}</span>`; rows = null; return; }
+  const cnt = (fn) => rows.filter(fn).length;
+  const ds = rows.map(r => r.d).filter(Boolean).sort();
+  $("sum").innerHTML = `<table>
+    <tr><td>行の数</td><td><b>${rows.length.toLocaleString()}</b> 件（${esc(ds[0] || "")} 〜 ${esc(ds[ds.length - 1] || "")}）</td></tr>
+    <tr><td>キャンセル／トビ／流れた</td><td>${cnt(r => r.ss === "cancel")}／${cnt(r => r.ss === "tobi")}／${cnt(r => r.ss === "flowed")}</td></tr>
+    <tr><td>カード払い</td><td>${cnt(r => r.cd)}</td></tr>
+    <tr><td>キャストNG（赤い文字）</td><td>${cnt(r => r.cn)}</td></tr>
+    <tr><td>色の印あり</td><td>${cnt(r => r.mk && Object.keys(r.mk).length)}</td></tr>
+    <tr><td>メールアドレスあり</td><td>${cnt(r => r.em)}</td></tr></table>`;
+  $("runBox").style.display = "";
+});
+async function run(){
+  if(!rows) return;
+  if(!confirm(`${rows.length.toLocaleString()} 件を取りこみます。前に取りこんだ分は消して入れなおします。よろしいですか？`)) return;
+  $("go").disabled = true; $("res").innerHTML = "";
+  try{ const c = q(await sb.rpc("kb_daicho_clear")); $("prog").textContent = `前の取りこみを消しました（過去の利用 ${c.history}件）`; }
+  catch(e){ $("res").innerHTML = `<span class="ng">消せませんでした（SQL 134 は実行ずみ？・登録した端末？）：${esc(e.message || e)}</span>`; $("go").disabled = false; return; }
+  const tot = { rows: 0, newCustomers: 0, ngCustomers: 0, castNg: 0 }, by = KB.operatorName();
+  for(let i = 0; i < rows.length; i += BATCH){
+    const part = rows.slice(i, i + BATCH);
+    let ok = false, err = "";
+    for(let t = 0; t < 3 && !ok; t++){
+      try{ const r = q(await sb.rpc("kb_daicho_import", { p_rows: part, p_by: by })); Object.keys(tot).forEach(k => tot[k] += r[k] || 0); ok = true; }
+      catch(e){ err = e.message || String(e); await new Promise(r => setTimeout(r, 1500)); }
+    }
+    if(!ok){ $("res").innerHTML = `<span class="ng">${i + 1}行目のあたりで止まりました：${esc(err)}<br>もう一度「取りこむ」を押すと、はじめから入れなおします。</span>`; $("go").disabled = false; return; }
+    const done = Math.min(i + BATCH, rows.length);
+    $("fill").style.width = Math.round(done / rows.length * 100) + "%";
+    $("prog").textContent = `${done.toLocaleString()} / ${rows.length.toLocaleString()} 件`;
+  }
+  $("res").innerHTML = `<div class="ok">✅ 取りこみが終わりました</div><table>
+    <tr><td>過去の利用</td><td>${tot.rows.toLocaleString()} 件</td></tr><tr><td>新しく作ったお客さん</td><td>${tot.newCustomers.toLocaleString()} 人</td></tr>
+    <tr><td>NG客にした</td><td>${tot.ngCustomers} 人</td></tr><tr><td>キャストNG</td><td>${tot.castNg} 件</td></tr></table>
+    <p class="lead" style="margin-top:8px">👥 <a href="customers.html">顧客台帳</a> で、電話番号で探して確かめてください。</p>`;
+  $("go").disabled = false;
+}
+init();
+</script>
+</body>
+</html>

@@ -170,6 +170,7 @@ function paintDetail(){
         <div class="f"><label>名前</label><input id="c_name" value="${esc(c.name)}" maxlength="80" ${ed}></div>
         <div class="f"><label>電話番号（数字だけ）</label><input id="c_phone" value="${esc(c.phone)}" maxlength="20" ${ed}></div>
       </div>
+      <div class="f" style="margin-top:6px"><label>メール（WEB予約・外国人のお客さん）</label><input id="c_email" value="${esc(c.email || "")}" maxlength="200" ${ed}></div>
       <div class="f2" style="margin-top:6px">
         <div class="f"><label>NG客</label><select id="c_ng" ${ed}><option value="0">NGではない</option><option value="1" ${c.ng ? "selected" : ""}>⚠️ NG客</option></select></div>
         <div class="f"><label>NGの理由</label><input id="c_ngr" value="${esc(c.ng_reason)}" maxlength="200" ${ed}></div>
@@ -200,15 +201,23 @@ function paintDetail(){
     </div>`;
 }
 // 台帳エクセルで目立たせてあったところ（決まりにない色・赤い文字の欄）
+// 台帳エクセルの欄（A〜AB）→ 名前
+const XL_COL = { A:"アドレス", B:"電話", C:"名前", D:"店舗", E:"エリア", F:"住所", G:"台帳", H:"開始", I:"終了", J:"確認電話", K:"コース", L:"コース", M:"フリー", N:"追加", O:"OP", P:"OP", Q:"媒体", R:"基本額", S:"入会金", T:"指名料", U:"延長", V:"交通費", W:"OP額", X:"割引", Y:"総額", Z:"日付", AA:"キャスト", AB:"備考" };
 function markText(m){
   if(!m || !Object.keys(m).length) return "";
   const out = [];
   if(m.other_fill) out.push("色つき");
   if(m.red_cols && m.red_cols.length) out.push("赤字：" + m.red_cols.join("・"));
-  return out.length ? `<br><span class="mark">⚠️ ${esc(out.join("／"))}</span>` : "";
+  // 台帳エクセルから：{"fill:#FFFF00":["D","E"], "font:#FF0000":["AB"]}（意味のわからない色は、その色のまま見せる）
+  const chips = Object.keys(m).filter(k => /^(fill|font):#[0-9A-F]{6}$/i.test(k)).map(k => {
+    const [kind, col] = k.split(":"), where = [...new Set((m[k] || []).map(c => XL_COL[c] || c))].join("・");
+    return kind === "fill" ? `<span class="mark" style="background:${col};color:#333;border-radius:6px;padding:0 6px">🎨 ${esc(where)}</span>`
+                           : `<span class="mark" style="color:${col};font-weight:800">✏️ ${esc(where)}が色文字</span>`;
+  });
+  return (out.length ? `<br><span class="mark">⚠️ ${esc(out.join("／"))}</span>` : "") + (chips.length ? "<br>" + chips.join(" ") : "");
 }
 async function saveCustomer(){
-  const patch = { name: $("c_name").value.trim(), phone: $("c_phone").value.replace(/\D/g, ""), ng: $("c_ng").value === "1", ng_reason: $("c_ngr").value.trim(), note: $("c_note").value, updated_by: KB.operatorName(), updated_at: new Date().toISOString() };
+  const patch = { name: $("c_name").value.trim(), phone: $("c_phone").value.replace(/\D/g, ""), email: $("c_email").value.trim(), ng: $("c_ng").value === "1", ng_reason: $("c_ngr").value.trim(), note: $("c_note").value, updated_by: KB.operatorName(), updated_at: new Date().toISOString() };
   if(patch.phone && patch.phone !== cur.phone){
     const ex = q(await sb.from("kb_customers").select("id,name").eq("phone", patch.phone).neq("id", cur.id).limit(1).maybeSingle());
     if(ex && !confirm(`この電話番号は「${ex.name || "名前なし"}」さんでも使われています。このまま保存しますか？`)) return;
