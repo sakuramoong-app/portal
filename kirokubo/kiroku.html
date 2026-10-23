@@ -1286,7 +1286,7 @@ async function lookupCustomer(keepName){
     const casts = [...new Set(past.map(p=>castName(p.cast_id)))];
     $("custInfo").innerHTML = (c.ng ? `<div class="warn">⚠️ NG客です：${esc(c.ng_reason||"理由なし")}</div>` : "") +
       `<div class="hist">これまで ${past.length}件${past.length>=10?"以上":""}（新しい順）：${past.map(p=>`${p.biz_date.slice(5).replace("-","/")} ${esc(storeLabel(p.store_key))} ${p.dummy_name ? "🎭" + esc(p.dummy_name) + "→" : ""}${esc(castName(p.cast_id))} ${esc(p.course)}${p.status==="cancel"?"(キャンセル)":p.status==="tobi"?"(トビ)":""}`).join("、") || "なし"}<br>
-       指名したことのあるキャスト：${casts.map(esc).join("、") || "なし"}<br>※ 台帳（エクセル）の過去データは、あとで入れます</div>`;
+       指名したことのあるキャスト（記録簿）：${casts.map(esc).join("、") || "なし"}</div>`;
     if(!editing){
       const cid = $("f_cast").value;
       setVisit(visitFrom(past, cid));
@@ -1448,6 +1448,8 @@ async function saveRes(){
   const cancelLike = ["cancel", "tobi"].includes($("f_status").value);
   const waiting = String($("f_status").value).startsWith("wait_");
   const ck = checksForSave();
+  // 出禁・店NGのお客さんは受けない（NGが解除になったら「NG客」を「NGではない」に直してから）
+  if(!cancelLike && $("f_ng").value === "1"){ toast("🚫 出禁・店NGのお客さんです。受けられません（解除なら、お客さんの「NG客」を直してから）"); $("custInfo").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.longNg){ toast("🚫 このキャストでは受けられません（赤い枠の理由を見てください）"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.missAnnounce){ toast("📣 お客様に案内することに、まだチェックがついていません"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.missConfirm && !waiting){ toast("✅ キャストに確認してから受けるものがあります。確認したらチェック、まだなら状態を「キャスト返事待ち」に"); $("castChecks").scrollIntoView({ block: "center" }); return; }
@@ -3951,8 +3953,29 @@ lookupCustomer = async function(){
   const r = await __lookupCustomerON.apply(this, arguments);
   // 顧客台帳で開くリンク
   if(curCustomer && $("custInfo") && !$("custLedgerLink")) $("custInfo").insertAdjacentHTML("afterbegin", `<div id="custLedgerLink" style="margin-bottom:4px"><a href="customers.html?id=${curCustomer.id}" target="_blank" rel="noopener" style="font-weight:800;color:var(--pink-deep)">👥 顧客台帳で開く（これまでの利用・キャストNG・メモ）</a></div>`);
+  if(curCustomer) custCaution(curCustomer.id);
   checkOldNomi(); return r;
 };
+// ⚠️ 要注意：台帳エクセルの過去の利用（トビ・キャンセルの回数）と、キャストNGの一覧
+async function custCaution(custId){
+  try{
+    const [h, n] = await Promise.all([
+      sb.from("kb_cust_history").select("biz_date,status").eq("customer_id", custId).order("biz_date", { ascending: false }).limit(2000),
+      sb.from("kb_cust_cast_ng").select("cast_id,cast_name,reason").eq("customer_id", custId),
+    ]);
+    if(!curCustomer || curCustomer.id !== custId || !$("custInfo")) return;
+    const hs = (h.data || []), ngs = (n.data || []);
+    const cnt = s => hs.filter(x => x.status === s).length, lastOf = s => (hs.find(x => x.status === s && x.biz_date) || {}).biz_date;
+    const fmt = d => d ? d.replace(/-/g, "/") : "";
+    const tobi = cnt("tobi"), cancel = cnt("cancel"), done = cnt("done");
+    const lines = [];
+    if(tobi) lines.push(`<div class="warn">⚠️ トビ ${tobi}回（最後 ${fmt(lastOf("tobi")) || "日付なし"}）</div>`);
+    if(ngs.length) lines.push(`<div class="warn">🙅 キャストNG：${ngs.map(x => esc(x.cast_id ? castName(x.cast_id) : x.cast_name)).join("・")}（このキャストでは保存できません）</div>`);
+    if(cancel >= 2) lines.push(`<div class="warn" style="background:#FFF6E5;border-color:#F3C77A;color:#8a5a00">⚠️ キャンセル ${cancel}回</div>`);
+    const old = $("custCaution"); if(old) old.remove();
+    $("custInfo").insertAdjacentHTML("afterbegin", `<div id="custCaution">${lines.join("")}${hs.length ? `<div class="hist">📚 台帳（エクセル）の利用 ${done}回${hs[0] && hs[0].biz_date ? "（最後 " + fmt(hs.find(x => x.biz_date).biz_date) + "）" : ""}</div>` : ""}</div>`);
+  }catch(e){}
+}
 const __onCastON = onCast;
 onCast = function(){ const r = __onCastON.apply(this, arguments); checkOldNomi(); return r; };
 const __openFormON = openForm;
