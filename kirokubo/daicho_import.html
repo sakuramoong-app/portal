@@ -35,7 +35,7 @@
     </div>
     <div class="box" id="runBox" style="display:none">
       <h2>② 取りこむ</h2>
-      <p class="lead">前に取りこんだ分（過去の利用・エクセルのキャストNG）は消してから入れなおします。お客さん（名前・電話・NG・メモ）は消えません。<br>
+      <p class="lead">前に取りこんだ分（過去の利用・エクセルのキャストNG・取りこみで作ったお客さん）は消してから入れなおします。記録簿で予約を入れたお客さん・手でNGやメモを入れたお客さんは消えません。<br>
         数分かかります。終わるまでこの画面を閉じないでください。</p>
       <button class="btn btn-primary" id="go" onclick="run()">📥 取りこむ</button>
       <div class="bar"><div id="fill"></div></div>
@@ -72,7 +72,7 @@ async function run(){
   if(!rows) return;
   if(!confirm(`${rows.length.toLocaleString()} 件を取りこみます。前に取りこんだ分は消して入れなおします。よろしいですか？`)) return;
   $("go").disabled = true; $("res").innerHTML = "";
-  try{ const c = q(await sb.rpc("kb_daicho_clear")); $("prog").textContent = `前の取りこみを消しました（過去の利用 ${c.history}件）`; }
+  try{ const c = q(await sb.rpc("kb_daicho_clear", { p_customers: true })); $("prog").textContent = `前の取りこみを消しました（過去の利用 ${c.history}件・取りこみで作ったお客さん ${c.customers || 0}人）`; }
   catch(e){ $("res").innerHTML = `<span class="ng">消せませんでした（SQL 134 は実行ずみ？・登録した端末？）：${esc(e.message || e)}</span>`; $("go").disabled = false; return; }
   const tot = { rows: 0, newCustomers: 0, ngCustomers: 0, castNg: 0 }, by = KB.operatorName();
   for(let i = 0; i < rows.length; i += BATCH){
