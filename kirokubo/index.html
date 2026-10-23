@@ -732,6 +732,7 @@ function copyConfirm(t, castId){
 const ANS_PROFILE_LABELS = { age:"年齢", size:"サイズ", psize:"Pサイズ", state:"状態（竿/玉）", hair:"髪の毛", personality:"性格", hobby:"趣味", erogenous:"性感帯", charm:"チャームポイント" };
 const ANS_SECTIONS = [["profile","📝 プロフィール"],["intro","💬 紹介文"],["options","✅ オプション"],["reception","📣 受付へのお願い"],["personality","🧠 性格タイプ"]];
 const PROF_STAFF_URL = "https://sakuramoong-app.github.io/cast-sakura-profile/staff.html?cast=";
+const reflBtn = (kind, label) => CAN_EDIT && ansCur && ansCur.c.prof_id ? `<button class="btn btn-primary btn-sm" onclick="openReflect('${kind}')">${label}</button>` : "";
 let ansCur = null;   // { a, d, c }
 async function showAnswer(aid){
   try{
@@ -794,9 +795,9 @@ function paintAnswer(){
       <b style="font-size:15px">📨 ${esc(nameOf(c))}さんの答え</b><span class="hint">${fmtDT(a.submitted_at)}</span><span style="flex:1"></span>
       <span class="ansProg">対応 ${nDone} / ${ANS_SECTIONS.length}</span></div>
     <div class="hint" style="margin:4px 0 8px">上から順に見て、台帳・キャストプロフ・受付ルールに入れたら「対応した」にチェック。全部終わったら、いちばん下の「✅ 照合した」。</div>
-    ${sec("profile", "📝 プロフィール", prof, profLink)}
-    ${sec("intro", "💬 紹介文", intro, profLink)}
-    ${sec("options", "✅ オプション", optBody, profLink)}
+    ${sec("profile", "📝 プロフィール", prof, reflBtn("profile", "📝 プロフに反映（在籍店舗ぜんぶ）") + profLink)}
+    ${sec("intro", "💬 紹介文", intro, reflBtn("intro", "💬 お店ごとに書いてプロフに反映") + profLink)}
+    ${sec("options", "✅ オプション", optBody, reflBtn("options", "✅ プロフに反映（エイティーン・極門も）") + profLink)}
     ${sec("reception", "📣 受付へのお願い", recBody, CAN_EDIT ? answerToolsHtml(d, a.id) : "")}
     ${sec("personality", "🧠 性格タイプ（25問）", pers, "")}
     <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
@@ -832,6 +833,113 @@ async function openAnswer(castId, aid){
 async function refreshAnsCount(){
   try{ const { count } = await sb.from("prof_confirm_answers").select("id", { count: "exact", head: true }).is("reviewed_at", null);
     $("ansListBtn").textContent = "📨 届いた答え" + (count ? `（未照合 ${count}）` : ""); }catch(e){}
+}
+// ---------- 📝 答えをキャストプロフに反映（在籍しているお店ぜんぶ。エイティーン・極門はオプションだけ。紹介文は内勤がお店ごとに書く） ----------
+const PROF_STORE_OF = { sakuramoon:"サクラムーン", lana_uguisu:"ラナ鶯谷", lana_kinshi:"ラナ錦糸町", dressgarden:"ドレスガーデン", peachmoon:"ピーチムーン五反田", gyakuanal:"逆AF倶楽部", cutie:"キューティー", eighteen:"18", gokumon:"極門" };
+const PROF_DUMMY = ["18", "極門"];   // 名前・年齢を変えた別の設定 → オプションだけ入れる
+const PROF_LEGACY = { name:"name", age:"age", size:"size", psize:"psize", state:"state", hair:"hair", personality:"personality", hobby:"hobby", charm:"charm", erogenous:"erogenous", comment:"comment", mgrComment:"generatedManagerComment" };
+let refl = null;   // { prof, stores:[プロフの店舗キー], kind, rows }
+function profGet(data, sk, f){   // キャストプロフの getField と同じ読み方（サクラムーンだけ旧データも見る）
+  const sp = (data.storeProfiles || {})[sk];
+  if(sp && sp[f] != null && sp[f] !== "") return sp[f];
+  return sk === "サクラムーン" ? (data[PROF_LEGACY[f] || f] || "") : "";
+}
+function profOpts(data, sk){
+  const sp = (data.storeProfiles || {})[sk];
+  if(sp && sp.options && Object.keys(sp.options).length) return { options: sp.options, optMemo: sp.optMemo || {} };
+  return sk === "サクラムーン" ? { options: data.options || {}, optMemo: data.optMemo || {} } : { options: {}, optMemo: {} };
+}
+async function openReflect(kind){
+  const { d, c } = ansCur;
+  if(!c.prof_id){ toast("このキャストはキャストプロフとつながっていません"); return; }
+  let prof;
+  try{ prof = q(await sb.from("prof_casts").select("id,name,data").eq("id", c.prof_id).single()); }
+  catch(e){ toast("キャストプロフが読めませんでした：" + (e.message || e)); return; }
+  const all = Object.keys(c.stores || {}).map(k => PROF_STORE_OF[k]).filter(Boolean);
+  const stores = kind === "options" ? all : all.filter(s => !PROF_DUMMY.includes(s));
+  if(!stores.length){ toast("台帳に在籍店舗がありません"); return; }
+  const data = prof.data || {};
+  let rows = [];
+  if(kind === "profile"){
+    Object.keys(ANS_PROFILE_LABELS).filter(k => d.profile && (d.profile[k] || "").trim()).forEach(k => stores.forEach(sk => {
+      const cur = String(profGet(data, sk, k) || ""), v = String(d.profile[k]).trim();
+      if(cur !== v) rows.push({ sk, f: k, label: ANS_PROFILE_LABELS[k], cur, v, on: true });
+    }));
+  }else if(kind === "options"){
+    Object.keys(d.options || {}).filter(k => d.options[k]).forEach(k => stores.forEach(sk => {
+      const o = profOpts(data, sk), cur = o.options[k] || "", v = d.options[k], memo = (d.optMemo || {})[k] || "";
+      if(cur !== v || (memo && memo !== (o.optMemo[k] || ""))) rows.push({ sk, f: k, label: k, cur: cur + ((o.optMemo[k]) ? "（" + o.optMemo[k] + "）" : ""), v: v + (memo ? "（" + memo + "）" : ""), val: v, memo, on: true });
+    }));
+  }else{   // intro：お店ごとに書く（今の文が入った状態から）
+    rows = stores.map(sk => ({ sk, comment: profGet(data, sk, "comment"), mgrComment: profGet(data, sk, "mgrComment") }));
+  }
+  refl = { prof, stores, kind, rows };
+  paintReflect();
+}
+function paintReflect(){
+  const { kind, rows, stores } = refl, d = ansCur.d;
+  let bg = document.getElementById("reflBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "reflBg"; bg.style.cssText = "position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
+  const title = { profile: "📝 プロフィールをキャストプロフに反映", options: "✅ オプションをキャストプロフに反映", intro: "💬 紹介文をお店ごとに書いてキャストプロフに反映" }[kind];
+  let body;
+  if(kind === "intro"){
+    const want = ["self", "mgr"].map(k => { const s = (d.introChange || {})[k] || {}; return s.want === "change" ? `<div class="ansText"><b>${k === "self" ? "本人から一言" : "店長から一言"}の希望：</b>${esc(s.text || "")}</div>` : ""; }).join("");
+    body = `${want || '<div class="hint">キャストは「このままでOK」と答えています。直すところがあれば直してください。</div>'}
+      <div class="hint" style="margin:6px 0">同じ文章が並ぶと公式HPの検索に不利なので、お店ごとに口調・語尾・言い回しを少し変えてください。「↓ ほかのお店にコピー」でコピーしてから直すと早いです。</div>
+      ${rows.map((r, i) => `<div class="ansSec"><b>${esc(STORE_LABEL_OF(r.sk))}</b>
+        <div class="hint" style="margin-top:4px">本人から一言 <a href="javascript:void(0)" onclick="reflCopy(${i},'comment')">↓ ほかのお店にコピー</a></div>
+        <textarea id="rf_c${i}" style="width:100%;min-height:80px">${esc(r.comment)}</textarea>
+        <div class="hint">店長から一言 <a href="javascript:void(0)" onclick="reflCopy(${i},'mgrComment')">↓ ほかのお店にコピー</a></div>
+        <textarea id="rf_m${i}" style="width:100%;min-height:100px">${esc(r.mgrComment)}</textarea></div>`).join("")}`;
+  }else{
+    body = rows.length ? `<div class="hint">在籍しているお店：${stores.map(s => esc(STORE_LABEL_OF(s))).join("・")}${kind === "profile" ? "（エイティーン・極門はダミーなので入れません）" : ""}。チェックをはずした行は入れません。</div>
+      <table class="ansTbl"><tr><th></th><th>お店</th><th>項目</th><th>今のプロフ</th><th>→ 答え</th></tr>
+      ${rows.map((r, i) => `<tr><td><input type="checkbox" ${r.on ? "checked" : ""} onchange="refl.rows[${i}].on=this.checked"></td><td>${esc(STORE_LABEL_OF(r.sk))}</td><td>${esc(r.label)}</td><td style="color:#9C8B8F">${esc(r.cur || "（空欄）")}</td><td><b>${esc(r.v)}</b></td></tr>`).join("")}</table>`
+      : `<div class="hint">キャストプロフはもう答えと同じです。変えるところはありません。</div>`;
+  }
+  bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:760px;width:100%;max-height:90vh;overflow:auto;font-size:13.5px">
+    <b style="font-size:16px">${title}</b><div style="margin-top:8px">${body}</div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      ${kind === "intro" || rows.length ? `<button class="btn btn-primary" onclick="saveReflect()">この内容でキャストプロフに入れる</button>` : ""}
+      <button class="btn btn-ghost" onclick="document.getElementById('reflBg').remove()">${kind === "intro" || rows.length ? "やめる" : "閉じる"}</button></div></div>`;
+}
+function STORE_LABEL_OF(sk){ return sk === "18" ? "エイティーン" : sk; }
+function reflCopy(i, f){
+  const id = (f === "comment" ? "rf_c" : "rf_m"), v = $(id + i).value;
+  refl.rows.forEach((r, j) => { if(j !== i) $(id + j).value = v; });
+  toast("ほかのお店にコピーしました。お店ごとに言い回しを少し変えてください");
+}
+async function saveReflect(){
+  const { prof, kind, rows } = refl, data = JSON.parse(JSON.stringify(prof.data || {}));
+  data.storeProfiles = data.storeProfiles || {};
+  const sp = sk => (data.storeProfiles[sk] = data.storeProfiles[sk] || { active: true });
+  let n = 0;
+  if(kind === "intro"){
+    rows.forEach((r, i) => { const s = sp(r.sk); const c1 = $("rf_c" + i).value.trim(), c2 = $("rf_m" + i).value.trim();
+      if(c1 !== (r.comment || "")){ s.comment = c1; n++; } if(c2 !== (r.mgrComment || "")){ s.mgrComment = c2; n++; } });
+  }else rows.filter(r => r.on).forEach(r => {
+    const s = sp(r.sk);
+    if(kind === "profile"){ s[r.f] = r.v; n++; }
+    else{
+      if(!s.options || !Object.keys(s.options).length){ const o = profOpts(prof.data || {}, r.sk); s.options = Object.assign({}, o.options); s.optMemo = Object.assign({}, o.optMemo); }   // サクラムーンの旧データを先に写す
+      s.options[r.f] = r.val; if(r.memo){ s.optMemo = s.optMemo || {}; s.optMemo[r.f] = r.memo; } n++;
+    }
+  });
+  if(!n){ toast("変えるところがありません"); return; }
+  // サクラムーンは旧データにも同じものを入れる（キャストプロフの setField と同じ）
+  const saku = data.storeProfiles["サクラムーン"] || {};
+  const p = { id: prof.id, name: prof.name, by: operatorName(), status: data.status || "new",
+    castComment: data.generatedCastComment || "", mgrComment: saku.mgrComment != null ? saku.mgrComment : (data.generatedManagerComment || ""),
+    storeProfiles: data.storeProfiles };
+  if(saku.comment != null) p.comment = saku.comment;
+  if(saku.options) { p.options = saku.options; p.optMemo = saku.optMemo || {}; }
+  try{
+    const r = q(await sb.rpc("prof_update_confirmed", { p }));
+    if(!r || r.result !== "ok") throw new Error((r && r.message) || "保存できませんでした");
+  }catch(e){ toast("キャストプロフに入れられませんでした：" + (e.message || e)); return; }
+  document.getElementById("reflBg").remove();
+  toast(`キャストプロフに ${n}か所入れました`);
+  await ansMark(kind === "intro" ? "intro" : kind, true);
 }
 // 答えから台帳へ：受付ルールにする・設定に入れる（入れたあと「保存する」）
 let ansOpen = null;
