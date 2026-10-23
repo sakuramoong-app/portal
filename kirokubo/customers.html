@@ -36,6 +36,21 @@
   table.h tr.cancel td{background:#FFF1DE;} table.h tr.tobi td{background:#FFE1E1;} table.h tr.flowed td{background:#E6F6E8;}
   table.h tr.castng td{color:#D0021B;font-weight:800;}
   table.h td.memo{white-space:pre-wrap;max-width:320px;}
+  /* 利用の履歴（カード） */
+  .hfilter{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;}
+  .hlist{max-height:70vh;overflow:auto;display:flex;flex-direction:column;gap:6px;}
+  .hc{border:1.5px solid var(--line);border-radius:12px;padding:8px 10px;background:#fff;font-size:13.5px;line-height:1.6;}
+  .hc.cancel{background:#FFF7EC;border-color:#F3C77A;} .hc.tobi{background:#FFF0F0;border-color:#F2A1A1;} .hc.flowed{background:#F1FAF2;border-color:#A8DDB0;}
+  .hc.castng{border-color:#E5484D;border-width:2px;}
+  .hc .hh{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+  .hc .hm{color:#5C4B4F;font-size:13px;margin-top:2px;}
+  .hc .hmemo{white-space:pre-wrap;background:#FBF7F8;border-radius:8px;padding:6px 8px;margin-top:6px;font-size:14px;}
+  .hc .hmemo.red{color:#C62828;font-weight:700;}
+  .hc .hmemo .hw{color:#fff;background:#E5484D;border-radius:4px;padding:0 3px;}
+  .badge{font-size:12px;font-weight:800;border-radius:99px;padding:1px 9px;background:#eee;}
+  .badge.cancel{background:#FFE2B8;color:#8a5a00;} .badge.tobi{background:#FFD0D0;color:#C62828;} .badge.flowed{background:#D2F2D8;color:#1f7a3a;}
+  .tag{font-size:11.5px;color:var(--sub);border:1px solid var(--line);border-radius:99px;padding:0 7px;}
+  .dot{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:4px;border:1.5px solid rgba(0,0,0,.15);font-size:10px;font-weight:800;}
   .mark{display:inline-block;background:#FFF3B0;border:1.5px solid #E8C200;border-radius:6px;padding:0 5px;font-size:11px;font-weight:800;color:#7a5d00;margin-left:4px;}
   .src{font-size:10.5px;color:var(--sub);}
   .f2{display:grid;grid-template-columns:1fr 1fr;gap:8px;} @media (max-width:640px){ .f2{grid-template-columns:1fr;} }
@@ -193,12 +208,35 @@ function paintDetail(){
     </div>
 
     <div class="csec"><h3>📜 利用の履歴（新しい順・${all.length}件）</h3>
-      ${all.length ? `<div style="max-height:60vh;overflow:auto"><table class="h"><tr><th>日</th><th>お店</th><th>キャスト</th><th>コース</th><th>場所</th><th>金額</th><th>状態</th><th>備考</th></tr>
-        ${all.map(r=>`<tr class="${r.status} ${r.castng ? "castng" : ""}"><td>${md(r.date)}${r.src === "excel" ? '<br><span class="src">台帳</span>' : ""}</td><td>${esc(r.store)}</td>
-          <td>${esc(r.cast)}${r.castng ? '<br>🙅キャストNG' : ""}</td><td>${esc(r.course)}</td><td>${esc(r.place)}</td><td>${r.total ? yen(r.total) : ""}${r.card ? " 💳" : ""}</td>
-          <td>${esc(STATUS[r.status] || (r.status === "yet" ? "これから" : ""))}${markText(r.marks)}</td><td class="memo">${esc(r.memo || "")}</td></tr>`).join("")}</table></div>`
-        : `<div class="src">まだありません（台帳エクセルの過去の利用は、端末の登録のあとに取りこみます）</div>`}
+      ${all.length ? `<div class="hfilter">
+          <button class="btn btn-sm ${histOnly ? "btn-ghost" : "btn-primary"}" onclick="histOnly=false;openCustomer(cur.id)">全部（${all.length}）</button>
+          <button class="btn btn-sm ${histOnly ? "btn-primary" : "btn-ghost"}" onclick="histOnly=true;openCustomer(cur.id)">⚠️ 何かあった回だけ（${all.filter(isTrouble).length}）</button></div>
+        <div class="hlist">${all.filter(r => !histOnly || isTrouble(r)).map(histCard).join("") || '<div class="src">ありません</div>'}</div>`
+        : `<div class="src">まだありません</div>`}
     </div>`;
+}
+// ---------- 利用の履歴：1回ずつのカード（備考は全文。何かあった回は目立たせる） ----------
+let histOnly = false;
+const TROUBLE_WORDS = /NG|ＮＧ|出禁|トビ|ﾄﾋﾞ|飛ん|飛ば|とんだ|クレーム|トラブル|警察|盗撮|暴力|薬|要注意|注意|しつこ|強要|生で|キャンセル/;
+function hasColor(m){ return !!m && Object.keys(m).some(k => /^fill:#|^font:#(?!FF0000)/i.test(k) || k === "other_fill" || k === "red_cols"); }
+function isTrouble(r){ return ["cancel", "tobi", "flowed"].includes(r.status) || r.castng || hasColor(r.marks) || TROUBLE_WORDS.test(r.memo || "") || (r.memo || "").length >= 40; }
+function hl(s){ return esc(s).replace(/(NG|ＮＧ|出禁|トビ|飛んだ|飛ばれ|クレーム|盗撮|暴力|薬|警察|要注意)/g, '<b class="hw">$1</b>'); }
+function histCard(r){
+  const st = STATUS[r.status] || (r.status === "yet" ? "これから" : "");
+  const memoRed = r.marks && Object.keys(r.marks).some(k => /^font:#FF0000/i.test(k) && (r.marks[k] || []).includes("AB"));
+  return `<div class="hc ${r.status} ${r.castng ? "castng" : ""}">
+    <div class="hh"><b>${md(r.date) || "日付なし"}</b>${r.src === "excel" ? '<span class="tag">台帳</span>' : ""}
+      ${st ? `<span class="badge ${r.status}">${esc(st)}</span>` : ""}${r.castng ? '<span class="badge tobi">🙅 キャストNG</span>' : ""}${r.card ? '<span class="tag">💳 カード</span>' : ""}${colorDots(r.marks)}</div>
+    <div class="hm">${[r.store, r.cast, r.course, r.place].filter(Boolean).map(esc).join("　・　")}${r.total ? "　・　" + yen(r.total) : ""}</div>
+    ${r.memo ? `<div class="hmemo ${memoRed ? "red" : ""}">${hl(r.memo)}</div>` : ""}</div>`;
+}
+// 台帳エクセルで色がついていたところ：色の小さい四角だけ（どの欄かは、押すと出る）
+function colorDots(m){
+  if(!m) return "";
+  const keys = Object.keys(m).filter(k => /^fill:#[0-9A-F]{6}$/i.test(k) || /^font:#[0-9A-F]{6}$/i.test(k) && !/FF0000/i.test(k));
+  const old = (m.other_fill || (m.red_cols && m.red_cols.length)) ? '<span class="tag">🎨 色つき</span>' : "";
+  return old + keys.map(k => { const [kind, col] = k.split(":"), where = [...new Set((m[k] || []).map(c => XL_COL[c] || c))].join("・");
+    return `<span class="dot" title="${esc((kind === "fill" ? "塗りつぶし：" : "文字の色：") + where)}" style="${kind === "fill" ? "background:" + col : "border-color:" + col + ";color:" + col}">${kind === "fill" ? "" : "字"}</span>`; }).join("");
 }
 // 台帳エクセルで目立たせてあったところ（決まりにない色・赤い文字の欄）
 // 台帳エクセルの欄（A〜AB）→ 名前

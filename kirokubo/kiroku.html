@@ -3960,7 +3960,7 @@ lookupCustomer = async function(){
 async function custCaution(custId){
   try{
     const [h, n] = await Promise.all([
-      sb.from("kb_cust_history").select("biz_date,status").eq("customer_id", custId).order("biz_date", { ascending: false }).limit(2000),
+      sb.from("kb_cust_history").select("biz_date,status,cast_raw,memo,marks,cast_ng").eq("customer_id", custId).order("biz_date", { ascending: false }).limit(2000),
       sb.from("kb_cust_cast_ng").select("cast_id,cast_name,reason").eq("customer_id", custId),
     ]);
     if(!curCustomer || curCustomer.id !== custId || !$("custInfo")) return;
@@ -3972,6 +3972,17 @@ async function custCaution(custId){
     if(tobi) lines.push(`<div class="warn">⚠️ トビ ${tobi}回（最後 ${fmt(lastOf("tobi")) || "日付なし"}）</div>`);
     if(ngs.length) lines.push(`<div class="warn">🙅 キャストNG：${ngs.map(x => esc(x.cast_id ? castName(x.cast_id) : x.cast_name)).join("・")}（このキャストでは保存できません）</div>`);
     if(cancel >= 2) lines.push(`<div class="warn" style="background:#FFF6E5;border-color:#F3C77A;color:#8a5a00">⚠️ キャンセル ${cancel}回</div>`);
+    // 何かあった回（キャンセル・トビ・流れた・キャストNG・色つき・NGや出禁などの言葉・長い備考）は、備考を全文で見せる（見落とさないように）
+    const WORDS = /NG|ＮＧ|出禁|トビ|ﾄﾋﾞ|飛ん|飛ば|とんだ|クレーム|トラブル|警察|盗撮|暴力|薬|要注意|注意|しつこ|強要|キャンセル/;
+    const colored = m => !!m && Object.keys(m).some(k => /^fill:#|^font:#/i.test(k) || k === "other_fill" || k === "red_cols");
+    const trouble = hs.filter(x => ["cancel", "tobi", "flowed"].includes(x.status) || x.cast_ng || colored(x.marks) || WORDS.test(x.memo || "") || (x.memo || "").length >= 40);
+    const STL = { cancel: "キャンセル", tobi: "トビ", flowed: "流れた", done: "" };
+    const hlw = s => esc(s).replace(/(NG|ＮＧ|出禁|トビ|飛んだ|飛ばれ|クレーム|盗撮|暴力|薬|警察|要注意)/g, '<b style="background:#E5484D;color:#fff;border-radius:4px;padding:0 3px">$1</b>');
+    const tItem = x => `<div style="border-top:1px dashed #F1C9CF;padding:4px 0"><b>${fmt(x.biz_date) || "日付なし"}</b> ${esc(x.cast_raw || "")} ${STL[x.status] ? `<b style="color:#C62828">【${STL[x.status]}】</b>` : ""}${x.cast_ng ? " 🙅" : ""}${colored(x.marks) ? " 🎨" : ""}
+      ${x.memo ? `<div style="white-space:pre-wrap">${hlw(x.memo)}</div>` : ""}</div>`;
+    if(trouble.length) lines.push(`<div class="warn" style="background:#FFF8F0;border-color:#F3B27A;color:#5c3a00;font-weight:400">
+      <b>📝 台帳で何かあった回 ${trouble.length}件（備考は全文）</b>${trouble.slice(0, 3).map(tItem).join("")}
+      ${trouble.length > 3 ? `<details><summary style="cursor:pointer;font-weight:800">のこり ${trouble.length - 3}件を見る</summary>${trouble.slice(3).map(tItem).join("")}</details>` : ""}</div>`);
     const old = $("custCaution"); if(old) old.remove();
     $("custInfo").insertAdjacentHTML("afterbegin", `<div id="custCaution">${lines.join("")}${hs.length ? `<div class="hist">📚 台帳（エクセル）の利用 ${done}回${hs[0] && hs[0].biz_date ? "（最後 " + fmt(hs.find(x => x.biz_date).biz_date) + "）" : ""}</div>` : ""}</div>`);
   }catch(e){}
