@@ -122,8 +122,10 @@
       <input class="search" id="q" placeholder="🔍 名前・読み・別名で検索" oninput="render()">
       <button class="btn btn-ghost" id="sendModeBtn" onclick="toggleSendMode()">📨 確認フォームをまとめて送る</button>
       <button class="btn btn-ghost" id="ansListBtn" onclick="toggleAnsList()">📨 届いた答え</button>
+      <button class="btn btn-ghost" onclick="toggleNotesList()">🧹 受付ルールにまとめる</button>
     </div>
     <div id="ansListBox" style="display:none;background:#fff;border:1.5px solid #F1E3E7;border-radius:12px;padding:10px 12px;margin:6px 0"></div>
+    <div id="notesListBox" style="display:none;background:#fff;border:1.5px solid #F1E3E7;border-radius:12px;padding:10px 12px;margin:6px 0"></div>
     <div id="sendHelp" class="hint" style="display:none;background:#FFF5F8;border-radius:10px;padding:8px 12px;margin:6px 0">
       📨 各キャストの「📋 コピー」を押すと、その子専用のURL（なければ作る）とLINEの文がコピーされます。そのままLINEに貼って送ってください。<br>
       コピーした子には「📋 コピー済」が付きます（このPCに覚えておくだけ）。👀＝キャストが開いた、📨＝答えが届いた。</div>
@@ -165,6 +167,7 @@
 
     <div class="sec">📋 受付ルール</div>
     <div class="hint" style="margin:-4px 0 8px">受付でこのキャストを選ぶと、お客様の条件（新規・外国人・コースなど）に当てはまるものだけが出ます。足したり直したりするとすぐ保存されます。</div>
+    <div id="e_notesMove"></div>
     <div id="e_checks"></div>
     <div class="grid" style="margin-top:10px">
       <div class="f"><label>⌛ 長いコースは何分まで（空＝上限なし）</label><input type="number" id="e_longMax" min="30" max="1440" step="10"></div>
@@ -181,6 +184,7 @@
     <div id="e_confirm"></div>
 
     <div class="sec">📝 特記事項・NG・メモ</div>
+    <div class="hint" style="margin:-4px 0 8px;background:#FFF6D6;border-radius:10px;padding:6px 10px">⚠️ 特記事項・NG は<b>上の「📋 受付ルール」に移していきます</b>。ここに書いたものは、受付ルールに移すまで受付に「まだ移していないメモ」として出ます。</div>
     <div class="f"><label>特記事項 <small style="font-weight:400;color:#9C8B8F">… 内勤が理解しておくこと（お客さんには言わない）。お客さんに言うことは上の「確認事項」へ</small></label><textarea id="e_special"></textarea></div>
     <div class="f" style="margin-top:10px"><label>NG <small style="font-weight:400;color:#9C8B8F">… キャストが受けないこと（内勤がつけるか判断する材料）</small></label><textarea id="e_ng"></textarea></div>
     <div class="f" style="margin-top:10px"><label>メモ <small style="font-weight:400;color:#9C8B8F">… そのほか（受付には出ません）</small></label><textarea id="e_note"></textarea></div>
@@ -586,6 +590,77 @@ async function saveRule(){
     }
     renderChecks(editingId); toast("受付ルールを保存しました");
   }catch(e){ toast("保存できませんでした（SQL 100 を実行してください）：" + (e.message || e)); }
+}
+/* ---------- 🧹 特記事項・NG・内勤連絡 → 受付ルールにまとめる（元のメモは消さない。移したら印をつける＝notes_moved） ---------- */
+let profNoteCache = null;   // prof_id → data（内勤への連絡事項を見る用）
+async function loadProfNotes(force){
+  if(profNoteCache && !force) return profNoteCache;
+  const rows = q(await sb.from("prof_casts").select("id,data").eq("deleted", false)) || [];
+  profNoteCache = {}; rows.forEach(r => { profNoteCache[r.id] = r.data || {}; });
+  return profNoteCache;
+}
+// このキャストのメモ（まだ移していないものだけ）：[{ src, label, text }]
+function notesToMove(c, profs){
+  const out = [], seen = new Set();
+  const add = (src, label, text) => { text = String(text || "").trim(); if(!text || seen.has(text)) return; seen.add(text);
+    if(!(c.notes_moved || []).some(m => m.src === src && m.text === text)) out.push({ src, label, text }); };
+  add("special", "台帳の特記事項", c.special_notes);
+  add("ng", "台帳のNG", c.ng_notes);
+  const d = c.prof_id && profs ? profs[c.prof_id] : null;
+  if(d){
+    add("internal:サクラムーン", "プロフの内勤連絡（サクラムーン）", (((d.storeProfiles || {})["サクラムーン"] || {}).internal) || d.internal);
+    Object.entries(d.storeProfiles || {}).forEach(([sk, sp]) => { if(sk !== "サクラムーン") add("internal:" + sk, `プロフの内勤連絡（${STORE_LABEL_OF(sk)}）`, sp && sp.internal); });
+  }
+  return out;
+}
+let notesMoveCur = [];
+async function renderNotesMove(id){
+  const el = $("e_notesMove"); if(!el) return;
+  el.innerHTML = "";
+  if(!id) return;
+  let profs = null;
+  try{ profs = await loadProfNotes(); }catch(e){ /* プロフが読めなくても台帳のメモは出す */ }
+  if(editingId !== id) return;
+  const c = casts.find(x => x.id === id); if(!c) return;
+  notesMoveCur = notesToMove(c, profs);
+  if(!notesMoveCur.length){ el.innerHTML = ""; return; }
+  el.innerHTML = `<div style="border:2px solid #FFB547;background:#FFF9EE;border-radius:12px;padding:8px 10px;margin-bottom:8px">
+    <div style="font-weight:800;font-size:13.5px;color:#a35a00">🧹 まだ受付ルールに移していないメモ（${notesMoveCur.length}）</div>
+    <div class="hint" style="margin:2px 0 6px">「⚡ ルールにする」で下の受付ルールを作る（長いメモは何こかに分けてOK）→ ぜんぶ移したら「✔ 移した」。いらないものは「いらない」。<b>元のメモは消えません。</b></div>
+    ${notesMoveCur.map((n, i) => `<div style="background:#fff;border-radius:10px;padding:6px 8px;margin-top:6px">
+      <div style="font-size:11.5px;color:#9C8B8F;font-weight:700">${esc(n.label)}</div>
+      <div style="white-space:pre-wrap;font-size:13.5px">${esc(n.text)}</div>
+      ${CAN_EDIT ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+        <button class="btn btn-ghost btn-sm" onclick="noteToRule(${i})">⚡ ルールにする</button>
+        <button class="btn btn-ghost btn-sm" onclick="markNoteMoved(${i},'rule')">✔ 移した</button>
+        <button class="btn btn-ghost btn-sm" onclick="markNoteMoved(${i},'skip')">いらない</button></div>` : ""}</div>`).join("")}</div>`;
+}
+function noteToRule(i){
+  const n = notesMoveCur[i]; if(!n) return;
+  openRule(0, { text: n.text.length > 300 ? n.text.slice(0, 300) : n.text, kind: "know", cond: "always", source: "note:" + n.src });
+}
+async function markNoteMoved(i, how){
+  const n = notesMoveCur[i], c = casts.find(x => x.id === editingId); if(!n || !c) return;
+  if(how === "rule" && !castChecks.some(x => x.cast_id === c.id) && !confirm("このキャストの受付ルールがまだありません。「移した」にしてよいですか？")) return;
+  if(how === "skip" && !confirm("このメモを「いらない」にしますか？（受付に出なくなります。元のメモは消えません）")) return;
+  const moved = (c.notes_moved || []).concat([{ src: n.src, text: n.text, how, by: operatorName(), at: new Date().toISOString() }]);
+  try{
+    const r = q(await sb.from("master_casts").update({ notes_moved: moved }).eq("id", c.id).select("notes_moved").single());
+    c.notes_moved = (r && r.notes_moved) || moved;
+    toast(how === "rule" ? "移したにしました" : "いらないにしました");
+    renderNotesMove(c.id);
+  }catch(e){ toast("できませんでした（SQL 138 を実行してください）：" + (e.message || e)); }
+}
+// 一覧：まだメモが残っている人
+async function toggleNotesList(){
+  const box = $("notesListBox");
+  if(box.style.display !== "none"){ box.style.display = "none"; return; }
+  box.style.display = ""; box.innerHTML = "読んでいます…";
+  let profs = null;
+  try{ profs = await loadProfNotes(true); }catch(e){}
+  const list = casts.filter(c => c.status !== "left").map(c => ({ c, n: notesToMove(c, profs).length })).filter(x => x.n);
+  box.innerHTML = `<div style="font-weight:800;margin-bottom:4px">🧹 まだ受付ルールに移していないメモがある人（${list.length}人）</div>`
+    + (list.map(x => `<div style="padding:3px 0"><a href="javascript:void(0)" onclick="openEdit('${esc(x.c.id)}');$('notesListBox').style.display='none'">${esc(nameOf(x.c))}</a> <small style="color:#9C8B8F">${x.n}こ</small></div>`).join("") || '<div class="hint">ありません 🎉</div>');
 }
 // フォームの答えからルールを作る（台帳の受付ルールの欄を開いて、中身を入れておく）
 function ruleFromAnswer(text, kind, cond, aid){
@@ -1084,6 +1159,7 @@ function openEdit(id){
   $("e_terms").innerHTML = id ? termsHtml(c) : `<div class="hint">キャストを保存してから、ランク・条件を入れられます（面接の内容をヒアリングとして書いてください）。</div>`;
   $("termsBtn").style.display = id && CAN_EDIT ? "" : "none";
   renderChecks(id);
+  renderNotesMove(id);
   renderPrivateClosed(id);
   renderConfirm(id);
   $("e_special").value = c.special_notes || ""; $("e_ng").value = c.ng_notes || ""; $("e_note").value = c.note || "";

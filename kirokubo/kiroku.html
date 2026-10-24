@@ -1466,7 +1466,7 @@ function buildMsg(c){
 `【${cast ? (cast.official_name || cast.temp_name) : "キャスト"}】${isDummyStore(c.store) && $("f_dummy").value ? "（ダミー名「" + $("f_dummy").value + "」で受けています）" : ""}
 ${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st||"--:--"}〜${en||"--:--"}
 【店名】${storeLabel(c.store)}
-【名前】${$("f_name").value || "お客"}様 ${VISIT.find(v=>v[0]===visit)[1]}
+【名前】${$("f_name").value || "お客"}様 ${(VISIT.find(v=>v[0]===visit) || [])[1] || ""}
 【コース】${c.course}${/^\d+$/.test(c.course)?"分":""}${c.free?"（"+FREE_SUFFIX[c.free]+"）":""}${c.ext?"＋延長"+c.ext*30+"分":""}
 【ホテル・自宅】${$("f_area").value} ${$("f_address").value}${hotelMapUrl() ? "\n【地図】" + hotelMapUrl() : ""}
 【バック有OP】${backOps}
@@ -4193,6 +4193,47 @@ function castOptMarks(){
 }
 const __recalcEX = recalc;
 recalc = function(){ __recalcEX.apply(this, arguments); renderExtList(); renderNeighbors(); castOptMarks(); };
+
+/* ============================================================
+   2026/10/25：受付に出すキャストの注意は「受付ルール」だけにする
+   台帳の特記事項・NG・プロフの内勤連絡は、台帳で受付ルールに移していく（notes_moved に「移した」の印）。
+   まだ移していないメモだけ、ここに出す（なくならないように）
+   ============================================================ */
+const NOTE_PROF_STORE = { sakuramoon:"サクラムーン", lana_uguisu:"ラナ鶯谷", lana_kinshi:"ラナ錦糸町", dressgarden:"ドレスガーデン", peachmoon:"ピーチムーン五反田", gyakuanal:"逆AF倶楽部", cutie:"キューティー", eighteen:"18", gokumon:"極門" };
+function unmovedNotes(c, profs, storeKey){
+  const out = [], seen = new Set();
+  const add = (src, label, text) => { text = String(text || "").trim(); if(!text || seen.has(text)) return; seen.add(text);
+    if(!(c.notes_moved || []).some(m => m.src === src && m.text === text)) out.push({ label, text }); };
+  add("special", "特記事項", c.special_notes);
+  add("ng", "NG", c.ng_notes);
+  const d = c.prof_id && profs ? profs[c.prof_id] : null, sk = NOTE_PROF_STORE[storeKey];
+  if(d && sk){
+    const sp = (d.storeProfiles || {})[sk] || {};
+    add("internal:" + sk, "プロフの内勤連絡", sk === "サクラムーン" ? (sp.internal || d.internal) : sp.internal);
+  }
+  return out;
+}
+let castNotesSeq = 0;
+async function paintCastNotes(){
+  const seq = ++castNotesSeq, el = $("castInfo");
+  const c = M.casts.find(x => x.id === $("f_cast").value);
+  if(!c){ el.innerHTML = ""; return; }
+  let profs = null;
+  try{ profs = await loadProfs(); }catch(e){ /* プロフが読めなくても台帳のメモは出す */ }
+  if(seq !== castNotesSeq) return;
+  const list = unmovedNotes(c, profs, $("f_store").value);
+  const rules = rulesOn(c.id).map(r => "・" + esc(r.note) + hearLink(r.hearing_text, r.by_name, r.created_at)).join("<br>");
+  el.innerHTML =
+    (list.length ? `<div style="background:#FFF9EE;border:1.5px dashed #FFB547;border-radius:12px;padding:6px 10px;margin:6px 0;font-size:13px">
+      <div style="font-weight:800;color:#a35a00;font-size:12.5px">📝 まだ受付ルールに移していないメモ（キャスト台帳で整理中）</div>
+      ${list.map(n => `<div style="white-space:pre-wrap;margin-top:3px"><small style="color:#9C8B8F">${esc(n.label)}：</small>${esc(n.text)}</div>`).join("")}</div>` : "")
+    + (rules ? `<details style="margin-top:4px"><summary style="cursor:pointer;font-size:12.5px;font-weight:800;color:var(--sub)">🧮 このキャストの条件を見る</summary><div class="info">${rules}</div></details>` : "")
+    + (c.prof_id ? `<a class="proflink" style="font-size:12px" href="${PROF_STAFF_URL}?cast=${encodeURIComponent(c.prof_id)}" target="_blank" rel="noopener">📂 ${esc(c.official_name || c.temp_name)}のプロフを開く</a>` : "");
+}
+const __onCastNM = onCast;
+onCast = function(){ __onCastNM.apply(this, arguments); paintCastNotes(); };
+const __onStoreNM = onStore;
+onStore = function(){ const r = __onStoreNM.apply(this, arguments); paintCastNotes(); return r; };
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
