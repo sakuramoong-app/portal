@@ -626,7 +626,7 @@ async function renderNotesMove(id){
   const todos = [];
   (c.notes_moved || []).forEach((m, mi) => (m.todo || []).forEach((t, ti) => { if(!t.done) todos.push({ mi, ti, ...t }); }));
   const go = { zappi: `<button class="btn btn-ghost btn-sm" onclick="openTerms()">🔁 条件を開く</button>`,
-               private: `<button class="btn btn-ghost btn-sm" onclick="openPrivate()">🔓 連絡先を開く</button>`,
+               private: `<button class="btn btn-ghost btn-sm" onclick="openPrivate().then(()=>$('e_private').scrollIntoView({ block: 'start', behavior: 'smooth' }))">🔓 連絡先を開く</button>`,   // 連絡先の欄は下のほうにあるので、そこまで動く
                prof: c.prof_id ? `<a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(c.prof_id)}" target="_blank" rel="noopener">📝 プロフを開く</a>` : "" };
   const todoHtml = todos.length ? `<div style="border:2px solid #A88BFF;background:#FBF9FF;border-radius:12px;padding:8px 10px;margin-bottom:8px">
     <div style="font-weight:800;font-size:13.5px;color:#6030aa">✋ 手でやること（${todos.length}）</div>
