@@ -456,7 +456,7 @@ function termsKindFields(){
     op_price: `<div class="f"><label>オプション</label><select id="tk_op">${opts.map(([code, label])=>`<option value="${esc(code)}">${esc(label)}</option>`).join("")}</select></div>
                <div class="f"><label>料金（円）</label><input id="tk_price" type="number" min="0" step="500"></div>
                <div class="f"><label>バック（円）</label><input id="tk_back" type="number" min="0" step="500"></div>`,
-    zappi_exempt: `<div class="f" style="grid-column:1/-1"><label>雑費なしの曜日</label><div>${days.map((d, i)=>`<label style="margin-right:8px"><input type="checkbox" class="tk_day" value="${i}" checked> ${d}</label>`).join("")}</div></div>`,
+    zappi_exempt: `<div class="f" style="grid-column:1/-1"><label>雑費なしの曜日</label><div style="display:flex;flex-wrap:wrap;gap:6px 14px">${days.map((d, i)=>`<label style="display:inline-flex;align-items:center;gap:4px;margin:0;font-size:15px;font-weight:700;color:var(--ink)"><input type="checkbox" class="tk_day" value="${i}" checked style="width:auto;margin:0;transform:scale(1.2)"> ${d}</label>`).join("")}</div></div>`,
     memo: `<div class="hint" style="grid-column:1/-1">計算はしません。受付の画面に、下の説明が表示されます。</div>`,
   };
   $("t_kindFields").innerHTML = F[k] || "";
