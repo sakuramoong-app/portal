@@ -272,7 +272,45 @@ async function peekCast(){
     <table><tr><th>欄</th><th>中身</th></tr>${Object.entries(L).map(([k, l])=>`<tr><td>${l}</td><td style="white-space:pre-wrap">${esc(p[k] || "")}</td></tr>`).join("")}
     <tr><td>アイコン</td><td>${esc((p.icons || []).join("・"))}</td></tr>
     <tr><td>オプション（${opts.length}）</td><td>${opts.map(([t, v])=>esc(t) + "：" + esc(v)).join("<br>")}</td></tr></table>
-    <p class="lead" style="margin-top:8px">この中身がキャストプロフの「🌐 公式HPから取りこむ」で入ります。</p>`;
+    <p class="lead" style="margin-top:8px">この中身がキャストプロフの「🌐 公式HPから取りこむ」で入ります。</p>
+    <div style="margin-top:14px;padding:10px 12px;border:2px dashed #E5638C;border-radius:12px">
+      <b>✍️ 公式HPに入れるテスト（この1人だけ）</b>
+      <p class="lead" style="margin:4px 0 8px">紹介文を直して「👀 確かめる」（何も変えません）→ よければ「🌐 本当に入れる」。${p.html ? "このお店はHTMLのまま入れます（デザインはそのまま）。" : ""}</p>
+      ${["comment", "mgrComment"].map(k=>`<div style="margin-bottom:10px"><div style="font-size:13px;font-weight:800">${L[k]}（読んだ場所：${({ cms: "管理画面", public: "公開しているページ" })[(p.from || {})[k]] || "なし"}）</div>
+        <textarea id="sv_${k}" style="width:100%;min-height:140px;font-size:12.5px;font-family:monospace" oninput="svPreview('${k}')">${esc(p[k] || "")}</textarea>
+        <div style="font-size:12px;color:#888">↓ 見た目（公式HPに近い形）</div>
+        <iframe id="svpv_${k}" sandbox style="width:100%;height:260px;border:1px solid #ddd;border-radius:8px;background:#fff"></iframe></div>`).join("")}
+      <button class="btn" style="padding:7px 14px;font-size:13px" onclick="saveTest(true)">👀 確かめる（何も変えない）</button>
+      <button class="btn" style="padding:7px 14px;font-size:13px;margin-left:6px;background:#E5486C" onclick="saveTest(false)">🌐 本当に入れる</button>
+      <label style="font-size:12.5px;margin-left:8px"><input type="checkbox" id="svPublish" checked> 入れたあと「更新」もする</label>
+      <div id="svOut" style="margin-top:8px"></div>
+    </div>`;
+  svCur = { store, no, html: !!p.html, orig: { comment: p.comment || "", mgrComment: p.mgrComment || "" } };
+  svPreview("comment"); svPreview("mgrComment");
+}
+
+let svCur = null;
+function svPreview(k){
+  const v = document.getElementById("sv_" + k).value, f = document.getElementById("svpv_" + k);
+  const body = svCur && svCur.html ? v : esc(v).replace(/\n/g, "<br>");
+  f.srcdoc = `<meta charset="utf-8"><body style="margin:8px;font-family:sans-serif;font-size:14px;color:#444">${body}</body>`;
+}
+async function saveTest(dry){
+  const out = document.getElementById("svOut");
+  if(!svCur){ out.innerHTML = `<span class="ng">先に「🔎 読んでみる」を押してください</span>`; return; }
+  const set = {};
+  ["comment", "mgrComment"].forEach(k=>{ const v = document.getElementById("sv_" + k).value; if(v !== svCur.orig[k]) set[k] = v; });
+  if(!Object.keys(set).length){ out.innerHTML = `<span class="ng">まだ何も直していません</span>`; return; }
+  if(!dry && !confirm(`${svCur.no}番の紹介文を、公式HPの管理画面に保存します。よろしいですか？`)) return;
+  out.innerHTML = dry ? "確かめています…（30秒ほど）" : "入れています…（1分ほど。画面を閉じないで）";
+  const r = await callFn({ action: "cast_save", store: svCur.store, no: svCur.no, set, dry, publish: !dry && document.getElementById("svPublish").checked });
+  const ch = (r.changes || []).map(c=>`<tr><td>${esc(c.k)}</td><td style="white-space:pre-wrap;color:#999">${esc(c.before)}</td><td style="white-space:pre-wrap"><b>${esc(c.after)}</b></td></tr>`).join("");
+  const head = r.dry ? (r.button ? `✅ 確かめました（まだ何も変えていません）。保存ボタン：「${esc(r.button.value)}」・写真 ${r.photos}枚` : `<span class="ng">⚠️ 保存ボタンが見つかりません。この画面の写真を送ってください</span>`)
+    : r.saved ? (r.ok ? `✅ 保存しました。写真 ${r.photos}→${r.photosAfter}枚${r.published ? (r.published.ok ? "・更新しました" : "・<span class='ng'>更新できませんでした</span>") : ""}。公式HPで見た目を確かめてください`
+                      : `<span class="ng">⚠️ 保存したけど、確かめたら違うところがあります（${esc((r.failed || []).join("・"))}／写真 ${r.photos}→${r.photosAfter}枚）。すぐ教えてください</span>`)
+    : `<span class="ng">${esc(r.error || r.note || "うまくいきませんでした")}</span>`;
+  out.innerHTML = `<div class="${r.ok ? "ok" : ""}">${head}</div>${ch ? `<table><tr><th>欄</th><th>今</th><th>→ 入れる</th></tr>${ch}</table>` : ""}
+    <details style="margin-top:6px"><summary style="font-size:12px">くわしく（こちらに見せる用）</summary><textarea style="width:100%;height:120px;font-size:11px">${esc(JSON.stringify({ ...r, changes: undefined }, null, 1))}</textarea></details>`;
 }
 
 /* ---------- 📺 ヘブン ---------- */
