@@ -3999,7 +3999,7 @@ lookupCustomer = async function(){
 async function custCaution(custId){
   try{
     const [h, n] = await Promise.all([
-      sb.from("kb_cust_history").select("biz_date,status,cast_raw,memo,marks,cast_ng").eq("customer_id", custId).order("biz_date", { ascending: false }).limit(2000),
+      sb.from("kb_cust_history").select("biz_date,status,cast_raw,memo,marks,cast_ng,src_row").eq("customer_id", custId).order("biz_date", { ascending: false }).limit(2000),
       sb.from("kb_cust_cast_ng").select("cast_id,cast_name,reason").eq("customer_id", custId),
     ]);
     if(!curCustomer || curCustomer.id !== custId || !$("custInfo")) return;
@@ -4017,7 +4017,7 @@ async function custCaution(custId){
     const trouble = hs.filter(x => ["cancel", "tobi", "flowed"].includes(x.status) || x.cast_ng || colored(x.marks) || WORDS.test(x.memo || "") || (x.memo || "").length >= 40);
     const STL = { cancel: "キャンセル", tobi: "トビ", flowed: "流れた", done: "" };
     const hlw = s => esc(s).replace(/(NG|ＮＧ|出禁|トビ|飛んだ|飛ばれ|クレーム|盗撮|暴力|薬|警察|要注意)/g, '<b style="background:#E5484D;color:#fff;border-radius:4px;padding:0 3px">$1</b>');
-    const tItem = x => `<div style="border-top:1px dashed #F1C9CF;padding:4px 0"><b>${fmt(x.biz_date) || "日付なし"}</b> ${esc(x.cast_raw || "")} ${STL[x.status] ? `<b style="color:#C62828">【${STL[x.status]}】</b>` : ""}${x.cast_ng ? " 🙅" : ""}${colored(x.marks) ? " 🎨" : ""}
+    const tItem = x => `<div style="border-top:1px dashed #F1C9CF;padding:4px 0"><b>${fmt(x.biz_date) || "日付なし"}</b> ${esc(x.cast_raw || "")} ${STL[x.status] ? `<b style="color:#C62828">【${STL[x.status]}】</b>` : ""}${x.cast_ng ? " 🙅" : ""}${colored(x.marks) ? " 🎨" : ""}${x.src_row ? ` <small style="color:#8a6d3b">（エクセル ${x.src_row}行目）</small>` : ""}
       ${x.memo ? `<div style="white-space:pre-wrap">${hlw(x.memo)}</div>` : ""}</div>`;
     if(trouble.length) lines.push(`<div class="warn" style="background:#FFF8F0;border-color:#F3B27A;color:#5c3a00;font-weight:400">
       <b>📝 台帳で何かあった回 ${trouble.length}件（備考は全文）</b>${trouble.slice(0, 3).map(tItem).join("")}
