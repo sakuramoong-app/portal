@@ -837,6 +837,21 @@ async function refreshAnsCount(){
 // ---------- 📝 答えをキャストプロフに反映（在籍しているお店ぜんぶ。エイティーン・極門はオプションだけ。紹介文は内勤がお店ごとに書く） ----------
 const PROF_STORE_OF = { sakuramoon:"サクラムーン", lana_uguisu:"ラナ鶯谷", lana_kinshi:"ラナ錦糸町", dressgarden:"ドレスガーデン", peachmoon:"ピーチムーン五反田", gyakuanal:"逆AF倶楽部", cutie:"キューティー", eighteen:"18", gokumon:"極門" };
 const PROF_DUMMY = ["18", "極門"];   // 名前・年齢を変えた別の設定 → オプションだけ入れる
+// 公式HPのキャストのページ（在籍番号は台帳の stores[].siteNo。18・極門はシフトで選んだ番号 hp_dummy_map も見る）
+const HP_SITE_OF = { sakuramoon:"sakura-moon", lana_uguisu:"josou-lana", lana_kinshi:"lana-kinshicho", dressgarden:"dress-garden-shibuya", peachmoon:"peach-m", gyakuanal:"gyaku-anal-club", cutie:"cutie-josou", eighteen:"18-josokko-gakuen", gokumon:"gokumon-sm" };
+let hpDummyNos = null;
+async function loadHpDummyNos(){
+  if(hpDummyNos) return;
+  try{ hpDummyNos = q(await sb.from("hp_dummy_map").select("store_key,cast_name,no")) || []; }catch(e){ hpDummyNos = []; }
+}
+function hpLinkOf(c, sk){
+  const mk = Object.keys(PROF_STORE_OF).find(k => PROF_STORE_OF[k] === sk), site = HP_SITE_OF[mk];
+  if(!site) return "";
+  let no = Number(c.stores && c.stores[mk] && c.stores[mk].siteNo) || 0;
+  if(!no && c.shift_name){ const d = (hpDummyNos || []).find(x => x.store_key === mk && x.cast_name === c.shift_name); if(d) no = Number(d.no) || 0; }
+  const url = no ? `https://www.${site}.com/gal/gal-${no}.html` : `https://www.${site}.com/gal.html`;
+  return ` <a href="${url}" target="_blank" rel="noopener" style="font-size:12px;font-weight:700">🌐 公式HPで見る${no ? "" : "（番号なし・一覧）"}</a>`;
+}
 const PROF_LEGACY = { name:"name", age:"age", size:"size", psize:"psize", state:"state", hair:"hair", personality:"personality", hobby:"hobby", charm:"charm", erogenous:"erogenous", comment:"comment", mgrComment:"generatedManagerComment" };
 let refl = null;   // { prof, stores:[プロフの店舗キー], kind, rows }
 function profGet(data, sk, f){   // キャストプロフの getField と同じ読み方（サクラムーンだけ旧データも見る）
@@ -873,6 +888,7 @@ async function openReflect(kind){
   }else{   // intro：お店ごとに書く（今の文が入った状態から）
     rows = stores.map(sk => ({ sk, comment: profGet(data, sk, "comment"), mgrComment: profGet(data, sk, "mgrComment") }));
   }
+  await loadHpDummyNos();
   refl = { prof, stores, kind, rows };
   paintReflect();
 }
@@ -886,7 +902,7 @@ function paintReflect(){
     const want = ["self", "mgr"].map(k => { const s = (d.introChange || {})[k] || {}; return s.want === "change" ? `<div class="ansText"><b>${k === "self" ? "本人から一言" : "店長から一言"}の希望：</b>${esc(s.text || "")}</div>` : ""; }).join("");
     body = `${want || '<div class="hint">キャストは「このままでOK」と答えています。直すところがあれば直してください。</div>'}
       <div class="hint" style="margin:6px 0">同じ文章が並ぶと公式HPの検索に不利なので、お店ごとに口調・語尾・言い回しを少し変えてください。「↓ ほかのお店にコピー」でコピーしてから直すと早いです。</div>
-      ${rows.map((r, i) => `<div class="ansSec"><b>${esc(STORE_LABEL_OF(r.sk))}</b>
+      ${rows.map((r, i) => `<div class="ansSec"><b>${esc(STORE_LABEL_OF(r.sk))}</b>${hpLinkOf(ansCur.c, r.sk)}
         <div class="hint" style="margin-top:4px">本人から一言 <a href="javascript:void(0)" onclick="reflCopy(${i},'comment')">↓ ほかのお店にコピー</a></div>
         <textarea id="rf_c${i}" style="width:100%;min-height:80px">${esc(r.comment)}</textarea>
         <div class="hint">店長から一言 <a href="javascript:void(0)" onclick="reflCopy(${i},'mgrComment')">↓ ほかのお店にコピー</a></div>
@@ -894,7 +910,7 @@ function paintReflect(){
   }else{
     body = rows.length ? `<div class="hint">在籍しているお店：${stores.map(s => esc(STORE_LABEL_OF(s))).join("・")}${kind === "profile" ? "（エイティーン・極門はダミーなので入れません）" : ""}。チェックをはずした行は入れません。</div>
       <table class="ansTbl"><tr><th></th><th>お店</th><th>項目</th><th>今のプロフ</th><th>→ 答え</th></tr>
-      ${rows.map((r, i) => `<tr><td><input type="checkbox" ${r.on ? "checked" : ""} onchange="refl.rows[${i}].on=this.checked"></td><td>${esc(STORE_LABEL_OF(r.sk))}</td><td>${esc(r.label)}</td><td style="color:#9C8B8F">${esc(r.cur || "（空欄）")}</td><td><b>${esc(r.v)}</b></td></tr>`).join("")}</table>`
+      ${rows.map((r, i) => `<tr><td><input type="checkbox" ${r.on ? "checked" : ""} onchange="refl.rows[${i}].on=this.checked"></td><td>${esc(STORE_LABEL_OF(r.sk))}${hpLinkOf(ansCur.c, r.sk)}</td><td>${esc(r.label)}</td><td style="color:#9C8B8F">${esc(r.cur || "（空欄）")}</td><td><b>${esc(r.v)}</b></td></tr>`).join("")}</table>`
       : `<div class="hint">キャストプロフはもう答えと同じです。変えるところはありません。</div>`;
   }
   bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:760px;width:100%;max-height:90vh;overflow:auto;font-size:13.5px">
