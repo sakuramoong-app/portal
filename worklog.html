@@ -425,6 +425,7 @@ loadBoard();
   .donelist li{margin-left:18px;}
   .donelist small{color:var(--sub);}
   .note2{font-size:11.5px;color:var(--sub);line-height:1.7;margin-top:6px;}
+  .bignote{font-size:17px;font-weight:800;line-height:1.7;color:#8a3a12;background:#FFF4E5;border:2px solid #FFB547;border-radius:14px;padding:12px 16px;margin:4px 0 14px;}
   @media print{ .tabs,.back,#boardView,#logView,.noprint{display:none !important;} #sumView{display:block !important;} body{background:#fff;} }
 </style>
 <script>
@@ -499,7 +500,9 @@ async function loadSummary(){
   dayKeys.forEach(k=>{ const m = k.slice(0, 7); const o = months[m] = months[m] || { days: 0, commits: 0, hours: 0 }; o.days++; o.commits += days[k].length; o.hours += span(k); });
   // アプリごと
   const apps = SUM_REPOS.map(r=>{ const cs = commits.filter(c=>c.repo.repo === r.repo); if(!cs.length) return null;
-    return { label: r.label, n: cs.length, days: new Set(cs.map(c=>workDay(c.at))).size, from: cs[0].at, to: cs[cs.length - 1].at }; }).filter(Boolean).sort((a, b)=>b.n - a.n);
+    const ad = {}; cs.forEach(c=>{ const k = workDay(c.at); (ad[k] = ad[k] || []).push(c.at); });
+    const hours = Object.values(ad).reduce((s, a)=>s + (a[a.length - 1] - a[0]) / 3600000, 0);   // そのアプリの、日ごとの最初〜最後の公開の幅の合計
+    return { label: r.label, n: cs.length, days: Object.keys(ad).length, hours, from: cs[0].at, to: cs[cs.length - 1].at }; }).filter(Boolean).sort((a, b)=>b.n - a.n);
   // 時間帯・曜日
   const byHour = Array(24).fill(0); commits.forEach(c=>byHour[hh(c.at)]++);
   const maxH = Math.max(...byHour, 1);
@@ -508,6 +511,7 @@ async function loadSummary(){
   const doneBy = {}; done.forEach(d=>{ (doneBy[d.app || "その他"] = doneBy[d.app || "その他"] || []).push(d); });
 
   el.innerHTML = `
+    <div class="bignote">⚠️ この数字は <b>GitHub に公開した記録</b> から数えたものです。<br>考えている時間・調べている時間・細かい作業の時間は<b>入っていません</b>（実際の作業時間はこれより長くなります）。</div>
     <p class="lead">アプリを作った記録のまとめです。<b>数字は GitHub に公開した記録（自動）から数えています。</b>
       <button class="chip noprint" style="margin-left:6px" onclick="window.print()">🖨 印刷・PDFにする</button></p>
     <div class="sumcards">
@@ -526,8 +530,9 @@ async function loadSummary(){
       <tr class="tot"><td class="l">合計</td><td>${dayKeys.length}日</td><td>${commits.length}回</td><td>${h1(totalSpan)}時間〜</td></tr></table>
       <div class="note2">作業時間の目安＝その日の最初の公開から最後の公開までの時間。最初の公開の前にも作業していて、公開が1回だけの日は0時間になるので、<b>実際の作業時間はこれより長くなります。</b></div></div>
     <div class="sbox"><h3>📱 アプリごと</h3>
-      <table class="st"><tr><th class="l">アプリ</th><th>公開した回数</th><th>作業した日</th><th>はじめ</th><th>さいご</th></tr>
-      ${apps.map(a=>`<tr><td class="l">${esc(a.label)}</td><td>${a.n}回</td><td>${a.days}日</td><td>${fmtD(a.from)}</td><td>${fmtD(a.to)}</td></tr>`).join("")}</table></div>
+      <table class="st"><tr><th class="l">アプリ</th><th>公開した回数</th><th>作業した日</th><th>作業時間の目安</th><th>はじめ</th><th>さいご</th></tr>
+      ${apps.map(a=>`<tr><td class="l">${esc(a.label)}</td><td>${a.n}回</td><td>${a.days}日</td><td>${h1(a.hours)}時間〜</td><td>${fmtD(a.from)}</td><td>${fmtD(a.to)}</td></tr>`).join("")}</table>
+      <div class="note2">アプリごとの作業時間の目安＝そのアプリの、日ごとの最初〜最後の公開の幅の合計。同じ日に2つのアプリをさわった時間は、両方に入ることがあります。</div></div>
     <div class="sbox"><h3>🕐 公開した時間帯</h3>
       <div class="bars">${byHour.map((n, h)=>`<div class="b ${h >= 22 || h < 6 ? "night" : ""}" style="height:${n / maxH * 100}%" title="${h}時台 ${n}回"></div>`).join("")}</div>
       <div class="barlab">${byHour.map((n, h)=>`<div>${h % 3 === 0 ? h : ""}</div>`).join("")}</div>

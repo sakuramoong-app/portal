@@ -540,7 +540,7 @@
       <div id="castTimeline"></div>
       <div id="neighborBox"></div>
       <div class="row2" style="margin-top:8px">
-        <div class="f"><label>開始時刻<span class="req">必須</span></label><input type="time" id="f_start" step="300" oninput="recalc()"></div>
+        <div class="f"><label>日付・開始時刻<span class="req">必須</span></label><div style="display:flex;gap:6px"><input type="date" id="f_day" style="max-width:160px" onchange="recalc()"><input type="time" id="f_start" step="300" oninput="recalc()" style="flex:1"></div><div id="dayMoved" style="font-size:12px;color:#c77700;font-weight:800"></div></div>
         <div class="f"><label>終了時刻（自動・延長こみ）</label><div class="endview" id="endView">--:--</div></div>
       </div>
       <div class="row1"><div class="f"><label>コース<span class="req">必須</span></label><select id="f_course" onchange="recalc()"></select></div></div>
@@ -1483,7 +1483,8 @@ function startAt(){
   const st = $("f_start").value; if(!st) return null;
   const [h,m] = st.split(":").map(Number);
   // 日本時間で組み立てる。朝6時より前は次の日の日付（営業日はそのまま）
-  const d = new Date(`${day}T${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:00+09:00`);
+  const bd = ($("f_day") && $("f_day").value) || day;   // 日付を変えたとき（別の日の予約にする）
+  const d = new Date(`${bd}T${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:00+09:00`);
   if(h < 6) d.setTime(d.getTime() + 24*3600*1000);
   return d;
 }
@@ -1527,7 +1528,7 @@ async function saveRes(){
     const mins = minutesOf(c.course) + c.ext*30 + c.date*30;
     const ovRaw = $("f_backov") ? $("f_backov").value : "";
     const row = {
-      biz_date: day, store_key: c.store, cast_id: $("f_cast").value, customer_id: customerId,
+      biz_date: ($("f_day") && $("f_day").value) || day, store_key: c.store, cast_id: $("f_cast").value, customer_id: customerId,
       dummy_name: isDummyStore(c.store) ? $("f_dummy").value : "",
       checks,
       ...(("guest_flags" in (rows[0] || editing || {}) || M.castChecks.some(x=>"kind" in x)) ? { guest_flags: [...guestFlags], todos: ck.todos } : {}),
@@ -1551,7 +1552,7 @@ async function saveRes(){
     };
     if(editing) q(await sb.from("kb_reservations").update(row).eq("id", editing.id));
     else { row.created_by = by; q(await sb.from("kb_reservations").insert(row)); }
-    closeForm(); toast("保存しました🌸"); loadDay();
+    closeForm(); { const bd = $("f_day") && $("f_day").value; toast(bd && bd !== day ? "保存しました🌸（" + Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) + " の予約にしました）" : "保存しました🌸"); } loadDay();
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
 async function removeRes(){
@@ -1653,7 +1654,7 @@ function drawTimeline(){
   if(!sh){ loadShifts(day).then(()=>drawTimeline()).catch(()=>{}); }
   const shift = sh ? (sh[c.shift_name] || sh[c.official_name]) : null;
   const others = rows.filter(r=>r.cast_id === c.id && (!editing || r.id !== editing.id) && r.status !== "cancel" && r.status !== "tobi" && r.start_at && r.end_at)
-    .map(r=>{ const s = hourOf(r.start_at); let e = hourOf(r.end_at); if(e < s) e += 24; return { s, e, label: hm(r.start_at) + "〜" + hm(r.end_at), st: r.status }; });
+    .map(r=>{ const s = hourOf(r.start_at); let e = hourOf(r.end_at); if(e < s) e += 24; return { s, e, label: hm(r.start_at) + "〜" + hm(r.end_at) + (r.area ? " " + r.area : ""), st: r.status }; });
   let cur = null;
   const st = $("f_start").value;
   if(st && last){
@@ -1687,13 +1688,13 @@ onCast = function(){
   if(!c){ $("castInfo").innerHTML = ""; return; }
   hearings = [];
   const rules = rulesOn(c.id).map(r=>"・" + esc(r.note) + hearLink(r.hearing_text, r.by_name, r.created_at)).join("<br>");
-  // 特記事項・NG はキャストの真下にそのまま出す（10/25）。条件（料金・バック）はたたむ
   const parts = [];
-  if(c.special_notes) parts.push(`<div class="info" style="white-space:pre-wrap">📝 特記事項：${esc(c.special_notes)}</div>`);
-  if(c.ng_notes) parts.push(`<div class="warn" style="white-space:pre-wrap">🚫 NG：${esc(c.ng_notes)}</div>`);
-  $("castInfo").innerHTML = parts.join("") + (rules
-    ? `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:13px;font-weight:800;color:var(--sub)">🧮 このキャストの条件を見る</summary><div class="info">${rules}</div></details>`
-    : "");
+  if(c.special_notes) parts.push(`<div class="info">📝 特記事項：${esc(c.special_notes)}</div>`);
+  if(c.ng_notes) parts.push(`<div class="warn">🚫 NG：${esc(c.ng_notes)}</div>`);
+  if(rules) parts.push(`<div class="info">🧮 このキャストの条件：<br>${rules}</div>`);
+  $("castInfo").innerHTML = parts.length
+    ? `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:13px;font-weight:800;color:var(--sub)">📂 このキャストの特記事項・NG・条件を見る</summary>${parts.join("")}</details>`
+    : "";
 };
 
 /* ---------- ⑥ 最終確認（お客さんに読み上げ） ---------- */
@@ -3634,11 +3635,8 @@ const __onCastL = onCast;
 onCast = function(){
   __onCastL.apply(this, arguments);
   const c = M.casts.find(x=>x.id === $("f_cast").value);
-  if(!c || !c.prof_id) return;   // プロフとつながっていない子は、今までどおり
-  // 特記事項・NG（キャスト台帳）はキャストの真下にそのまま出す（10/25）＋ プロフへのリンク
-  const top = (c.special_notes ? `<div class="info" style="white-space:pre-wrap">📝 特記事項：${esc(c.special_notes)}</div>` : "")
-    + (c.ng_notes ? `<div class="warn" style="white-space:pre-wrap">🚫 NG：${esc(c.ng_notes)}</div>` : "");
-  $("castInfo").innerHTML = top + `<a class="proflink" href="${PROF_STAFF_URL}?cast=${encodeURIComponent(c.prof_id)}" target="_blank" rel="noopener">📂 ${esc(c.official_name || c.temp_name)}のプロフを開く（特記事項・NG・条件・ホテル）</a>`;
+  if(!c || !c.prof_id) return;   // プロフとつながっていない子は、今までどおり（たたんで出す）
+  $("castInfo").innerHTML = `<a class="proflink" href="${PROF_STAFF_URL}?cast=${encodeURIComponent(c.prof_id)}" target="_blank" rel="noopener">📂 ${esc(c.official_name || c.temp_name)}のプロフを開く（特記事項・NG・条件・ホテル）</a>`;
 };
 
 /* ============================================================
@@ -4103,6 +4101,7 @@ openForm = function(id){
   const r = (id ? rows.find(x=>x.id === id) : null) || {};
   extOrders = Array.isArray(r.ext_orders) && r.ext_orders.length ? r.ext_orders.map(o=>({ ...o }))
     : [ ...(r.extension_count ? [{ kind: "ext", min: r.extension_count * 30, legacy: true }] : []), ...(r.date_count ? [{ kind: "date", min: r.date_count * 30, legacy: true }] : []) ];
+  if($("f_day")) $("f_day").value = r.biz_date || day;
   const ret = __openFormEX.apply(this, arguments);
   syncExtCounts(); recalc();
   if(extOrders.length) $("optDetails").open = true;
@@ -4128,6 +4127,10 @@ function renderNeighbors(){
   const el = $("neighborBox"); if(!el) return;
   const c = M.casts.find(x=>x.id === $("f_cast").value);
   const st = $("f_start").value;
+  // 日付を変えたとき：タイムライン・前後の予約は「いま開いている日」のものなので、その日を開いて確かめる
+  const bd = $("f_day") ? $("f_day").value : day;
+  if($("dayMoved")) $("dayMoved").textContent = bd && bd !== day ? "📅 " + Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) + " の予約になります（いま開いている日とちがいます）" : "";
+  if(bd && bd !== day){ el.innerHTML = `<div class="warn" style="font-size:13px">📅 日付を変えたので、上のタイムラインと前後の予約は、いま開いている日のものです。${Number(bd.slice(5, 7))}/${Number(bd.slice(8))} の空きは、その日を開いて確かめてください</div>`; return; }
   if(!c){ el.innerHTML = ""; return; }
   const list = rows.filter(r=>r.cast_id === c.id && (!editing || r.id !== editing.id) && !["cancel", "tobi"].includes(r.status) && r.start_at && r.end_at)
     .map(r=>{ const s = hourOf(r.start_at); let e = hourOf(r.end_at); if(e < s) e += 24; return { r, s, e }; }).sort((a, b)=>a.s - b.s);
@@ -4157,7 +4160,7 @@ function renderNeighbors(){
     <div style="font-weight:800;font-size:13px;color:var(--sub)">🕐 前後の予約（${esc(c.official_name || c.temp_name)}）</div>${h}</div>`;
 }
 /* ---------- このキャストの AF・逆AF・有料オプションの可否（キャストプロフの ◎○△×） ---------- */
-const MARK_STYLE = { "◎": ["◎大好き", "#1f9d6b"], "○": ["○OK", "#1f9d6b"], "△": ["△条件つき", "#c77700"], "×": ["×NG", "#d9534f"] };
+const MARK_STYLE = { "◎": ["◎", "#1f9d6b"], "○": ["○", "#1f9d6b"], "〇": ["○", "#1f9d6b"], "△": ["△", "#c77700"], "×": ["×", "#d9534f"] };
 function markHtml(m){ const s = MARK_STYLE[m]; return s ? `<b style="color:${s[1]};margin-left:6px">${s[0]}</b>` : `<small style="color:var(--sub);margin-left:6px">？（プロフに書いていない）</small>`; }
 // オプションの名前 → プロフの項目（AF・聖水など）。見つからなければ出さない
 function playKeyOf(label){
