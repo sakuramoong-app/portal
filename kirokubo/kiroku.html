@@ -4202,7 +4202,7 @@ recalc = function(){ __recalcEX.apply(this, arguments); renderExtList(); renderN
 const NOTE_PROF_STORE = { sakuramoon:"サクラムーン", lana_uguisu:"ラナ鶯谷", lana_kinshi:"ラナ錦糸町", dressgarden:"ドレスガーデン", peachmoon:"ピーチムーン五反田", gyakuanal:"逆AF倶楽部", cutie:"キューティー", eighteen:"18", gokumon:"極門" };
 function unmovedNotes(c, profs, storeKey){
   const out = [], seen = new Set();
-  const add = (src, label, text) => { text = String(text || "").trim(); if(!text || seen.has(text)) return; seen.add(text);
+  const add = (src, label, text) => { text = String(text || "").trim(); if(!text || /^(なし|特になし|とくになし|ない|無し|ありません)[。\s]*$/.test(text) || seen.has(text)) return; seen.add(text);   // 「特になし」などは出さない
     if(!(c.notes_moved || []).some(m => m.src === src && m.text === text)) out.push({ label, text }); };
   add("special", "特記事項", c.special_notes);
   add("ng", "NG", c.ng_notes);

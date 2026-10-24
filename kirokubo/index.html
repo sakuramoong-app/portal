@@ -602,7 +602,7 @@ async function loadProfNotes(force){
 // このキャストのメモ（まだ移していないものだけ）：[{ src, label, text }]
 function notesToMove(c, profs){
   const out = [], seen = new Set();
-  const add = (src, label, text) => { text = String(text || "").trim(); if(!text || seen.has(text)) return; seen.add(text);
+  const add = (src, label, text) => { text = String(text || "").trim(); if(!text || isNashi(text) || seen.has(text)) return; seen.add(text);   // 「特になし」などは出さない
     if(!(c.notes_moved || []).some(m => m.src === src && m.text === text)) out.push({ src, label, text }); };
   add("special", "台帳の特記事項", c.special_notes);
   add("ng", "台帳のNG", c.ng_notes);
