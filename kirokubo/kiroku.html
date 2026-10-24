@@ -76,6 +76,8 @@
   .step{border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:12px;}
   .step h3{font-size:15px;font-weight:800;color:#e5638c;margin:0 0 10px;display:flex;align-items:center;gap:8px;}
   .step h3 .n{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:99px;background:#e5638c;color:#fff;font-size:13px;}
+  .req{display:inline-block;margin-left:6px;background:#FFE8EC;color:#C8325A;border-radius:99px;padding:0 7px;font-size:11px;font-weight:800;vertical-align:1px;}
+  .miss{outline:3px solid #E5486C;outline-offset:3px;border-radius:10px;}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
   .row1{margin-bottom:10px;}
   @media (max-width:600px){ .row2{grid-template-columns:1fr;} }
@@ -500,25 +502,26 @@
     <!-- ① 電話番号（最初に台帳の履歴を見る） -->
     <div class="step">
       <h3><span class="n">1</span>電話番号・お客さんの名前（台帳で履歴を見る）</h3>
-      <div class="row1"><div class="f"><label>電話番号</label>
+      <div class="row1"><div class="f"><label>電話番号<span class="req">必須</span></label>
         <div style="display:flex;gap:6px"><input id="f_phone" type="tel" inputmode="tel" placeholder="09012345678" onchange="lookupCustomer()">
           <button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="lookupCustomer()">🔍 調べる</button></div></div></div>
-      <div class="row1"><div class="f"><label>お客さんの名前</label><input id="f_name" maxlength="40" oninput="recalc()"></div></div>
+      <div class="row1"><div class="f"><label>お客さんの名前<span class="req">必須</span></label><input id="f_name" maxlength="40" oninput="recalc()"></div></div>
       <div id="custInfo"></div>
-      <div class="f" style="margin-top:8px"><label>種別</label><div class="chips" id="f_visit"></div></div>
+      <div class="f" style="margin-top:8px"><label>種別（新規・店リピ・本指名）<span class="req">必須</span></label><div class="chips" id="f_visit"></div></div>
       <div class="f" style="margin-top:8px"><label>お客様のこと（当てはまれば押す）</label><div class="chips" id="f_guest"></div></div>
     </div>
 
-    <!-- ② 指名キャスト -->
+    <!-- ② 指名・何時から・どこで（ここで行けるかどうかが決まる） -->
     <div class="step">
-      <h3><span class="n">2</span>指名キャスト</h3>
-      <div class="row2">
-        <div class="f"><label>売上店舗</label><select id="f_store" onchange="onStore()"></select></div>
-        <div class="f"><label>フリー区分</label>
-          <select id="f_free" onchange="recalc()">
-            <option value="">なし（指名あり）</option><option value="free">フリー</option>
-            <option value="special_free">特別フリー</option><option value="event_free">イベフリー</option>
-          </select></div>
+      <h3><span class="n">2</span>指名・何時から・どこで（ここで行けるか決まる）</h3>
+      <div class="f"><label>指名する？<span class="req">必須</span></label><div class="chips" id="f_nomiChips"></div>
+        <select id="f_free" style="display:none" onchange="recalc()">
+          <option value="">なし（指名あり）</option><option value="free">フリー</option>
+          <option value="special_free">特別フリー</option><option value="event_free">イベフリー</option>
+        </select></div>
+      <div class="row2" style="margin-top:8px">
+        <div class="f"><label>売上店舗<span class="req">必須</span></label><select id="f_store" onchange="onStore()"></select></div>
+        <div class="f"><label>開始時刻<span class="req">必須</span></label><input type="time" id="f_start" step="300" oninput="recalc()"></div>
       </div>
       <!-- ダミーのお店（極門・エイティーン）だけ -->
       <div id="dummyWrap" style="display:none;background:#F6F2FE;border-radius:12px;padding:8px 10px;margin-bottom:8px">
@@ -529,35 +532,16 @@
         <div id="dummyMatch"></div>
         <div style="font-size:12px;color:var(--sub);margin-top:4px">↓ 下は「実際に行くキャスト」（バックは実際に行くキャストで計算）</div>
       </div>
-      <div class="f"><label>キャスト（フリーのときは行く人を選ぶ）</label><select id="f_cast" onchange="onCast()"></select>
+      <div class="f"><label>キャスト（フリーのときは行く人を選ぶ）<span class="req">必須</span></label><select id="f_cast" onchange="onCast()"></select>
         <label style="display:block;font-size:12px;color:var(--sub);margin-top:4px"><input type="checkbox" id="f_castAll" onchange="fillCastSel()" style="width:auto;display:inline;vertical-align:middle;margin-right:4px"> シフトにない人も出す（ふだんは、その日の出勤のキャストだけ）</label></div>
-      <div id="castChecks"></div>
-    </div>
-
-    <!-- ③ 日時・エリア・コース -->
-    <div class="step">
-      <h3><span class="n">3</span>日時・エリア・コース</h3>
-      <div class="row2">
-        <div class="f"><label>開始時刻</label><input type="time" id="f_start" step="300" oninput="recalc()"></div>
-        <div class="f"><label>コース</label><select id="f_course" onchange="recalc()"></select></div>
-      </div>
-      <div class="row2">
-        <div class="f"><label>延長（30分の回数）／デート（30分の回数）</label>
-          <div style="display:flex;gap:6px"><input type="number" id="f_ext" min="0" value="0" oninput="recalc()"><input type="number" id="f_date" min="0" value="0" oninput="recalc()"></div></div>
-        <div class="f"><label>終了時刻（自動）</label><div class="endview" id="endView">--:--</div></div>
-      </div>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px;font-size:14px;font-weight:800">
-        <label id="nhWrap"><input type="checkbox" id="f_nh" onchange="recalc()"> キューティ：NH料金で取った</label>
-        <label id="admWrap"><input type="checkbox" id="f_adm" onchange="recalc()"> 入会金あり（極門の新規）</label>
-      </div>
-      <div id="courseInfo"></div>
       <div id="castTimeline"></div>
+      <div id="castChecks"></div>
       <div id="placePick"></div>
       <div class="row2" style="margin-top:10px">
-        <div class="f"><label>エリア</label>
+        <div class="f"><label>エリア<span class="req">必須</span></label>
           <select id="f_areaSel" onchange="onAreaSel()"></select>
           <input id="f_area" maxlength="60" placeholder="場所（駅・地名など。例：川崎）" style="display:none;margin-top:6px" oninput="showAreaFee();recalc()"></div>
-        <div class="f"><label>ホテル・自宅（部屋番号）</label>
+        <div class="f"><label>ホテル・自宅（部屋番号）<span class="req">種類は必須</span></label>
           <div style="display:flex;gap:6px"><select id="f_place" style="max-width:110px" onchange="checkNewHotel()"><option value="">（種類）</option><option value="love">ラブホ</option><option value="biz">ビジホ</option><option value="home">自宅</option></select>
           <input id="f_address" maxlength="200" list="hotelList" oninput="recalc();checkNewHotel()" style="flex:1"></div><datalist id="hotelList"></datalist></div>
       </div>
@@ -572,12 +556,23 @@
       </div>
     </div>
 
-    <!-- ④ 希望プレイ・オプション・総額 -->
+    <!-- ③ コース・オプション -->
     <div class="step">
-      <h3><span class="n">4</span>希望プレイ・オプション・総額のご案内</h3>
+      <h3><span class="n">3</span>コース・オプション</h3>
+      <div class="row2">
+        <div class="f"><label>コース<span class="req">必須</span></label><select id="f_course" onchange="recalc()"></select></div>
+        <div class="f"><label>終了時刻（自動）</label><div class="endview" id="endView">--:--</div></div>
+      </div>
+      <div class="row1"><div class="f"><label>延長（30分の回数）／デート（30分の回数）</label>
+        <div style="display:flex;gap:6px;max-width:300px"><input type="number" id="f_ext" min="0" value="0" oninput="recalc()"><input type="number" id="f_date" min="0" value="0" oninput="recalc()"></div></div></div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px;font-size:14px;font-weight:800">
+        <label id="nhWrap"><input type="checkbox" id="f_nh" onchange="recalc()"> キューティ：NH料金で取った</label>
+        <label id="admWrap"><input type="checkbox" id="f_adm" onchange="recalc()"> 入会金あり（極門の新規）</label>
+      </div>
+      <div id="courseInfo"></div>
       <div id="castInfo"></div>
-      <div style="background:#FFF4E5;border:2px solid #FFB547;border-radius:12px;padding:8px 12px;margin-bottom:8px">
-        <div style="font-weight:800;font-size:13.5px;color:#a35a00;margin-bottom:4px">🔸 AF・逆AF のご希望（必ず聞く）</div>
+      <div id="afBox" style="background:#FFF4E5;border:2px solid #FFB547;border-radius:12px;padding:8px 12px;margin-bottom:8px">
+        <div style="font-weight:800;font-size:13.5px;color:#a35a00;margin-bottom:4px">🔸 AF・逆AF のご希望（必ず聞く）<span class="req">必須</span></div>
         <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:14.5px;font-weight:700">
           <span>AF：<label class="ynb"><input type="radio" name="f_afw" value="yes" onchange="onAfWish()"><span>〇</span></label><label class="ynb"><input type="radio" name="f_afw" value="no" onchange="onAfWish()"><span>×</span></label></span>
           <span>逆AF：<label class="ynb"><input type="radio" name="f_rafw" value="yes" onchange="onAfWish()"><span>〇</span></label><label class="ynb"><input type="radio" name="f_rafw" value="no" onchange="onAfWish()"><span>×</span></label></span>
@@ -593,18 +588,23 @@
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="openOptAdd()">＋ 一覧にオプションを足す</button><button type="button" class="btn btn-ghost btn-sm edit-only" onclick="openOptEdit()">⚙️ 一覧を直す・消す（店長）</button></div>
       </details>
-      <div class="row1"><div class="f"><label>支払い方法</label>
-        <select id="f_pay" style="max-width:220px" onchange="recalc()"><option value="cash">現金</option><option value="card">カード（×1.15）</option><option value="card_paid">カード精算済</option></select></div></div>
+    </div>
+
+    <!-- ④ 総額のご案内（コース・オプション・場所が決まったら） -->
+    <div class="step">
+      <h3><span class="n">4</span>総額のご案内</h3>
+      <div class="row1"><div class="f"><label>支払い方法<span class="req">必須</span></label><div id="f_payChips" style="display:none"></div>
+        <select id="f_pay" style="max-width:220px" onchange="recalc()"><option value="">（選ぶ）</option><option value="cash">現金</option><option value="card">カード（×1.15）</option><option value="card_paid">カード精算済</option></select></div></div>
       <div class="calc" id="calc"></div>
       <div class="row1" style="margin-top:8px"><div class="f"><label>割引（円）・割引の名前</label>
         <div style="display:flex;gap:6px"><input type="number" id="f_discount" min="0" value="0" oninput="recalc()" style="max-width:140px"><input id="f_discnote" placeholder="例：口コミ割" maxlength="60"></div></div></div>
       <details id="backDet" class="calc" style="margin-top:8px"><summary style="cursor:pointer;font-weight:800;font-size:14px">💗 キャストの報酬<span id="backSum"></span>（受付では見なくてOK）</summary><div id="calcBack"></div></details>
     </div>
 
-    <!-- ⑤ 媒体・お客さんの名前 -->
+    <!-- ⑤ 媒体 -->
     <div class="step">
       <h3><span class="n">5</span>媒体</h3>
-      <div class="row1"><div class="f"><label>媒体（いくつでも）</label><div class="chips" id="f_media"></div></div></div>
+      <div class="row1"><div class="f"><label>媒体（いくつでも）<span class="req">必須</span></label><div class="chips" id="f_media"></div></div></div>
     </div>
 
     <!-- ⑥ 最終確認 -->
@@ -612,7 +612,7 @@
       <h3><span class="n">6</span>最終確認（お客さんに読み上げ）</h3>
       <div id="finalSummary" class="final"></div>
       <div class="row2" style="margin-top:10px">
-        <div class="f"><label>状態</label><select id="f_status" class="stsel st pick" onchange="stColor()"></select></div>
+        <div class="f"><label>状態<span class="req">必須</span></label><select id="f_status" class="stsel st pick" onchange="stColor()"></select></div>
       </div>
       <div class="row2" style="display:none">
         <div></div>
@@ -776,8 +776,10 @@ function openForm(id){
   const r = editing || {};
   $("formTitle").textContent = id ? `受付の編集（No.${id}）` : "＋ 受付";
   $("receptionNotes").innerHTML = (M.set.reception_notes || []).map(t=>`<div class="info">📌 ${esc(t)}</div>`).join("");
-  $("f_store").innerHTML = M.stores.map(s=>`<option value="${s.key}">${esc(s.label)}</option>`).join("");
-  $("f_store").value = r.store_key || "sakuramoon";
+  // 新しい受付は、店舗・指名・種別・支払い方法を「まだ選んでいない」から（必須）
+  $("f_store").innerHTML = `<option value="">（店舗を選ぶ）</option>` + M.stores.map(s=>`<option value="${s.key}">${esc(s.label)}</option>`).join("");
+  $("f_store").value = id ? (r.store_key || "sakuramoon") : "";
+  nomiChosen = !!id;
   const grp = { active:"在籍", break:"お休み中", new:"入店前", interview:"面接中" };
   $("f_cast").innerHTML = `<option value="">（キャストを選ぶ）</option>` + Object.keys(grp).map(st=>{
     const list = M.casts.filter(c=>c.status===st); if(!list.length) return "";
@@ -800,8 +802,9 @@ function openForm(id){
   setRadio("f_afw", r.af_wish || ""); setRadio("f_rafw", r.rev_af_wish || "");
   $("optDetails").open = false;
   $("f_transport").value = r.transport || 0; $("f_discount").value = r.discount || 0; $("f_discnote").value = r.discount_note || "";
-  $("f_pay").value = r.payment || "cash"; $("f_confirm").value = r.confirm_call || ""; $("f_note").value = r.note || "";
-  visit = r.visit_kind || "new"; mediaSel = (r.media || []).slice();
+  $("f_pay").value = id ? (r.payment || "cash") : ""; $("f_confirm").value = r.confirm_call || ""; $("f_note").value = r.note || "";
+  visit = id ? (r.visit_kind || "new") : ""; mediaSel = (r.media || []).slice();
+  document.querySelectorAll("#formBg .miss").forEach(el=>el.classList.remove("miss"));
   const c = r.kb_customers || {};
   curCustomer = r.customer_id ? { id: r.customer_id, ...c } : null;
   $("f_phone").value = c.phone || ""; $("f_name").value = c.name || ""; $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = "";
@@ -822,7 +825,7 @@ function onStore(r){
   const store = $("f_store").value, g = storeGroup(store);
   const list = M.prices.filter(p=>p.store_key===store);
   const keep = (r && r.course) || $("f_course").value;
-  $("f_course").innerHTML = list.map(p=>`<option value="${esc(p.course)}">${esc(p.course)}${/^\d+$/.test(p.course)?"分":""}　${yen(p.price)}${p.note?"（"+esc(p.note)+"）":""}</option>`).join("");
+  $("f_course").innerHTML = `<option value="">（コースを選ぶ）</option>` + list.map(p=>`<option value="${esc(p.course)}">${esc(p.course)}${/^\d+$/.test(p.course)?"分":""}　${yen(p.price)}${p.note?"（"+esc(p.note)+"）":""}</option>`).join("");
   if(keep && list.some(p=>p.course===keep)) $("f_course").value = keep;
   // オプション
   const sel = (r && r.options) || [];
@@ -843,6 +846,7 @@ function onStore(r){
   // 媒体・新規リピ
   $("f_media").innerHTML = M.media.map(m=>`<button type="button" class="chip ${mediaSel.includes(m.code)?"on":""}" onclick="toggleMedia('${m.code}')">${esc(m.label)}</button>`).join("");
   $("f_visit").innerHTML = VISIT.map(([k,l])=>`<button type="button" class="chip ${visit===k?"on":""}" onclick="setVisit('${k}')">${l}</button>`).join("");
+  renderNomiChips();
   storeOnlyFields();
   optSummary();
   // ダミーのお店：ダミー名を選ぶ
@@ -1294,6 +1298,38 @@ async function lookupCustomer(keepName){
   }catch(e){ $("custInfo").innerHTML = `<div class="warn">お客さんを探せませんでした：${esc(e.message||e)}</div>`; }
 }
 function setVisit(v){ visit = v; document.querySelectorAll("#f_visit .chip").forEach((b,i)=>b.classList.toggle("on", VISIT[i][0]===v)); recalc(); }
+// 指名する？（フリー区分の select はかくして、ボタンで選ぶ。新しい受付は何も選んでいないところから）
+const NOMI = [["", "指名あり"], ["free", "フリー"], ["special_free", "特別フリー"], ["event_free", "イベフリー"]];
+let nomiChosen = false;
+function renderNomiChips(){
+  const v = $("f_free").value;
+  $("f_nomiChips").innerHTML = NOMI.map(([k, l])=>`<button type="button" class="chip ${nomiChosen && v === k ? "on" : ""}" onclick="setNomi('${k}')">${l}</button>`).join("");
+}
+function setNomi(v){ nomiChosen = true; $("f_free").value = v; renderNomiChips(); recalc(); }
+// 必須の項目で、まだ入っていないもの [名前, 場所の id]（キャンセル・トビにするときは見ない）
+function missingRequired(){
+  return [
+    [!digits($("f_phone").value), "電話番号", "f_phone"],
+    [!$("f_name").value.trim(), "お客さんの名前", "f_name"],
+    [!visit, "種別（新規・店リピ・本指名）", "f_visit"],
+    [!nomiChosen, "指名する？", "f_nomiChips"],
+    [!$("f_store").value, "売上店舗", "f_store"],
+    [!$("f_start").value, "開始時刻", "f_start"],
+    [!$("f_course").value, "コース", "f_course"],
+    [!$("f_area").value.trim(), "エリア", "f_areaSel"],
+    [!$("f_place").value, "ラブホ・ビジホ・自宅", "f_place"],
+    [!radioVal("f_afw") || !radioVal("f_rafw"), "AF・逆AF", "afBox"],
+    [!$("f_pay").value, "支払い方法", "f_pay"],
+    [!mediaSel.length, "媒体", "f_media"],
+  ].filter(x=>x[0]).map(x=>[x[1], x[2]]);
+}
+function markMissing(list){
+  document.querySelectorAll("#formBg .miss").forEach(el=>el.classList.remove("miss"));
+  list.forEach(([, id])=>{ const el = $(id); if(el) el.classList.add("miss"); });
+  const first = list.length && $(list[0][1]); if(first) first.scrollIntoView({ block: "center" });
+}
+// 入れたら赤い枠を消す
+["input", "change", "click"].forEach(ev=>document.addEventListener(ev, e=>{ const m = e.target.closest && e.target.closest(".miss"); if(m) m.classList.remove("miss"); }));
 
 /* ---------- 計算 ---------- */
 function calc(){
@@ -1336,7 +1372,7 @@ function calc(){
   let total = price + admission + nomination + ext*extSet.price + date*dateSet.price + transport + optionTotal - discount;
   const pay = $("f_pay").value;
   const cardRate = (M.set.card || {}).rate || 1.15;
-  if(pay !== "cash"){ total = Math.round(total * cardRate); }
+  if(pay && pay !== "cash"){ total = Math.round(total * cardRate); }
   // バック：店舗のグループのランク（特別フリー・イベフリーは「イベ」のランク）＋コース＋（本指／フリー…）
   let courseBack = 0, rank = "", key = "";
   if(cast){
@@ -1387,7 +1423,7 @@ function recalc(){
     ${c.optionTotal?`<div class="row"><span>オプション</span><b>${yen(c.optionTotal)}</b></div>`:""}
     ${c.transport?`<div class="row"><span>交通費</span><b>${yen(c.transport)}</b></div>`:""}
     ${c.discount?`<div class="row"><span>割引</span><b>−${yen(c.discount)}</b></div>`:""}
-    ${c.pay!=="cash"?`<div class="row"><span>カード（×${(M.set.card||{}).rate||1.15}）</span><b></b></div>`:""}
+    ${c.pay && c.pay!=="cash"?`<div class="row"><span>カード（×${(M.set.card||{}).rate||1.15}）</span><b></b></div>`:""}
     <div class="row total"><span>総額</span><b>${yen(c.total)}</b></div>`;
   if($("backSum")) $("backSum").textContent = "：" + yen(ov !== "" ? (Number(ov) || 0) : back);
   $("calcBack").innerHTML = `
@@ -1446,6 +1482,9 @@ async function saveRes(){
   // 受付ルール：📣は全部チェック／✅はチェックするまで「〜待ち」でしか保存できない／⌛受けない長さは保存できない（キャンセル・トビは除く）
   if(!$("f_status").value){ toast("⚠️ 状態を選んでください"); $("f_status").scrollIntoView({ block: "center" }); return; }
   const cancelLike = ["cancel", "tobi"].includes($("f_status").value);
+  // 必須の項目（キャンセル・トビにするときは、なくても保存できる）
+  const miss = cancelLike ? [] : missingRequired();
+  if(miss.length){ toast("⚠️ まだ入っていない必須の項目：" + miss.map(x=>x[0]).join("・")); markMissing(miss); return; }
   const waiting = String($("f_status").value).startsWith("wait_");
   const ck = checksForSave();
   // 出禁・店NGのお客さんは受けない（NGが解除になったら「NG客」を「NGではない」に直してから）
@@ -1554,7 +1593,7 @@ renderList = function(){
 /* ---------- 支払い方法のボタン ---------- */
 const PAYS = [["cash", "現金"], ["card", "カード（×1.15）"], ["card_paid", "カード済み"]];
 function renderPayChips(){
-  const v = $("f_pay").value || "cash";
+  const v = $("f_pay").value;   // 新しい受付は「まだ選んでいない」（必須）
   $("f_payChips").innerHTML = PAYS.map(([k, l])=>`<button type="button" class="chip ${v === k ? "on" : ""}" onclick="setPay('${k}')">${l}</button>`).join("");
 }
 function setPay(v){ $("f_pay").value = v; renderPayChips(); recalc(); }
