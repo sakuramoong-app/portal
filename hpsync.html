@@ -292,7 +292,7 @@ async function peekCast(){
 let svCur = null;
 function svPreview(k){
   const v = document.getElementById("sv_" + k).value, f = document.getElementById("svpv_" + k);
-  const body = svCur && svCur.html ? v : esc(v).replace(/\n/g, "<br>");
+  const body = svCur && svCur.html && /<[a-z]/i.test(v) ? v : esc(v).replace(/\n/g, "<br>");   // タグのない文は、管理画面が改行を <br> にする
   f.srcdoc = `<meta charset="utf-8"><body style="margin:8px;font-family:sans-serif;font-size:14px;color:#444">${body}</body>`;
 }
 async function saveTest(dry){
@@ -309,7 +309,8 @@ async function saveTest(dry){
     : r.saved ? (r.ok ? `✅ 保存しました。写真 ${r.photos}→${r.photosAfter}枚${r.published ? (r.published.ok ? "・更新しました" : "・<span class='ng'>更新できませんでした</span>") : ""}。公式HPで見た目を確かめてください`
                       : `<span class="ng">⚠️ 保存したけど、確かめたら違うところがあります（${esc((r.failed || []).join("・"))}／写真 ${r.photos}→${r.photosAfter}枚）。すぐ教えてください</span>`)
     : `<span class="ng">${esc(r.error || r.note || "うまくいきませんでした")}</span>`;
-  out.innerHTML = `<div class="${r.ok ? "ok" : ""}">${head}</div>${ch ? `<table><tr><th>欄</th><th>今</th><th>→ 入れる</th></tr>${ch}</table>` : ""}
+  const hf = (r.htmlFields || []).map(x=>`<tr><td>${esc(x.k)}</td><td>${x.len}文字</td><td style="font-size:12px">${esc(x.head)}</td></tr>`).join("");
+  out.innerHTML = `<div class="${r.ok ? "ok" : ""}">${head}</div>${r.htmlFields ? `<div style="margin-top:6px;font-weight:800;font-size:13px">HTMLが入っている欄（${(r.htmlFields || []).length}）</div><table><tr><th>欄</th><th>長さ</th><th>はじめ</th></tr>${hf || '<tr><td colspan="3">なし</td></tr>'}</table>` : ""}${ch ?`<table><tr><th>欄</th><th>今</th><th>→ 入れる</th></tr>${ch}</table>` : ""}
     <details style="margin-top:6px"><summary style="font-size:12px">くわしく（こちらに見せる用）</summary><textarea style="width:100%;height:120px;font-size:11px">${esc(JSON.stringify({ ...r, changes: undefined }, null, 1))}</textarea></details>`;
 }
 
