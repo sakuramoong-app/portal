@@ -844,11 +844,15 @@ async function loadHpDummyNos(){
   if(hpDummyNos) return;
   try{ hpDummyNos = q(await sb.from("hp_dummy_map").select("store_key,cast_name,no")) || []; }catch(e){ hpDummyNos = []; }
 }
+function hpNoOf(c, sk){   // プロフのお店 → { mk: 管理画面ロボットのお店, no: 在籍番号 }
+  const mk = Object.keys(PROF_STORE_OF).find(k => PROF_STORE_OF[k] === sk);
+  let no = Number(mk && c.stores && c.stores[mk] && c.stores[mk].siteNo) || 0;
+  if(!no && mk && c.shift_name){ const d = (hpDummyNos || []).find(x => x.store_key === mk && x.cast_name === c.shift_name); if(d) no = Number(d.no) || 0; }
+  return { mk, no };
+}
 function hpLinkOf(c, sk){
-  const mk = Object.keys(PROF_STORE_OF).find(k => PROF_STORE_OF[k] === sk), site = HP_SITE_OF[mk];
+  const { mk, no } = hpNoOf(c, sk), site = HP_SITE_OF[mk];
   if(!site) return "";
-  let no = Number(c.stores && c.stores[mk] && c.stores[mk].siteNo) || 0;
-  if(!no && c.shift_name){ const d = (hpDummyNos || []).find(x => x.store_key === mk && x.cast_name === c.shift_name); if(d) no = Number(d.no) || 0; }
   const url = no ? `https://www.${site}.com/gal/gal-${no}.html` : `https://www.${site}.com/gal.html`;
   return ` <a href="${url}" target="_blank" rel="noopener" style="font-size:12px;font-weight:700">🌐 公式HPで見る${no ? "" : "（番号なし・一覧）"}</a>`;
 }
@@ -904,9 +908,10 @@ function paintReflect(){
       <div class="hint" style="margin:6px 0">同じ文章が並ぶと公式HPの検索に不利なので、お店ごとに口調・語尾・言い回しを少し変えてください。「↓ ほかのお店にコピー」でコピーしてから直すと早いです。</div>
       ${rows.map((r, i) => `<div class="ansSec"><b>${esc(STORE_LABEL_OF(r.sk))}</b>${hpLinkOf(ansCur.c, r.sk)}
         <div class="hint" style="margin-top:4px">本人から一言 <a href="javascript:void(0)" onclick="reflCopy(${i},'comment')">↓ ほかのお店にコピー</a></div>
-        <textarea id="rf_c${i}" style="width:100%;min-height:80px">${esc(r.comment)}</textarea>
+        <textarea id="rf_c${i}" style="width:100%;min-height:80px" oninput="reflPv('rf_c${i}')">${esc(r.comment)}</textarea><iframe id="rf_c${i}_pv" sandbox style="display:none;width:100%;height:220px;border:1px solid #eee;border-radius:8px;background:#fff"></iframe>
         <div class="hint">店長から一言 <a href="javascript:void(0)" onclick="reflCopy(${i},'mgrComment')">↓ ほかのお店にコピー</a></div>
-        <textarea id="rf_m${i}" style="width:100%;min-height:100px">${esc(r.mgrComment)}</textarea></div>`).join("")}`;
+        <textarea id="rf_m${i}" style="width:100%;min-height:100px" oninput="reflPv('rf_m${i}')">${esc(r.mgrComment)}</textarea><iframe id="rf_m${i}_pv" sandbox style="display:none;width:100%;height:220px;border:1px solid #eee;border-radius:8px;background:#fff"></iframe></div>`).join("")}
+      <div class="hint">HTML（デザインつき）の紹介文は、下に見た目が出ます。HTMLの中の言葉だけを直してください。</div>`;
   }else{
     body = rows.length ? `<div class="hint">在籍しているお店：${stores.map(s => esc(STORE_LABEL_OF(s))).join("・")}${kind === "profile" ? "（エイティーン・極門はダミーなので入れません）" : ""}。チェックをはずした行は入れません。</div>
       <table class="ansTbl"><tr><th></th><th>お店</th><th>項目</th><th>今のプロフ</th><th>→ 答え</th></tr>
@@ -917,7 +922,17 @@ function paintReflect(){
     <b style="font-size:16px">${title}</b><div style="margin-top:8px">${body}</div>
     <div style="display:flex;gap:8px;margin-top:12px">
       ${kind === "intro" || rows.length ? `<button class="btn btn-primary" onclick="saveReflect()">この内容でキャストプロフに入れる</button>` : ""}
+      ${kind === "profile" && !rows.length ? `<button class="btn btn-primary" onclick="hpFromAnswer()">🌐 公式HPと比べる</button>` : ""}
       <button class="btn btn-ghost" onclick="document.getElementById('reflBg').remove()">${kind === "intro" || rows.length ? "やめる" : "閉じる"}</button></div></div>`;
+  if(kind === "intro") rows.forEach((r, i) => { reflPv("rf_c" + i); reflPv("rf_m" + i); });
+}
+// HTML（デザインつき）の紹介文の見た目。タグのない文なら出さない
+function reflPv(id){
+  const v = $(id).value, f = $(id + "_pv");
+  if(!f) return;
+  const isHtml = /<[a-z][^>]*>/i.test(v);
+  f.style.display = isHtml ? "block" : "none";
+  if(isHtml) f.srcdoc = `<meta charset="utf-8"><body style="margin:6px;font-family:sans-serif;font-size:14px;color:#444">${v}</body>`;
 }
 function STORE_LABEL_OF(sk){ return sk === "18" ? "エイティーン" : sk; }
 function reflCopy(i, f){
@@ -930,12 +945,15 @@ async function saveReflect(){
   data.storeProfiles = data.storeProfiles || {};
   const sp = sk => (data.storeProfiles[sk] = data.storeProfiles[sk] || { active: true });
   let n = 0;
+  const hpSets = {};   // 公式HPにも入れる分 { お店: { 欄: 中身 } }
+  const hpSet = (sk, f, v) => { (hpSets[sk] = hpSets[sk] || {})[f] = v; };
   if(kind === "intro"){
     rows.forEach((r, i) => { const s = sp(r.sk); const c1 = $("rf_c" + i).value.trim(), c2 = $("rf_m" + i).value.trim();
-      if(c1 !== (r.comment || "")){ s.comment = c1; n++; } if(c2 !== (r.mgrComment || "")){ s.mgrComment = c2; n++; } });
+      if(c1 !== (r.comment || "")){ s.comment = c1; n++; } if(c2 !== (r.mgrComment || "")){ s.mgrComment = c2; n++; }
+      if(c1) hpSet(r.sk, "comment", c1); if(c2) hpSet(r.sk, "mgrComment", c2); });
   }else rows.filter(r => r.on).forEach(r => {
     const s = sp(r.sk);
-    if(kind === "profile"){ s[r.f] = r.v; n++; }
+    if(kind === "profile"){ s[r.f] = r.v; n++; hpSet(r.sk, r.f, r.v); }
     else{
       if(!s.options || !Object.keys(s.options).length){ const o = profOpts(prof.data || {}, r.sk); s.options = Object.assign({}, o.options); s.optMemo = Object.assign({}, o.optMemo); }   // サクラムーンの旧データを先に写す
       s.options[r.f] = r.val; if(r.memo){ s.optMemo = s.optMemo || {}; s.optMemo[r.f] = r.memo; } n++;
@@ -956,6 +974,77 @@ async function saveReflect(){
   document.getElementById("reflBg").remove();
   toast(`キャストプロフに ${n}か所入れました`);
   await ansMark(kind === "intro" ? "intro" : kind, true);
+  if(Object.keys(hpSets).length) openHpPush(hpSets);   // オプションはまだ公式HPに入れない
+}
+// ---------- 🌐 公式HPにも入れる（お店ごとに「確かめる」→ チェックしたお店に「入れる」） ----------
+let hpPush = null;
+const HP_CMS_LABEL = { gname:"名前", gye:"年齢", g3s:"サイズ", Dttcomm1:"Pサイズ", Dttcomm2:"性格", Dttcomm3:"趣味", Dttcomm4:"性感帯", Dttcomm5:"チャームポイント", Dttcomm6:"状態（竿/玉）", Dttcomm7:"髪の毛",
+  comm1:"本人から一言", comm1a:"本人から一言（HTML）", comm2:"店長から一言", comm2a:"店長から一言（HTML）" };
+async function hpFn(body){
+  const { data, error } = await sb.functions.invoke("hp-shift-sync", { body });
+  let r = data;
+  if(error){ try{ r = await error.context.json(); }catch(e){ r = { ok: false, error: error.message }; } }
+  return r || { ok: false, error: "返事がありません" };
+}
+function hpFromAnswer(){   // プロフはもう答えと同じ → 答えのプロフィールを、在籍しているお店の公式HPと比べる
+  const d = ansCur.d, sets = {};
+  refl.stores.forEach(sk => Object.keys(ANS_PROFILE_LABELS).forEach(k => { const v = String((d.profile || {})[k] || "").trim(); if(v) (sets[sk] = sets[sk] || {})[k] = v; }));
+  document.getElementById("reflBg").remove();
+  if(Object.keys(sets).length) openHpPush(sets); else toast("入れるものがありません");
+}
+function openHpPush(sets){
+  const c = ansCur.c;
+  hpPush = Object.keys(sets).map(sk => ({ sk, ...hpNoOf(c, sk), set: sets[sk], state: "wait", on: true, r: null }));
+  paintHpPush();
+  hpCheckAll();
+}
+function paintHpPush(){
+  let bg = document.getElementById("hpBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "hpBg"; bg.style.cssText = "position:fixed;inset:0;z-index:310;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
+  const L = Object.assign({ comment: "本人から一言", mgrComment: "店長から一言" }, ANS_PROFILE_LABELS);
+  const short = s => { s = String(s || ""); return s.length > 120 ? s.slice(0, 120) + "…" : s; };
+  const busyNow = hpPush.some(x => x.state === "checking" || x.state === "saving");
+  const rowsHtml = hpPush.map((x, i) => {
+    const r = x.r || {};
+    let st = "";
+    if(!x.no) st = `<span style="color:#d9534f">台帳に在籍番号がないので入れられません</span>`;
+    else if(x.state === "checking") st = "確かめています…";
+    else if(x.state === "saving") st = "入れています…（1分ほど）";
+    else if(x.state === "checked") st = r.ok ? (r.changes && r.changes.length ? `変わるところ ${r.changes.length}か所（写真 ${r.photos}枚はそのまま）` : "公式HPはもう同じです") : `<span style="color:#d9534f">❌ ${esc(r.error || "確かめられませんでした")}</span>`;
+    else if(x.state === "done") st = r.ok ? `✅ 入れました（写真 ${r.photos}→${r.photosAfter}枚${r.published && r.published.ok ? "・更新ずみ" : ""}）` : `<span style="color:#d9534f">⚠️ ${esc(r.error || ("確かめたら違うところがあります：" + (r.failed || []).join("・")))}（写真 ${r.photos}→${r.photosAfter}）</span>`;
+    const can = x.no && x.state === "checked" && r.ok && r.changes && r.changes.length;
+    const ch = (r.changes || []).map(c => `<tr><td>${esc(HP_CMS_LABEL[c.k] || c.k)}</td><td style="color:#9C8B8F;white-space:pre-wrap">${esc(short(c.before))}</td><td style="white-space:pre-wrap"><b>${esc(short(c.after))}</b></td></tr>`).join("");
+    return `<div class="ansSec"><label style="font-weight:800"><input type="checkbox" ${can && x.on ? "checked" : ""} ${can ? "" : "disabled"} onchange="hpPush[${i}].on=this.checked"> ${esc(STORE_LABEL_OF(x.sk))}</label>${hpLinkOf(ansCur.c, x.sk)}
+      <div style="font-size:13px;margin-top:4px">${st}</div>
+      ${ch && x.state === "checked" ? `<table class="ansTbl" style="margin-top:4px"><tr><th>欄</th><th>今の公式HP</th><th>→ 入れる</th></tr>${ch}</table>` : ""}
+      <div class="hint">入れる欄：${Object.keys(x.set).map(k => esc(L[k] || k)).join("・")}</div></div>`;
+  }).join("");
+  const any = hpPush.some(x => x.on && x.state === "checked" && x.r && x.r.ok && x.r.changes && x.r.changes.length);
+  bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:760px;width:100%;max-height:90vh;overflow:auto;font-size:13.5px">
+    <b style="font-size:16px">🌐 公式HPにも入れますか？</b>
+    <div class="hint" style="margin:6px 0">キャストプロフには入れました。下は公式HPの管理画面を見て「変わるところ」を出しただけです（まだ何も変えていません）。入れるお店にチェックして「🌐 入れる」。オプションはまだ公式HPに入れられません。</div>
+    ${rowsHtml}
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-primary" ${any && !busyNow ? "" : "disabled"} onclick="hpPushAll()">🌐 チェックしたお店の公式HPに入れる</button>
+      <button class="btn btn-ghost" ${busyNow ? "disabled" : ""} onclick="document.getElementById('hpBg').remove()">${hpPush.some(x => x.state === "done") ? "閉じる" : "閉じる（公式HPには入れない）"}</button></div></div>`;
+}
+async function hpCheckAll(){
+  for(const x of hpPush){
+    if(!x.no || !x.mk) continue;
+    x.state = "checking"; paintHpPush();
+    x.r = await hpFn({ action: "cast_save", store: x.mk, no: x.no, set: x.set, dry: true });
+    x.state = "checked"; paintHpPush();
+  }
+}
+async function hpPushAll(){
+  const list = hpPush.filter(x => x.on && x.state === "checked" && x.r && x.r.ok && x.r.changes && x.r.changes.length);
+  if(!list.length || !confirm(`${list.map(x => STORE_LABEL_OF(x.sk)).join("・")} の公式HPに入れます。よろしいですか？`)) return;
+  for(const x of list){
+    x.state = "saving"; paintHpPush();
+    x.r = await hpFn({ action: "cast_save", store: x.mk, no: x.no, set: x.set, dry: false, publish: true });
+    x.state = "done"; paintHpPush();
+  }
+  toast("公式HPに入れ終わりました。見た目を公式HPで確かめてください");
 }
 // 答えから台帳へ：受付ルールにする・設定に入れる（入れたあと「保存する」）
 let ansOpen = null;
