@@ -623,17 +623,115 @@ async function renderNotesMove(id){
   if(editingId !== id) return;
   const c = casts.find(x => x.id === id); if(!c) return;
   notesMoveCur = notesToMove(c, profs);
-  if(!notesMoveCur.length){ el.innerHTML = ""; return; }
-  el.innerHTML = `<div style="border:2px solid #FFB547;background:#FFF9EE;border-radius:12px;padding:8px 10px;margin-bottom:8px">
+  const todos = [];
+  (c.notes_moved || []).forEach((m, mi) => (m.todo || []).forEach((t, ti) => { if(!t.done) todos.push({ mi, ti, ...t }); }));
+  const go = { zappi: `<button class="btn btn-ghost btn-sm" onclick="openTerms()">🔁 条件を開く</button>`,
+               private: `<button class="btn btn-ghost btn-sm" onclick="openPrivate()">🔓 連絡先を開く</button>`,
+               prof: c.prof_id ? `<a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(c.prof_id)}" target="_blank" rel="noopener">📝 プロフを開く</a>` : "" };
+  const todoHtml = todos.length ? `<div style="border:2px solid #A88BFF;background:#FBF9FF;border-radius:12px;padding:8px 10px;margin-bottom:8px">
+    <div style="font-weight:800;font-size:13.5px;color:#6030aa">✋ 手でやること（${todos.length}）</div>
+    ${todos.map(t => `<div style="background:#fff;border-radius:10px;padding:6px 8px;margin-top:6px"><div style="font-size:11.5px;color:#9C8B8F;font-weight:700">${esc(SPLIT_DEST[t.dest] || "")}</div>
+      <div style="font-size:13.5px">${esc(t.text)}</div>
+      ${CAN_EDIT ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${go[t.dest] || ""}<button class="btn btn-ghost btn-sm" onclick="todoDone(${t.mi},${t.ti})">✔ やった</button></div>` : ""}</div>`).join("")}</div>` : "";
+  if(!notesMoveCur.length){ el.innerHTML = todoHtml; return; }
+  el.innerHTML = todoHtml + `<div style="border:2px solid #FFB547;background:#FFF9EE;border-radius:12px;padding:8px 10px;margin-bottom:8px">
     <div style="font-weight:800;font-size:13.5px;color:#a35a00">🧹 まだ受付ルールに移していないメモ（${notesMoveCur.length}）</div>
     <div class="hint" style="margin:2px 0 6px">「⚡ ルールにする」で下の受付ルールを作る（長いメモは何こかに分けてOK）→ ぜんぶ移したら「✔ 移した」。いらないものは「いらない」。<b>元のメモは消えません。</b></div>
     ${notesMoveCur.map((n, i) => `<div style="background:#fff;border-radius:10px;padding:6px 8px;margin-top:6px">
       <div style="font-size:11.5px;color:#9C8B8F;font-weight:700">${esc(n.label)}</div>
       <div style="white-space:pre-wrap;font-size:13.5px">${esc(n.text)}</div>
       ${CAN_EDIT ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+        <button class="btn btn-primary btn-sm" onclick="openSplit(${i})">💡 振り分けを手伝う</button>
         <button class="btn btn-ghost btn-sm" onclick="noteToRule(${i})">⚡ ルールにする</button>
         <button class="btn btn-ghost btn-sm" onclick="markNoteMoved(${i},'rule')">✔ 移した</button>
-        <button class="btn btn-ghost btn-sm" onclick="markNoteMoved(${i},'skip')">いらない</button></div>` : ""}</div>`).join("")}</div>`;
+        <button class="btn btn-ghost btn-sm" onclick="markNoteMoved(${i},'skip')">いらない</button></div><div id="split_${i}"></div>` : ""}</div>`).join("")}</div>`;
+}
+/* ---------- 💡 振り分けを手伝う：メモを【】や行ごとに分けて、行き先のおすすめをつける ---------- */
+const SPLIT_DEST = { announce: "📣 受付ルール：お客様に案内", confirm: "✅ 受付ルール：確認してから受ける", after: "⏳ 受付ルール：予約のあとにやること", know: "🤫 受付ルール：知っておくだけ",
+  area: "🗺 行けるお店・エリアと移動", zappi: "✋ 条件：雑費なし（手で）", private: "✋ 連絡先（手で）", prof: "✋ プロフの基本情報（手で）", skip: "いらない" };
+const SPLIT_MANUAL = ["zappi", "private", "prof"];
+function splitNote(text){
+  const out = [];
+  String(text || "").split(/\r?\n/).forEach(line => {
+    line = line.trim(); if(!line) return;
+    const first = line.split("【")[0].trim();
+    if(first) out.push(first);
+    for(const m of line.matchAll(/【([^】]*)】([^【]*)/g)){
+      const k = m[1].trim(), v = m[2].trim();
+      if(v) out.push(k + "：" + v); else if(k) out.push(k);
+    }
+  });
+  return out;
+}
+function guessDest(p){
+  const v = p.includes("：") ? p.split("：").slice(1).join("：").trim() : p;
+  if(isNashi(v)) return "skip";
+  if(/^(AF|逆AF|ＡＦ)\s*[◎○〇△×].*$/.test(p.replace(/\s/g, "")) && !/[^AF逆ＡＦ◎○〇△×\s]/.test(p)) return "skip";   // AF◎逆AF◎ だけ
+  if(/(極門|18|エイティーン).{0,2}備考/.test(p)) return "skip";
+  if(/雑費/.test(p)) return "zappi";
+  if(/誕生日|生年月日|住所|電話|LINE/.test(p)) return "private";
+  if(/タバコ|たばこ|煙草|喫煙|身長|年齢|サイズ/.test(p)) return "prof";
+  if(/最寄|駅|自宅|移動|分\/|分／|出発|から.*分/.test(p)) return "area";
+  if(/確認/.test(p)) return "confirm";
+  if(/案内|伝え|お客様に|お客さんに/.test(p)) return "announce";
+  if(/あとで|後で|予約後|予約のあと|在室|連絡する/.test(p)) return "after";
+  return "know";
+}
+let splitCur = null;
+function openSplit(i){
+  const n = notesMoveCur[i]; if(!n) return;
+  splitCur = { i, n, rows: splitNote(n.text).map(p => ({ text: p, dest: guessDest(p) })) };
+  paintSplit();
+}
+function paintSplit(){
+  const { i, rows } = splitCur, el = $("split_" + i); if(!el) return;
+  el.innerHTML = `<div style="border:2px solid #A88BFF;border-radius:12px;padding:8px;margin-top:6px;background:#FBF9FF">
+    <div style="font-weight:800;font-size:13px;color:#6030aa">💡 おすすめの振り分け（行き先と文は直せます）</div>
+    ${rows.map((r, j) => `<div style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap">
+      <input value="${esc(r.text)}" oninput="splitCur.rows[${j}].text=this.value" style="flex:1;min-width:160px">
+      <select onchange="splitCur.rows[${j}].dest=this.value" style="max-width:230px">${Object.keys(SPLIT_DEST).map(k => `<option value="${k}" ${r.dest === k ? "selected" : ""}>${SPLIT_DEST[k]}</option>`).join("")}</select></div>`).join("")}
+    <div class="hint" style="margin-top:6px">受付ルールとエリアは自動で入ります。「✋（手で）」は、入れおわるまで「手でやること」として残ります。</div>
+    <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px">
+      <button class="btn btn-ghost btn-sm" onclick="$('split_${i}').innerHTML=''">やめる</button>
+      <button class="btn btn-primary btn-sm" onclick="saveSplit()">💾 この振り分けで入れる</button></div></div>`;
+}
+async function saveSplit(){
+  const { n, rows } = splitCur, c = casts.find(x => x.id === editingId); if(!c) return;
+  const use = rows.map(r => ({ text: r.text.trim(), dest: r.dest })).filter(r => r.text);
+  const rules = use.filter(r => RULE_KIND[r.dest]), areas = use.filter(r => r.dest === "area"), manual = use.filter(r => SPLIT_MANUAL.includes(r.dest));
+  if(!confirm(`受付ルール ${rules.length}こ・エリア ${areas.length}こ を入れます${manual.length ? `（手でやること ${manual.length}こ）` : ""}。よろしいですか？`)) return;
+  try{
+    for(const r of rules){
+      const row = { cast_id: c.id, text: r.text.slice(0, 300), kind: r.dest, cond: "always", cond_value: "", sort: castChecks.filter(x => x.cast_id === c.id).length + 1,
+                    created_by: operatorName(), updated_by: operatorName(), updated_at: new Date().toISOString(), source: "note:" + n.src };
+      const nr = q(await sb.from("kb_cast_checks").insert(row).select().single());
+      if(nr) castChecks.push(nr);
+    }
+    if(areas.length){
+      const cur = String(c.area_note || "").trim(), add = areas.map(a => a.text).filter(t => !cur.includes(t));
+      if(add.length){
+        const area_note = (cur ? cur + "\n" : "") + add.join("\n");
+        q(await sb.from("master_casts").update({ area_note }).eq("id", c.id));
+        c.area_note = area_note; if($("e_area")) $("e_area").value = area_note;   // 「保存する」で前の中身にもどらないように
+      }
+    }
+    const moved = (c.notes_moved || []).concat([{ src: n.src, text: n.text, how: "rule", by: operatorName(), at: new Date().toISOString(),
+      todo: manual.map(m => ({ text: m.text, dest: m.dest, done: false })) }]);
+    const r = q(await sb.from("master_casts").update({ notes_moved: moved }).eq("id", c.id).select("notes_moved").single());
+    c.notes_moved = (r && r.notes_moved) || moved;
+    renderChecks(c.id); renderNotesMove(c.id);
+    toast("入れました" + (manual.length ? "。「✋ 手でやること」を見てください" : ""));
+  }catch(e){ toast("とちゅうで止まりました（入ったものはそのまま）：" + (e.message || e)); renderChecks(c.id); }
+}
+async function todoDone(mi, ti){
+  const c = casts.find(x => x.id === editingId); if(!c) return;
+  const moved = JSON.parse(JSON.stringify(c.notes_moved || []));
+  if(!moved[mi] || !moved[mi].todo || !moved[mi].todo[ti]) return;
+  moved[mi].todo[ti].done = true; moved[mi].todo[ti].by = operatorName(); moved[mi].todo[ti].at = new Date().toISOString();
+  try{
+    const r = q(await sb.from("master_casts").update({ notes_moved: moved }).eq("id", c.id).select("notes_moved").single());
+    c.notes_moved = (r && r.notes_moved) || moved; renderNotesMove(c.id); toast("やったにしました");
+  }catch(e){ toast("できませんでした：" + (e.message || e)); }
 }
 function noteToRule(i){
   const n = notesMoveCur[i]; if(!n) return;
@@ -658,7 +756,8 @@ async function toggleNotesList(){
   box.style.display = ""; box.innerHTML = "読んでいます…";
   let profs = null;
   try{ profs = await loadProfNotes(true); }catch(e){}
-  const list = casts.filter(c => c.status !== "left").map(c => ({ c, n: notesToMove(c, profs).length })).filter(x => x.n);
+  const todoN = c => (c.notes_moved || []).reduce((a, m) => a + (m.todo || []).filter(t => !t.done).length, 0);
+  const list = casts.filter(c => c.status !== "left").map(c => ({ c, n: notesToMove(c, profs).length + todoN(c) })).filter(x => x.n);
   box.innerHTML = `<div style="font-weight:800;margin-bottom:4px">🧹 まだ受付ルールに移していないメモがある人（${list.length}人）</div>`
     + (list.map(x => `<div style="padding:3px 0"><a href="javascript:void(0)" onclick="openEdit('${esc(x.c.id)}');$('notesListBox').style.display='none'">${esc(nameOf(x.c))}</a> <small style="color:#9C8B8F">${x.n}こ</small></div>`).join("") || '<div class="hint">ありません 🎉</div>');
 }
