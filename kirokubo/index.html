@@ -262,7 +262,7 @@
       <div class="f"><label>⌛ 長いコースは何分まで（空＝上限なし）</label><input type="number" id="e_longMax" min="30" max="1440" step="10"></div>
       <div class="f"><label>それより長いと</label><select id="e_longOver"><option value="">（上限なし）</option><option value="ask">キャストに確認してから</option><option value="ng">受けない（NG）</option></select></div>
     </div>
-    <div class="f" style="margin-top:8px"><label>🚃 キャストの最寄り駅・行ける場所 <small style="font-weight:400;color:#9C8B8F">… 例：最寄り 東池袋／池袋・大塚までOK／電車で移動</small></label><textarea id="e_area" style="min-height:50px"></textarea></div>
+    <div class="f" style="margin-top:8px"><label>🚃 キャストの最寄り駅・各店までの時間 <small style="font-weight:400;color:#9C8B8F">… 例：最寄り 東池袋／池袋まで10分・鶯谷まで25分・五反田まで35分</small></label><textarea id="e_area" style="min-height:50px"></textarea></div>
     </details>
 
     <details class="acc" data-acc="private"><summary class="sec">📞 連絡先（内勤だけ）</summary>
@@ -770,7 +770,7 @@ async function renderNotesMove(id){
 }
 /* ---------- 💡 振り分けを手伝う：メモを【】や行ごとに分けて、行き先のおすすめをつける ---------- */
 const SPLIT_DEST = { announce: "📣 受付ルール：お客様に案内", confirm: "✅ 受付ルール：確認してから受ける", after: "⏳ 受付ルール：予約のあとにやること", know: "🤫 受付ルール：知っておくだけ",
-  area: "🚃 キャストの最寄り駅・行ける場所", note: "📝 台帳のメモ（受付には出ない）", zappi: "✋ 条件：雑費なし（手で）", private: "✋ 連絡先（手で）", prof: "✋ プロフの基本情報（手で）", skip: "いらない" };
+  area: "🚃 キャストの最寄り駅・各店までの時間", note: "📝 台帳のメモ（受付には出ない）", zappi: "✋ 条件：雑費なし（手で）", private: "✋ 連絡先（手で）", prof: "✋ プロフの基本情報（手で）", skip: "いらない" };
 const SPLIT_MANUAL = ["zappi", "private", "prof"];
 function splitNote(text){
   const out = [];
@@ -1109,7 +1109,7 @@ function paintAnswer(){
     + (d.longMax != null ? qa("長いコースは何分まで受けられますか？", d.longMax ? d.longMax + "分まで（それより長いのは" + (d.longOver === "ng" ? "受けない" : "私に確認してから") + "）" : "何分でもOK（上限なし）", `<div class="ours">台帳：${c.long_max ? c.long_max + "分まで" : "上限なし"}</div>`) : "")
     + qa("ホテルの希望（NG・苦手・好きなホテル）", nv(d.hotel))
     + qa("電話受付外でのご要望", nv(d.notes), `<div class="ours">台帳の特記事項：${esc(c.special_notes || "（なし）")}</div>`)
-    + (d.area != null ? qa("キャストの最寄り駅・行ける場所", nv(d.area)) : "") + (d.ng ? qa("今のNG", nv(d.ng)) : "");
+    + (d.area != null ? qa("キャストの最寄り駅・各店までの時間", nv(d.area)) : "") + (d.ng ? qa("今のNG", nv(d.ng)) : "");
   // 🧠 性格タイプ（25問：質問・選んだ答え・もう一方の選択肢）
   const pl = (d.personalityAnswers && d.personalityAnswers.list) || [];
   const pqDef = n => (typeof PQ_QUESTIONS !== "undefined" ? PQ_QUESTIONS.find(x => x.n === n) : null);

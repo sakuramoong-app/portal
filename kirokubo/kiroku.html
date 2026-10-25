@@ -540,9 +540,10 @@
       <div id="castTimeline"></div>
       <div id="neighborBox"></div>
       <div class="row2" style="margin-top:8px">
-        <div class="f"><label>日付・開始時刻<span class="req">必須</span></label><div style="display:flex;gap:6px"><input type="date" id="f_day" style="max-width:160px" onchange="recalc()"><input type="time" id="f_start" step="300" oninput="recalc()" style="flex:1"></div><div id="dayMoved" style="font-size:12px;color:#c77700;font-weight:800"></div></div>
+        <div class="f"><label>日付・開始時刻<span class="req">必須</span></label><div style="display:flex;gap:6px"><input type="date" id="f_day" style="max-width:160px" onchange="recalc()"><input type="time" id="f_start" step="300" oninput="recalc()" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="toggleCastCal()" title="キャストの出勤日をカレンダーで見る" style="flex:none;white-space:nowrap">🗓 出勤日</button></div><div id="dayMoved" style="font-size:12px;color:#c77700;font-weight:800"></div></div>
         <div class="f"><label>終了時刻（自動・延長こみ）</label><div class="endview" id="endView">--:--</div></div>
       </div>
+      <div id="castCal" style="display:none"></div>
       <div class="row1"><div class="f"><label>コース<span class="req">必須</span></label><select id="f_course" onchange="recalc()"></select></div></div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px;font-size:14px;font-weight:800">
         <label id="nhWrap"><input type="checkbox" id="f_nh" onchange="recalc()"> キューティ：NH料金で取った</label>
@@ -1245,6 +1246,11 @@ function renderCastChecks(c){
   const custNg = typeof custCastNg !== "undefined" && custCastNg && custCastNg.cid === c.id ? custCastNg : null;
   // ⌛ 長いコース
   const mins = formMinutes(), warn = ngWarnings(c);
+  // 🌙 お泊り：池袋・鶯谷・五反田以外（遠方）は本指名のみ（新規・店リピのときに出す）
+  try{
+    const area = $("f_area").value.trim();
+    if(String(calc().course || "").includes("泊") && area && !/池袋|鶯谷|五反田/.test(area) && (visit === "new" || visit === "repeat")) warn.push("🌙 遠方泊りは本指名のみです（池袋・鶯谷・五反田以外のお泊り）");
+  }catch(e){}
   let longNg = false;
   if(custNg){ longNg = true; warn.unshift(`🙅 このお客さんは、このキャストNGです${custNg.reason ? "（" + custNg.reason + "）" : ""}。別のキャストにしてください`); }
   if(c.long_max && mins > c.long_max){
@@ -4256,7 +4262,7 @@ async function paintCastNotes(){
       <div style="font-weight:800;color:#a35a00;font-size:12.5px">📝 まだ受付ルールに移していないメモ（キャスト台帳で整理中）</div>
       ${list.map(n => `<div style="white-space:pre-wrap;margin-top:3px"><small style="color:#9C8B8F">${esc(n.label)}：</small>${esc(n.text)}</div>`).join("")}</div>` : "")
     + (c.area_note && String(c.area_note).trim() ? `<div style="background:#F2FBF6;border:1.5px solid #BFE8D2;border-radius:12px;padding:6px 10px;margin:6px 0;font-size:13px">
-      <div style="font-weight:800;color:#1a7f4b;font-size:12.5px">🚃 キャストの最寄り駅・行ける場所</div><div style="white-space:pre-wrap">${esc(c.area_note)}</div></div>` : "")
+      <div style="font-weight:800;color:#1a7f4b;font-size:12.5px">🚃 キャストの最寄り駅・各店までの時間</div><div style="white-space:pre-wrap">${esc(c.area_note)}</div></div>` : "")
     + (rules ? `<details style="margin-top:4px"><summary style="cursor:pointer;font-size:12.5px;font-weight:800;color:var(--sub)">🧮 このキャストの条件を見る</summary><div class="info">${rules}</div></details>` : "")
     + (c.id ? `<a class="proflink" style="font-size:12px" href="index.html?cast=${encodeURIComponent(c.id)}" target="_blank" rel="noopener">📒 ${esc(c.official_name || c.temp_name)}のキャスト台帳を開く</a>` : "");
 }
@@ -4308,6 +4314,73 @@ saveRes = async function(){
 };
 const __onStoreNM = onStore;
 onStore = function(){ const r = __onStoreNM.apply(this, arguments); paintCastNotes(); return r; };
+
+/* ---------- 🗓 出勤日のカレンダー：お客さんが日付を変えたいとき、選んでいるキャストの出勤日に印（押すとその日に） ----------
+   ・シフトは loadShifts と同じもの（内勤が受理したシフトだけ）。週ごとに読んで覚えておく */
+const CAL_OK = ["input_waiting", "inputting", "confirmed", "change_requested", "change_inputting", "change_confirmed"];
+const calCache = {};   // "キャストID|週" → { ymd: { start, end } }
+let calYm = "";
+async function castShiftDays(c, wks){
+  const names = [c.shift_name, c.official_name].filter(Boolean);
+  const need = wks.filter(w => !calCache[c.id + "|" + w]);
+  if(need.length && names.length){
+    const rows = q(await sb.from("shift_weeks").select("wk,cast_name,data").in("wk", need).in("cast_name", names)) || [];
+    need.forEach(w => { calCache[c.id + "|" + w] = {}; });
+    rows.sort((a, b) => (a.cast_name === c.shift_name ? 0 : 1) - (b.cast_name === c.shift_name ? 0 : 1)).forEach(r => {
+      const d = r.data || {}, m = calCache[c.id + "|" + r.wk]; if(!m || !CAL_OK.includes(d.status)) return;
+      Object.entries(d.shifts || {}).forEach(([ymd, sh]) => { if(sh && sh.start != null && sh.end != null && !m[ymd]) m[ymd] = { start: Number(sh.start), end: Number(sh.end) }; });
+    });
+  }
+  const out = {}; wks.forEach(w => Object.assign(out, calCache[c.id + "|" + w] || {}));
+  return out;
+}
+function toggleCastCal(){
+  const el = $("castCal");
+  if(el.style.display !== "none"){ el.style.display = "none"; return; }
+  calYm = ($("f_day").value || KB.bizDateOf()).slice(0, 7);
+  el.style.display = ""; paintCastCal();
+}
+function calMove(n){ const [y, m] = calYm.split("-").map(Number), d = new Date(Date.UTC(y, m - 1 + n, 1)); calYm = d.toISOString().slice(0, 7); paintCastCal(); }
+function calPick(ymd){ $("f_day").value = ymd; $("f_day").dispatchEvent(new Event("change")); paintCastCal(); }
+async function paintCastCal(){
+  const el = $("castCal"); if(!el || el.style.display === "none" || !calYm) return;
+  const ym = calYm, [y, m] = ym.split("-").map(Number);
+  const c = M.casts.find(x => x.id === $("f_cast").value);
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate(), lead = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7;   // 月曜はじまり
+  const ymdOf = d => `${ym}-${String(d).padStart(2, "0")}`;
+  const head = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="calMove(-1)">◀</button><b style="flex:1;text-align:center">${y}年${m}月</b>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="calMove(1)">▶</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="$('castCal').style.display='none'">✕</button></div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:6px">${c ? `🌸 ＝ <b>${esc(c.official_name || c.temp_name)}</b> の出勤日（押すとその日にします）` : "キャストを選ぶと、出勤日に印が付きます"}</div>`;
+  el.innerHTML = `<div class="ccal">${head}<div style="color:var(--sub);font-size:12px">読んでいます…</div></div>`;
+  let sh = {};
+  try{ if(c) sh = await castShiftDays(c, [...new Set(Array.from({ length: days }, (_, i) => weekKeyOfYmd(ymdOf(i + 1))))]); }catch(e){}
+  if(calYm !== ym || el.style.display === "none") return;   // 読んでいる間に月を変えた・閉じた
+  const t = h => { const hh = Math.floor(h), mm = Math.round((h - hh) * 60); return (hh >= 24 ? "翌" + (hh - 24) : hh) + (mm ? ":" + String(mm).padStart(2, "0") : ""); };
+  const today = KB.bizDateOf(), sel = $("f_day").value;
+  let cells = ["月", "火", "水", "木", "金", "土", "日"].map((w, i) => `<div class="ccw ${i === 5 ? "sat" : i === 6 ? "sun" : ""}">${w}</div>`).join("") + "<div></div>".repeat(lead);
+  for(let d = 1; d <= days; d++){
+    const ymd = ymdOf(d), s = sh[ymd], dow = (lead + d - 1) % 7;
+    cells += `<button type="button" class="ccd ${s ? "on" : ""} ${ymd === sel ? "sel" : ""} ${ymd < today ? "past" : ""} ${ymd === today ? "today" : ""} ${dow === 5 ? "sat" : dow === 6 ? "sun" : ""}" onclick="calPick('${ymd}')">
+      <span class="n">${d}</span>${s ? `<span class="tm">${t(s.start)}〜${t(s.end)}</span>` : ""}</button>`;
+  }
+  el.innerHTML = `<div class="ccal">${head}<div class="ccg">${cells}</div></div>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .ccal{border:1.5px solid #FFC2D1;border-radius:14px;padding:10px;margin:6px 0 10px;background:#FFFBFD}
+  .ccg{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .ccw{text-align:center;font-size:11.5px;font-weight:800;color:var(--sub)} .ccw.sat{color:#1E6FD9} .ccw.sun{color:#E0245E}
+  .ccd{border:1.5px solid #F1E3E7;background:#fff;border-radius:10px;min-height:46px;padding:3px 2px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1px}
+  .ccd .n{font-size:13.5px;font-weight:800;color:var(--ink)} .ccd.sat .n{color:#1E6FD9} .ccd.sun .n{color:#E0245E}
+  .ccd .tm{font-size:10px;font-weight:800;color:#B0124F;line-height:1.2;text-align:center}
+  .ccd.on{background:#FFE0EA;border-color:#FF8FAB} .ccd.on .n::after{content:" 🌸";font-size:10px}
+  .ccd.past{opacity:.45} .ccd.today{box-shadow:inset 0 0 0 2px #FFB547} .ccd.sel{outline:3px solid #E5638C;outline-offset:-1px}
+</style>`);
+const __onCastCal = onCast;
+onCast = function(){ const r = __onCastCal.apply(this, arguments); paintCastCal(); return r; };
+const __openFormCal = openForm;
+openForm = function(){ const r = __openFormCal.apply(this, arguments); $("castCal").style.display = "none"; return r; };
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
