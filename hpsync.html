@@ -47,6 +47,15 @@
   </div>
 
   <div class="box">
+    <h2 style="font-size:16px;color:var(--pink-deep);margin-bottom:6px">🆕 新人を登録する画面を調べる（保存はしません）</h2>
+    <p class="lead" style="margin:0 0 8px">上の「お店」で選んだお店の「キャスト管理」にあるボタンを調べます。新人を自動で登録できるようにするための下しらべです。</p>
+    <button class="btn" style="padding:7px 14px;font-size:13px" onclick="newPeek('')">① ボタンを調べる</button>
+    <div id="npBtns" style="margin-top:8px"></div>
+    <textarea id="npOut" readonly style="display:none;width:100%;min-height:160px;margin-top:8px;font-size:12px;font-family:monospace"></textarea>
+    <button class="btn" id="npCopy" style="display:none;padding:6px 12px;font-size:13px;margin-top:6px" onclick="navigator.clipboard.writeText(document.getElementById('npOut').value).then(()=>alert('コピーしました。Claudeに貼ってください'))">📋 結果をコピー</button>
+  </div>
+
+  <div class="box">
     <h2 style="font-size:16px;color:var(--pink-deep);margin-bottom:6px">📺 媒体に入れるか試す <select id="hvMedia" style="font-size:14px;padding:3px 6px;margin-left:6px"><option value="heaven">ヘブン</option><option value="pure">ぴゅあらば</option><option value="joho">口コミ情報局</option></select></h2>
     <p class="lead" style="margin:0 0 8px">上の「お店」で選んだお店の媒体の管理画面にログインして、出勤表を読むだけです（何も変えません）。下の「書きこみテスト」は、押したときだけ媒体を変えます。</p>
     <button class="btn" style="padding:7px 14px;font-size:13px" onclick="heavenTest()">📺 読んでみる</button>
@@ -256,6 +265,22 @@ async function doApply(){
   }catch(e){ ap.innerHTML = `<span class="ng">❌ ${esc(e.message || e)}</span>`; b.disabled = false; }
 }
 initWrite();
+
+/* ---------- 🆕 新人を登録する画面の下しらべ（保存はしない） ---------- */
+async function newPeek(press){
+  const bx = document.getElementById("npBtns"), out = document.getElementById("npOut"), store = document.getElementById("testStore").value;
+  if(store === "__all"){ bx.innerHTML = `<span class="ng">上の「お店」で、お店を1つ選んでください</span>`; return; }
+  bx.innerHTML = "調べています…（30秒ほど）";
+  const r = await callFn({ action: "cast_new_peek", store, press });
+  out.style.display = ""; document.getElementById("npCopy").style.display = "";
+  out.value = JSON.stringify(r, null, 1);
+  if(!r.ok){ bx.innerHTML = `<span class="ng">❌ ${esc(r.error || r.message || "調べられませんでした（ロボットを新しくデプロイした？）")}</span>`; return; }
+  if(press){ bx.innerHTML = `<div class="ok">✅ 「${esc(press)}」を押した画面を調べました（保存はしていません）。下の結果をコピーして、Claudeに貼ってください。</div>`; return; }
+  const all = [...new Set((r.pages || []).flatMap(p => p.forms.flatMap(f => f.buttons)))];
+  bx.innerHTML = `<div class="ok">✅ ${esc(r.store)}：いま${esc(r.editCount)}人（いちばん大きい番号 ${esc(r.maxNo)}）</div>
+    <div class="lead" style="margin:6px 0">② 新人を登録しそうなボタン（「新規」「追加」など）を押してください。開いた画面を調べるだけで、保存はしません。</div>
+    ${all.map(b => `<button class="btn" style="padding:5px 10px;font-size:12.5px;margin:2px;background:#fff;color:#E5638C;border:1.5px solid #ffc2d1" onclick="newPeek(this.dataset.v)" data-v="${esc(b)}">${esc(b)}</button>`).join("")}`;
+}
 
 /* ---------- 🔎 キャストのプロフを読む ---------- */
 async function peekCast(){
