@@ -164,6 +164,11 @@
       <button class="btn btn-ghost" id="ansListBtn" onclick="toggleAnsList()">📨 届いた答え</button>
       <button class="btn btn-ghost" onclick="toggleNotesList()">🧹 受付ルールにまとめる</button>
       <button class="btn btn-ghost" id="newProfBtn" onclick="toggleNewProfs()">📥 新しく届いたプロフ</button>
+      <details class="edit-only" style="font-size:13px"><summary style="cursor:pointer;font-weight:800;color:var(--sub);padding:6px 4px">⚙️ そのほか</summary>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+          <button class="btn btn-ghost btn-sm" onclick="hpBulkFill()">🌐 全員の空いている欄を公式HPから取りこむ</button>
+          <button class="btn btn-ghost btn-sm" onclick="openNotifyEmails()">📧 プロフが届いたときの通知メール</button>
+        </div></details>
     </div>
     <div id="newProfBox" style="display:none;background:#fff;border:1.5px solid #F1E3E7;border-radius:12px;padding:10px 12px;margin:6px 0"></div>
     <div id="ansListBox" style="display:none;background:#fff;border:1.5px solid #F1E3E7;border-radius:12px;padding:10px 12px;margin:6px 0"></div>
@@ -195,6 +200,9 @@
         </select></div>
       <div class="f"><label>入店日</label><input type="date" id="e_join"></div>
       <div class="f"><label>退店日</label><input type="date" id="e_leave"></div>
+      <div class="f"><label>面接日</label><input type="date" id="e_interview"></div>
+      <div class="f"><label>入店のきっかけ</label><input id="e_joinReason" maxlength="200"></div>
+      <div class="f" style="grid-column:1/-1"><label>退店の理由</label><input id="e_leaveReason" maxlength="300"></div>
     </div>
     <div class="f" style="margin-top:10px"><label>別名（ほかのアプリ・お店での書き方。「、」で区切る）</label><input id="e_aliases"></div>
     <div class="f" style="margin-top:10px"><label>記録簿の集計名（空ならキャスト名と同じ）</label><input id="e_agg" maxlength="60"></div>
@@ -1318,13 +1326,17 @@ async function renderProf(id){
     .concat(Object.keys(data.storeProfiles || {}).filter(k => known.includes(k))))];
   pf = { c, prof, data, logs, stores: stores.length ? stores : ["サクラムーン"], dirty: new Set() };
   pf.sk = pf.stores[0];
+  // 面接日・きっかけ・退店の理由はプロフにある（入店日・退店日は台帳が空のときだけプロフから）
+  $("e_interview").value = data.interviewDate || ""; $("e_joinReason").value = data.joinReason || ""; $("e_leaveReason").value = data.leaveReason || "";
+  if(!$("e_join").value && data.joinDate) $("e_join").value = String(data.joinDate).slice(0, 10);
+  if(!$("e_leave").value && data.leaveDate) $("e_leave").value = String(data.leaveDate).slice(0, 10);
   paintProf();
 }
 function paintProf(){
   const el = $("e_prof"); if(!pf || !el) return;
   const { data, sk } = pf, ro = CAN_EDIT ? "" : "disabled";
   const o = profOpts(data, sk);
-  const optKeys = [...new Set(Object.keys(PF_OPT_LABEL).concat(Object.keys(o.options || {})))];
+  const optKeys = [...new Set(Object.keys(PF_OPT_LABEL).concat(Object.keys(o.options || {}), [...(pf.extraOpts || [])]))];
   const hp = data.hotelPrefs || {};
   const hn = hid => { const h = (pfHotels || []).find(x => x.hotel_id === hid); return h ? h.hotel_name + (h.area ? "(" + h.area + ")" : "") : ""; };
   const chips = (ids, bg, fg, mark) => (ids || []).map(hn).filter(Boolean).map(n => `<span style="background:${bg};color:${fg}">${mark} ${esc(n)}</span>`).join("");
@@ -1333,14 +1345,17 @@ function paintProf(){
   const pv = id => `<iframe id="${id}_pv" sandbox style="display:none;width:100%;height:240px;border:1px solid #eee;border-radius:8px;background:#fff"></iframe>`;
   el.innerHTML = `
     <div class="pfTabs">${pf.stores.map((s, i) => `<button type="button" class="pfTab ${s === sk ? "on" : ""}" onclick="pfTab(${i})">${esc(STORE_LABEL_OF(s))}${pf.dirty.has(s) ? " ✏️" : ""}</button>`).join("")}
-      <a class="btn btn-ghost btn-sm" style="margin-left:auto" href="${PROF_STAFF_URL}${encodeURIComponent(pf.prof.id)}" target="_blank" rel="noopener">📂 プロフの画面で開く</a></div>
+      <span style="margin-left:auto"></span>
+      ${CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfHpImport()">🌐 公式HPから取りこむ</button>` : ""}
+      <a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(pf.prof.id)}" target="_blank" rel="noopener">📂 プロフの画面で開く</a></div>
     ${PROF_DUMMY.includes(sk) ? `<div class="hint" style="margin-bottom:6px">${esc(STORE_LABEL_OF(sk))}は名前・年齢を変えた別の設定です（公式HPにはまだ入れられません）。</div>` : ""}
     <div class="pfPanel"><div class="pfHead">📋 基本情報 ${hpLinkOf(pf.c, sk)}</div><div class="pfBody"><div class="pfGrid">
       ${PF_BASIC.map(([f, l]) => `<div><label>${l}</label><input id="pf_b_${f}" value="${esc(profGet(data, sk, f))}" ${ro}></div>`).join("")}</div></div></div>
     <div class="pfPanel"><div class="pfHead">✅ オプション可否 <small style="font-weight:400;color:#9C8B8F">◎大好き ○OK △相談 ×NG</small></div><div class="pfBody">
       ${optKeys.map((k, i) => `<div class="pfOpt"><span>${esc(PF_OPT_LABEL[k] || k)}</span>
         <select id="pf_o_${i}" data-k="${esc(k)}" ${ro}>${PF_MARKS.map(m => `<option value="${m}" ${(o.options[k] || "") === m ? "selected" : ""}>${m || "－"}</option>`).join("")}</select>
-        <input id="pf_om_${i}" placeholder="メモ（条件など）" value="${esc((o.optMemo || {})[k] || "")}" ${ro}></div>`).join("")}</div></div>
+        <input id="pf_om_${i}" placeholder="メモ（条件など）" value="${esc((o.optMemo || {})[k] || "")}" ${ro}></div>`).join("")}
+      ${CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:8px"><input id="pf_newopt" placeholder="新しいオプションの名前（例：TSP（有料））" style="flex:1"><button class="btn btn-ghost btn-sm" onclick="pfAddOpt()">＋ 種類を足す</button></div>` : ""}</div></div>
     <div class="pfPanel"><div class="pfHead">💬 紹介文</div><div class="pfBody">
       <div class="hint">本人から一言</div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
       <div class="hint" style="margin-top:8px">店長から一言</div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></div>
@@ -1383,6 +1398,126 @@ function pfCollect(){
   if(before !== after) pf.dirty.add(sk);
 }
 function pfTab(i){ pfCollect(); pf.sk = pf.stores[i]; paintProf(); }
+function pfAddOpt(){
+  const n = $("pf_newopt").value.trim(); if(!n) return;
+  pfCollect(); pf.extraOpts = pf.extraOpts || new Set(); pf.extraOpts.add(n); paintProf();
+  toast("足しました。◎○△×を選んで「💾 プロフを保存」してください");
+}
+/* 🌐 公式HPから取りこむ（キャストプロフの「🌐 公式HPから取りこむ」と同じ決まり：空いている欄は自動、もう入っている欄は選ぶ） */
+const PF_HP_FIELDS = PF_BASIC.filter(([f]) => !["tabako", "skill"].includes(f)).concat([["comment", "本人から一言"], ["mgrComment", "店長から一言"]]);
+function hpOptKeyOf(title){   // 公式HPのオプション名 → プロフのオプション（後ろに説明がついていても）
+  const t = String(title).replace(/\s+/g, "");
+  if(t === "3P（有料）") return "3P／お客様2名（有料）";
+  for(const [k, l] of Object.entries(PF_OPT_LABEL)) if(t === l || t === k) return k;
+  for(const [k, l] of Object.entries(PF_OPT_LABEL)) if(t.startsWith(l + "（")) return k;
+  return "";
+}
+function hpDiffOf(data, sk, p){
+  const auto = [], ask = [];
+  PF_HP_FIELDS.forEach(([f, l]) => { const v = String(p[f] || "").trim(), cur = String(profGet(data, sk, f) || "").trim(); if(!v || v === cur) return; (cur ? ask : auto).push({ kind: "field", f, l, cur, v }); });
+  const cur = profOpts(data, sk).options || {};
+  Object.entries(p.options || {}).forEach(([title, v]) => { const k = hpOptKeyOf(title); if(!k || !v || v === (cur[k] || "")) return; (cur[k] ? ask : auto).push({ kind: "opt", f: k, l: "オプション：" + (PF_OPT_LABEL[k] || k), cur: cur[k] || "", v }); });
+  return { auto, ask };
+}
+function hpApplyTo(data, sk, it){
+  data.storeProfiles = data.storeProfiles || {};
+  const sp = data.storeProfiles[sk] = data.storeProfiles[sk] || { active: true };
+  if(it.kind === "opt"){ const o = profOpts(data, sk); sp.options = Object.assign({}, o.options, { [it.f]: it.v }); sp.optMemo = Object.assign({}, o.optMemo); }
+  else sp[it.f] = it.v;
+}
+let pfImp = null;
+async function pfHpImport(){
+  if(!pf) return;
+  pfCollect(); await loadHpDummyNos();
+  const plan = [];
+  let bg = document.getElementById("pfImpBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "pfImpBg"; bg.style.cssText = "position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
+  const box = t => { bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:720px;width:100%;max-height:88vh;overflow:auto;font-size:13.5px">${t}</div>`; };
+  for(const sk of pf.stores){
+    const { mk, no } = hpNoOf(pf.c, sk);
+    if(!mk || !no){ plan.push({ sk, error: "在籍番号がありません" }); continue; }
+    box(`公式HPを読んでいます…（${plan.length + 1}／${pf.stores.length}：${esc(STORE_LABEL_OF(sk))}）`);
+    const r = await hpFn({ action: "cast_profiles", store: mk, nos: [no] });
+    const p = r.ok && r.profiles && r.profiles[0];
+    if(!p || p.error){ plan.push({ sk, error: (p && p.error) || r.error || r.message || "読めませんでした" }); continue; }
+    plan.push({ sk, ...hpDiffOf(pf.data, sk, p) });
+  }
+  pfImp = plan;
+  const sh = s => { s = String(s || ""); return esc(s.length > 50 ? s.slice(0, 50) + "…" : s); };
+  box(`<b style="font-size:16px">🌐 公式HPから取りこむ：${esc(pf.prof.name)}</b>
+    <div class="hint" style="margin:6px 0">空いている欄（チェックずみ）はそのまま入ります。もう入っている欄は、公式HPのほうにしたいものだけチェックしてください。入れたら「💾 プロフを保存」で保存されます。</div>
+    ${plan.map((x, i) => `<div class="ansSec"><b>${esc(STORE_LABEL_OF(x.sk))}</b>
+      ${x.error ? `<div style="color:#d9534f">${esc(x.error)}</div>` : (!x.auto.length && !x.ask.length ? `<div class="hint">公式HPと同じです</div>` :
+        x.auto.concat(x.ask).map((it, j) => `<label style="display:flex;gap:6px;align-items:flex-start;font-size:12.5px;padding:2px 0">
+          <input type="checkbox" class="pfImpChk" data-i="${i}" data-j="${j}" ${j < x.auto.length ? "checked" : ""}>
+          <span><b>${esc(it.l)}</b>：${it.cur ? `<span style="color:#9C8B8F">${sh(it.cur)}</span> → ` : ""}${sh(it.v)}${j < x.auto.length ? ' <small style="color:#1a7f4b">（空いている欄）</small>' : ""}</span></label>`).join(""))}</div>`).join("")}
+    <div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary" onclick="pfImpApply()">この内容で入れる</button><button class="btn btn-ghost" onclick="document.getElementById('pfImpBg').remove()">やめる</button></div>`);
+}
+function pfImpApply(){
+  let n = 0;
+  document.querySelectorAll(".pfImpChk:checked").forEach(c => {
+    const x = pfImp[+c.dataset.i], all = x.auto.concat(x.ask), it = all[+c.dataset.j];
+    if(it){ hpApplyTo(pf.data, x.sk, it); pf.dirty.add(x.sk); n++; }
+  });
+  document.getElementById("pfImpBg").remove(); paintProf();
+  toast(n ? `${n}か所入れました。「💾 プロフを保存」で保存されます` : "入れたものはありません");
+}
+/* 🌐 全員の空いている欄を公式HPから（もう入っている欄はさわらない）。お店ごとに8人ずつ読む */
+async function hpBulkFill(){
+  if(!CAN_EDIT || !confirm("全員の、プロフの空いている欄だけを公式HPから取りこみます（もう入っている欄はさわりません）。数分かかります。始めますか？")) return;
+  await loadHpDummyNos();
+  let bg = document.getElementById("pfImpBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "pfImpBg"; bg.style.cssText = "position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
+  const say = t => { bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:520px;width:100%;font-size:14px;line-height:1.8">${t}</div>`; };
+  say("キャストプロフを読んでいます…");
+  let profs;
+  try{ profs = q(await sb.from("prof_casts").select("id,name,data").eq("deleted", false)) || []; }catch(e){ say("読めませんでした：" + esc(e.message || e) + `<br><button class="btn btn-ghost" onclick="document.getElementById('pfImpBg').remove()">閉じる</button>`); return; }
+  const byId = {}; profs.forEach(p => { byId[p.id] = { prof: p, data: JSON.parse(JSON.stringify(p.data || {})), n: 0 }; });
+  const errs = [];
+  const targets = casts.filter(c => c.prof_id && byId[c.prof_id] && c.status !== "left");
+  for(const [mk, sk] of Object.entries(PROF_STORE_OF)){
+    const list = targets.map(c => ({ c, no: hpNoOf(c, sk).no })).filter(x => x.no && (x.c.stores || {})[mk]);
+    for(let i = 0; i < list.length; i += 8){
+      const part = list.slice(i, i + 8);
+      say(`公式HPを読んでいます…<br>${esc(STORE_LABEL_OF(sk))}：${i + 1}〜${i + part.length}人目／${list.length}人`);
+      const r = await hpFn({ action: "cast_profiles", store: mk, nos: part.map(x => x.no) });
+      if(!r.ok){ errs.push(STORE_LABEL_OF(sk) + "：" + (r.error || r.message || "読めませんでした")); continue; }
+      (r.profiles || []).forEach(p => {
+        const x = part.find(y => y.no === p.no); if(!x || p.error) return;
+        const t = byId[x.c.prof_id];
+        hpDiffOf(t.data, sk, p).auto.forEach(it => { hpApplyTo(t.data, sk, it); t.n++; });
+      });
+    }
+  }
+  const changed = Object.values(byId).filter(t => t.n);
+  let saved = 0;
+  for(const t of changed){
+    say(`プロフに入れています…（${saved + 1}／${changed.length}人）`);
+    try{ const r = q(await sb.rpc("prof_update_confirmed", { p: profPayload(t.prof, t.data) })); if(r && r.result === "ok") saved++; else errs.push(t.prof.name + "：保存できませんでした"); }
+    catch(e){ errs.push(t.prof.name + "：" + (e.message || e)); }
+  }
+  say(`<b>🌐 取りこみが終わりました</b><br>空いている欄を入れた人：${saved}人（${changed.reduce((a, t) => a + t.n, 0)}か所）
+    ${errs.length ? `<div style="color:#d9534f;font-size:12.5px;margin-top:6px">${errs.map(esc).join("<br>")}</div>` : ""}
+    <div style="text-align:right;margin-top:10px"><button class="btn btn-primary" onclick="document.getElementById('pfImpBg').remove();if(editingId)renderProf(editingId)">OK</button></div>`);
+}
+/* 📧 プロフが届いたときの通知メール（キャストプロフの「通知メール設定」と同じ prof_settings の notifyEmails） */
+async function openNotifyEmails(){
+  let list = [];
+  try{ const r = q(await sb.from("prof_settings").select("value").eq("key", "notifyEmails").maybeSingle()); list = (r && Array.isArray(r.value)) ? r.value : []; }
+  catch(e){ toast("読めませんでした：" + (e.message || e)); return; }
+  let bg = document.getElementById("mailBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "mailBg"; bg.style.cssText = "position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
+  const paint = () => { bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:480px;width:100%;font-size:14px">
+    <b style="font-size:16px">📧 プロフが届いたときの通知メール</b>
+    <div class="hint" style="margin:6px 0">キャストがプロフを提出したとき、ここのアドレスにメールが届きます。</div>
+    ${list.map((m, i) => `<div style="display:flex;gap:6px;align-items:center;padding:3px 0"><span style="flex:1">${esc(m)}</span>${CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="notifyDel(${i})">消す</button>` : ""}</div>`).join("") || '<div class="hint">まだありません</div>'}
+    ${CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:8px"><input id="nm_new" type="email" placeholder="メールアドレス" style="flex:1;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font-family:inherit"><button class="btn btn-ghost btn-sm" onclick="notifyAdd()">＋ 足す</button></div>` : ""}
+    <div style="text-align:right;margin-top:10px"><button class="btn btn-primary" onclick="document.getElementById('mailBg').remove()">閉じる</button></div></div>`; };
+  const save = async () => { try{ q(await sb.from("prof_settings").upsert({ key: "notifyEmails", value: list })); toast("保存しました"); }catch(e){ toast("保存できませんでした：" + (e.message || e)); } paint(); };
+  window.notifyAdd = () => { const v = $("nm_new").value.trim(); if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)){ toast("メールアドレスの形になっていません"); return; } if(!list.includes(v)) list.push(v); save(); };
+  window.notifyDel = i => { if(confirm(list[i] + " を消しますか？")){ list.splice(i, 1); save(); } };
+  paint();
+}
 /* 🏨 ホテル（キャストプロフと同じ：押すたびに 未設定 → ◎ → △ → × → 未設定。△と×には理由・条件のメモ） */
 let pfHotelArea = "";
 function pfHotelEditor(hp){
@@ -1443,18 +1578,22 @@ async function pfDelLog(i){
   try{ q(await sb.from("prof_logs").delete().eq("log_id", l.log_id)); toast("記録を消しました"); await pfReloadLogs(); }
   catch(e){ toast("消せませんでした：" + (e.message || e)); }
 }
+// prof_update_confirmed に送る形（サクラムーンは旧データにも同じものを入れる。キャストプロフの setField・答えの反映 saveReflect と同じ）
+function profPayload(prof, data){
+  const saku = (data.storeProfiles || {})["サクラムーン"] || {};
+  const p = { id: prof.id, name: prof.name, by: operatorName(), status: data.status || "new",
+    castComment: data.generatedCastComment || "", mgrComment: saku.mgrComment != null ? saku.mgrComment : (data.generatedManagerComment || ""),
+    storeProfiles: data.storeProfiles || {} };
+  if(saku.comment != null) p.comment = saku.comment;
+  if(saku.options){ p.options = saku.options; p.optMemo = saku.optMemo || {}; }
+  return p;
+}
 async function saveProf(){
   if(!pf) return;
   pfCollect();
   if(!pf.dirty.size && !pf.hotelDirty){ toast("変えたところがありません"); return; }
   const { prof, data } = pf;
-  // サクラムーンは旧データにも同じものを入れる（キャストプロフの setField と同じ。答えの反映 saveReflect と同じ形）
-  const saku = (data.storeProfiles || {})["サクラムーン"] || {};
-  const p = { id: prof.id, name: prof.name, by: operatorName(), status: data.status || "new",
-    castComment: data.generatedCastComment || "", mgrComment: saku.mgrComment != null ? saku.mgrComment : (data.generatedManagerComment || ""),
-    storeProfiles: data.storeProfiles };
-  if(saku.comment != null) p.comment = saku.comment;
-  if(saku.options){ p.options = saku.options; p.optMemo = saku.optMemo || {}; }
+  const p = profPayload(prof, data);
   if(pf.hotelDirty) p.hotelPrefs = pfHotelPrefs();
   try{
     const r = q(await sb.rpc("prof_update_confirmed", { p }));
@@ -1512,6 +1651,7 @@ function openEdit(id){
   $("editHint").textContent = id ? "直したら「保存する」を押してください。" : "名前が決まっていなければ、仮の名前だけでOKです。";
   $("e_official").value = c.official_name || ""; $("e_kana").value = c.kana || ""; $("e_temp").value = c.temp_name || "";
   $("e_status").value = c.status || "active"; $("e_join").value = c.join_date || ""; $("e_leave").value = c.leave_date || "";
+  $("e_interview").value = ""; $("e_joinReason").value = ""; $("e_leaveReason").value = "";   // プロフを読んだら入る（renderProf）
   $("e_aliases").value = (c.aliases || []).join("、"); $("e_agg").value = c.agg_name || "";
   $("e_terms").innerHTML = id ? termsHtml(c) : `<div class="hint">キャストを保存してから、ランク・条件を入れられます（面接の内容をヒアリングとして書いてください）。</div>`;
   $("termsBtn").style.display = id && CAN_EDIT ? "" : "none";
@@ -1586,6 +1726,7 @@ async function saveCast(){
   try{
     if(!(await staffSession())){ toast("ログインの期限が切れました。ポータルから開き直してください"); return; }
     let saved;
+    savedDates = { interview: $("e_interview").value, joinReason: $("e_joinReason").value.trim(), leaveReason: $("e_leaveReason").value.trim() };
     const prevStores = JSON.parse(JSON.stringify(((editingId && casts.find(c => c.id === editingId)) || {}).stores || {}));
     if(editingId){
       saved = q(await sb.from("master_casts").update(row).eq("id", editingId).select().single());
@@ -1595,9 +1736,22 @@ async function saveCast(){
       casts.push(saved);
     }
     closeEdit(); render(); toast("保存しました🌸");
+    if(saved) await saveProfDates(saved);
     if(saved) await syncShift(saved, prevStores);
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
+// 面接日・入店日・退店日・きっかけ・退店の理由をプロフにも（変わったときだけ）。pf は保存の前に開いていたキャストのプロフ
+async function saveProfDates(c){
+  if(!pf || !pf.prof || pf.c.id !== c.id) return;
+  const d = pf.prof.data || {}, v = { interviewDate: savedDates.interview, joinDate: c.join_date || "", leaveDate: c.leave_date || "", joinReason: savedDates.joinReason, leaveReason: savedDates.leaveReason };
+  const same = k => (k.endsWith("Date") ? String(d[k] || "").slice(0, 10) : String(d[k] || "")) === String(v[k] || "");
+  if(Object.keys(v).every(same)) return;
+  try{
+    const r = q(await sb.rpc("prof_update_confirmed", { p: Object.assign(profPayload(pf.prof, pf.prof.data || {}), v) }));
+    if(r && r.result === "ok") Object.assign(pf.prof.data, v);
+  }catch(e){ toast("プロフの面接日などを保存できませんでした：" + (e.message || e)); }
+}
+let savedDates = {};
 /* ---------- 📅 台帳の在籍店舗 → サクラシフト（まだいなければ登録してパスワードを作る。いればお店・媒体を足す） ---------- */
 const SHIFT_STORE_OF = { sakuramoon:"サクラムーン", lana_uguisu:"ラナ鶯谷", lana_kinshi:"ラナ錦糸町", dressgarden:"ドレスガーデン", peachmoon:"ピーチムーン",
   gyakuanal:"逆AF倶楽部", cutie:"キューティー", eighteen:"18", gokumon:"極門" };
