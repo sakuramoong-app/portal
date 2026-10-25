@@ -133,6 +133,25 @@
   .pfPanel{background:#fff;border:1.5px solid #F7D9E2;border-radius:16px;margin-bottom:10px;overflow:hidden}
   .pfHead{background:#FFF0F5;padding:8px 14px;font-weight:800;font-size:13.5px;color:#5C4B4F;display:flex;align-items:center;gap:6px}
   .pfBody{padding:10px 14px}
+  /* アコーディオン（最初は閉じておく）と、上に固定の「項目へジャンプ」 */
+  details.acc{scroll-margin-top:64px}
+  details.acc > summary.sec, details.pfPanel > summary.pfHead{cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px}
+  details.acc > summary::-webkit-details-marker, details.pfPanel > summary::-webkit-details-marker{display:none}
+  details.acc > summary.sec::after, details.pfPanel > summary.pfHead::after{content:"▼";margin-left:auto;font-size:11px;color:#C9A6B1;transition:transform .15s}
+  details.acc[open] > summary.sec::after, details.pfPanel[open] > summary.pfHead::after{transform:rotate(180deg)}
+  details.pfPanel{scroll-margin-top:64px}
+  #editBg .jump{position:sticky;top:-24px;z-index:6;background:#fff;margin:0 -20px 4px;padding:8px 20px;border-bottom:1.5px solid var(--line);display:flex;gap:6px;overflow-x:auto;white-space:nowrap;box-shadow:0 6px 14px rgba(255,143,171,.10)}
+  @media (min-width:1100px){ body.pane #editBg .jump{top:-16px} }
+  @media (min-width:700px){ #editBg .jump{flex-wrap:wrap;overflow-x:visible} }
+  #editBg .jump button{flex:none;border:1.5px solid #F1E3E7;background:#FFF5F8;border-radius:99px;padding:5px 11px;font-family:inherit;font-size:12.5px;font-weight:800;color:#5C4B4F;cursor:pointer}
+  #editBg .jump button.sub{background:#fff;color:#9C8B8F;font-weight:700}
+  #editBg .jump button.all{background:#fff;border-style:dashed;color:#9C8B8F}
+  /* 一覧の「あかさたな」ジャンプ */
+  .kanaJump{position:sticky;top:0;z-index:4;background:var(--bg);display:flex;gap:4px;flex-wrap:wrap;padding:6px 0;margin-bottom:6px}
+  body.pane .kanaJump{background:#fff}
+  .kanaJump button{min-width:32px;border:1.5px solid #F1E3E7;background:#fff;border-radius:10px;padding:4px 6px;font-family:inherit;font-size:13px;font-weight:800;color:#5C4B4F;cursor:pointer}
+  .kanaJump button:disabled{color:#D9CDD1;background:#FAF6F7;cursor:default}
+  .row{scroll-margin-top:52px}
   .pfGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px 12px}
   .pfGrid label{display:block;font-size:11.5px;font-weight:800;color:#9C8B8F;margin-bottom:2px}
   .pfOpt{display:grid;grid-template-columns:1fr 70px 1fr;gap:6px;align-items:center;padding:3px 0;border-bottom:1px dashed #F6E8EC;font-size:13px}
@@ -181,6 +200,7 @@
       📨 各キャストの「📋 コピー」を押すと、その子専用のURL（なければ作る）とLINEの文がコピーされます。そのままLINEに貼って送ってください。<br>
       コピーした子には「📋 コピー済」が付きます（このPCに覚えておくだけ）。👀＝キャストが開いた、📨＝答えが届いた。</div>
     <div class="tabs" id="tabs"></div>
+    <div class="kanaJump" id="kanaJump"></div>
     <div class="list" id="list"></div>
   </div>
 </div>
@@ -192,7 +212,9 @@
     <button class="x" onclick="closeEdit()" aria-label="閉じる">×</button>
     <h2 id="editTitle">キャスト</h2>
     <div class="hint" id="editHint"></div>
+    <div class="jump" id="editJump"></div>
 
+    <details class="acc" data-acc="basic"><summary class="sec">👤 名前・状態・日付</summary>
     <div class="grid">
       <div class="f"><label>正式な名前（公式HPの書き方）</label><input id="e_official" maxlength="60"></div>
       <div class="f"><label>読み（ひらがな）</label><input id="e_kana" maxlength="60"></div>
@@ -210,21 +232,25 @@
     </div>
     <div class="f" style="margin-top:10px"><label>別名（ほかのアプリ・お店での書き方。「、」で区切る）</label><input id="e_aliases"></div>
     <div class="f" style="margin-top:10px"><label>記録簿の集計名（空ならキャスト名と同じ）</label><input id="e_agg" maxlength="60"></div>
+    </details>
 
-    <div class="sec">🏪 在籍店舗</div>
+    <details class="acc" data-acc="stores"><summary class="sec">🏪 在籍店舗</summary>
     <div class="hint" style="margin:-4px 0 8px">チェック＝在籍している店舗。その店での名前・公式HPの在籍番号も入れられます（あとで公式HPへの自動反映に使います）。</div>
     <div class="stores" id="e_stores"></div>
+    </details>
 
-    <div class="sec">📝 プロフ（お客さんに見せる情報）</div>
+    <details class="acc" data-acc="prof"><summary class="sec">📝 プロフ（お客さんに見せる情報）</summary>
     <div class="hint" style="margin:-4px 0 8px">キャストプロフと同じ中身です。ここで直して「💾 プロフを保存」→ 公式HPにも入れられます。</div>
     <div id="e_prof"></div>
+    </details>
 
-    <div class="sec">⭐ バック（ランク）・条件</div>
+    <details class="acc" data-acc="terms"><summary class="sec">⭐ バック（ランク）・条件</summary>
     <div class="hint" style="margin:-4px 0 8px">変えるときは「🔁 バック・条件を変える」から。<b>ヒアリング内容がないと変えられません。</b></div>
     <div id="e_terms"></div>
     <button class="btn btn-ghost edit-only" id="termsBtn" style="width:100%;margin-top:8px" onclick="openTerms()">🔁 バック・条件を変える（ヒアリング必須）</button>
+    </details>
 
-    <div class="sec">📋 受付ルール</div>
+    <details class="acc" data-acc="rules"><summary class="sec">📋 受付ルール</summary>
     <div class="hint" style="margin:-4px 0 8px">受付でこのキャストを選ぶと、お客様の条件（新規・外国人・コースなど）に当てはまるものだけが出ます。足したり直したりするとすぐ保存されます。</div>
     <div id="e_notesMove"></div>
     <div id="e_checks"></div>
@@ -233,24 +259,29 @@
       <div class="f"><label>それより長いと</label><select id="e_longOver"><option value="">（上限なし）</option><option value="ask">キャストに確認してから</option><option value="ng">受けない（NG）</option></select></div>
     </div>
     <div class="f" style="margin-top:8px"><label>🗺 行けるお店・エリアと移動のしかた</label><textarea id="e_area" style="min-height:50px"></textarea></div>
+    </details>
 
-    <div class="sec">📞 連絡先（内勤だけ）</div>
+    <details class="acc" data-acc="private"><summary class="sec">📞 連絡先（内勤だけ）</summary>
     <div class="hint" style="margin:-4px 0 8px">電話番号・住所・誕生日など。<b>内勤ならだれでも見られて・直せます</b>（キャストのページには出ません）。見たり直したりすると、だれが・いつかが残ります。</div>
     <div id="e_private"></div>
+    </details>
 
-    <div class="sec">📨 プロフ確認フォーム（既存キャスト）</div>
+    <details class="acc" data-acc="confirm"><summary class="sec">📨 プロフ確認フォーム（既存キャスト）</summary>
     <div class="hint" style="margin:-4px 0 8px">キャスト専用のURLを作って、LINEで送ってください。キャストには<b>公式HPの内容だけ</b>が見えます（特記事項・NG・連絡先は見えません）。答えが届いたら、ここで台帳の内容と照らし合わせます。</div>
     <div id="e_confirm"></div>
+    </details>
 
-    <div class="sec">📝 特記事項・NG・メモ</div>
+    <details class="acc" data-acc="notes"><summary class="sec">📝 特記事項・NG・メモ</summary>
     <div class="hint" style="margin:-4px 0 8px;background:#FFF6D6;border-radius:10px;padding:6px 10px">⚠️ 特記事項・NG は<b>上の「📋 受付ルール」に移していきます</b>。ここに書いたものは、受付ルールに移すまで受付に「まだ移していないメモ」として出ます。</div>
     <div class="f"><label>特記事項 <small style="font-weight:400;color:#9C8B8F">… 内勤が理解しておくこと（お客さんには言わない）。お客さんに言うことは上の「確認事項」へ</small></label><textarea id="e_special"></textarea></div>
     <div class="f" style="margin-top:10px"><label>NG <small style="font-weight:400;color:#9C8B8F">… キャストが受けないこと（内勤がつけるか判断する材料）</small></label><textarea id="e_ng"></textarea></div>
     <div class="f" style="margin-top:10px"><label>メモ <small style="font-weight:400;color:#9C8B8F">… そのほか（受付には出ません）</small></label><textarea id="e_note"></textarea></div>
     <div class="f" style="margin-top:10px"><label>⏱ 予約と予約の間（インターバル・分） <small style="font-weight:400;color:#9C8B8F">… 「予約の間を30分あけてほしい」など。記録簿のタイムラインで予約の前後がグレーになります（0＝なし）</small></label><input type="number" id="e_interval" min="0" max="240" step="5" style="max-width:140px"></div>
+    </details>
 
-    <div class="sec">🔗 つながっているアプリのデータ</div>
+    <details class="acc" data-acc="links"><summary class="sec">🔗 つながっているアプリのデータ</summary>
     <div class="links" id="e_links"></div>
+    </details>
 
     <div class="actions">
       <button class="btn btn-danger edit-only" id="delBtn" onclick="removeCast()">🗑 削除</button>
@@ -407,14 +438,21 @@ function render(){
     const rnow = {}; RANK_KEYS.forEach(([k])=>{ const r = rankRowOn(c.id, k, todayYmd()); rnow[k] = r ? r.rank : ((c.ranks || {})[k] || ""); });
     const ranks = RANK_KEYS.filter(([k])=>rnow[k]).map(([k,l])=>`<span class="bd rank">${l} ${esc(rnow[k])}</span>`).join("");
     const links = (c.shift_name?'<span class="bd link">📅シフト</span>':"") + (c.prof_id?'<span class="bd link">📝プロフ</span>':"") + ((c.room_ids||[]).length?'<span class="bd link">🚪ルーム</span>':"");
-    return `<div class="row ${$("editBg").classList.contains("show") && c.id === editingId ? "sel" : ""}" onclick="openEdit('${c.id}')">
+    return `<div class="row ${$("editBg").classList.contains("show") && c.id === editingId ? "sel" : ""}" data-g="${gyouOf(c)}" onclick="openEdit('${c.id}')">
       <span class="id">${c.id}</span>
       <span class="nm">${esc(nameOf(c))}<small>${esc(c.kana || (c.official_name ? "" : "仮の名前"))}</small></span>
       <span class="badges">${ranks}${links}</span>${sendMode ? sendCell(c) : ""}
       <span class="st ${c.status}">${STATUS[c.status]||c.status}</span>
     </div>`;
   }).join("") : `<div class="empty">このタブにはキャストがいません</div>`;
+  const has = new Set(list.map(gyouOf));
+  $("kanaJump").innerHTML = GYOU.map(([g]) => g).concat(["他"]).map(g => `<button type="button" ${has.has(g) ? "" : "disabled"} onclick="kanaJump('${g}')">${g}</button>`).join("");
 }
+// 一覧の「あかさたな」ジャンプ（読み→なければ名前の1文字目）
+const GYOU = [["あ","あいうえおぁぃぅぇぉゔ"],["か","かきくけこがぎぐげご"],["さ","さしすせそざじずぜぞ"],["た","たちつてとだぢづでどっ"],["な","なにぬねの"],
+  ["は","はひふへほばびぶべぼぱぴぷぺぽ"],["ま","まみむめも"],["や","やゆよゃゅょ"],["ら","らりるれろ"],["わ","わをんゎ"]];
+function gyouOf(c){ const ch = key(c.kana || nameOf(c)).charAt(0); const g = GYOU.find(([, s]) => s.includes(ch)); return g ? g[0] : "他"; }
+function kanaJump(g){ const r = document.querySelector(`#list .row[data-g="${g}"]`); if(r) r.scrollIntoView({ block: "start", behavior: "smooth" }); }
 
 /* ---------- バック（ランク）・条件（ヒアリングとセットで変える） ---------- */
 const KIND_LABEL = { nomination_fee:"指名料", op_price:"オプション", back_add:"バック上乗せ", zappi_exempt:"雑費なし", transport_back:"交通費バック", memo:"そのほか" };
@@ -641,7 +679,7 @@ function openRule(rid, pre){
       <button class="btn btn-primary btn-sm" onclick="saveRule()">💾 保存</button></div></div>`;
   ruleCondUI(x.cond_value);
   box.dataset.source = x.source || "";
-  box.scrollIntoView({ block: "center", behavior: "smooth" });
+  showEl(box).scrollIntoView({ block: "center", behavior: "smooth" });
 }
 function ruleCondUI(val){
   const c = $("r_cond").value, w = $("r_valWrap");
@@ -705,7 +743,7 @@ async function renderNotesMove(id){
   const todos = [];
   (c.notes_moved || []).forEach((m, mi) => (m.todo || []).forEach((t, ti) => { if(!t.done) todos.push({ mi, ti, ...t }); }));
   const go = { zappi: `<button class="btn btn-ghost btn-sm" onclick="openTerms()">🔁 条件を開く</button>`,
-               private: `<button class="btn btn-ghost btn-sm" onclick="openPrivate().then(()=>$('e_private').scrollIntoView({ block: 'start', behavior: 'smooth' }))">🔓 連絡先を開く</button>`,   // 連絡先の欄は下のほうにあるので、そこまで動く
+               private: `<button class="btn btn-ghost btn-sm" onclick="openPrivate().then(()=>showEl($('e_private')).scrollIntoView({ block: 'start', behavior: 'smooth' }))">🔓 連絡先を開く</button>`,   // 連絡先の欄は下のほうにあるので、そこまで動く
                prof: c.prof_id ? `<a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(c.prof_id)}" target="_blank" rel="noopener">📝 プロフを開く</a>` : "" };
   const todoHtml = todos.length ? `<div style="border:2px solid #A88BFF;background:#FBF9FF;border-radius:12px;padding:8px 10px;margin-bottom:8px">
     <div style="font-weight:800;font-size:13.5px;color:#6030aa">✋ 手でやること（${todos.length}）</div>
@@ -876,7 +914,7 @@ async function toggleNotesList(){
 }
 // フォームの答えからルールを作る（台帳の受付ルールの欄を開いて、中身を入れておく）
 function ruleFromAnswer(text, kind, cond, aid){
-  $("e_checks").scrollIntoView({ block: "start", behavior: "smooth" });
+  showEl($("e_checks")).scrollIntoView({ block: "start", behavior: "smooth" });
   openRule(0, { text, kind, cond, source: aid ? "form:" + aid : "" });
 }
 async function removeCheck(cid){
@@ -1026,7 +1064,7 @@ async function showAnswer(aid){
     const a = q(await sb.from("prof_confirm_answers").select("*").eq("id", aid).single());
     ansCur = { a, d: a.data || {}, c: casts.find(x=>x.id === a.cast_id) || {} };
     paintAnswer();
-    $("e_answer").scrollIntoView({ block: "start", behavior: "smooth" });
+    showEl($("e_answer")).scrollIntoView({ block: "start", behavior: "smooth" });
   }catch(e){ toast("開けませんでした：" + (e.message || e)); }
 }
 function paintAnswer(){
@@ -1526,21 +1564,21 @@ function paintProf(){
       ${CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfHpImport()">🌐 公式HPから取りこむ</button>` : ""}
       <a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(pf.prof.id)}" target="_blank" rel="noopener">📂 プロフの画面で開く</a></div>
     ${PROF_DUMMY.includes(sk) ? `<div class="hint" style="margin-bottom:6px">${esc(STORE_LABEL_OF(sk))}は名前・年齢を変えた別の設定です（公式HPにはまだ入れられません）。</div>` : ""}
-    <div class="pfPanel"><div class="pfHead">📋 基本情報 ${hpLinkOf(pf.c, sk)}</div><div class="pfBody"><div class="pfGrid">
-      ${PF_BASIC.map(([f, l]) => `<div><label>${l}</label><input id="pf_b_${f}" value="${esc(profGet(data, sk, f))}" ${ro}></div>`).join("")}</div></div></div>
-    <div class="pfPanel"><div class="pfHead">✅ オプション可否 <small style="font-weight:400;color:#9C8B8F">◎大好き ○OK △相談 ×NG</small></div><div class="pfBody">
+    <details ${pfAcc("basic")}><summary class="pfHead">📋 基本情報 ${hpLinkOf(pf.c, sk)}</summary><div class="pfBody"><div class="pfGrid">
+      ${PF_BASIC.map(([f, l]) => `<div><label>${l}</label><input id="pf_b_${f}" value="${esc(profGet(data, sk, f))}" ${ro}></div>`).join("")}</div></div></details>
+    <details ${pfAcc("opts")}><summary class="pfHead">✅ オプション可否 <small style="font-weight:400;color:#9C8B8F">◎大好き ○OK △相談 ×NG</small></summary><div class="pfBody">
       ${optKeys.map((k, i) => `<div class="pfOpt"><span>${esc(PF_OPT_LABEL[k] || k)}</span>
         <select id="pf_o_${i}" data-k="${esc(k)}" ${ro}>${PF_MARKS.map(m => `<option value="${m}" ${(o.options[k] || "") === m ? "selected" : ""}>${m || "－"}</option>`).join("")}</select>
         <input id="pf_om_${i}" placeholder="メモ（条件など）" value="${esc((o.optMemo || {})[k] || "")}" ${ro}></div>`).join("")}
-      ${CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:8px"><input id="pf_newopt" placeholder="新しいオプションの名前（例：TSP（有料））" style="flex:1"><button class="btn btn-ghost btn-sm" onclick="pfAddOpt()">＋ 種類を足す</button></div>` : ""}</div></div>
-    <div class="pfPanel"><div class="pfHead">💬 紹介文</div><div class="pfBody">
+      ${CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:8px"><input id="pf_newopt" placeholder="新しいオプションの名前（例：TSP（有料））" style="flex:1"><button class="btn btn-ghost btn-sm" onclick="pfAddOpt()">＋ 種類を足す</button></div>` : ""}</div></details>
+    <details ${pfAcc("intro")}><summary class="pfHead">💬 紹介文</summary><div class="pfBody">
       <div class="hint">本人から一言</div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
-      <div class="hint" style="margin-top:8px">店長から一言</div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></div>
-    <div class="pfPanel"><div class="pfHead">🏨 ホテル <small style="font-weight:400;color:#9C8B8F">（このキャストだけの◎△×。お店のホテル一覧は変わりません）</small></div><div class="pfBody">
+      <div class="hint" style="margin-top:8px">店長から一言</div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></details>
+    <details ${pfAcc("hotel")}><summary class="pfHead">🏨 ホテル <small style="font-weight:400;color:#9C8B8F">（このキャストだけの◎△×。お店のホテル一覧は変わりません）</small></summary><div class="pfBody">
       ${hotelHtml ? `<div class="pfChips">${hotelHtml}</div>` : `<div class="hint">まだありません</div>`}
-      ${CAN_EDIT ? pfHotelEditor(hp) : ""}</div></div>
+      ${CAN_EDIT ? pfHotelEditor(hp) : ""}</div></details>
     ${pfPersonalityHtml(data)}
-    <div class="pfPanel"><div class="pfHead">🗓 記録・ログ（ヒアリングなど）</div><div class="pfBody">
+    <details ${pfAcc("logs")}><summary class="pfHead">🗓 記録・ログ（ヒアリングなど）</summary><div class="pfBody">
       ${CAN_EDIT ? `<div style="background:#FFF5F8;border-radius:12px;padding:8px 10px;margin-bottom:6px">
         <div style="display:flex;gap:6px;flex-wrap:wrap"><select id="pf_lt" style="max-width:190px">${PF_LOG_TYPES.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
           <input type="date" id="pf_ld" value="${todayYmd()}" style="max-width:160px"></div>
@@ -1557,7 +1595,7 @@ function paintProf(){
             <button type="button" title="消す" onclick="pfDelLog(${i})" style="border:none;background:rgba(255,255,255,.7);border-radius:8px;padding:2px 7px;font-size:12px;cursor:pointer">🗑</button>` : ""}
         </div>
         <div style="font-size:10.5px;font-weight:700;color:${mk.color};margin-bottom:3px">${mk.emoji} ${l.author ? esc(l.author) : "書いた人の記録なし"}</div>
-        <div style="font-size:14px;white-space:pre-wrap;line-height:1.6">${esc(String(l.content || ""))}</div></div>`; }).join("") || `<div class="hint">記録はまだありません</div>`}</div></div>
+        <div style="font-size:14px;white-space:pre-wrap;line-height:1.6">${esc(String(l.content || ""))}</div></div>`; }).join("") || `<div class="hint">記録はまだありません</div>`}</div></details>
     ${CAN_EDIT ? `<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:6px">
       <button class="btn btn-ghost" onclick="hpPushLater()">🌐 公式HPにまとめて入れる</button>
       <button class="btn btn-ghost" onclick="saveProf(true)">💾 保存だけ（公式HPはあとで）</button>
@@ -1845,7 +1883,7 @@ function pfPersonalityHtml(data){
       <div style="background:#FFF5F8;border-radius:10px;padding:10px 12px;margin-top:6px;font-size:13px;line-height:1.8;max-height:360px;overflow:auto">
         ${list.map(it => `<div style="margin-bottom:6px"><b>Q${esc(it.n)}．</b>${esc(it.q || "")}<br>　→ ${esc(it.text || "（未回答）")}</div>`).join("")}</div></details>`
     : `<div class="hint" style="text-align:center;padding:10px 0">まだ答えがありません（キャストがプロフのフォームで答えるとここに出ます）</div>`;
-  return `<div class="pfPanel"><div class="pfHead">🧩 性格タイプ${fromForm ? ' <small style="font-weight:400;color:#9C8B8F">（プロフ確認フォームの答えから）</small>' : ""}</div><div class="pfBody">${body}</div></div>`;
+  return `<details ${pfAcc("ptype")}><summary class="pfHead">🧩 性格タイプ${fromForm ? ' <small style="font-weight:400;color:#9C8B8F">（プロフ確認フォームの答えから）</small>' : ""}</summary><div class="pfBody">${body}</div></details>`;
 }
 // 書いた内勤の色（キャストプロフ・内勤カレンダーと同じ）
 const STAFF_MARKS = { "きゃ": { emoji: "🧡", color: "#e8590c", bg: "#fff4ee" }, "すや": { emoji: "💗", color: "#d6579e", bg: "#fff3fa" },
@@ -1966,6 +2004,33 @@ async function markReviewed(aid){
   }catch(e){ toast("できませんでした：" + (e.message || e)); }
 }
 
+// ---------- アコーディオン（最初は閉じておく）と、上に固定の「項目へジャンプ」 ----------
+const pfOpen = new Set();   // プロフの中の、開いている小さい項目（お店のタブを変えても開いたまま）
+function pfAcc(k){ return `class="pfPanel" data-p="${k}" ${pfOpen.has(k) ? "open" : ""} ontoggle="pfAccT(this)"`; }
+function pfAccT(el){ if(el.open) pfOpen.add(el.dataset.p); else pfOpen.delete(el.dataset.p); }
+function showEl(el){ for(let p = el && el.parentElement; p; p = p.parentElement) if(p.tagName === "DETAILS") p.open = true; return el; }   // 閉じている項目の中なら開く
+const EDIT_JUMP = [["basic", "👤 名前・状態"], ["stores", "🏪 在籍店舗"], ["prof", "📝 プロフ"], ["terms", "⭐ バック"], ["rules", "📋 受付ルール"],
+  ["private", "📞 連絡先"], ["confirm", "📨 確認フォーム"], ["notes", "📝 特記事項"], ["links", "🔗 アプリ"]];
+const PF_JUMP = [["basic", "基本情報"], ["opts", "オプション"], ["intro", "紹介文"], ["hotel", "ホテル"], ["ptype", "性格"], ["logs", "記録"]];
+function paintEditJump(){
+  $("editJump").innerHTML = EDIT_JUMP.map(([k, l]) => `<button type="button" onclick="jumpTo('${k}')">${l}</button>` +
+      (k === "prof" ? PF_JUMP.map(([p, pl]) => `<button type="button" class="sub" onclick="jumpProf('${p}')">${pl}</button>`).join("") : "")).join("")
+    + `<button type="button" class="all" onclick="accAll(true)">全部ひらく</button><button type="button" class="all" onclick="accAll(false)">全部とじる</button>`;
+}
+function jumpTo(k){
+  const d = document.querySelector(`#editBg details.acc[data-acc="${k}"]`); if(!d) return;
+  d.open = true; d.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+function jumpProf(p){
+  const a = document.querySelector(`#editBg details.acc[data-acc="prof"]`); if(a) a.open = true;
+  const d = document.querySelector(`#e_prof details.pfPanel[data-p="${p}"]`);
+  if(!d){ if(a) a.scrollIntoView({ block: "start", behavior: "smooth" }); return; }
+  d.open = true; pfOpen.add(p); d.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+function accAll(on){
+  document.querySelectorAll("#editBg details.acc, #e_prof details.pfPanel").forEach(d => { d.open = on; });
+  if(on) PF_JUMP.forEach(([p]) => pfOpen.add(p)); else pfOpen.clear();
+}
 /* ---------- 編集 ---------- */
 function openEdit(id){
   // ほかのキャストに切りかえるとき、プロフを直したままなら確かめる
@@ -1973,6 +2038,10 @@ function openEdit(id){
     pfCollect(); if((pf.dirty.size || pf.hotelDirty) && !confirm("プロフの直したところが、まだ保存されていません。保存しないでほかのキャストを開きますか？")) return;
   }
   editingId = id;
+  // 項目は最初は閉じておく（新しく足すときだけ名前の所を開く）
+  if(!$("editJump").innerHTML) paintEditJump();
+  document.querySelectorAll("#editBg details.acc").forEach(d => { d.open = !id && d.dataset.acc === "basic"; });
+  pfOpen.clear();
   const c = id ? casts.find(x=>x.id===id) : { status:"interview", aliases:[], stores:{}, ranks:{}, room_ids:[] };
   $("editTitle").textContent = id ? `${nameOf(c)}（${id}）` : "＋ キャストを追加";
   $("editHint").textContent = id ? "直したら「保存する」を押してください。" : "名前が決まっていなければ、仮の名前だけでOKです。";
