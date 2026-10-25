@@ -137,7 +137,9 @@
       <button class="btn btn-ghost" id="sendModeBtn" onclick="toggleSendMode()">📨 確認フォームをまとめて送る</button>
       <button class="btn btn-ghost" id="ansListBtn" onclick="toggleAnsList()">📨 届いた答え</button>
       <button class="btn btn-ghost" onclick="toggleNotesList()">🧹 受付ルールにまとめる</button>
+      <button class="btn btn-ghost" id="newProfBtn" onclick="toggleNewProfs()">📥 新しく届いたプロフ</button>
     </div>
+    <div id="newProfBox" style="display:none;background:#fff;border:1.5px solid #F1E3E7;border-radius:12px;padding:10px 12px;margin:6px 0"></div>
     <div id="ansListBox" style="display:none;background:#fff;border:1.5px solid #F1E3E7;border-radius:12px;padding:10px 12px;margin:6px 0"></div>
     <div id="notesListBox" style="display:none;background:#fff;border:1.5px solid #F1E3E7;border-radius:12px;padding:10px 12px;margin:6px 0"></div>
     <div id="sendHelp" class="hint" style="display:none;background:#FFF5F8;border-radius:10px;padding:8px 12px;margin:6px 0">
@@ -345,7 +347,7 @@ async function load(){
   }
   $("gate").style.display = "none"; $("main").style.display = "";
   $("wipSub").textContent = CAN_EDIT ? "👑 店長として開いています（直せます）。" : "店長（きゃ）が準備中のページです。見ることと「📨 確認フォームをまとめて送る」はできます（台帳を直すのは店長だけ）。";
-  render(); refreshAnsCount();
+  render(); refreshAnsCount(); refreshNewProfCount();
 }
 
 function render(){
@@ -1477,15 +1479,101 @@ async function saveCast(){
   }
   try{
     if(!(await staffSession())){ toast("ログインの期限が切れました。ポータルから開き直してください"); return; }
+    let saved;
+    const prevStores = JSON.parse(JSON.stringify(((editingId && casts.find(c => c.id === editingId)) || {}).stores || {}));
     if(editingId){
-      const r = q(await sb.from("master_casts").update(row).eq("id", editingId).select().single());
-      casts = casts.map(c => c.id === editingId ? r : c);
+      saved = q(await sb.from("master_casts").update(row).eq("id", editingId).select().single());
+      casts = casts.map(c => c.id === editingId ? saved : c);
     }else{
-      const r = q(await sb.from("master_casts").insert(row).select().single());
-      casts.push(r);
+      saved = q(await sb.from("master_casts").insert(row).select().single());
+      casts.push(saved);
     }
     closeEdit(); render(); toast("保存しました🌸");
+    if(saved) await syncShift(saved, prevStores);
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+/* ---------- 📅 台帳の在籍店舗 → サクラシフト（まだいなければ登録してパスワードを作る。いればお店・媒体を足す） ---------- */
+const SHIFT_STORE_OF = { sakuramoon:"サクラムーン", lana_uguisu:"ラナ鶯谷", lana_kinshi:"ラナ錦糸町", dressgarden:"ドレスガーデン", peachmoon:"ピーチムーン",
+  gyakuanal:"逆AF倶楽部", cutie:"キューティー", eighteen:"18", gokumon:"極門" };
+function shiftStoresOf(ks){
+  const out = ks.map(k => SHIFT_STORE_OF[k]).filter(Boolean);
+  // 媒体：サクラ系のお店にいればヘブン（サクラシフトの新規キャストと同じ）、キューティー・極門はそれぞれのぴゅあらば・口コミ情報局
+  if(ks.some(k => ["sakuramoon", "lana_uguisu", "lana_kinshi", "dressgarden", "peachmoon"].includes(k))) out.push("ヘブンサクラ", "ヘブンラナ");
+  if(ks.includes("cutie")) out.push("(キュ)ぴゅあらば", "(キュ)情報局");
+  if(ks.includes("gokumon")) out.push("(極)ぴゅあらば", "(極)情報局");
+  return out;
+}
+// prev：保存する前の在籍店舗。サクラシフトにもういる子は、新しくチェックしたお店と、変えたダミー名だけ送る（今の媒体の設定はさわらない）
+async function syncShift(c, prev){
+  if(!CAN_EDIT || c.status === "left" || !Object.keys(c.stores || {}).length) return;
+  const name = c.shift_name || c.official_name || c.temp_name;
+  if(!name) return;
+  prev = prev || {};
+  const aliases = {}, nm = (o, k) => (o[k] && o[k].name) || "";
+  if(nm(c.stores, "eighteen") && (!c.shift_name || nm(c.stores, "eighteen") !== nm(prev, "eighteen"))) aliases["18"] = nm(c.stores, "eighteen");
+  if(nm(c.stores, "gokumon") && (!c.shift_name || nm(c.stores, "gokumon") !== nm(prev, "gokumon"))) aliases["極門"] = nm(c.stores, "gokumon");
+  const keys = c.shift_name ? Object.keys(c.stores).filter(k => !(k in prev)) : Object.keys(c.stores);
+  if(c.shift_name && !keys.length && !Object.keys(aliases).length) return;   // サクラシフトにいて、変えるものがない
+  try{
+    const r = q(await sb.rpc("shift_register_cast", { p: { name, stores: shiftStoresOf(keys), aliases, by: operatorName() } }));
+    if(!r || r.result !== "ok") throw new Error((r && r.message) || "登録できませんでした");
+    if(!c.shift_name){
+      const u = q(await sb.from("master_casts").update({ shift_name: name }).eq("id", c.id).select().single());
+      casts = casts.map(x => x.id === c.id ? u : x); render();
+    }
+    if(r.created || !c.shift_name) showShiftResult(name, r.pw, r.created);
+    else toast("サクラシフトのお店・媒体もそろえました");
+  }catch(e){ toast("サクラシフトに登録できませんでした（SQL 142 を実行してください）：" + (e.message || e)); }
+}
+function showShiftResult(name, pw, created){
+  let bg = document.getElementById("shiftBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "shiftBg"; bg.style.cssText = "position:fixed;inset:0;z-index:320;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
+  bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:460px;width:100%;font-size:14px;line-height:1.8">
+    <b style="font-size:16px">📅 サクラシフトに${created ? "登録しました" : "つなぎました"}</b>
+    <div style="background:#FFF0F5;border-radius:12px;padding:10px 12px;margin-top:8px">名前：<b>${esc(name)}</b><br>パスワード：<b style="font-size:18px;letter-spacing:.1em">${esc(pw || "（サクラシフトで確かめてください）")}</b></div>
+    <div class="hint" style="margin-top:8px">${created ? "ログインできるようになるまで、少し時間がかかることがあります。" : "サクラシフトにもういた子なので、台帳とつなぎました。"}<br>
+      キャストに送るログインの案内文は、サクラシフトの「設定」→ ログイン情報の配布 で作れます（設定画面を開きなおしてから）。</div>
+    <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-primary" onclick="document.getElementById('shiftBg').remove()">OK</button></div></div>`;
+}
+/* ---------- 📥 新しく届いたプロフ（キャストプロフにいて、台帳にいない子）→ 台帳に入れる（ここで台帳のIDができる） ---------- */
+async function newProfs(){
+  const rows = q(await sb.from("prof_casts").select("id,name,data").eq("deleted", false)) || [];
+  const linked = new Set(casts.map(c => c.prof_id).filter(Boolean));
+  return rows.filter(r => !linked.has(r.id) && !(r.data && r.data.retired)).map(r => ({ id: r.id, name: r.name, at: (r.data && (r.data.submittedAt || r.data.updatedAt)) || "" }))
+    .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+}
+async function refreshNewProfCount(){
+  try{ const n = (await newProfs()).length; $("newProfBtn").textContent = `📥 新しく届いたプロフ${n ? "（" + n + "）" : ""}`; }catch(e){}
+}
+async function toggleNewProfs(){
+  const box = $("newProfBox");
+  if(box.style.display !== "none"){ box.style.display = "none"; return; }
+  box.style.display = ""; box.innerHTML = "読んでいます…";
+  let list = [];
+  try{ list = await newProfs(); }catch(e){ box.innerHTML = "読めませんでした：" + esc(e.message || e); return; }
+  box.innerHTML = `<div style="font-weight:800;margin-bottom:4px">📥 新しく届いたプロフ（台帳にまだいない子・${list.length}人）</div>
+    <div class="hint" style="margin-bottom:6px">「＋ 台帳に入れる」で台帳に入ります（ここで台帳のIDができて、プロフとつながります）。そのあと在籍店舗を決めて保存すると、サクラシフトにも自動で登録されます。</div>`
+    + (list.map(x => `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px dashed #F1E3E7">
+        <b style="flex:1">${esc(x.name)}</b><small style="color:#9C8B8F">${esc(String(x.at).slice(0, 10))}</small>
+        ${CAN_EDIT ? `<button class="btn btn-primary btn-sm" onclick="addFromProf('${esc(x.id)}')">＋ 台帳に入れる</button>` : ""}
+        <a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(x.id)}" target="_blank" rel="noopener">📂 プロフ</a></div>`).join("") || '<div class="hint">ありません 🎉</div>');
+}
+async function addFromProf(pid){
+  const p = (await newProfs()).find(x => x.id === pid); if(!p) { toast("もう台帳に入っています"); return; }
+  const same = casts.find(c => (c.official_name === p.name || c.temp_name === p.name || c.shift_name === p.name) && !c.prof_id);
+  try{
+    let r;
+    if(same && confirm(`台帳に「${nameOf(same)}」がいます（プロフとつながっていない）。この子とつなぎますか？\n（キャンセルなら、新しく台帳に入れます）`)){
+      r = q(await sb.from("master_casts").update({ prof_id: pid }).eq("id", same.id).select().single());
+      casts = casts.map(c => c.id === same.id ? r : c);
+    }else{
+      r = q(await sb.from("master_casts").insert({ official_name: p.name, prof_id: pid, status: "new", stores: {} }).select().single());
+      casts.push(r);
+    }
+    render(); refreshNewProfCount(); $("newProfBox").style.display = "none";
+    toast("台帳に入れました。在籍店舗を決めて保存してください");
+    openEdit(r.id);
+  }catch(e){ toast("台帳に入れられませんでした：" + (e.message || e)); }
 }
 
 async function removeCast(){
