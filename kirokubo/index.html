@@ -2028,7 +2028,7 @@ const isPane = () => document.body.classList.contains("pane") && window.matchMed
 
 async function saveCast(){
   if(!CAN_EDIT){ toast("作成中のため、直せるのは店長だけです"); return; }
-  if(pf && $("pf_c")){ pfCollect(); if((pf.dirty.size || pf.hotelDirty) && confirm("プロフも直しています。いっしょにプロフも保存しますか？")) await saveProf(); }
+  if(pf && $("pf_c")){ pfCollect(); if((pf.dirty.size || pf.hotelDirty) && confirm("プロフも直しています。いっしょにプロフも保存しますか？\n（公式HPには入れません。あとで「🌐 公式HPにまとめて入れる」で入れられます）")) await saveProf(true); }
   const official = $("e_official").value.trim(), temp = $("e_temp").value.trim();
   if(!official && !temp){ toast("正式な名前か仮の名前を入れてね"); return; }
   const aliases = $("e_aliases").value.split(/[、,，]/).map(s=>s.trim()).filter(Boolean).filter(a=>a!==official && a!==temp);
