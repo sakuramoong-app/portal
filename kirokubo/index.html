@@ -58,6 +58,8 @@
   /* 小窓 */
   .modal-bg{display:none;position:fixed;inset:0;z-index:50;background:rgba(92,75,79,.45);overflow:auto;padding:24px 14px;}
   .modal-bg.show{display:block;}
+  /* キャストの画面：保存ボタンをいつも下に出しておく（スクロールしなくても押せる） */
+  #editBg .modal > .actions{position:sticky;bottom:0;z-index:5;background:#fff;margin:0 -20px -20px;padding:10px 20px 14px;border-top:1.5px solid var(--line);border-radius:0 0 20px 20px;box-shadow:0 -6px 14px rgba(255,143,171,.12);}
   .modal{position:relative;background:#fff;border-radius:20px;max-width:640px;margin:0 auto;padding:22px 20px 20px;box-shadow:0 14px 40px rgba(92,75,79,.3);}
   .x{position:absolute;top:12px;right:14px;width:34px;height:34px;border:none;border-radius:99px;background:var(--pink-soft);color:var(--pink-deep);font-size:18px;font-weight:800;cursor:pointer;}
   .modal h2{font-size:17px;font-weight:800;margin:0 40px 4px 0;}
