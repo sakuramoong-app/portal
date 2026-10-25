@@ -425,6 +425,7 @@ async function load(){
   $("wipSub").textContent = CAN_EDIT ? "👑 店長として開いています（直せます）。" : "店長（きゃ）が準備中のページです。見ることと「📨 確認フォームをまとめて送る」はできます（台帳を直すのは店長だけ）。";
   document.body.classList.add("pane");   // PC では左に一覧・右にキャスト（キャストプロフと同じならび）
   render(); refreshAnsCount(); refreshNewProfCount();
+  { const want = new URLSearchParams(location.search).get("cast"); if(want && casts.some(c => c.id === want)) openEdit(want); }   // 記録簿の「📒 キャスト台帳を開く」から
   autoMoveInternal();   // プロフの内勤連絡で、まだ振り分けていないものを自動で
 }
 
