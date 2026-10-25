@@ -1306,10 +1306,10 @@ async function renderProf(id){
   try{
     const [p, lg] = await Promise.all([
       sb.from("prof_casts").select("id,name,data").eq("id", c.prof_id).single(),
-      sb.from("prof_logs").select("type,date,content,author").eq("cast_id", c.prof_id).order("date", { ascending: false }).limit(8),
+      sb.from("prof_logs").select("log_id,type,date,content,author,created_at").eq("cast_id", c.prof_id).order("date", { ascending: false }).order("created_at", { ascending: false }).limit(40),
     ]);
     prof = q(p); logs = q(lg) || [];
-    if(!pfHotels) pfHotels = q(await sb.from("prof_hotels").select("hotel_id,hotel_name,area").order("seq")) || [];
+    if(!pfHotels) pfHotels = q(await sb.from("prof_hotels").select("hotel_id,hotel_name,area,store_status").order("seq")) || [];
   }catch(e){ if(editingId === id) el.innerHTML = `<div class="hint">キャストプロフが読めませんでした：${esc(e.message || e)}</div>`; return; }
   if(editingId !== id) return;   // 読んでいる間にほかのキャストを開いた
   const data = JSON.parse(JSON.stringify((prof && prof.data) || {}));
@@ -1344,11 +1344,19 @@ function paintProf(){
     <div class="pfPanel"><div class="pfHead">💬 紹介文</div><div class="pfBody">
       <div class="hint">本人から一言</div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
       <div class="hint" style="margin-top:8px">店長から一言</div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></div>
-    <div class="pfPanel"><div class="pfHead">🏨 ホテル <small style="font-weight:400;color:#9C8B8F">（直すのは「📂 プロフの画面で開く」から）</small></div><div class="pfBody">
-      ${hotelHtml ? `<div class="pfChips">${hotelHtml}</div>` : `<div class="hint">まだありません</div>`}</div></div>
+    <div class="pfPanel"><div class="pfHead">🏨 ホテル <small style="font-weight:400;color:#9C8B8F">（このキャストだけの◎△×。お店のホテル一覧は変わりません）</small></div><div class="pfBody">
+      ${hotelHtml ? `<div class="pfChips">${hotelHtml}</div>` : `<div class="hint">まだありません</div>`}
+      ${CAN_EDIT ? pfHotelEditor(hp) : ""}</div></div>
     <div class="pfPanel"><div class="pfHead">🧩 性格タイプ・🗓 記録（ヒアリングなど）</div><div class="pfBody">
       ${pt ? `<div style="font-size:13px;margin-bottom:4px">性格タイプ：<b>${esc(typeof pt === "string" ? pt : (pt.name || pt.type || JSON.stringify(pt)))}</b></div>` : ""}
-      ${pf.logs.map(l => `<div class="pfLog"><small style="color:#9C8B8F">${esc(l.date || "")}・${esc(l.type || "")}・${esc(l.author || "")}</small><div style="white-space:pre-wrap">${esc(String(l.content || "").slice(0, 300))}${String(l.content || "").length > 300 ? "…" : ""}</div></div>`).join("") || `<div class="hint">記録はまだありません</div>`}</div></div>
+      ${CAN_EDIT ? `<div style="background:#FFF5F8;border-radius:12px;padding:8px 10px;margin-bottom:6px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><select id="pf_lt" style="max-width:190px">${PF_LOG_TYPES.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
+          <input type="date" id="pf_ld" value="${todayYmd()}" style="max-width:160px"></div>
+        <textarea id="pf_lc" style="margin-top:6px;min-height:60px" placeholder="記録の中身（ヒアリングした内容など）"></textarea>
+        <div style="text-align:right;margin-top:4px"><button class="btn btn-ghost btn-sm" onclick="pfAddLog()">＋ 記録を足す</button></div></div>` : ""}
+      ${pf.logs.map((l, i) => `<div class="pfLog" id="pf_log_${i}"><small style="color:#9C8B8F">${esc(l.date || "")}・${esc(PF_LOG_LABEL[l.type] || l.type || "")}・${esc(l.author || "")}</small>
+        ${CAN_EDIT ? `<a href="javascript:void(0)" onclick="pfEditLog(${i})" style="font-size:11.5px;margin-left:8px">✏️ 直す</a><a href="javascript:void(0)" onclick="pfDelLog(${i})" style="font-size:11.5px;margin-left:8px;color:#d9534f">🗑 消す</a>` : ""}
+        <div style="white-space:pre-wrap">${esc(String(l.content || "").slice(0, 600))}${String(l.content || "").length > 600 ? "…" : ""}</div></div>`).join("") || `<div class="hint">記録はまだありません</div>`}</div></div>
     ${CAN_EDIT ? `<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:6px"><button class="btn btn-primary" onclick="saveProf()">💾 プロフを保存</button></div>` : ""}`;
   reflPv("pf_c"); reflPv("pf_m");
 }
@@ -1375,10 +1383,70 @@ function pfCollect(){
   if(before !== after) pf.dirty.add(sk);
 }
 function pfTab(i){ pfCollect(); pf.sk = pf.stores[i]; paintProf(); }
+/* 🏨 ホテル（キャストプロフと同じ：押すたびに 未設定 → ◎ → △ → × → 未設定。△と×には理由・条件のメモ） */
+let pfHotelArea = "";
+function pfHotelEditor(hp){
+  const areas = [...new Set((pfHotels || []).map(h => h.area).filter(Boolean))];
+  if(!areas.length) return "";
+  if(!pfHotelArea || !areas.includes(pfHotelArea)) pfHotelArea = areas[0];
+  const st = id => (hp.ok || []).includes(id) ? "ok" : (hp.conditional || []).includes(id) ? "cond" : (hp.ng || []).includes(id) ? "ng" : "";
+  const look = { ok: ["#E6F6EE", "#1a6640", "◎ "], cond: ["#FFF8E6", "#8a6300", "△ "], ng: ["#FFE8EC", "#c0304a", "× "], "": ["#fff", "#7A6070", ""] };
+  const memoRows = (pfHotels || []).filter(h => ["cond", "ng"].includes(st(h.hotel_id)));
+  return `<div style="margin-top:8px;border-top:1px dashed #F1E3E7;padding-top:8px">
+    <div class="hint" style="margin-bottom:4px">押すたびに ◎ → △ → × → なし。エリア：</div>
+    <div class="pfTabs" style="margin-bottom:6px">${areas.map(a => `<button type="button" class="pfTab ${a === pfHotelArea ? "on" : ""}" onclick="pfHotelArea='${esc(a)}';pfCollect();paintProf()">${esc(a)}</button>`).join("")}</div>
+    <div class="pfChips">${(pfHotels || []).filter(h => h.area === pfHotelArea).map(h => { const s = st(h.hotel_id), [bg, fg, mk] = look[s];
+      return `<span style="background:${bg};color:${fg};border:1.5px solid ${s ? fg + "55" : "#EDD5DF"};cursor:pointer" onclick="pfHotelCycle('${esc(h.hotel_id)}')">${mk}${esc(h.hotel_name)}</span>`; }).join("")}</div>
+    ${memoRows.length ? `<div style="margin-top:8px">${memoRows.map(h => `<div style="display:flex;gap:6px;align-items:center;margin-top:4px;font-size:12.5px">
+      <span style="min-width:120px">${st(h.hotel_id) === "ng" ? "×" : "△"} ${esc(h.hotel_name)}</span>
+      <input style="flex:1" placeholder="理由・条件（例：フェイスタオルがないので客に用意させる）" value="${esc((hp.memo || {})[h.hotel_id] || "")}" onchange="pfHotelMemo('${esc(h.hotel_id)}',this.value)"></div>`).join("")}</div>` : ""}</div>`;
+}
+function pfHotelPrefs(){ const d = pf.data; d.hotelPrefs = Object.assign({ ok: [], ng: [], conditional: [], memo: {} }, d.hotelPrefs || {}); ["ok", "ng", "conditional"].forEach(k => { d.hotelPrefs[k] = d.hotelPrefs[k] || []; }); d.hotelPrefs.memo = d.hotelPrefs.memo || {}; return d.hotelPrefs; }
+function pfHotelCycle(id){
+  pfCollect();
+  const hp = pfHotelPrefs(), isOk = hp.ok.includes(id), isC = hp.conditional.includes(id), isNg = hp.ng.includes(id);
+  hp.ok = hp.ok.filter(x => x !== id); hp.conditional = hp.conditional.filter(x => x !== id); hp.ng = hp.ng.filter(x => x !== id);
+  if(!isOk && !isC && !isNg) hp.ok.push(id); else if(isOk) hp.conditional.push(id); else if(isC) hp.ng.push(id);
+  pf.hotelDirty = true; paintProf();
+}
+function pfHotelMemo(id, v){ const hp = pfHotelPrefs(); v = String(v || "").trim(); if(v) hp.memo[id] = v; else delete hp.memo[id]; pf.hotelDirty = true; }
+/* 🗓 記録（キャストプロフの記録と同じ表 prof_logs） */
+const PF_LOG_TYPES = [["ヒアリング", "💬 ヒアリング"], ["面接", "📋 面接"], ["入店", "✅ 入店"], ["クレーム_キャスト", "⚠️ 要望・不満"], ["クレーム_客", "🚨 クレーム（お客様から）"]];
+const PF_LOG_LABEL = Object.assign(Object.fromEntries(PF_LOG_TYPES), { "退店": "🚪 退店" });
+async function pfReloadLogs(){
+  pf.logs = q(await sb.from("prof_logs").select("log_id,type,date,content,author,created_at").eq("cast_id", pf.prof.id).order("date", { ascending: false }).order("created_at", { ascending: false }).limit(40)) || [];
+  pfCollect(); paintProf();
+}
+async function pfAddLog(){
+  const content = $("pf_lc").value.trim();
+  if(!content){ toast("記録の中身を書いてください"); return; }
+  if(!operatorName()){ toast("ポータルで自分の名前を選んでから書いてください"); return; }
+  try{
+    const logId = "LOG-" + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2));
+    q(await sb.from("prof_logs").insert({ log_id: logId, cast_id: pf.prof.id, cast_name: pf.prof.name, type: $("pf_lt").value, date: $("pf_ld").value || todayYmd(),
+      reservation_date: "", content: content.slice(0, 10000), author: operatorName().slice(0, 20) }));
+    toast("記録を足しました"); await pfReloadLogs();
+  }catch(e){ toast("記録を足せませんでした：" + (e.message || e)); }
+}
+function pfEditLog(i){
+  const l = pf.logs[i], box = $("pf_log_" + i); if(!l || !box) return;
+  box.innerHTML = `<textarea id="pf_le_${i}" style="min-height:80px">${esc(l.content || "")}</textarea>
+    <div style="text-align:right;margin-top:4px"><button class="btn btn-ghost btn-sm" onclick="pfCollect();paintProf()">やめる</button> <button class="btn btn-primary btn-sm" onclick="pfSaveLog(${i})">💾 保存</button></div>`;
+}
+async function pfSaveLog(i){
+  const l = pf.logs[i]; if(!l) return;
+  try{ q(await sb.from("prof_logs").update({ content: $("pf_le_" + i).value.trim().slice(0, 10000) }).eq("log_id", l.log_id)); toast("記録を直しました"); await pfReloadLogs(); }
+  catch(e){ toast("直せませんでした：" + (e.message || e)); }
+}
+async function pfDelLog(i){
+  const l = pf.logs[i]; if(!l || !confirm("この記録を消しますか？（元にもどせません）")) return;
+  try{ q(await sb.from("prof_logs").delete().eq("log_id", l.log_id)); toast("記録を消しました"); await pfReloadLogs(); }
+  catch(e){ toast("消せませんでした：" + (e.message || e)); }
+}
 async function saveProf(){
   if(!pf) return;
   pfCollect();
-  if(!pf.dirty.size){ toast("変えたところがありません"); return; }
+  if(!pf.dirty.size && !pf.hotelDirty){ toast("変えたところがありません"); return; }
   const { prof, data } = pf;
   // サクラムーンは旧データにも同じものを入れる（キャストプロフの setField と同じ。答えの反映 saveReflect と同じ形）
   const saku = (data.storeProfiles || {})["サクラムーン"] || {};
@@ -1387,10 +1455,12 @@ async function saveProf(){
     storeProfiles: data.storeProfiles };
   if(saku.comment != null) p.comment = saku.comment;
   if(saku.options){ p.options = saku.options; p.optMemo = saku.optMemo || {}; }
+  if(pf.hotelDirty) p.hotelPrefs = pfHotelPrefs();
   try{
     const r = q(await sb.rpc("prof_update_confirmed", { p }));
     if(!r || r.result !== "ok") throw new Error((r && r.message) || "保存できませんでした");
   }catch(e){ toast("プロフを保存できませんでした：" + (e.message || e)); return; }
+  pf.hotelDirty = false;
   // 公式HPにも：直したお店の基本情報・紹介文（エイティーン・極門はまだ入れない）
   const sets = {};
   pf.dirty.forEach(sk => {
@@ -1434,7 +1504,7 @@ async function markReviewed(aid){
 function openEdit(id){
   // ほかのキャストに切りかえるとき、プロフを直したままなら確かめる
   if($("editBg").classList.contains("show") && pf && CAN_EDIT && $("pf_c")){
-    pfCollect(); if(pf.dirty.size && !confirm("プロフの直したところが、まだ保存されていません。保存しないでほかのキャストを開きますか？")) return;
+    pfCollect(); if((pf.dirty.size || pf.hotelDirty) && !confirm("プロフの直したところが、まだ保存されていません。保存しないでほかのキャストを開きますか？")) return;
   }
   editingId = id;
   const c = id ? casts.find(x=>x.id===id) : { status:"interview", aliases:[], stores:{}, ranks:{}, room_ids:[] };
@@ -1478,7 +1548,7 @@ function openEdit(id){
 }
 function closeEdit(){
   // プロフを直したまま閉じない（プロフは「💾 プロフを保存」で別に保存する）
-  if(pf && CAN_EDIT && $("pf_c")){ pfCollect(); if(pf.dirty.size && !confirm("プロフの直したところが、まだ保存されていません。保存しないで閉じますか？")) return; }
+  if(pf && CAN_EDIT && $("pf_c")){ pfCollect(); if((pf.dirty.size || pf.hotelDirty) && !confirm("プロフの直したところが、まだ保存されていません。保存しないで閉じますか？")) return; }
   $("editBg").classList.remove("show");
   if($("list")) render();   // 一覧の「選んでいる印」を消す
 }
@@ -1490,7 +1560,7 @@ const isPane = () => document.body.classList.contains("pane") && window.matchMed
 
 async function saveCast(){
   if(!CAN_EDIT){ toast("作成中のため、直せるのは店長だけです"); return; }
-  if(pf && $("pf_c")){ pfCollect(); if(pf.dirty.size && confirm("プロフも直しています。いっしょにプロフも保存しますか？")) await saveProf(); }
+  if(pf && $("pf_c")){ pfCollect(); if((pf.dirty.size || pf.hotelDirty) && confirm("プロフも直しています。いっしょにプロフも保存しますか？")) await saveProf(); }
   const official = $("e_official").value.trim(), temp = $("e_temp").value.trim();
   if(!official && !temp){ toast("正式な名前か仮の名前を入れてね"); return; }
   const aliases = $("e_aliases").value.split(/[、,，]/).map(s=>s.trim()).filter(Boolean).filter(a=>a!==official && a!==temp);
