@@ -1295,7 +1295,7 @@ function openHpPush(sets, cast){
 function paintHpPush(){
   let bg = document.getElementById("hpBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "hpBg"; bg.style.cssText = "position:fixed;inset:0;z-index:310;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
-  const L = Object.assign({ comment: "本人から一言", mgrComment: "店長から一言", options: "オプション" }, ANS_PROFILE_LABELS);
+  const L = Object.assign({ name: "名前", comment: "本人から一言", mgrComment: "店長から一言", options: "オプション" }, ANS_PROFILE_LABELS);
   const short = s => { s = String(s || ""); return s.length > 120 ? s.slice(0, 120) + "…" : s; };
   const busyNow = hpPush.some(x => x.state === "checking" || x.state === "saving");
   const rowsHtml = hpPush.map((x, i) => {
@@ -1311,7 +1311,7 @@ function paintHpPush(){
     return `<div class="ansSec"><label style="font-weight:800"><input type="checkbox" ${can && x.on ? "checked" : ""} ${can ? "" : "disabled"} onchange="hpPush[${i}].on=this.checked"> ${esc(STORE_LABEL_OF(x.sk))}</label>${hpLinkOf(hpPushCast, x.sk)}
       <div style="font-size:13px;margin-top:4px">${st}</div>
       ${ch && x.state === "checked" ? `<table class="ansTbl" style="margin-top:4px"><tr><th>欄</th><th>今の公式HP</th><th>→ 入れる</th></tr>${ch}</table>` : ""}
-      <div class="hint">入れる欄：${Object.keys(x.set).map(k => esc(L[k] || k)).join("・")}</div></div>`;
+      <div class="hint">入れる欄：${Object.keys(x.set).filter(k => !["tabako", "skill"].includes(k)).map(k => esc(L[k] || k)).join("・")}</div></div>`;
   }).join("");
   const any = hpPush.some(x => x.on && x.state === "checked" && x.r && x.r.ok && x.r.changes && x.r.changes.length);
   bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:760px;width:100%;max-height:90vh;overflow:auto;font-size:13.5px">
