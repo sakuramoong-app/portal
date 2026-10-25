@@ -1394,6 +1394,7 @@ function paintProf(){
     <div class="pfTabs">${pf.stores.map((s, i) => `<button type="button" class="pfTab ${s === sk ? "on" : ""}" onclick="pfTab(${i})">${esc(STORE_LABEL_OF(s))}${pf.dirty.has(s) ? " ✏️" : ""}</button>`).join("")}
       <span style="margin-left:auto"></span>
       ${CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfHpImport()">🌐 公式HPから取りこむ</button>` : ""}
+      ${CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfFormLink()">🔁 出しなおし用のURL</button>` : ""}
       <a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(pf.prof.id)}" target="_blank" rel="noopener">📂 プロフの画面で開く</a></div>
     ${PROF_DUMMY.includes(sk) ? `<div class="hint" style="margin-bottom:6px">${esc(STORE_LABEL_OF(sk))}は名前・年齢を変えた別の設定です（公式HPにはまだ入れられません）。</div>` : ""}
     <div class="pfPanel"><div class="pfHead">📋 基本情報 ${hpLinkOf(pf.c, sk)}</div><div class="pfBody"><div class="pfGrid">
@@ -1996,11 +1997,13 @@ async function sameAsCast(pid){
     <select id="same_sel" style="width:100%;margin-top:8px;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font-family:inherit;font-size:14px">
       ${cands.sort((a, b) => nameOf(a).localeCompare(nameOf(b), "ja")).map(c => `<option value="${esc(c.id)}" ${guess && guess.id === c.id ? "selected" : ""}>${esc(nameOf(c))}（${esc(c.id)}）</option>`).join("")}</select>
     <div class="hint" style="margin-top:8px">「${esc(p.name)}」の答えのうち、えらんだ子のプロフで<b>空いている所だけ</b>を入れます（今の中身は変えません）。内勤連絡がちがうときは、うしろに足します。入れたあと「${esc(p.name)}」のプロフは消します。</div>
+    <label style="display:flex;gap:6px;align-items:flex-start;margin-top:8px;font-size:13px"><input type="checkbox" id="same_over" style="margin-top:4px">
+      <span>キャストが<b>出しなおした</b>ので、新しい答えで<b>書きかえる</b>（空いていない所も）</span></label>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
       <button class="btn btn-ghost" onclick="document.getElementById('sameBg').remove()">やめる</button>
-      <button class="btn btn-primary" onclick="mergeProf('${esc(pid)}', $('same_sel').value)">まとめる</button></div></div>`;
+      <button class="btn btn-primary" onclick="mergeProf('${esc(pid)}', $('same_sel').value, $('same_over').checked)">まとめる</button></div></div>`;
 }
-async function mergeProf(pid, castId){
+async function mergeProf(pid, castId, over){
   const c = casts.find(x => x.id === castId); if(!c || !c.prof_id) return;
   try{
     const [a, b] = await Promise.all([sb.from("prof_casts").select("id,name,data").eq("id", pid).single(), sb.from("prof_casts").select("id,name,data").eq("id", c.prof_id).single()]);
@@ -2009,12 +2012,12 @@ async function mergeProf(pid, castId){
     const empty = v => v == null || v === "" || (typeof v === "object" && !Array.isArray(v) && !Object.keys(v).length) || (Array.isArray(v) && !v.length);
     PF_MERGE_KEYS.forEach(k => {
       if(empty(nd[k])) return;
-      if(k === "personalityAnswers"){ if(!((d.personalityAnswers || {}).list || []).length){ d[k] = nd[k]; filled.push("性格タイプの答え"); } return; }
-      if(empty(d[k])){ d[k] = nd[k]; filled.push((PF_BASIC.find(x => x[0] === k) || [])[1] || ({ comment: "本人から一言", personalityType: "性格タイプ", vibes: "雰囲気" })[k] || k); }
+      if(k === "personalityAnswers"){ if(over || !((d.personalityAnswers || {}).list || []).length){ d[k] = nd[k]; filled.push("性格タイプの答え"); } return; }
+      if(empty(d[k]) || (over && JSON.stringify(d[k]) !== JSON.stringify(nd[k]))){ d[k] = nd[k]; filled.push((PF_BASIC.find(x => x[0] === k) || [])[1] || ({ comment: "本人から一言", personalityType: "性格タイプ", vibes: "雰囲気" })[k] || k); }
     });
-    // オプション：まだ入っていないものだけ
+    // オプション：まだ入っていないものだけ（書きかえるときは、ちがうものも）
     const o = Object.assign({}, d.options || {}); let no = 0;
-    Object.entries(nd.options || {}).forEach(([k, v]) => { if(v && !o[k]){ o[k] = v; no++; } });
+    Object.entries(nd.options || {}).forEach(([k, v]) => { if(v && (over ? o[k] !== v : !o[k])){ o[k] = v; no++; } });
     if(no){ d.options = o; filled.push(`オプション${no}こ`); }
     // 内勤連絡：ちがえばうしろに足す（自動の振り分けにも入る）
     const ni = String(nd.internal || "").trim(), oi = String(d.internal || "").trim();
@@ -2026,6 +2029,27 @@ async function mergeProf(pid, castId){
     profNoteCache = null; await autoMoveInternal(c.id);
     if(editingId === c.id) renderProf(c.id);
   }catch(e){ toast("まとめられませんでした：" + (e.message || e)); }
+}
+/* 🔁 出しなおし用のURL：このURLで出すと、この子のプロフが書きかわる（ふつうのURLだと「📥 新しく届いたプロフ」になる） */
+const PROF_FORM_URL = "https://sakuramoong-app.github.io/cast-sakura-profile/?t=";
+async function pfFormLink(){
+  if(!pf) return;
+  const name = nameOf(pf.c);
+  try{
+    const r = q(await sb.rpc("prof_form_link", { p_id: pf.prof.id }));
+    if(!r || r.result !== "ok") throw new Error((r && r.message) || "作れませんでした");
+    const url = PROF_FORM_URL + r.t;
+    const msg = `${name}さん\nプロフの出しなおしは、こちらからお願いします🌸\n${url}`;
+    let bg = document.getElementById("formLinkBg");
+    if(!bg){ bg = document.createElement("div"); bg.id = "formLinkBg"; bg.style.cssText = "position:fixed;inset:0;z-index:320;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
+    bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:480px;width:100%;font-size:14px;line-height:1.8">
+      <b style="font-size:16px">🔁 ${esc(name)}さんの出しなおし用のURL</b>
+      <textarea id="formLinkMsg" readonly style="width:100%;min-height:96px;margin-top:8px;font-size:13px">${esc(msg)}</textarea>
+      <div class="hint">このURLで出すと、${esc(name)}さんのプロフが新しい内容になります（「📥 新しく届いたプロフ」には出ません）。<b>${esc(name)}さんにだけ</b>送ってください。</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button class="btn btn-ghost" onclick="document.getElementById('formLinkBg').remove()">閉じる</button>
+        <button class="btn btn-primary" onclick="navigator.clipboard.writeText($('formLinkMsg').value).then(()=>toast('コピーしました'),()=>{$('formLinkMsg').select();toast('選んだので Ctrl+C でコピーしてください')})">📋 コピー</button></div></div>`;
+  }catch(e){ toast("URLが作れませんでした（SQL 145 を実行してください）：" + (e.message || e)); }
 }
 async function addFromProf(pid){
   const p = (await newProfs()).find(x => x.id === pid); if(!p) { toast("もう台帳に入っています"); return; }
