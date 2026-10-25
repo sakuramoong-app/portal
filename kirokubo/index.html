@@ -100,6 +100,20 @@
   .ansTbl{width:100%;border-collapse:collapse;font-size:12.5px} .ansTbl th,.ansTbl td{border-bottom:1px solid #F1E3E7;padding:3px 5px;text-align:left}
   .ansTbl th{color:#9C8B8F;font-weight:700} .ansTbl tr.chg td{background:#FFE0EA}
   .ansRow{display:flex;gap:8px;align-items:center;padding:6px 4px;border-top:1px dashed #F1E3E7;cursor:pointer} .ansRow:hover{background:#FFF5F8}
+  /* 📝 プロフ（キャストプロフと同じ見た目） */
+  .pfTabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .pfTab{border:1.5px solid #F1E3E7;background:#fff;border-radius:99px;padding:5px 12px;font-family:inherit;font-size:12.5px;font-weight:800;color:#9C8B8F;cursor:pointer}
+  .pfTab.on{background:#FF9EC0;border-color:#FF9EC0;color:#fff}
+  .pfPanel{background:#fff;border:1.5px solid #F7D9E2;border-radius:16px;margin-bottom:10px;overflow:hidden}
+  .pfHead{background:#FFF0F5;padding:8px 14px;font-weight:800;font-size:13.5px;color:#5C4B4F;display:flex;align-items:center;gap:6px}
+  .pfBody{padding:10px 14px}
+  .pfGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px 12px}
+  .pfGrid label{display:block;font-size:11.5px;font-weight:800;color:#9C8B8F;margin-bottom:2px}
+  .pfOpt{display:grid;grid-template-columns:1fr 70px 1fr;gap:6px;align-items:center;padding:3px 0;border-bottom:1px dashed #F6E8EC;font-size:13px}
+  .pfOpt select{padding:4px 6px} .pfOpt input{padding:4px 8px;font-size:12.5px}
+  .pfChips{display:flex;flex-wrap:wrap;gap:4px 6px;font-size:12.5px} .pfChips span{border-radius:99px;padding:2px 9px}
+  .pfLog{border-top:1px dashed #F1E3E7;padding:5px 0;font-size:12.5px;line-height:1.7}
+  @media (max-width:560px){ .pfOpt{grid-template-columns:1fr 64px} .pfOpt input{grid-column:1/-1} }
 </style>
 <script src="https://sakuramoong-app.github.io/cast-sakura-profile/pq_questions.js"></script>
 </head>
@@ -159,6 +173,10 @@
     <div class="sec">🏪 在籍店舗</div>
     <div class="hint" style="margin:-4px 0 8px">チェック＝在籍している店舗。その店での名前・公式HPの在籍番号も入れられます（あとで公式HPへの自動反映に使います）。</div>
     <div class="stores" id="e_stores"></div>
+
+    <div class="sec">📝 プロフ（お客さんに見せる情報）</div>
+    <div class="hint" style="margin:-4px 0 8px">キャストプロフと同じ中身です。ここで直して「💾 プロフを保存」→ 公式HPにも入れられます。</div>
+    <div id="e_prof"></div>
 
     <div class="sec">⭐ バック（ランク）・条件</div>
     <div class="hint" style="margin:-4px 0 8px">変えるときは「🔁 バック・条件を変える」から。<b>ヒアリング内容がないと変えられません。</b></div>
@@ -1176,9 +1194,10 @@ function hpFromAnswer(){   // プロフはもう答えと同じ → 答えのプ
   document.getElementById("reflBg").remove();
   if(Object.keys(sets).length) openHpPush(sets); else toast("入れるものがありません");
 }
-function openHpPush(sets){
-  const c = ansCur.c;
-  hpPush = Object.keys(sets).map(sk => ({ sk, ...hpNoOf(c, sk), set: sets[sk], state: "wait", on: true, r: null }));
+let hpPushCast = null;   // 公式HPに入れるキャスト（答えの画面からなら ansCur.c、台帳のプロフの欄からならそのキャスト）
+function openHpPush(sets, cast){
+  const c = hpPushCast = cast || ansCur.c;
+  hpPush =Object.keys(sets).map(sk => ({ sk, ...hpNoOf(c, sk), set: sets[sk], state: "wait", on: true, r: null }));
   paintHpPush();
   hpCheckAll();
 }
@@ -1198,7 +1217,7 @@ function paintHpPush(){
     else if(x.state === "done") st = r.ok ? `✅ 入れました（写真 ${r.photos}→${r.photosAfter}枚${r.published && r.published.ok ? "・更新ずみ" : ""}）` : `<span style="color:#d9534f">⚠️ ${esc(r.error || ("確かめたら違うところがあります：" + (r.failed || []).join("・")))}（写真 ${r.photos}→${r.photosAfter}）</span>`;
     const can = x.no && x.state === "checked" && r.ok && r.changes && r.changes.length;
     const ch = (r.changes || []).map(c => `<tr><td>${esc(HP_CMS_LABEL[c.k] || c.k)}</td><td style="color:#9C8B8F;white-space:pre-wrap">${esc(short(c.before))}</td><td style="white-space:pre-wrap"><b>${esc(short(c.after))}</b></td></tr>`).join("");
-    return `<div class="ansSec"><label style="font-weight:800"><input type="checkbox" ${can && x.on ? "checked" : ""} ${can ? "" : "disabled"} onchange="hpPush[${i}].on=this.checked"> ${esc(STORE_LABEL_OF(x.sk))}</label>${hpLinkOf(ansCur.c, x.sk)}
+    return `<div class="ansSec"><label style="font-weight:800"><input type="checkbox" ${can && x.on ? "checked" : ""} ${can ? "" : "disabled"} onchange="hpPush[${i}].on=this.checked"> ${esc(STORE_LABEL_OF(x.sk))}</label>${hpLinkOf(hpPushCast, x.sk)}
       <div style="font-size:13px;margin-top:4px">${st}</div>
       ${ch && x.state === "checked" ? `<table class="ansTbl" style="margin-top:4px"><tr><th>欄</th><th>今の公式HP</th><th>→ 入れる</th></tr>${ch}</table>` : ""}
       <div class="hint">入れる欄：${Object.keys(x.set).map(k => esc(L[k] || k)).join("・")}</div></div>`;
@@ -1229,6 +1248,131 @@ async function hpPushAll(){
     x.state = "done"; paintHpPush();
   }
   toast("公式HPに入れ終わりました。見た目を公式HPで確かめてください");
+}
+
+/* ---------- 📝 プロフ（台帳の中で、キャストプロフの中身を見る・直す）
+   保存は prof_update_confirmed（キャストプロフの「答えを反映」と同じ。だれが直したかはプロフの履歴に残る）
+   お店ごとの中身（storeProfiles）。サクラムーンだけ旧データも見る（profGet・profOpts） ---------- */
+const PF_BASIC = [["name","源氏名"],["age","年齢"],["size","３サイズ"],["psize","Pサイズ"],["state","状態（竿/玉）"],["hair","髪の毛"],
+  ["personality","性格"],["hobby","趣味"],["charm","チャームポイント"],["erogenous","性感帯"],["tabako","タバコ"],["skill","得意技"]];
+// キャストプロフのオプションの並び（staff.html の OPT_LABEL_MAP と同じ。右は短い名前）
+const PF_OPT_LABEL = { "AF":"AF", "逆AF":"逆AF", "前立腺マッサージ":"前立腺マッサージ", "兜合わせ":"兜合わせ", "玉舐め":"玉舐め", "キス":"キス",
+  "全身リップ":"全身リップ", "乳首責め":"乳首責め", "生フェラ":"生フェラ", "69":"69", "Sプレイ":"Sプレイ", "Mプレイ":"Mプレイ",
+  "お泊りコース":"お泊りコース", "デートコース":"デートコース", "キャスト射精（有料）":"射精（有料）",
+  "コース内キャスト2回以上射精（有料）":"キャスト無限射精（有料）", "3P／お客様2名（有料）":"3P／お客様2名（有料）",
+  "3P／キャスト2名（有料）":"3P／キャスト2名（有料）", "コスプレ（有料）":"コスプレ（有料）", "ごっくん（有料）":"ごっくん（有料）",
+  "聖水（有料）":"聖水（有料）", "女装されているお客様":"女装されているお客様", "外国人のお客様":"外国人のお客様" };
+const PF_MARKS = ["", "◎", "○", "△", "×"];
+let pf = null;          // { c, prof, data（直している中身）, logs, stores, sk, dirty（直したお店） }
+let pfHotels = null;    // ホテル一覧（prof_hotels）
+async function renderProf(id){
+  const el = $("e_prof"); if(!el) return;
+  pf = null;
+  const c = id && casts.find(x => x.id === id);
+  if(!c){ el.innerHTML = `<div class="hint">キャストを保存してから使えます。</div>`; return; }
+  if(!c.prof_id){ el.innerHTML = `<div class="hint">キャストプロフとつながっていません。</div>`; return; }
+  el.innerHTML = `<div class="hint">キャストプロフを読んでいます…</div>`;
+  let prof, logs;
+  try{
+    const [p, lg] = await Promise.all([
+      sb.from("prof_casts").select("id,name,data").eq("id", c.prof_id).single(),
+      sb.from("prof_logs").select("type,date,content,author").eq("cast_id", c.prof_id).order("date", { ascending: false }).limit(8),
+    ]);
+    prof = q(p); logs = q(lg) || [];
+    if(!pfHotels) pfHotels = q(await sb.from("prof_hotels").select("hotel_id,hotel_name,area").order("seq")) || [];
+  }catch(e){ if(editingId === id) el.innerHTML = `<div class="hint">キャストプロフが読めませんでした：${esc(e.message || e)}</div>`; return; }
+  if(editingId !== id) return;   // 読んでいる間にほかのキャストを開いた
+  const data = JSON.parse(JSON.stringify((prof && prof.data) || {}));
+  const known = Object.values(PROF_STORE_OF);
+  const stores = [...new Set(Object.keys(c.stores || {}).map(k => PROF_STORE_OF[k]).filter(Boolean)
+    .concat(Object.keys(data.storeProfiles || {}).filter(k => known.includes(k))))];
+  pf = { c, prof, data, logs, stores: stores.length ? stores : ["サクラムーン"], dirty: new Set() };
+  pf.sk = pf.stores[0];
+  paintProf();
+}
+function paintProf(){
+  const el = $("e_prof"); if(!pf || !el) return;
+  const { data, sk } = pf, ro = CAN_EDIT ? "" : "disabled";
+  const o = profOpts(data, sk);
+  const optKeys = [...new Set(Object.keys(PF_OPT_LABEL).concat(Object.keys(o.options || {})))];
+  const hp = data.hotelPrefs || {};
+  const hn = hid => { const h = (pfHotels || []).find(x => x.hotel_id === hid); return h ? h.hotel_name + (h.area ? "(" + h.area + ")" : "") : ""; };
+  const chips = (ids, bg, fg, mark) => (ids || []).map(hn).filter(Boolean).map(n => `<span style="background:${bg};color:${fg}">${mark} ${esc(n)}</span>`).join("");
+  const hotelHtml = chips(hp.ok, "#E6F6EE", "#1a6640", "◎") + chips(hp.conditional, "#FFF8E6", "#8a6300", "△") + chips(hp.ng, "#FFE8EC", "#c0304a", "×");
+  const pt = data.personalityType;
+  const pv = id => `<iframe id="${id}_pv" sandbox style="display:none;width:100%;height:240px;border:1px solid #eee;border-radius:8px;background:#fff"></iframe>`;
+  el.innerHTML = `
+    <div class="pfTabs">${pf.stores.map((s, i) => `<button type="button" class="pfTab ${s === sk ? "on" : ""}" onclick="pfTab(${i})">${esc(STORE_LABEL_OF(s))}${pf.dirty.has(s) ? " ✏️" : ""}</button>`).join("")}
+      <a class="btn btn-ghost btn-sm" style="margin-left:auto" href="${PROF_STAFF_URL}${encodeURIComponent(pf.prof.id)}" target="_blank" rel="noopener">📂 プロフの画面で開く</a></div>
+    ${PROF_DUMMY.includes(sk) ? `<div class="hint" style="margin-bottom:6px">${esc(STORE_LABEL_OF(sk))}は名前・年齢を変えた別の設定です（公式HPにはまだ入れられません）。</div>` : ""}
+    <div class="pfPanel"><div class="pfHead">📋 基本情報 ${hpLinkOf(pf.c, sk)}</div><div class="pfBody"><div class="pfGrid">
+      ${PF_BASIC.map(([f, l]) => `<div><label>${l}</label><input id="pf_b_${f}" value="${esc(profGet(data, sk, f))}" ${ro}></div>`).join("")}</div></div></div>
+    <div class="pfPanel"><div class="pfHead">✅ オプション可否 <small style="font-weight:400;color:#9C8B8F">◎大好き ○OK △相談 ×NG</small></div><div class="pfBody">
+      ${optKeys.map((k, i) => `<div class="pfOpt"><span>${esc(PF_OPT_LABEL[k] || k)}</span>
+        <select id="pf_o_${i}" data-k="${esc(k)}" ${ro}>${PF_MARKS.map(m => `<option value="${m}" ${(o.options[k] || "") === m ? "selected" : ""}>${m || "－"}</option>`).join("")}</select>
+        <input id="pf_om_${i}" placeholder="メモ（条件など）" value="${esc((o.optMemo || {})[k] || "")}" ${ro}></div>`).join("")}</div></div>
+    <div class="pfPanel"><div class="pfHead">💬 紹介文</div><div class="pfBody">
+      <div class="hint">本人から一言</div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
+      <div class="hint" style="margin-top:8px">店長から一言</div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></div>
+    <div class="pfPanel"><div class="pfHead">🏨 ホテル <small style="font-weight:400;color:#9C8B8F">（直すのは「📂 プロフの画面で開く」から）</small></div><div class="pfBody">
+      ${hotelHtml ? `<div class="pfChips">${hotelHtml}</div>` : `<div class="hint">まだありません</div>`}</div></div>
+    <div class="pfPanel"><div class="pfHead">🧩 性格タイプ・🗓 記録（ヒアリングなど）</div><div class="pfBody">
+      ${pt ? `<div style="font-size:13px;margin-bottom:4px">性格タイプ：<b>${esc(typeof pt === "string" ? pt : (pt.name || pt.type || JSON.stringify(pt)))}</b></div>` : ""}
+      ${pf.logs.map(l => `<div class="pfLog"><small style="color:#9C8B8F">${esc(l.date || "")}・${esc(l.type || "")}・${esc(l.author || "")}</small><div style="white-space:pre-wrap">${esc(String(l.content || "").slice(0, 300))}${String(l.content || "").length > 300 ? "…" : ""}</div></div>`).join("") || `<div class="hint">記録はまだありません</div>`}</div></div>
+    ${CAN_EDIT ? `<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:6px"><button class="btn btn-primary" onclick="saveProf()">💾 プロフを保存</button></div>` : ""}`;
+  reflPv("pf_c"); reflPv("pf_m");
+}
+// 画面の中身 → pf.data（いま開いているお店の分）。変えたお店は pf.dirty に
+function pfCollect(){
+  if(!pf || !$("pf_c")) return;
+  const { data, sk } = pf;
+  data.storeProfiles = data.storeProfiles || {};
+  const before = JSON.stringify({ b: PF_BASIC.map(([f]) => profGet(data, sk, f)), c: profGet(data, sk, "comment"), m: profGet(data, sk, "mgrComment"), o: profOpts(data, sk) });
+  const sp = data.storeProfiles[sk] = data.storeProfiles[sk] || { active: true };
+  PF_BASIC.forEach(([f]) => { const v = $("pf_b_" + f).value.trim(); if(v !== String(profGet(data, sk, f) || "").trim()) sp[f] = v; });
+  const c1 = $("pf_c").value.trim(), c2 = $("pf_m").value.trim();
+  if(c1 !== String(profGet(data, sk, "comment") || "").trim()) sp.comment = c1;
+  if(c2 !== String(profGet(data, sk, "mgrComment") || "").trim()) sp.mgrComment = c2;
+  const o = profOpts(data, sk), opts = Object.assign({}, o.options), memo = Object.assign({}, o.optMemo);
+  let och = false;
+  document.querySelectorAll("#e_prof select[data-k]").forEach(s => {
+    const k = s.dataset.k, v = s.value, m = $("pf_om_" + s.id.slice(5)).value.trim();
+    if((opts[k] || "") !== v){ if(v) opts[k] = v; else delete opts[k]; och = true; }
+    if((memo[k] || "") !== m){ if(m) memo[k] = m; else delete memo[k]; och = true; }
+  });
+  if(och){ sp.options = opts; sp.optMemo = memo; }
+  const after = JSON.stringify({ b: PF_BASIC.map(([f]) => profGet(data, sk, f)), c: profGet(data, sk, "comment"), m: profGet(data, sk, "mgrComment"), o: profOpts(data, sk) });
+  if(before !== after) pf.dirty.add(sk);
+}
+function pfTab(i){ pfCollect(); pf.sk = pf.stores[i]; paintProf(); }
+async function saveProf(){
+  if(!pf) return;
+  pfCollect();
+  if(!pf.dirty.size){ toast("変えたところがありません"); return; }
+  const { prof, data } = pf;
+  // サクラムーンは旧データにも同じものを入れる（キャストプロフの setField と同じ。答えの反映 saveReflect と同じ形）
+  const saku = (data.storeProfiles || {})["サクラムーン"] || {};
+  const p = { id: prof.id, name: prof.name, by: operatorName(), status: data.status || "new",
+    castComment: data.generatedCastComment || "", mgrComment: saku.mgrComment != null ? saku.mgrComment : (data.generatedManagerComment || ""),
+    storeProfiles: data.storeProfiles };
+  if(saku.comment != null) p.comment = saku.comment;
+  if(saku.options){ p.options = saku.options; p.optMemo = saku.optMemo || {}; }
+  try{
+    const r = q(await sb.rpc("prof_update_confirmed", { p }));
+    if(!r || r.result !== "ok") throw new Error((r && r.message) || "保存できませんでした");
+  }catch(e){ toast("プロフを保存できませんでした：" + (e.message || e)); return; }
+  // 公式HPにも：直したお店の基本情報・紹介文（エイティーン・極門はまだ入れない）
+  const sets = {};
+  pf.dirty.forEach(sk => {
+    if(PROF_DUMMY.includes(sk)) return;
+    const s = {};
+    PF_BASIC.forEach(([f]) => { const v = String(profGet(data, sk, f) || "").trim(); if(v) s[f] = v; });
+    ["comment", "mgrComment"].forEach(f => { const v = String(profGet(data, sk, f) || "").trim(); if(v) s[f] = v; });
+    if(Object.keys(s).length) sets[sk] = s;
+  });
+  prof.data = JSON.parse(JSON.stringify(data)); pf.dirty.clear(); paintProf();
+  toast("プロフを保存しました");
+  if(Object.keys(sets).length) openHpPush(sets, pf.c);
 }
 // 答えから台帳へ：受付ルールにする・設定に入れる（入れたあと「保存する」）
 let ansOpen = null;
@@ -1269,6 +1413,7 @@ function openEdit(id){
   $("termsBtn").style.display = id && CAN_EDIT ? "" : "none";
   renderChecks(id);
   renderNotesMove(id);
+  renderProf(id);
   renderPrivateClosed(id);
   renderConfirm(id);
   $("e_special").value = c.special_notes || ""; $("e_ng").value = c.ng_notes || ""; $("e_note").value = c.note || "";
@@ -1295,7 +1440,11 @@ function openEdit(id){
   $("editHint").textContent = CAN_EDIT ? $("editHint").textContent : "🚧 作成中のため、見るだけです（直せるのは店長だけ）。";
   $("editBg").classList.add("show");
 }
-function closeEdit(){ $("editBg").classList.remove("show"); }
+function closeEdit(){
+  // プロフを直したまま閉じない（プロフは「💾 プロフを保存」で別に保存する）
+  if(pf && CAN_EDIT && $("pf_c")){ pfCollect(); if(pf.dirty.size && !confirm("プロフの直したところが、まだ保存されていません。保存しないで閉じますか？")) return; }
+  $("editBg").classList.remove("show");
+}
 // 外側を押したら閉じる（中で押し始めて外で離したときは閉じない）
 (function(){ let down = false; const bg = $("editBg");
   bg.addEventListener("mousedown", e=>{ down = e.target === bg; });
@@ -1303,6 +1452,7 @@ function closeEdit(){ $("editBg").classList.remove("show"); }
 
 async function saveCast(){
   if(!CAN_EDIT){ toast("作成中のため、直せるのは店長だけです"); return; }
+  if(pf && $("pf_c")){ pfCollect(); if(pf.dirty.size && confirm("プロフも直しています。いっしょにプロフも保存しますか？")) await saveProf(); }
   const official = $("e_official").value.trim(), temp = $("e_temp").value.trim();
   if(!official && !temp){ toast("正式な名前か仮の名前を入れてね"); return; }
   const aliases = $("e_aliases").value.split(/[、,，]/).map(s=>s.trim()).filter(Boolean).filter(a=>a!==official && a!==temp);
