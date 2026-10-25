@@ -679,6 +679,7 @@ const FREE_SUFFIX = { "":"", free:"フリー", special_free:"特別フリー", e
 let M = {};              // マスタ一式
 let day = "", rows = [], editing = null, curCustomer = null, visit = "new", mediaSel = [];
 let backOv = "", backOvFor = -1;   // 報酬を手で直した値（予約ごと）
+let cbackOv = "", cbackFor = -1;   // バック表にないランク×コースのとき、受付で入れたコースのバック（予約ごと）
 let custPast = null;   // 電話番号で見つけたお客さんの、これまでの予約（キャストを変えたら本指名・店リピを決めなおす）
 let showMoney = false;
 
@@ -1386,7 +1387,7 @@ function calc(){
   const cardRate = (M.set.card || {}).rate || 1.15;
   if(pay && pay !== "cash"){ total = Math.round(total * cardRate); }
   // バック：店舗のグループのランク（特別フリー・イベフリーは「イベ」のランク）＋コース＋（本指／フリー…）
-  let courseBack = 0, rank = "", key = "";
+  let courseBack = 0, rank = "", key = "", backMissing = null;
   if(cast){
     rank = (free === "special_free" || free === "event_free") ? ranksOn(cast).event : ranksOn(cast)[g];
     const suffix = free ? FREE_SUFFIX[free] : (visit === "honshi" ? "本指" : "");
@@ -1396,7 +1397,14 @@ function calc(){
       key = course + suffix;
       courseBack = M.back[r2 + "|" + key];
       if(courseBack == null && r2 !== rank) courseBack = M.back[rank + "|" + key];
-      if(courseBack == null){ courseBack = 0; why.push(`⚠️ バック表に「${rank}・${key}」がありません → 報酬を手で入れてください`); }
+      if(courseBack == null){
+        // バック表にないランク×コース：受付で入れた金額を使う（保存すると、このランク×コースが埋まる＝次から自動）
+        if(cbackFor !== (editing ? editing.id : 0)){ cbackFor = editing ? editing.id : 0; cbackOv = ""; }
+        backMissing = { rank: r2, key, course, g, price };
+        const mv = Number(cbackOv) || 0;
+        if(mv > 0){ courseBack = mv; why.push(`コースのバック：${r2}・${key} → ${yen(mv)}（受付で入れた。保存すると次から自動）`); }
+        else { courseBack = 0; why.push(`⚠️ バック表に「${r2}・${key}」がありません → 「💗 キャストの報酬」でこのコースのバックを入れてください`); }
+      }
       else why.push(`コースのバック：${rank}・${key} → ${yen(courseBack)}`);
     }else why.push("⚠️ このお店用のランクが台帳にありません → 報酬を手で入れてください");
   }
@@ -1413,7 +1421,7 @@ function calc(){
     });
   }
   return { store, g, course, price, nomination, admission, extFee: ext*extSet.price, dateFee: date*dateSet.price, opts, optionTotal,
-           optionBack, transport, discount, total, pay, courseBack, extra, why, rank, ext, date, free };
+           optionBack, transport, discount, total, pay, courseBack, extra, why, rank, ext, date, free, backMissing };
 }
 
 let last = null;
@@ -1438,7 +1446,13 @@ function recalc(){
     ${c.pay && c.pay!=="cash"?`<div class="row"><span>カード（×${(M.set.card||{}).rate||1.15}）</span><b></b></div>`:""}
     <div class="row total"><span>総額</span><b>${yen(c.total)}</b></div>`;
   if($("backSum")) $("backSum").textContent = "：" + yen(ov !== "" ? (Number(ov) || 0) : back);
-  $("calcBack").innerHTML = `
+  const bm = c.backMissing;
+  $("calcBack").innerHTML = (bm ? `<div style="background:#FFF4E5;border:2px solid #FFB547;border-radius:12px;padding:8px 10px;margin-bottom:8px">
+      <b style="font-size:13.5px;color:#a35a00">📝 「${esc(bm.rank)}・${esc(bm.key)}」のバックがまだありません</b>
+      <div id="cbackRef" style="font-size:12.5px;line-height:1.7;margin-top:4px;color:var(--sub)">参考を読んでいます…</div>
+      <div class="f" style="margin-top:6px"><label>このコースのバック（コースの分だけ・円）</label>
+        <input type="number" id="f_cback" value="${esc(cbackOv)}" ${KB.CAN_EDIT ? "" : "disabled"} oninput="cbackOv=this.value" onchange="recalc()" placeholder="例：11000"></div>
+      <div style="font-size:11.5px;color:#a35a00">保存すると、次からは「${esc(bm.rank)}・${esc(bm.key)}」は自動でこの金額になります</div></div>` : "") + `
     <div class="row back"><span>コースのバック</span><b>${yen(c.courseBack)}</b></div>
     <div class="row back"><span>OPのバック</span><b>${yen(c.optionBack)}</b></div>
     <div class="row back"><span>延長・入会金・特例</span><b>${yen(c.extra)}</b></div>
@@ -1447,6 +1461,7 @@ function recalc(){
     <div class="f" style="margin-top:8px"><label>報酬を手で直す（空なら自動）…特例などで、報酬の合計をこの金額にしたいとき。精算もこの金額になります</label>
       <input type="number" id="f_backov" value="${esc(ov)}" ${KB.CAN_EDIT?"":"disabled"} oninput="backOv=this.value" onchange="recalc()" placeholder="例：15000"></div>
     <div class="why">${esc(c.why.join("\n"))}</div>`;
+  if(bm){ if($("backDet")) $("backDet").open = true; loadBackRef(bm); }   // たたんであると見落とすので開く
   // コースの説明（極門など）
   const info = M.courseInfo.find(i=>i.store_key===c.store && String(c.course).startsWith(i.course_type));
   $("courseInfo").innerHTML = info ? `<div class="info"><b>${esc(info.title)}</b>\n${esc(info.description)}</div>` : "";
@@ -4238,11 +4253,57 @@ async function paintCastNotes(){
     (list.length ? `<div style="background:#FFF9EE;border:1.5px dashed #FFB547;border-radius:12px;padding:6px 10px;margin:6px 0;font-size:13px">
       <div style="font-weight:800;color:#a35a00;font-size:12.5px">📝 まだ受付ルールに移していないメモ（キャスト台帳で整理中）</div>
       ${list.map(n => `<div style="white-space:pre-wrap;margin-top:3px"><small style="color:#9C8B8F">${esc(n.label)}：</small>${esc(n.text)}</div>`).join("")}</div>` : "")
+    + (c.area_note && String(c.area_note).trim() ? `<div style="background:#F2FBF6;border:1.5px solid #BFE8D2;border-radius:12px;padding:6px 10px;margin:6px 0;font-size:13px">
+      <div style="font-weight:800;color:#1a7f4b;font-size:12.5px">🗺 行けるお店・エリアと移動</div><div style="white-space:pre-wrap">${esc(c.area_note)}</div></div>` : "")
     + (rules ? `<details style="margin-top:4px"><summary style="cursor:pointer;font-size:12.5px;font-weight:800;color:var(--sub)">🧮 このキャストの条件を見る</summary><div class="info">${rules}</div></details>` : "")
     + (c.prof_id ? `<a class="proflink" style="font-size:12px" href="${PROF_STAFF_URL}?cast=${encodeURIComponent(c.prof_id)}" target="_blank" rel="noopener">📂 ${esc(c.official_name || c.temp_name)}のプロフを開く</a>` : "");
 }
 const __onCastNM = onCast;
 onCast = function(){ __onCastNM.apply(this, arguments); paintCastNotes(); };
+
+/* ============================================================
+   2026/10/25：バック表にないランク×コースのとき（交通費の提案額と同じ考え方）
+   参考：コースの基本額・ほかのランクのバック（バック表）・ほかのキャストが前に入ったときのバック（その日のランクつき）
+   受付で入れたバックは、予約を保存したときにバック表へ（次からは自動）
+   ============================================================ */
+const backRefCache = {};
+function rankAt(castId, g, ymd){
+  const rows = (M.rankHist || []).filter(r => r.cast_id === castId && r.grp === g && String(r.valid_from || "") <= ymd)
+    .sort((a, b) => String(b.valid_from).localeCompare(String(a.valid_from)) || (b.id || 0) - (a.id || 0));
+  if(rows.length) return rows[0].rank || "";
+  const c = M.casts.find(x => x.id === castId); return (c && c.ranks && c.ranks[g]) || "";
+}
+async function loadBackRef(bm){
+  const ck = bm.g + "|" + bm.key, el = () => $("cbackRef");
+  const paint = html => { if(el()) el().innerHTML = html; };
+  if(backRefCache[ck]){ paint(backRefCache[ck]); return; }
+  const tbl = Object.keys(M.back).filter(k => k.split("|")[1] === bm.key && M.back[k] != null).map(k => ({ rank: k.split("|")[0], amount: M.back[k] }));
+  let past = [];
+  try{
+    const rows = q(await sb.from("kb_reservations").select("biz_date,cast_id,course,base_price,course_back,store_key,visit_kind,free_kind")
+      .eq("course", bm.course).gt("course_back", 0).order("biz_date", { ascending: false }).limit(60)) || [];
+    past = rows.filter(r => r.course_back > 0 && storeGroup(r.store_key) === bm.g && (r.course + (r.free_kind ? FREE_SUFFIX[r.free_kind] : (r.visit_kind === "honshi" ? "本指" : ""))) === bm.key).slice(0, 8);
+  }catch(e){ /* 読めなくてもバック表の参考は出す */ }
+  const nm = id => { const c = M.casts.find(x => x.id === id); return c ? (c.official_name || c.temp_name) : "（不明）"; };
+  const html = `コースの基本額：<b>${yen(bm.price)}</b><br>`
+    + (tbl.length ? `バック表（ほかのランク）：${tbl.map(t => `<b>${esc(t.rank)}</b> ${yen(t.amount)}`).join("・")}<br>` : "バック表には、このコースのほかのランクもありません<br>")
+    + (past.length ? `前に入ったとき：<br>${past.map(r => `・${esc(String(r.biz_date).slice(5).replace("-", "/"))} ${esc(nm(r.cast_id))}（${esc(rankAt(r.cast_id, bm.g, r.biz_date) || "ランク不明")}）基本額 ${yen(r.base_price)} → バック <b>${yen(r.course_back)}</b>`).join("<br>")}` : "前に入った記録はありません");
+  backRefCache[ck] = html; paint(html);
+}
+const __saveResBL = saveRes;
+saveRes = async function(){
+  const bm = last && last.backMissing && Number(cbackOv) > 0 && KB.CAN_EDIT ? { rank: last.backMissing.rank, course: last.backMissing.key, amount: Math.round(Number(cbackOv)) } : null;
+  const r = await __saveResBL.apply(this, arguments);
+  if(bm && !$("formBg").classList.contains("show")){   // 保存できた（小窓が閉じた）ときだけ、バック表に入れる
+    try{
+      q(await sb.from("kb_back").upsert(bm, { onConflict: "rank,course", ignoreDuplicates: true }));
+      if(M.back[bm.rank + "|" + bm.course] == null) M.back[bm.rank + "|" + bm.course] = bm.amount;
+      delete backRefCache[last.backMissing.g + "|" + bm.course];
+      toast(`バック表に「${bm.rank}・${bm.course}」${yen(bm.amount)} を入れました（次から自動）`);
+    }catch(e){ toast("バック表に入れられませんでした：" + (e.message || e)); }
+  }
+  return r;
+};
 const __onStoreNM = onStore;
 onStore = function(){ const r = __onStoreNM.apply(this, arguments); paintCastNotes(); return r; };
 </script>
