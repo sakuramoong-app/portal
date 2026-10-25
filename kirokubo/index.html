@@ -1615,7 +1615,15 @@ async function pfHpImport(){
   if(!bg){ bg = document.createElement("div"); bg.id = "pfImpBg"; bg.style.cssText = "position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
   const box = t => { bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:720px;width:100%;max-height:88vh;overflow:auto;font-size:13.5px">${t}</div>`; };
   for(const sk of pf.stores){
-    const { mk, no } = hpNoOf(pf.c, sk);
+    let { mk, no } = hpNoOf(pf.c, sk);
+    if(mk && !no && HP_SITE_OF[mk]){   // 番号がまだない → その店での名前で管理画面からさがす（1人だけ見つかれば台帳にも入れる）
+      const name = ((pf.c.stores || {})[mk] || {}).name || pf.c.official_name || nameOf(pf.c);
+      box(`在籍番号をさがしています…（${esc(STORE_LABEL_OF(sk))}：「${esc(name)}」）`);
+      const f = await hpFn({ action: "cast_find", store: mk, name });
+      const hits = (f && f.hits) || [];
+      if(hits.length === 1 && await hpNewSetNo(pf.c, mk, hits[0].no)) no = hits[0].no;
+      else{ plan.push({ sk, error: !f || !f.ok ? "在籍番号がありません（さがせませんでした）" : hits.length ? `在籍番号がありません（「${name}」が${hits.length}人います：${hits.map(h => h.no + "番").join("・")}）` : `在籍番号がありません（管理画面に「${name}」が見つかりません）` }); continue; }
+    }
     if(!mk || !no){ plan.push({ sk, error: "在籍番号がありません" }); continue; }
     box(`公式HPを読んでいます…（${plan.length + 1}／${pf.stores.length}：${esc(STORE_LABEL_OF(sk))}）`);
     const r = await hpFn({ action: "cast_profiles", store: mk, nos: [no] });
