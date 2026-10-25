@@ -1966,10 +1966,57 @@ async function toggleNewProfs(){
   try{ list = await newProfs(); }catch(e){ box.innerHTML = "読めませんでした：" + esc(e.message || e); return; }
   box.innerHTML = `<div style="font-weight:800;margin-bottom:4px">📥 新しく届いたプロフ（台帳にまだいない子・${list.length}人）</div>
     <div class="hint" style="margin-bottom:6px">「＋ 台帳に入れる」で台帳に入ります（ここで台帳のIDができて、プロフとつながります）。そのあと在籍店舗を決めて保存すると、サクラシフトにも自動で登録されます。</div>`
-    + (list.map(x => `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px dashed #F1E3E7">
+    + (list.map(x => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 0;border-top:1px dashed #F1E3E7">
         <b style="flex:1">${esc(x.name)}</b><small style="color:#9C8B8F">${esc(String(x.at).slice(0, 10))}</small>
-        ${CAN_EDIT ? `<button class="btn btn-primary btn-sm" onclick="addFromProf('${esc(x.id)}')">＋ 台帳に入れる</button>` : ""}
+        ${CAN_EDIT ? `<button class="btn btn-primary btn-sm" onclick="addFromProf('${esc(x.id)}')">＋ 台帳に入れる</button>
+          <button class="btn btn-ghost btn-sm" onclick="sameAsCast('${esc(x.id)}')">🔗 台帳にいる子と同じ人</button>` : ""}
         <a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(x.id)}" target="_blank" rel="noopener">📂 プロフ</a></div>`).join("") || '<div class="hint">ありません 🎉</div>');
+}
+/* 🔗 同じ人のプロフが2つできたとき（キャストが別の名前でフォームを出しなおした など）
+   新しいほうの答えのうち、台帳の子のプロフで空いている所だけを入れる（上書きしない）→ 新しいほうは消す */
+const PF_MERGE_KEYS = ["age", "size", "psize", "state", "hair", "personality", "hobby", "charm", "tabako", "erogenous", "skill", "vibes", "comment", "personalityType", "personalityAnswers"];
+async function sameAsCast(pid){
+  const p = (await newProfs()).find(x => x.id === pid); if(!p) return;
+  const key2 = s => String(s || "").normalize("NFKC").replace(/\s/g, "");
+  const cands = casts.filter(c => c.prof_id && c.status !== "left");
+  const guess = cands.find(c => [c.official_name, c.temp_name, c.shift_name].some(n => n && (key2(p.name).endsWith(key2(n)) || key2(n).endsWith(key2(p.name)))));
+  let bg = document.getElementById("sameBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "sameBg"; bg.style.cssText = "position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
+  bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:480px;width:100%;font-size:14px;line-height:1.8">
+    <b style="font-size:16px">🔗 「${esc(p.name)}」は、台帳のだれと同じ人ですか？</b>
+    <select id="same_sel" style="width:100%;margin-top:8px;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font-family:inherit;font-size:14px">
+      ${cands.sort((a, b) => nameOf(a).localeCompare(nameOf(b), "ja")).map(c => `<option value="${esc(c.id)}" ${guess && guess.id === c.id ? "selected" : ""}>${esc(nameOf(c))}（${esc(c.id)}）</option>`).join("")}</select>
+    <div class="hint" style="margin-top:8px">「${esc(p.name)}」の答えのうち、えらんだ子のプロフで<b>空いている所だけ</b>を入れます（今の中身は変えません）。内勤連絡がちがうときは、うしろに足します。入れたあと「${esc(p.name)}」のプロフは消します。</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button class="btn btn-ghost" onclick="document.getElementById('sameBg').remove()">やめる</button>
+      <button class="btn btn-primary" onclick="mergeProf('${esc(pid)}', $('same_sel').value)">まとめる</button></div></div>`;
+}
+async function mergeProf(pid, castId){
+  const c = casts.find(x => x.id === castId); if(!c || !c.prof_id) return;
+  try{
+    const [a, b] = await Promise.all([sb.from("prof_casts").select("id,name,data").eq("id", pid).single(), sb.from("prof_casts").select("id,name,data").eq("id", c.prof_id).single()]);
+    const dup = q(a), keep = q(b), nd = dup.data || {}, d = JSON.parse(JSON.stringify(keep.data || {}));
+    const filled = [];
+    const empty = v => v == null || v === "" || (typeof v === "object" && !Array.isArray(v) && !Object.keys(v).length) || (Array.isArray(v) && !v.length);
+    PF_MERGE_KEYS.forEach(k => {
+      if(empty(nd[k])) return;
+      if(k === "personalityAnswers"){ if(!((d.personalityAnswers || {}).list || []).length){ d[k] = nd[k]; filled.push("性格タイプの答え"); } return; }
+      if(empty(d[k])){ d[k] = nd[k]; filled.push((PF_BASIC.find(x => x[0] === k) || [])[1] || ({ comment: "本人から一言", personalityType: "性格タイプ", vibes: "雰囲気" })[k] || k); }
+    });
+    // オプション：まだ入っていないものだけ
+    const o = Object.assign({}, d.options || {}); let no = 0;
+    Object.entries(nd.options || {}).forEach(([k, v]) => { if(v && !o[k]){ o[k] = v; no++; } });
+    if(no){ d.options = o; filled.push(`オプション${no}こ`); }
+    // 内勤連絡：ちがえばうしろに足す（自動の振り分けにも入る）
+    const ni = String(nd.internal || "").trim(), oi = String(d.internal || "").trim();
+    if(ni && !oi.includes(ni)){ d.internal = oi ? oi + "\n" + ni : ni; filled.push("内勤連絡"); }
+    if(filled.length) q(await sb.from("prof_casts").update({ data: d }).eq("id", keep.id));
+    q(await sb.from("prof_casts").update({ deleted: true }).eq("id", dup.id));
+    document.getElementById("sameBg").remove(); $("newProfBox").style.display = "none"; refreshNewProfCount();
+    toast(`「${dup.name}」を「${nameOf(c)}」にまとめました${filled.length ? "（入れたもの：" + filled.join("・") + "）" : "（入れるものはありませんでした）"}`);
+    profNoteCache = null; await autoMoveInternal(c.id);
+    if(editingId === c.id) renderProf(c.id);
+  }catch(e){ toast("まとめられませんでした：" + (e.message || e)); }
 }
 async function addFromProf(pid){
   const p = (await newProfs()).find(x => x.id === pid); if(!p) { toast("もう台帳に入っています"); return; }
