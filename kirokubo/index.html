@@ -2149,9 +2149,20 @@ async function saveCast(){
       saved = q(await sb.from("master_casts").insert(row).select().single());
       casts.push(saved);
     }
-    closeEdit(); render(); toast("保存しました🌸");
+    // 保存しても閉じない（お店を次々に直せるように）。開いている項目もそのまま
+    const wasNew = !editingId;
+    editingId = saved.id;
+    $("editTitle").textContent = `${nameOf(saved)}（${saved.id}）`;
+    $("delBtn").style.display = "";
+    if(pf && pf.c && pf.c.id === saved.id) pf.c = saved;
+    render(); toast("保存しました🌸");
     if(saved) await saveProfDates(saved);
     if(saved) await syncShift(saved, prevStores);
+    if(wasNew) openEdit(saved.id);   // 新しく足したとき：バック・受付ルールなどを出すため開き直す
+    else if(Object.keys(prevStores).sort().join() !== Object.keys(st).sort().join() && editingId === saved.id){   // 在籍店舗が変わったら、プロフのお店のタブも（見ていたお店のまま）
+      const sk = pf && pf.sk; await renderProf(saved.id);
+      if(pf && sk && pf.stores.includes(sk) && pf.sk !== sk){ pf.sk = sk; paintProf(); }
+    }
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
 // 面接日・入店日・退店日・きっかけ・退店の理由をプロフにも（変わったときだけ）。pf は保存の前に開いていたキャストのプロフ
