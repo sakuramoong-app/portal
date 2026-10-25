@@ -1421,12 +1421,12 @@ function paintProf(){
         return `<div id="pf_log_${i}" style="background:${mk.bg};border:1px solid rgba(0,0,0,.06);border-left:5px solid ${mk.color};border-radius:10px;padding:9px 12px;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
           <span style="font-size:11px;font-weight:700;color:#FF6B9D">${esc(PF_LOG_LABEL[l.type] || l.type || "")}</span>
-          <span style="font-size:10.5px;color:var(--sub)">${esc(l.date || "")}</span>
+          <span style="font-size:10.5px;color:var(--sub)">${esc(logDay(l.date))}</span>
           <span style="flex:1"></span>
           ${CAN_EDIT ? `<button type="button" title="直す" onclick="pfEditLog(${i})" style="border:none;background:rgba(255,255,255,.7);border-radius:8px;padding:2px 7px;font-size:12px;cursor:pointer">✏️</button>
             <button type="button" title="消す" onclick="pfDelLog(${i})" style="border:none;background:rgba(255,255,255,.7);border-radius:8px;padding:2px 7px;font-size:12px;cursor:pointer">🗑</button>` : ""}
         </div>
-        ${l.author ? `<div style="font-size:10.5px;font-weight:700;color:${mk.color};margin-bottom:3px">${mk.emoji} ${esc(l.author)}</div>` : ""}
+        <div style="font-size:10.5px;font-weight:700;color:${mk.color};margin-bottom:3px">${mk.emoji} ${l.author ? esc(l.author) : "書いた人の記録なし"}</div>
         <div style="font-size:14px;white-space:pre-wrap;line-height:1.6">${esc(String(l.content || ""))}</div></div>`; }).join("") || `<div class="hint">記録はまだありません</div>`}</div></div>
     ${CAN_EDIT ? `<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:6px"><button class="btn btn-primary" onclick="saveProf()">💾 プロフを保存</button></div>` : ""}`;
   reflPv("pf_c"); reflPv("pf_m");
@@ -1693,7 +1693,10 @@ function pfPersonalityHtml(data){
 // 書いた内勤の色（キャストプロフ・内勤カレンダーと同じ）
 const STAFF_MARKS = { "きゃ": { emoji: "🧡", color: "#e8590c", bg: "#fff4ee" }, "すや": { emoji: "💗", color: "#d6579e", bg: "#fff3fa" },
   "らん": { emoji: "💙", color: "#4d96d9", bg: "#f1f7fe" }, "かみ": { emoji: "🌙", color: "#3b5bdb", bg: "#f0f3fe" }, "わか": { emoji: "🦉", color: "#8a6fd1", bg: "#f6f2fe" } };
-function staffMark(name){ return STAFF_MARKS[name] || { emoji: "🌸", color: "#c9556a", bg: "#FDF3F5" }; }
+function staffMark(name){ if(!name) return { emoji: "👤", color: "#B8A9B0", bg: "#FAF7F8" };   // 書いた人が残っていない記録（前のしくみのころ）は灰色
+  return STAFF_MARKS[name] || { emoji: "🌸", color: "#c9556a", bg: "#FDF3F5" }; }
+// 記録の日付：「2026-09-12T15:00:00.000Z」のような形は日本の日付に（9時間ずれて前の日に見えていた）
+function logDay(d){ d = String(d || ""); if(!/T/.test(d)) return d.slice(0, 10); const t = new Date(d); if(isNaN(t)) return d.slice(0, 10); return new Date(t.getTime() + 9 * 3600e3).toISOString().slice(0, 10); }
 let pfLogFilter = "全て";
 /* 🗓 記録（キャストプロフの記録と同じ表 prof_logs） */
 const PF_LOG_TYPES = [["ヒアリング", "💬 ヒアリング"], ["面接", "📋 面接"], ["入店", "✅ 入店"], ["クレーム_キャスト", "⚠️ 要望・不満"], ["クレーム_客", "🚨 クレーム（お客様から）"]];
