@@ -648,7 +648,7 @@ async function renderNotesMove(id){
 }
 /* ---------- 💡 振り分けを手伝う：メモを【】や行ごとに分けて、行き先のおすすめをつける ---------- */
 const SPLIT_DEST = { announce: "📣 受付ルール：お客様に案内", confirm: "✅ 受付ルール：確認してから受ける", after: "⏳ 受付ルール：予約のあとにやること", know: "🤫 受付ルール：知っておくだけ",
-  area: "🗺 行けるお店・エリアと移動", zappi: "✋ 条件：雑費なし（手で）", private: "✋ 連絡先（手で）", prof: "✋ プロフの基本情報（手で）", skip: "いらない" };
+  area: "🗺 行けるお店・エリアと移動", note: "📝 台帳のメモ（受付には出ない）", zappi: "✋ 条件：雑費なし（手で）", private: "✋ 連絡先（手で）", prof: "✋ プロフの基本情報（手で）", skip: "いらない" };
 const SPLIT_MANUAL = ["zappi", "private", "prof"];
 function splitNote(text){
   const out = [];
@@ -665,6 +665,7 @@ function splitNote(text){
 }
 function guessDest(p){
   const v = p.includes("：") ? p.split("：").slice(1).join("：").trim() : p;
+  if(/^(仕事用)?(IC|ＩＣ)|ICカード|Suica|スイカ|PASMO|パスモ/i.test(p)) return "note";   // 仕事用ICカード（「なし」も大事な情報）
   if(isNashi(v)) return "skip";
   if(/^(AF|逆AF|ＡＦ)\s*[◎○〇△×].*$/.test(p.replace(/\s/g, "")) && !/[^AF逆ＡＦ◎○〇△×\s]/.test(p)) return "skip";   // AF◎逆AF◎ だけ
   if(/(極門|18|エイティーン).{0,2}備考/.test(p)) return "skip";
@@ -680,7 +681,7 @@ function guessDest(p){
 let splitCur = null;
 function openSplit(i){
   const n = notesMoveCur[i]; if(!n) return;
-  splitCur = { i, n, rows: splitNote(n.text).map(p => ({ text: p, dest: guessDest(p) })) };
+  splitCur = { i, n, rows: splitNote(n.text).map(p => ({ text: p.replace(/^(IC|ＩＣ)：/i, "仕事用ICカード："), dest: guessDest(p) })) };
   paintSplit();
 }
 function paintSplit(){
@@ -698,8 +699,8 @@ function paintSplit(){
 async function saveSplit(){
   const { n, rows } = splitCur, c = casts.find(x => x.id === editingId); if(!c) return;
   const use = rows.map(r => ({ text: r.text.trim(), dest: r.dest })).filter(r => r.text);
-  const rules = use.filter(r => RULE_KIND[r.dest]), areas = use.filter(r => r.dest === "area"), manual = use.filter(r => SPLIT_MANUAL.includes(r.dest));
-  if(!confirm(`受付ルール ${rules.length}こ・エリア ${areas.length}こ を入れます${manual.length ? `（手でやること ${manual.length}こ）` : ""}。よろしいですか？`)) return;
+  const rules = use.filter(r => RULE_KIND[r.dest]), areas = use.filter(r => r.dest === "area"), notes = use.filter(r => r.dest === "note"), manual = use.filter(r => SPLIT_MANUAL.includes(r.dest));
+  if(!confirm(`受付ルール ${rules.length}こ・エリア ${areas.length}こ・メモ ${notes.length}こ を入れます${manual.length ? `（手でやること ${manual.length}こ）` : ""}。よろしいですか？`)) return;
   try{
     for(const r of rules){
       const lm = r.text.match(/(\d{2,3})\s*分以上/);   // 「120分以上は…」→ 120分以上のコースのときだけ出す
@@ -714,6 +715,14 @@ async function saveSplit(){
         const area_note = (cur ? cur + "\n" : "") + add.join("\n");
         q(await sb.from("master_casts").update({ area_note }).eq("id", c.id));
         c.area_note = area_note; if($("e_area")) $("e_area").value = area_note;   // 「保存する」で前の中身にもどらないように
+      }
+    }
+    if(notes.length){
+      const cur = String(c.note || "").trim(), add = notes.map(a => a.text).filter(t => !cur.includes(t));
+      if(add.length){
+        const note = (cur ? cur + "\n" : "") + add.join("\n");
+        q(await sb.from("master_casts").update({ note }).eq("id", c.id));
+        c.note = note; if($("e_note")) $("e_note").value = note;
       }
     }
     const moved = (c.notes_moved || []).concat([{ src: n.src, text: n.text, how: "rule", by: operatorName(), at: new Date().toISOString(),
