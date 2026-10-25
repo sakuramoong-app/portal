@@ -168,6 +168,7 @@
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
           <button class="btn btn-ghost btn-sm" onclick="hpBulkFill()">🌐 全員の空いている欄を公式HPから取りこむ</button>
           <button class="btn btn-ghost btn-sm" onclick="openNotifyEmails()">📧 プロフが届いたときの通知メール</button>
+          <button class="btn btn-ghost btn-sm" onclick="openHotelList()">🏨 ホテル一覧（足す・直す）</button>
         </div></details>
     </div>
     <div id="newProfBox" style="display:none;background:#fff;border:1.5px solid #F1E3E7;border-radius:12px;padding:10px 12px;margin:6px 0"></div>
@@ -1517,6 +1518,61 @@ async function openNotifyEmails(){
   window.notifyAdd = () => { const v = $("nm_new").value.trim(); if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)){ toast("メールアドレスの形になっていません"); return; } if(!list.includes(v)) list.push(v); save(); };
   window.notifyDel = i => { if(confirm(list[i] + " を消しますか？")){ list.splice(i, 1); save(); } };
   paint();
+}
+/* 🏨 ホテル一覧（キャストプロフの「ホテル一覧管理」・受付の新しいホテルと同じ prof_hotels）。お店として◎×、地図、メモ */
+let hlArea = "";
+async function openHotelList(){
+  try{ pfHotels = q(await sb.from("prof_hotels").select("hotel_id,hotel_name,area,store_status,map_url,note").order("seq")) || []; }
+  catch(e){ toast("読めませんでした：" + (e.message || e)); return; }
+  let bg = document.getElementById("hotelBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "hotelBg"; bg.style.cssText = "position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
+  paintHotelList();
+}
+function paintHotelList(){
+  const bg = document.getElementById("hotelBg"); if(!bg) return;
+  const areas = [...new Set(pfHotels.map(h => h.area).filter(Boolean))];
+  if(!hlArea || !areas.includes(hlArea)) hlArea = areas[0] || "";
+  const ST = { "": "（ふつう）", ok: "◎ お店としておすすめ", ng: "× お店としてNG" };
+  const ro = CAN_EDIT ? "" : "disabled";
+  bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:820px;width:100%;max-height:90vh;overflow:auto;font-size:13.5px">
+    <b style="font-size:16px">🏨 ホテル一覧</b>
+    <div class="hint" style="margin:4px 0 8px">受付の「エリア・ホテル」とキャストごとの◎△×に使う一覧です。直したら行ごとに「💾」。</div>
+    <div class="pfTabs">${areas.map(a => `<button type="button" class="pfTab ${a === hlArea ? "on" : ""}" onclick="hlArea='${esc(a)}';paintHotelList()">${esc(a)}（${pfHotels.filter(h => h.area === a).length}）</button>`).join("")}</div>
+    ${pfHotels.filter(h => h.area === hlArea).map(h => `<div style="display:grid;grid-template-columns:1.2fr 1fr 1.4fr auto;gap:6px;align-items:center;padding:5px 0;border-top:1px dashed #F1E3E7">
+      <input id="hl_n_${esc(h.hotel_id)}" value="${esc(h.hotel_name)}" ${ro}>
+      <select id="hl_s_${esc(h.hotel_id)}" ${ro}>${Object.entries(ST).map(([k, l]) => `<option value="${k}" ${(h.store_status || "") === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <input id="hl_m_${esc(h.hotel_id)}" value="${esc(h.map_url || "")}" placeholder="地図のURL" ${ro}>
+      <span style="white-space:nowrap">${CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="saveHotel('${esc(h.hotel_id)}')">💾</button><button class="btn btn-ghost btn-sm" onclick="delHotel('${esc(h.hotel_id)}')">🗑</button>` : ""}</span>
+      <input id="hl_t_${esc(h.hotel_id)}" value="${esc(h.note || "")}" placeholder="メモ（部屋・注意など）" style="grid-column:1/-1;font-size:12.5px" ${ro}></div>`).join("") || '<div class="hint">ホテルがありません</div>'}
+    ${CAN_EDIT ? `<div style="background:#FFF5F8;border-radius:12px;padding:8px 10px;margin-top:10px">
+      <b style="font-size:13px">＋ ホテルを足す</b>
+      <div style="display:grid;grid-template-columns:1fr 1.4fr 1.4fr auto;gap:6px;margin-top:6px">
+        <input id="hl_new_a" placeholder="エリア（例：池袋）" value="${esc(hlArea)}"><input id="hl_new_n" placeholder="ホテルの名前"><input id="hl_new_m" placeholder="地図のURL（なくてもOK）">
+        <button class="btn btn-primary btn-sm" onclick="addHotel()">足す</button></div></div>` : ""}
+    <div style="text-align:right;margin-top:10px"><button class="btn btn-ghost" onclick="document.getElementById('hotelBg').remove();if(editingId&&pf){pfCollect();paintProf();}">閉じる</button></div></div>`;
+  bg.querySelectorAll("input:not([style*='grid-column']),select").forEach(el => { el.style.cssText += ";width:100%;padding:6px 8px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;background:#FFF5F8"; });
+  bg.querySelectorAll("input[style*='grid-column']").forEach(el => { el.style.cssText += ";padding:5px 8px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:#fff"; });
+}
+async function saveHotel(id){
+  const v = k => $(k + id).value.trim();
+  const row = { hotel_name: v("hl_n_"), store_status: $("hl_s_" + id).value, map_url: v("hl_m_"), note: v("hl_t_") };
+  if(!row.hotel_name){ toast("ホテルの名前を入れてください"); return; }
+  try{ q(await sb.from("prof_hotels").update(row).eq("hotel_id", id)); Object.assign(pfHotels.find(h => h.hotel_id === id) || {}, row); toast("保存しました"); }
+  catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+async function delHotel(id){
+  const h = pfHotels.find(x => x.hotel_id === id);
+  if(!h || !confirm(`「${h.hotel_name}」を一覧から消しますか？（キャストの◎△×からも見えなくなります）`)) return;
+  try{ q(await sb.from("prof_hotels").delete().eq("hotel_id", id)); pfHotels = pfHotels.filter(x => x.hotel_id !== id); paintHotelList(); toast("消しました"); }
+  catch(e){ toast("消せませんでした：" + (e.message || e)); }
+}
+async function addHotel(){
+  const area = $("hl_new_a").value.trim(), name = $("hl_new_n").value.trim(), map = $("hl_new_m").value.trim();
+  if(!area || !name){ toast("エリアとホテルの名前を入れてください"); return; }
+  if(pfHotels.some(h => h.area === area && h.hotel_name.replace(/\s/g, "") === name.replace(/\s/g, ""))){ toast("同じエリアに同じ名前のホテルがあります"); return; }
+  const row = { hotel_id: "h" + Date.now().toString(36), area, hotel_name: name, map_url: map, store_status: "", note: "" };
+  try{ q(await sb.from("prof_hotels").insert(row)); pfHotels.push(row); hlArea = area; paintHotelList(); toast("足しました"); }
+  catch(e){ toast("足せませんでした：" + (e.message || e)); }
 }
 /* 🏨 ホテル（キャストプロフと同じ：押すたびに 未設定 → ◎ → △ → × → 未設定。△と×には理由・条件のメモ） */
 let pfHotelArea = "";
