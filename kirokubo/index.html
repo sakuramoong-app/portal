@@ -1588,7 +1588,8 @@ function pfAddOpt(){
 /* 🌐 公式HPから取りこむ（キャストプロフの「🌐 公式HPから取りこむ」と同じ決まり：空いている欄は自動、もう入っている欄は選ぶ） */
 const PF_HP_FIELDS = PF_BASIC.filter(([f]) => !["tabako", "skill"].includes(f)).concat([["comment", "本人から一言"], ["mgrComment", "店長から一言"]]);
 function hpOptKeyOf(title){   // 公式HPのオプション名 → プロフのオプション（後ろに説明がついていても）
-  const t = String(title).replace(/\s+/g, "");
+  // 「逆ＡＦ」のような全角の英数字は半角に（かっこ・／はプロフと同じ全角に）
+  const t = String(title).normalize("NFKC").replace(/\s+/g, "").replace(/\(/g, "（").replace(/\)/g, "）").replace(/\//g, "／");
   if(t === "3P（有料）") return "3P／お客様2名（有料）";
   for(const [k, l] of Object.entries(PF_OPT_LABEL)) if(t === l || t === k) return k;
   for(const [k, l] of Object.entries(PF_OPT_LABEL)) if(t.startsWith(l + "（")) return k;
