@@ -1405,6 +1405,20 @@ async function hpNewLink(no){
   const x = hpNew; if(!x) return;
   if(await hpNewSetNo(x.c, x.mk, no)){ document.getElementById("hpNewBg").remove(); toast(`台帳に ${no}番 を入れました`); }
 }
+/* 管理画面の一覧（{no,name}）から、このキャストの番号をさがす
+   名前の候補：その店での名前 → 正式な名前・仮の名前・シフトの名前・別名。同じ名前 → なければ名前の最後が同じ（「美咲」と「櫻井美咲」） */
+function hpMatchNo(rows, c, mk){
+  const key = s => String(s || "").normalize("NFKC").replace(/[\s　]+/g, "");
+  const st = ((c.stores || {})[mk] || {}).name;
+  const names = [...new Set([st, c.official_name, c.temp_name, c.shift_name].concat(c.aliases || []).map(key).filter(Boolean))];
+  rows = rows || [];
+  for(const w of names){ const h = rows.filter(x => key(x.name) === w); if(h.length) return h; }
+  for(const w of names){
+    const h = rows.filter(x => { const n = key(x.name); return n.length >= 2 && w.length >= 2 && (n.endsWith(w) || w.endsWith(n)); });
+    if(h.length) return h;
+  }
+  return [];
+}
 /* 🔎 チェックしたお店で在籍番号が空いている所を、公式HPの管理画面から名前でさがす（入れるだけ。保存は「💾 保存する」） */
 async function findSiteNos(){
   const c = casts.find(x => x.id === editingId), out = $("findNoOut"); if(!c) return;
@@ -1414,8 +1428,8 @@ async function findSiteNos(){
   for(const s of todo){
     const name = $("esn_" + s.key).value.trim() || c.official_name || nameOf(c);
     out.textContent = `${s.label} をさがしています…（1店30秒ほど）`;
-    const r = await hpFn({ action: "cast_find", store: s.key, name });
-    const hits = (r && r.hits) || [];
+    const r = await hpFn({ action: "cast_find", store: s.key });
+    const hits = r && r.ok ? hpMatchNo(r.rows, Object.assign({}, c, { stores: { [s.key]: { name: $("esn_" + s.key).value.trim() } } }), s.key) : [];
     if(!r || !r.ok) msgs.push(`${s.label}：読めませんでした（${(r && r.error) || "?"}）`);
     else if(hits.length === 1){ if(editingId === c.id){ $("esno_" + s.key).value = String(hits[0].no); n++; } msgs.push(`${s.label}：${hits[0].no}番（${hits[0].name}）`); }
     else if(!hits.length) msgs.push(`${s.label}：「${name}」は見つかりませんでした`);
@@ -1621,8 +1635,8 @@ async function pfHpImport(){
     if(mk && !no && HP_SITE_OF[mk]){   // 番号がまだない → その店での名前で管理画面からさがす（1人だけ見つかれば台帳にも入れる）
       const name = ((pf.c.stores || {})[mk] || {}).name || pf.c.official_name || nameOf(pf.c);
       box(`在籍番号をさがしています…（${esc(STORE_LABEL_OF(sk))}：「${esc(name)}」）`);
-      const f = await hpFn({ action: "cast_find", store: mk, name });
-      const hits = (f && f.hits) || [];
+      const f = await hpFn({ action: "cast_find", store: mk });
+      const hits = f && f.ok ? hpMatchNo(f.rows, pf.c, mk) : [];
       if(hits.length === 1 && await hpNewSetNo(pf.c, mk, hits[0].no)) no = hits[0].no;
       else{ plan.push({ sk, error: !f || !f.ok ? "在籍番号がありません（さがせませんでした）" : hits.length ? `在籍番号がありません（「${name}」が${hits.length}人います：${hits.map(h => h.no + "番").join("・")}）` : `在籍番号がありません（管理画面に「${name}」が見つかりません）` }); continue; }
     }
@@ -1675,10 +1689,9 @@ async function hpBulkFill(all){   // all＝ちがう所も公式HPに合わせ�
       const r = await hpFn({ action: "cast_find", store: mk });
       const key = s => String(s || "").normalize("NFKC").replace(/[\s　]+/g, "");
       for(const c of (r && r.ok ? noNo : [])){
-        const want = key(c.stores[mk].name || c.official_name || nameOf(c));
-        let hits = (r.rows || []).filter(x => key(x.name) === want);
-        if(!hits.length && want.length >= 2) hits = (r.rows || []).filter(x => key(x.name).endsWith(want));
+        const hits = hpMatchNo(r.rows, c, mk);
         if(hits.length === 1 && await hpNewSetNo(c, mk, hits[0].no)){ foundNos++; const i = targets.findIndex(y => y.id === c.id); if(i >= 0) targets[i] = casts.find(y => y.id === c.id); }
+        else errs.push(`${STORE_LABEL_OF(sk)}：${nameOf(c)} の在籍番号が${hits.length ? "わかりません（" + hits.map(h => h.no + "番 " + h.name).join("・") + "）" : "見つかりません（「その店での名前」を管理画面と同じにしてください）"}`);
       }
       if(!r || !r.ok) errs.push(STORE_LABEL_OF(sk) + "：在籍番号をさがせませんでした（" + ((r && r.error) || "?") + "）");
     }
