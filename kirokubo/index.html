@@ -1394,7 +1394,6 @@ function paintProf(){
     <div class="pfTabs">${pf.stores.map((s, i) => `<button type="button" class="pfTab ${s === sk ? "on" : ""}" onclick="pfTab(${i})">${esc(STORE_LABEL_OF(s))}${pf.dirty.has(s) ? " ✏️" : ""}</button>`).join("")}
       <span style="margin-left:auto"></span>
       ${CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfHpImport()">🌐 公式HPから取りこむ</button>` : ""}
-      ${CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfFormLink()">🔁 出しなおし用のURL</button>` : ""}
       <a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(pf.prof.id)}" target="_blank" rel="noopener">📂 プロフの画面で開く</a></div>
     ${PROF_DUMMY.includes(sk) ? `<div class="hint" style="margin-bottom:6px">${esc(STORE_LABEL_OF(sk))}は名前・年齢を変えた別の設定です（公式HPにはまだ入れられません）。</div>` : ""}
     <div class="pfPanel"><div class="pfHead">📋 基本情報 ${hpLinkOf(pf.c, sk)}</div><div class="pfBody"><div class="pfGrid">
@@ -2040,27 +2039,6 @@ async function mergeProf(pid, castId, over){
     profNoteCache = null; await autoMoveInternal(c.id);
     if(editingId === c.id) renderProf(c.id);
   }catch(e){ toast("まとめられませんでした：" + (e.message || e)); }
-}
-/* 🔁 出しなおし用のURL：このURLで出すと、この子のプロフが書きかわる（ふつうのURLだと「📥 新しく届いたプロフ」になる） */
-const PROF_FORM_URL = "https://sakuramoong-app.github.io/cast-sakura-profile/?t=";
-async function pfFormLink(){
-  if(!pf) return;
-  const name = nameOf(pf.c);
-  try{
-    const r = q(await sb.rpc("prof_form_link", { p_id: pf.prof.id }));
-    if(!r || r.result !== "ok") throw new Error((r && r.message) || "作れませんでした");
-    const url = PROF_FORM_URL + r.t;
-    const msg = `${name}さん\nプロフの出しなおしは、こちらからお願いします🌸\n${url}`;
-    let bg = document.getElementById("formLinkBg");
-    if(!bg){ bg = document.createElement("div"); bg.id = "formLinkBg"; bg.style.cssText = "position:fixed;inset:0;z-index:320;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
-    bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:480px;width:100%;font-size:14px;line-height:1.8">
-      <b style="font-size:16px">🔁 ${esc(name)}さんの出しなおし用のURL</b>
-      <textarea id="formLinkMsg" readonly style="width:100%;min-height:96px;margin-top:8px;font-size:13px">${esc(msg)}</textarea>
-      <div class="hint">このURLで出すと、${esc(name)}さんのプロフが新しい内容になります（「📥 新しく届いたプロフ」には出ません）。<b>${esc(name)}さんにだけ</b>送ってください。</div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
-        <button class="btn btn-ghost" onclick="document.getElementById('formLinkBg').remove()">閉じる</button>
-        <button class="btn btn-primary" onclick="navigator.clipboard.writeText($('formLinkMsg').value).then(()=>toast('コピーしました'),()=>{$('formLinkMsg').select();toast('選んだので Ctrl+C でコピーしてください')})">📋 コピー</button></div></div>`;
-  }catch(e){ toast("URLが作れませんでした（SQL 145 を実行してください）：" + (e.message || e)); }
 }
 async function addFromProf(pid){
   const p = (await newProfs()).find(x => x.id === pid); if(!p) { toast("もう台帳に入っています"); return; }
