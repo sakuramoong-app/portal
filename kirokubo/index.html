@@ -1449,6 +1449,9 @@ async function renderProf(id){
   const known = Object.values(PROF_STORE_OF);
   const stores = [...new Set(Object.keys(c.stores || {}).map(k => PROF_STORE_OF[k]).filter(Boolean)
     .concat(Object.keys(data.storeProfiles || {}).filter(k => known.includes(k))))];
+  const TAB_ORDER = ["サクラムーン", "ラナ鶯谷", "ラナ錦糸町", "ピーチムーン五反田", "ドレスガーデン", "キューティー", "逆AF倶楽部", "18", "極門"];
+  const ord = s => { const i = TAB_ORDER.indexOf(s); return i < 0 ? 99 : i; };
+  stores.sort((a, b) => ord(a) - ord(b));
   pf = { c, prof, data, logs, stores: stores.length ? stores : ["サクラムーン"], dirty: new Set() };
   pf.sk = pf.stores[0];
   // 性格タイプ：プロフに答えがない子は、プロフ確認フォームのいちばん新しい答えを出す（あとで描きなおす）
