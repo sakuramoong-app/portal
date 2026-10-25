@@ -169,6 +169,7 @@
       <details class="edit-only" style="font-size:13px"><summary style="cursor:pointer;font-weight:800;color:var(--sub);padding:6px 4px">⚙️ そのほか</summary>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
           <button class="btn btn-ghost btn-sm" onclick="hpBulkFill()">🌐 全員の空いている欄を公式HPから取りこむ</button>
+          <button class="btn btn-ghost btn-sm" onclick="hpBulkFill(true)">🌐 全員を公式HPに合わせる（ちがう所も）</button>
           <button class="btn btn-ghost btn-sm" onclick="openNotifyEmails()">📧 プロフが届いたときの通知メール</button>
           <button class="btn btn-ghost btn-sm" onclick="openHotelList()">🏨 ホテル一覧（足す・直す）</button>
         </div></details>
@@ -1652,8 +1653,8 @@ function pfImpApply(){
   toast(n ? `${n}か所入れました。「💾 プロフを保存」で保存されます` : "入れたものはありません");
 }
 /* 🌐 全員の空いている欄を公式HPから（もう入っている欄はさわらない）。お店ごとに8人ずつ読む */
-async function hpBulkFill(){
-  if(!CAN_EDIT || !confirm("全員の、プロフの空いている欄だけを公式HPから取りこみます（もう入っている欄はさわりません）。数分かかります。始めますか？")) return;
+async function hpBulkFill(all){   // all＝ちがう所も公式HPに合わせる（公式HPが正しい。名前は台帳の正式な名前があるのでさわらない）
+  if(!CAN_EDIT || !confirm(all ? "全員のプロフを公式HPに合わせます（空いている欄も、ちがう欄も公式HPの中身にします。名前はそのまま）。変える前の中身はプロフの履歴に残ります。数分かかります。始めますか？" : "全員の、プロフの空いている欄だけを公式HPから取りこみます（もう入っている欄はさわりません）。数分かかります。始めますか？")) return;
   await loadHpDummyNos();
   let bg = document.getElementById("pfImpBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "pfImpBg"; bg.style.cssText = "position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
@@ -1664,7 +1665,22 @@ async function hpBulkFill(){
   const byId = {}; profs.forEach(p => { byId[p.id] = { prof: p, data: JSON.parse(JSON.stringify(p.data || {})), n: 0 }; });
   const errs = [];
   const targets = casts.filter(c => c.prof_id && byId[c.prof_id] && c.status !== "left");
+  let foundNos = 0;
   for(const [mk, sk] of Object.entries(PROF_STORE_OF)){
+    // 在籍番号がまだない子：その店での名前で管理画面の一覧からさがして台帳に入れる（1人だけ見つかったときだけ）
+    const noNo = targets.filter(c => (c.stores || {})[mk] && !hpNoOf(c, sk).no);
+    if(noNo.length && HP_SITE_OF[mk]){
+      say(`在籍番号をさがしています…<br>${esc(STORE_LABEL_OF(sk))}：${noNo.length}人`);
+      const r = await hpFn({ action: "cast_find", store: mk });
+      const key = s => String(s || "").normalize("NFKC").replace(/[\s　]+/g, "");
+      for(const c of (r && r.ok ? noNo : [])){
+        const want = key(c.stores[mk].name || c.official_name || nameOf(c));
+        let hits = (r.rows || []).filter(x => key(x.name) === want);
+        if(!hits.length && want.length >= 2) hits = (r.rows || []).filter(x => key(x.name).endsWith(want));
+        if(hits.length === 1 && await hpNewSetNo(c, mk, hits[0].no)){ foundNos++; const i = targets.findIndex(y => y.id === c.id); if(i >= 0) targets[i] = casts.find(y => y.id === c.id); }
+      }
+      if(!r || !r.ok) errs.push(STORE_LABEL_OF(sk) + "：在籍番号をさがせませんでした（" + ((r && r.error) || "?") + "）");
+    }
     const list = targets.map(c => ({ c, no: hpNoOf(c, sk).no })).filter(x => x.no && (x.c.stores || {})[mk]);
     for(let i = 0; i < list.length; i += 8){
       const part = list.slice(i, i + 8);
@@ -1674,7 +1690,8 @@ async function hpBulkFill(){
       (r.profiles || []).forEach(p => {
         const x = part.find(y => y.no === p.no); if(!x || p.error) return;
         const t = byId[x.c.prof_id];
-        hpDiffOf(t.data, sk, p).auto.forEach(it => { hpApplyTo(t.data, sk, it); t.n++; });
+        const d = hpDiffOf(t.data, sk, p);
+        (all ? d.auto.concat(d.ask.filter(it => it.f !== "name")) : d.auto).forEach(it => { hpApplyTo(t.data, sk, it); t.n++; });
       });
     }
   }
@@ -1685,7 +1702,7 @@ async function hpBulkFill(){
     try{ const r = q(await sb.rpc("prof_update_confirmed", { p: profPayload(t.prof, t.data) })); if(r && r.result === "ok") saved++; else errs.push(t.prof.name + "：保存できませんでした"); }
     catch(e){ errs.push(t.prof.name + "：" + (e.message || e)); }
   }
-  say(`<b>🌐 取りこみが終わりました</b><br>空いている欄を入れた人：${saved}人（${changed.reduce((a, t) => a + t.n, 0)}か所）
+  say(`<b>🌐 取りこみが終わりました</b><br>${all ? "公式HPに合わせた人" : "空いている欄を入れた人"}：${saved}人（${changed.reduce((a, t) => a + t.n, 0)}か所）${foundNos ? `<br>在籍番号を台帳に入れた所：${foundNos}か所` : ""}
     ${errs.length ? `<div style="color:#d9534f;font-size:12.5px;margin-top:6px">${errs.map(esc).join("<br>")}</div>` : ""}
     <div style="text-align:right;margin-top:10px"><button class="btn btn-primary" onclick="document.getElementById('pfImpBg').remove();if(editingId)renderProf(editingId)">OK</button></div>`);
 }
