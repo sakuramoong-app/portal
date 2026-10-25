@@ -1558,7 +1558,10 @@ function paintProf(){
         </div>
         <div style="font-size:10.5px;font-weight:700;color:${mk.color};margin-bottom:3px">${mk.emoji} ${l.author ? esc(l.author) : "書いた人の記録なし"}</div>
         <div style="font-size:14px;white-space:pre-wrap;line-height:1.6">${esc(String(l.content || ""))}</div></div>`; }).join("") || `<div class="hint">記録はまだありません</div>`}</div></div>
-    ${CAN_EDIT ? `<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:6px"><button class="btn btn-primary" onclick="saveProf()">💾 プロフを保存</button></div>` : ""}`;
+    ${CAN_EDIT ? `<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:6px">
+      <button class="btn btn-ghost" onclick="hpPushLater()">🌐 公式HPにまとめて入れる</button>
+      <button class="btn btn-ghost" onclick="saveProf(true)">💾 保存だけ（公式HPはあとで）</button>
+      <button class="btn btn-primary" onclick="saveProf()">💾 プロフを保存</button></div>` : ""}`;
   reflPv("pf_c"); reflPv("pf_m");
 }
 // 画面の中身 → pf.data（いま開いているお店の分）。変えたお店は pf.dirty に
@@ -1895,7 +1898,30 @@ function profPayload(prof, data){
   if(saku.options){ p.options = saku.options; p.optMemo = saku.optMemo || {}; }
   return p;
 }
-async function saveProf(){
+function hpSetsOf(data, sks){   // プロフのお店 → 公式HPに入れる中身（基本情報・紹介文・オプション。エイティーン・極門はオプションだけ）
+  const sets = {};
+  sks.forEach(sk => {
+    const s = {};
+    if(!PROF_DUMMY.includes(sk)){
+      PF_BASIC.forEach(([f]) => { const v = String(profGet(data, sk, f) || "").trim(); if(v) s[f] = v; });
+      ["comment", "mgrComment"].forEach(f => { const v = String(profGet(data, sk, f) || "").trim(); if(v) s[f] = v; });
+    }
+    const o = hpOptsOf(data, sk); if(Object.keys(o).length) s.options = o;
+    if(Object.keys(s).length) sets[sk] = s;
+  });
+  return sets;
+}
+// 🌐 あとでまとめて：保存ずみのプロフを、番号のある全部のお店の公式HPとくらべる（ちがうお店だけ入れられる）
+function hpPushLater(){
+  if(!pf) return;
+  pfCollect();
+  if(pf.dirty.size){ toast("先に「💾 保存」してください（保存した中身を公式HPに入れます）"); return; }
+  const sks = pf.stores.filter(sk => hpNoOf(pf.c, sk).no);
+  if(!sks.length){ toast("在籍番号のあるお店がありません"); return; }
+  const sets = hpSetsOf(pf.prof.data || pf.data, sks);
+  if(Object.keys(sets).length) openHpPush(sets, pf.c); else toast("入れるものがありません");
+}
+async function saveProf(later){
   if(!pf) return;
   pfCollect();
   if(!pf.dirty.size && !pf.hotelDirty){ toast("変えたところがありません"); return; }
@@ -1908,17 +1934,9 @@ async function saveProf(){
   }catch(e){ toast("プロフを保存できませんでした：" + (e.message || e)); return; }
   pf.hotelDirty = false;
   // 公式HPにも：直したお店の基本情報・紹介文（エイティーン・極門はまだ入れない）
-  const sets = {};
-  pf.dirty.forEach(sk => {
-    const s = {};
-    if(!PROF_DUMMY.includes(sk)){   // エイティーン・極門はオプションだけ
-      PF_BASIC.forEach(([f]) => { const v = String(profGet(data, sk, f) || "").trim(); if(v) s[f] = v; });
-      ["comment", "mgrComment"].forEach(f => { const v = String(profGet(data, sk, f) || "").trim(); if(v) s[f] = v; });
-    }
-    const o = hpOptsOf(data, sk); if(Object.keys(o).length) s.options = o;
-    if(Object.keys(s).length) sets[sk] = s;
-  });
+  const sets = hpSetsOf(data, [...pf.dirty]);
   prof.data = JSON.parse(JSON.stringify(data)); pf.dirty.clear(); paintProf();
+  if(later){ toast("保存しました。公式HPは「🌐 公式HPにまとめて入れる」であとから入れられます"); return; }
   toast("プロフを保存しました");
   if(Object.keys(sets).length) openHpPush(sets, pf.c);
 }
