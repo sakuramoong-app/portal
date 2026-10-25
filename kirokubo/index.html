@@ -1330,6 +1330,89 @@ async function hpPushAll(){
   toast("公式HPに入れ終わりました。見た目を公式HPで確かめてください");
 }
 
+/* ---------- 🆕 新人を公式HPに登録（管理画面の1〜90番の空き枠に書きこむ → 在籍番号を台帳に入れる）
+   エイティーン・極門（ダミー）はまだ。台帳の在籍店舗にあって、番号がまだないお店だけ ---------- */
+let hpNew = null;   // { c, sk, mk, set, r, show, top, state }
+function hpCanNew(c, sk){
+  if(PROF_DUMMY.includes(sk)) return false;
+  const { mk, no } = hpNoOf(c, sk);
+  return !!(mk && HP_SITE_OF[mk] && c.stores && c.stores[mk] && !no);
+}
+async function hpNewOpen(){
+  if(!pf) return;
+  pfCollect();
+  if(pf.dirty.size){ toast("先に「💾 プロフを保存」してください（保存した中身を公式HPに入れます）"); return; }
+  const { c, data, sk } = pf, { mk } = hpNoOf(c, sk);
+  const set = {};
+  // 基本情報は、このお店のタブが空ならキャストが書いたもの（サクラムーン）から。紹介文はお店ごとに書いたものだけ
+  PF_BASIC.forEach(([f]) => { const v = String(profGet(data, sk, f) || profGet(data, "サクラムーン", f) || "").trim(); if(v) set[f] = v; });
+  ["comment", "mgrComment"].forEach(f => { const v = String(profGet(data, sk, f) || "").trim(); if(v) set[f] = v; });
+  set.name = c.official_name || set.name || nameOf(c);   // 公式HPの名前は台帳の正式な名前
+  hpNew = { c, sk, mk, set, r: null, show: false, top: true, state: "checking" };
+  paintHpNew();
+  hpNew.r = await hpFn({ action: "cast_new", store: mk, set, dry: true });
+  hpNew.state = "checked"; paintHpNew();
+}
+function paintHpNew(){
+  const x = hpNew; if(!x) return;
+  let bg = document.getElementById("hpNewBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "hpNewBg"; bg.style.cssText = "position:fixed;inset:0;z-index:310;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
+  const r = x.r || {}, label = STORE_LABEL_OF(x.sk), name = x.set.name;
+  const short = s => { s = String(s || ""); return s.length > 120 ? s.slice(0, 120) + "…" : s; };
+  let body = "";
+  if(x.state === "checking") body = `<div class="hint">管理画面の空いている枠を探しています…（30秒ほど）</div>`;
+  else if(x.state === "saving") body = `<div class="hint">登録しています…（1分ほど）</div>`;
+  else if(x.state === "done") body = r.ok || r.saved
+    ? `<div style="background:#E6F6EE;border-radius:12px;padding:10px 12px">✅ ${esc(label)}の管理画面の <b>${esc(r.no)}番</b> に「${esc(name)}」を登録して、台帳に在籍番号を入れました。<br>
+        ${x.show ? "掲載しました" : "まだ<b>非公開</b>です"}${r.moved ? "・並び順はいちばん上" : r.moved === false ? "・<span style='color:#d9534f'>並び順は動かせませんでした（管理画面で直してください）</span>" : ""}${r.published && r.published.ok ? "・更新ずみ" : ""}</div>
+       <div class="hint" style="margin-top:8px">${x.show ? "" : "写真を管理画面で入れてから、管理画面の「掲載」にチェック →「更新」してください。"}${(r.failed || []).length ? "<br><span style='color:#d9534f'>入らなかった欄：" + esc(r.failed.join("・")) + "</span>" : ""}</div>`
+    : `<div style="color:#d9534f">❌ ${esc(r.error || "登録できませんでした")}</div>`;
+  else if(!r.ok){
+    body = `<div style="color:#d9534f">❌ ${esc(r.error || "確かめられませんでした（ロボットを新しくデプロイした？）")}</div>`
+      + (r.already ? `<div class="hint" style="margin-top:8px">管理画面にもういるなら、その番号を台帳に入れるだけでOKです。</div>
+        <button class="btn btn-primary" style="margin-top:6px" onclick="hpNewLink(${Number(r.already)})">🔗 ${esc(r.already)}番を台帳に入れる</button>` : "");
+  }else{
+    const ch = (r.changes || []).map(c => `<tr><td>${esc(HP_CMS_LABEL[c.k] || c.k)}</td><td style="white-space:pre-wrap"><b>${esc(short(c.after))}</b></td></tr>`).join("");
+    body = `<div>${esc(label)}の管理画面の <b>${esc(r.no)}番</b>（空いている枠。あと${esc((r.newInfo || {}).freeCount || "?")}枠）に、この内容で登録します。</div>
+      ${r.photos ? `<div style="color:#d9534f;margin-top:4px">⚠️ この枠に写真が${esc(r.photos)}枚のこっています。管理画面で確かめてください。</div>` : ""}
+      <table class="ansTbl" style="margin-top:6px"><tr><th>欄</th><th>入れる中身</th></tr>${ch}</table>
+      <label style="display:block;margin-top:8px"><input type="checkbox" ${x.top ? "checked" : ""} onchange="hpNew.top=this.checked"> 並び順をいちばん上にする（新人）</label>
+      ${r.canShow ? `<label style="display:block"><input type="checkbox" ${x.show ? "checked" : ""} onchange="hpNew.show=this.checked"> すぐ掲載する（写真がまだなら、チェックしないでください）</label>` : ""}
+      ${x.set.comment || x.set.mgrComment ? "" : `<div class="hint" style="margin-top:4px">紹介文は、このお店のタブにまだありません。登録したあと「💬 紹介文」に書いて保存すると、公式HPにも入れられます。</div>`}
+      <div class="hint" style="margin-top:4px">オプション（◎○△×）はまだ入りません。管理画面で入れてください。</div>`;
+  }
+  const can = x.state === "checked" && r.ok;
+  bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:640px;width:100%;max-height:90vh;overflow:auto;font-size:13.5px">
+    <b style="font-size:16px">🆕 ${esc(label)}の公式HPに「${esc(name)}」を新しく登録</b><div style="margin-top:8px">${body}</div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      ${can ? `<button class="btn btn-primary" onclick="hpNewSave()">🆕 この内容で登録する</button>` : ""}
+      <button class="btn btn-ghost" ${x.state === "saving" || x.state === "checking" ? "disabled" : ""} onclick="document.getElementById('hpNewBg').remove()">閉じる</button></div></div>`;
+}
+async function hpNewSave(){
+  const x = hpNew; if(!x || !x.r || !x.r.ok) return;
+  if(!confirm(`${STORE_LABEL_OF(x.sk)}の管理画面の ${x.r.no}番 に「${x.set.name}」を登録します。よろしいですか？`)) return;
+  x.state = "saving"; paintHpNew();
+  x.r = await hpFn({ action: "cast_new", store: x.mk, set: x.set, dry: false, show: x.show, top: x.top, publish: x.show });
+  if(x.r && x.r.saved && x.r.no) await hpNewSetNo(x.c, x.mk, x.r.no);
+  x.state = "done"; paintHpNew();
+}
+async function hpNewLink(no){
+  const x = hpNew; if(!x) return;
+  if(await hpNewSetNo(x.c, x.mk, no)){ document.getElementById("hpNewBg").remove(); toast(`台帳に ${no}番 を入れました`); }
+}
+async function hpNewSetNo(c, mk, no){   // 台帳の在籍店舗に在籍番号を入れる
+  try{
+    const cur = casts.find(x => x.id === c.id) || c;
+    const stores = JSON.parse(JSON.stringify(cur.stores || {}));
+    stores[mk] = Object.assign({}, stores[mk] || {}, { siteNo: String(no) });
+    const u = q(await sb.from("master_casts").update({ stores }).eq("id", c.id).select().single());
+    casts = casts.map(y => y.id === c.id ? u : y); render();
+    const inp = editingId === c.id && $("esno_" + mk); if(inp) inp.value = String(no);   // 開いている画面の在籍番号も（あとで保存しても消えないように）
+    if(pf && pf.c.id === c.id){ pf.c = u; pfCollect(); paintProf(); }
+    return true;
+  }catch(e){ toast("台帳に在籍番号を入れられませんでした：" + (e.message || e)); return false; }
+}
+
 /* ---------- 📝 プロフ（台帳の中で、キャストプロフの中身を見る・直す）
    保存は prof_update_confirmed（キャストプロフの「答えを反映」と同じ。だれが直したかはプロフの履歴に残る）
    お店ごとの中身（storeProfiles）。サクラムーンだけ旧データも見る（profGet・profOpts） ---------- */
@@ -1393,6 +1476,7 @@ function paintProf(){
   el.innerHTML = `
     <div class="pfTabs">${pf.stores.map((s, i) => `<button type="button" class="pfTab ${s === sk ? "on" : ""}" onclick="pfTab(${i})">${esc(STORE_LABEL_OF(s))}${pf.dirty.has(s) ? " ✏️" : ""}</button>`).join("")}
       <span style="margin-left:auto"></span>
+      ${CAN_EDIT && hpCanNew(pf.c, sk) ? `<button type="button" class="btn btn-primary btn-sm" onclick="hpNewOpen()">🆕 公式HPに新しく登録</button>` : ""}
       ${CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfHpImport()">🌐 公式HPから取りこむ</button>` : ""}
       <a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(pf.prof.id)}" target="_blank" rel="noopener">📂 プロフの画面で開く</a></div>
     ${PROF_DUMMY.includes(sk) ? `<div class="hint" style="margin-bottom:6px">${esc(STORE_LABEL_OF(sk))}は名前・年齢を変えた別の設定です（公式HPにはまだ入れられません）。</div>` : ""}
