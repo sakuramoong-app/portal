@@ -139,7 +139,11 @@
   details.acc > summary::-webkit-details-marker, details.pfPanel > summary::-webkit-details-marker{display:none}
   details.acc > summary.sec::after, details.pfPanel > summary.pfHead::after{content:"▼";margin-left:auto;font-size:11px;color:#C9A6B1;transition:transform .15s}
   details.acc[open] > summary.sec::after, details.pfPanel[open] > summary.pfHead::after{transform:rotate(180deg)}
-  details.pfPanel{scroll-margin-top:64px}
+  details.pfPanel{scroll-margin-top:calc(var(--jumpH, 50px) + 60px)}
+  /* プロフのお店のタブは、ジャンプのすぐ下に固定（プロフの所にいるあいだ） */
+  #editBg{--stickTop:-24px}
+  @media (min-width:1100px){ body.pane #editBg{--stickTop:-16px} }
+  #e_prof .pfStoreTabs{position:sticky;top:calc(var(--stickTop) + var(--jumpH, 50px));z-index:5;background:#fff;margin:0 -20px 8px;padding:6px 20px;border-bottom:1.5px solid var(--line);box-shadow:0 6px 12px rgba(255,143,171,.08)}
   #editBg .jump{position:sticky;top:-24px;z-index:6;background:#fff;margin:0 -20px 4px;padding:8px 20px;border-bottom:1.5px solid var(--line);display:flex;gap:6px;overflow-x:auto;white-space:nowrap;box-shadow:0 6px 14px rgba(255,143,171,.10)}
   @media (min-width:1100px){ body.pane #editBg .jump{top:-16px} }
   @media (min-width:700px){ #editBg .jump{flex-wrap:wrap;overflow-x:visible} }
@@ -1558,7 +1562,7 @@ function paintProf(){
   const pt = data.personalityType;
   const pv = id => `<iframe id="${id}_pv" sandbox style="display:none;width:100%;height:240px;border:1px solid #eee;border-radius:8px;background:#fff"></iframe>`;
   el.innerHTML = `
-    <div class="pfTabs">${pf.stores.map((s, i) => `<button type="button" class="pfTab ${s === sk ? "on" : ""}" onclick="pfTab(${i})">${esc(STORE_LABEL_OF(s))}${pf.dirty.has(s) ? " ✏️" : ""}</button>`).join("")}
+    <div class="pfTabs pfStoreTabs">${pf.stores.map((s, i) => `<button type="button" class="pfTab ${s === sk ? "on" : ""}" onclick="pfTab(${i})">${esc(STORE_LABEL_OF(s))}${pf.dirty.has(s) ? " ✏️" : ""}</button>`).join("")}
       <span style="margin-left:auto"></span>
       ${CAN_EDIT && hpCanNew(pf.c, sk) ? `<button type="button" class="btn btn-primary btn-sm" onclick="hpNewOpen()">🆕 公式HPに新しく登録</button>` : ""}
       ${CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfHpImport()">🌐 公式HPから取りこむ</button>` : ""}
@@ -2016,6 +2020,10 @@ function paintEditJump(){
   $("editJump").innerHTML = EDIT_JUMP.map(([k, l]) => `<button type="button" onclick="jumpTo('${k}')">${l}</button>` +
       (k === "prof" ? PF_JUMP.map(([p, pl]) => `<button type="button" class="sub" onclick="jumpProf('${p}')">${pl}</button>`).join("") : "")).join("")
     + `<button type="button" class="all" onclick="accAll(true)">全部ひらく</button><button type="button" class="all" onclick="accAll(false)">全部とじる</button>`;
+  // ジャンプの高さ（スマホ1段・PC2段）→ プロフのお店のタブをそのすぐ下に固定
+  const setH = () => { const h = $("editJump").offsetHeight; if(h) $("editBg").style.setProperty("--jumpH", h + "px"); };
+  if(window.ResizeObserver) new ResizeObserver(setH).observe($("editJump")); else window.addEventListener("resize", setH);
+  setTimeout(setH, 0);
 }
 function jumpTo(k){
   const d = document.querySelector(`#editBg details.acc[data-acc="${k}"]`); if(!d) return;
