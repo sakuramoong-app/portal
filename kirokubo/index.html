@@ -376,6 +376,8 @@ async function load(){
       sb.from("kb_cast_checks").select("*").eq("active", true).order("sort").order("id"),
     ]);
     casts = q(c) || []; stores = q(s) || [];
+    { const SO = ["sakuramoon", "lana_uguisu", "lana_kinshi", "peachmoon", "dressgarden", "cutie", "gyakuanal", "eighteen", "gokumon"], o = k => { const i = SO.indexOf(k); return i < 0 ? 99 : i; };   // 公式の並び
+      stores.sort((a, b) => o(a.key) - o(b.key)); }
     rankHist = q(rh) || []; castRules = q(cr) || []; kbOptions = q(op) || []; castChecks = q(ck) || [];
   }catch(e){
     $("gate").textContent = "読み込みに失敗しました：" + (e.message || e);
