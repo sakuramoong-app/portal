@@ -1237,7 +1237,7 @@ function renderCastChecks(c){
   el.dataset.cast = c.id;
   const all = M.castChecks.filter(x=>x.cast_id === c.id && ruleApplies(x));
   const by = k => all.filter(x=>(x.kind || "announce") === k);
-  const ann = by("announce"), conf = by("confirm").slice(), after = by("after"), know = by("know");
+  const ann = by("announce"), conf = by("confirm").slice(), after = by("after"), know = by("know").filter(x=>!String(x.text).startsWith("🏨"));   // 🏨 ホテルのことは「このキャストのホテル」にまとめて出す
   // 前回このキャストを指名したのが3年以上前 → 「以前このキャストを指名したことがあるか」を必ず聞く（下の checkOldNomi）
   if(typeof oldNomi !== "undefined" && oldNomi && oldNomi.cid === c.id) ann.unshift({ text: oldNomi.text });
   // このお客さんは、このキャストNG（顧客台帳）→ 受けない
@@ -4223,7 +4223,18 @@ async function paintCastNotes(){
   if(seq !== castNotesSeq) return;
   const list = unmovedNotes(c, profs, $("f_store").value);
   const rules = rulesOn(c.id).map(r => "・" + esc(r.note) + hearLink(r.hearing_text, r.by_name, r.created_at)).join("<br>");
+  // 🏨 このキャストのホテル：プロフのホテルの◎△×（ホテル一覧から）＋ 受付ルールの 🏨 のメモ
+  const hp = (c.prof_id && profs && profs[c.prof_id] && profs[c.prof_id].hotelPrefs) || {};
+  const hname = id => { const h = (M.hotels || []).find(x => x.hotel_id === id); return h ? h.hotel_name + (h.area ? "(" + h.area + ")" : "") : ""; };
+  const hl = (ids) => (ids || []).map(hname).filter(Boolean).map(esc).join("、");
+  const hotelLines = [];
+  if(hl(hp.ok)) hotelLines.push(`<div>◎ ${hl(hp.ok)}</div>`);
+  if(hl(hp.conditional)) hotelLines.push(`<div>△ ${hl(hp.conditional)}</div>`);
+  if(hl(hp.ng)) hotelLines.push(`<div style="color:#B0213F;font-weight:700">× ${hl(hp.ng)}</div>`);
+  M.castChecks.filter(x => x.cast_id === c.id && String(x.text).startsWith("🏨")).forEach(x => hotelLines.push(`<div style="white-space:pre-wrap">${esc(String(x.text).replace(/^🏨\s*/, ""))}</div>`));
   el.innerHTML =
+    (hotelLines.length ? `<div style="background:#F2F7FF;border:1.5px solid #B9CDF2;border-radius:12px;padding:6px 10px;margin:6px 0;font-size:13px">
+      <div style="font-weight:800;color:#2b5aa8;font-size:12.5px">🏨 このキャストのホテル</div>${hotelLines.join("")}</div>` : "") +
     (list.length ? `<div style="background:#FFF9EE;border:1.5px dashed #FFB547;border-radius:12px;padding:6px 10px;margin:6px 0;font-size:13px">
       <div style="font-weight:800;color:#a35a00;font-size:12.5px">📝 まだ受付ルールに移していないメモ（キャスト台帳で整理中）</div>
       ${list.map(n => `<div style="white-space:pre-wrap;margin-top:3px"><small style="color:#9C8B8F">${esc(n.label)}：</small>${esc(n.text)}</div>`).join("")}</div>` : "")
