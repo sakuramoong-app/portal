@@ -1404,6 +1404,24 @@ async function hpNewLink(no){
   const x = hpNew; if(!x) return;
   if(await hpNewSetNo(x.c, x.mk, no)){ document.getElementById("hpNewBg").remove(); toast(`台帳に ${no}番 を入れました`); }
 }
+/* 🔎 チェックしたお店で在籍番号が空いている所を、公式HPの管理画面から名前でさがす（入れるだけ。保存は「💾 保存する」） */
+async function findSiteNos(){
+  const c = casts.find(x => x.id === editingId), out = $("findNoOut"); if(!c) return;
+  const todo = stores.filter(s => $("es_" + s.key) && $("es_" + s.key).checked && !$("esno_" + s.key).value.trim() && HP_SITE_OF[s.key]);
+  if(!todo.length){ out.textContent = "空いている所はありません"; return; }
+  const msgs = []; let n = 0;
+  for(const s of todo){
+    const name = $("esn_" + s.key).value.trim() || c.official_name || nameOf(c);
+    out.textContent = `${s.label} をさがしています…（1店30秒ほど）`;
+    const r = await hpFn({ action: "cast_find", store: s.key, name });
+    const hits = (r && r.hits) || [];
+    if(!r || !r.ok) msgs.push(`${s.label}：読めませんでした（${(r && r.error) || "?"}）`);
+    else if(hits.length === 1){ if(editingId === c.id){ $("esno_" + s.key).value = String(hits[0].no); n++; } msgs.push(`${s.label}：${hits[0].no}番（${hits[0].name}）`); }
+    else if(!hits.length) msgs.push(`${s.label}：「${name}」は見つかりませんでした`);
+    else msgs.push(`${s.label}：「${name}」が${hits.length}人います（${hits.map(h => h.no + "番 " + h.name).join("・")}）→ 手で入れてください`);
+  }
+  out.innerHTML = esc(msgs.join(" ／ ")) + (n ? `<br><b>${n}か所入れました。「💾 保存する」を押してください。</b>` : "");
+}
 async function hpNewSetNo(c, mk, no){   // 台帳の在籍店舗に在籍番号を入れる
   try{
     const cur = casts.find(x => x.id === c.id) || c;
@@ -1916,7 +1934,8 @@ function openEdit(id){
       <input type="text" id="esn_${s.key}" placeholder="その店での名前" value="${esc(v&&v.name||"")}">
       <input type="text" id="esno_${s.key}" placeholder="公式HPの在籍番号" value="${esc(v&&v.siteNo||"")}">
     </div>`;
-  }).join("");
+  }).join("") + (CAN_EDIT ? `<div style="margin-top:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="findSiteNos()">🔎 空いている在籍番号を公式HPからさがす</button>
+    <span id="findNoOut" class="hint" style="margin-left:6px"></span></div>` : "");
   $("e_links").innerHTML = [
     c.shift_name ? `<div class="lk">📅 サクラシフト：「${esc(c.shift_name)}」</div>` : `<div class="lk none">📅 サクラシフト：つながっていません</div>`,
     c.prof_id ? `<div class="lk">📝 キャストプロフ：ID ${esc(c.prof_id)}</div>` : `<div class="lk none">📝 キャストプロフ：つながっていません</div>`,
