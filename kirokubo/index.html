@@ -690,7 +690,7 @@ function paintSplit(){
     ${rows.map((r, j) => `<div style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap">
       <input value="${esc(r.text)}" oninput="splitCur.rows[${j}].text=this.value" style="flex:1;min-width:160px">
       <select onchange="splitCur.rows[${j}].dest=this.value" style="max-width:230px">${Object.keys(SPLIT_DEST).map(k => `<option value="${k}" ${r.dest === k ? "selected" : ""}>${SPLIT_DEST[k]}</option>`).join("")}</select></div>`).join("")}
-    <div class="hint" style="margin-top:6px">受付ルールとエリアは自動で入ります。「✋（手で）」は、入れおわるまで「手でやること」として残ります。</div>
+    <div class="hint" style="margin-top:6px">受付ルールとエリアは自動で入ります。「○分以上」と書いてある受付ルールは「○分以上のコースのときだけ」出ます。「✋（手で）」は、入れおわるまで「手でやること」として残ります。</div>
     <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px">
       <button class="btn btn-ghost btn-sm" onclick="$('split_${i}').innerHTML=''">やめる</button>
       <button class="btn btn-primary btn-sm" onclick="saveSplit()">💾 この振り分けで入れる</button></div></div>`;
@@ -702,7 +702,8 @@ async function saveSplit(){
   if(!confirm(`受付ルール ${rules.length}こ・エリア ${areas.length}こ を入れます${manual.length ? `（手でやること ${manual.length}こ）` : ""}。よろしいですか？`)) return;
   try{
     for(const r of rules){
-      const row = { cast_id: c.id, text: r.text.slice(0, 300), kind: r.dest, cond: "always", cond_value: "", sort: castChecks.filter(x => x.cast_id === c.id).length + 1,
+      const lm = r.text.match(/(\d{2,3})\s*分以上/);   // 「120分以上は…」→ 120分以上のコースのときだけ出す
+      const row = { cast_id: c.id, text: r.text.slice(0, 300), kind: r.dest, cond: lm ? "long" : "always", cond_value: lm ? lm[1] : "", sort: castChecks.filter(x => x.cast_id === c.id).length + 1,
                     created_by: operatorName(), updated_by: operatorName(), updated_at: new Date().toISOString(), source: "note:" + n.src };
       const nr = q(await sb.from("kb_cast_checks").insert(row).select().single());
       if(nr) castChecks.push(nr);
