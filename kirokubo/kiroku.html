@@ -1451,8 +1451,10 @@ function recalc(){
       <b style="font-size:13.5px;color:#a35a00">📝 「${esc(bm.rank)}・${esc(bm.key)}」のバックがまだありません</b>
       <div id="cbackRef" style="font-size:12.5px;line-height:1.7;margin-top:4px;color:var(--sub)">参考を読んでいます…</div>
       <div class="f" style="margin-top:6px"><label>このコースのバック（コースの分だけ・円）</label>
-        <input type="number" id="f_cback" value="${esc(cbackOv)}" ${KB.CAN_EDIT ? "" : "disabled"} oninput="cbackOv=this.value" onchange="recalc()" placeholder="例：11000"></div>
-      <div style="font-size:11.5px;color:#a35a00">保存すると、次からは「${esc(bm.rank)}・${esc(bm.key)}」は自動でこの金額になります</div></div>` : "") + `
+        <input type="number" id="f_cback" value="${esc(cbackOv)}" oninput="cbackOv=this.value" onchange="recalc()" placeholder="例：11000"></div>
+      <div style="font-size:11.5px;color:#a35a00;line-height:1.7">保存すると、次からは「${esc(bm.rank)}・${esc(bm.key)}」は自動でこの金額になります。<br>
+        ⚠️ <b>新しく入れたときは、店長に報告してください。</b><br>
+        キャストには「過去にないコース内容だったので、バックを手で入れました。万が一直しが必要な場合は、店長から連絡が来ます」とお伝えください。</div></div>` : "") + `
     <div class="row back"><span>コースのバック</span><b>${yen(c.courseBack)}</b></div>
     <div class="row back"><span>OPのバック</span><b>${yen(c.optionBack)}</b></div>
     <div class="row back"><span>延長・入会金・特例</span><b>${yen(c.extra)}</b></div>
@@ -4292,14 +4294,14 @@ async function loadBackRef(bm){
 }
 const __saveResBL = saveRes;
 saveRes = async function(){
-  const bm = last && last.backMissing && Number(cbackOv) > 0 && KB.CAN_EDIT ? { rank: last.backMissing.rank, course: last.backMissing.key, amount: Math.round(Number(cbackOv)) } : null;
+  const bm = last && last.backMissing && Number(cbackOv) > 0 ? { rank: last.backMissing.rank, course: last.backMissing.key, amount: Math.round(Number(cbackOv)) } : null;
   const r = await __saveResBL.apply(this, arguments);
   if(bm && !$("formBg").classList.contains("show")){   // 保存できた（小窓が閉じた）ときだけ、バック表に入れる
     try{
       q(await sb.from("kb_back").upsert(bm, { onConflict: "rank,course", ignoreDuplicates: true }));
       if(M.back[bm.rank + "|" + bm.course] == null) M.back[bm.rank + "|" + bm.course] = bm.amount;
       delete backRefCache[last.backMissing.g + "|" + bm.course];
-      toast(`バック表に「${bm.rank}・${bm.course}」${yen(bm.amount)} を入れました（次から自動）`);
+      alert(`バック表に「${bm.rank}・${bm.course}」${yen(bm.amount)} を入れました（次から自動）。\n\n⚠️ 店長に報告してください。\nキャストには「過去にないコース内容だったので、バックを手で入れました。万が一直しが必要な場合は、店長から連絡が来ます」とお伝えください。`);
     }catch(e){ toast("バック表に入れられませんでした：" + (e.message || e)); }
   }
   return r;
