@@ -385,6 +385,7 @@ async function load(){
   $("wipSub").textContent = CAN_EDIT ? "👑 店長として開いています（直せます）。" : "店長（きゃ）が準備中のページです。見ることと「📨 確認フォームをまとめて送る」はできます（台帳を直すのは店長だけ）。";
   document.body.classList.add("pane");   // PC では左に一覧・右にキャスト（キャストプロフと同じならび）
   render(); refreshAnsCount(); refreshNewProfCount();
+  autoMoveInternal();   // プロフの内勤連絡で、まだ振り分けていないものを自動で
 }
 
 function render(){
@@ -474,9 +475,17 @@ async function openTerms(){
   document.querySelector('input[name=t_hmode][value=new]').checked = true;
   termsHMode();
   const day = todayYmd();
+  // ランクはえらぶ（そのグループで使っているランク＋バック表のランク）。ないときは「＋ 新しいランク」
+  if(!backRanks){ try{ backRanks = [...new Set((q(await sb.from("kb_back").select("rank")) || []).map(x => x.rank))]; }catch(e){ backRanks = []; } }
   $("t_ranks").innerHTML = RANK_KEYS.map(([g])=>{
-    const r = rankRowOn(c.id, g, day);
-    return `<div class="f"><label>${GRP_LABEL[g]}</label><input id="t_r_${g}" maxlength="20" value="${esc(r ? r.rank : "")}" data-was="${esc(r ? r.rank : "")}" placeholder="なし"></div>`;
+    const r = rankRowOn(c.id, g, day), cur = r ? r.rank : "";
+    const used = new Set(rankHist.filter(h => h.grp === g && h.rank).map(h => h.rank).concat(casts.map(x => (x.ranks || {})[g]).filter(Boolean)));
+    if(g === "cutie") backRanks.filter(x => !/\+NH/.test(x)).forEach(x => used.add(x)); else if(g === "sakurana") backRanks.filter(x => /^[A-Z][A-Z+]*$/.test(x)).forEach(x => used.add(x));
+    if(cur) used.add(cur);
+    const opts = [...used].sort((a, b) => a.localeCompare(b, "ja"));
+    return `<div class="f"><label>${GRP_LABEL[g]}</label><select id="t_r_${g}" data-was="${esc(cur)}" onchange="rankPick(this)">
+      <option value="" ${cur ? "" : "selected"}>なし</option>${opts.map(o => `<option value="${esc(o)}" ${o === cur ? "selected" : ""}>${esc(o)}</option>`).join("")}
+      <option value="__new">＋ 新しいランク…</option></select></div>`;
   }).join("");
   const active = castRules.filter(r=>r.cast_id === c.id && (ruleOn(r, day) || r.valid_from > day));
   $("t_rules").innerHTML = active.length ? active.map(r=>`<label style="display:block;font-size:13px;padding:3px 0"><input type="checkbox" class="t_end" value="${r.id}"> 終わらせる：<b>${KIND_LABEL[r.kind] || r.kind}</b> ${esc(r.note)}</label>`).join("")
@@ -493,6 +502,14 @@ async function openTerms(){
   $("termsBg").classList.add("show");
 }
 function closeTerms(){ $("termsBg").classList.remove("show"); }
+let backRanks = null;   // バック表（kb_back）にあるランク
+function rankPick(sel){
+  if(sel.value !== "__new") return;
+  const v = (prompt("新しいランクの名前（例：S）") || "").trim().slice(0, 20);
+  if(!v){ sel.value = sel.dataset.was || ""; return; }
+  if(![...sel.options].some(o => o.value === v)) sel.insertBefore(new Option(v, v), sel.lastElementChild);
+  sel.value = v;
+}
 function termsHMode(){
   const pick = document.querySelector('input[name=t_hmode]:checked').value === "pick";
   $("t_hnew_wrap").style.display = pick ? "none" : "";
@@ -759,6 +776,15 @@ async function saveSplit(){
   const rules = use.filter(r => RULE_KIND[r.dest]), areas = use.filter(r => r.dest === "area"), notes = use.filter(r => r.dest === "note"), manual = use.filter(r => SPLIT_MANUAL.includes(r.dest));
   if(!confirm(`受付ルール ${rules.length}こ・エリア ${areas.length}こ・メモ ${notes.length}こ を入れます${manual.length ? `（手でやること ${manual.length}こ）` : ""}。よろしいですか？`)) return;
   try{
+    await applySplit(c, n, use, "rule");
+    renderChecks(c.id); renderNotesMove(c.id);
+    toast("入れました" + (manual.length ? "。「✋ 手でやること」を見てください" : ""));
+  }catch(e){ toast("とちゅうで止まりました（入ったものはそのまま）：" + (e.message || e)); renderChecks(c.id); }
+}
+// 振り分けたものを入れる（受付ルール・エリア・台帳のメモ。雑費なし・連絡先・プロフは「✋ 手でやること」）→ メモに「移した」の印
+async function applySplit(c, n, use, how){
+  const rules = use.filter(r => RULE_KIND[r.dest]), areas = use.filter(r => r.dest === "area"), notes = use.filter(r => r.dest === "note"), manual = use.filter(r => SPLIT_MANUAL.includes(r.dest));
+  {
     for(const r of rules){
       const lm = r.text.match(/(\d{2,3})\s*分以上/);   // 「120分以上は…」→ 120分以上のコースのときだけ出す
       const row = { cast_id: c.id, text: r.text.slice(0, 300), kind: r.dest, cond: lm ? "long" : "always", cond_value: lm ? lm[1] : "", sort: castChecks.filter(x => x.cast_id === c.id).length + 1,
@@ -767,28 +793,43 @@ async function saveSplit(){
       if(nr) castChecks.push(nr);
     }
     if(areas.length){
-      const cur = String(c.area_note || "").trim(), add = areas.map(a => a.text).filter(t => !cur.includes(t));
+      const cur = String(c.area_note || "").trim(), add = [...new Set(areas.map(a => a.text))].filter(t => !cur.includes(t));
       if(add.length){
         const area_note = (cur ? cur + "\n" : "") + add.join("\n");
         q(await sb.from("master_casts").update({ area_note }).eq("id", c.id));
-        c.area_note = area_note; if($("e_area")) $("e_area").value = area_note;   // 「保存する」で前の中身にもどらないように
+        c.area_note = area_note; if($("e_area") && editingId === c.id) $("e_area").value = area_note;   // 「保存する」で前の中身にもどらないように
       }
     }
     if(notes.length){
-      const cur = String(c.note || "").trim(), add = notes.map(a => a.text).filter(t => !cur.includes(t));
+      const cur = String(c.note || "").trim(), add = [...new Set(notes.map(a => a.text))].filter(t => !cur.includes(t));
       if(add.length){
         const note = (cur ? cur + "\n" : "") + add.join("\n");
         q(await sb.from("master_casts").update({ note }).eq("id", c.id));
-        c.note = note; if($("e_note")) $("e_note").value = note;
+        c.note = note; if($("e_note") && editingId === c.id) $("e_note").value = note;
       }
     }
-    const moved = (c.notes_moved || []).concat([{ src: n.src, text: n.text, how: "rule", by: operatorName(), at: new Date().toISOString(),
+    const moved = (c.notes_moved || []).concat([{ src: n.src, text: n.text, how, by: operatorName(), at: new Date().toISOString(),
       todo: manual.map(m => ({ text: m.text, dest: m.dest, done: false })) }]);
     const r = q(await sb.from("master_casts").update({ notes_moved: moved }).eq("id", c.id).select("notes_moved").single());
     c.notes_moved = (r && r.notes_moved) || moved;
-    renderChecks(c.id); renderNotesMove(c.id);
-    toast("入れました" + (manual.length ? "。「✋ 手でやること」を見てください" : ""));
-  }catch(e){ toast("とちゅうで止まりました（入ったものはそのまま）：" + (e.message || e)); renderChecks(c.id); }
+  }
+  return { rules: rules.length, manual: manual.length };
+}
+// プロフの「内勤への連絡事項」は、届いたら自動で振り分ける（台帳を店長が開いたとき）。おかしければ受付ルールを直す
+function splitRowsOf(text){ return splitNote(text).map(p => ({ text: p.replace(/^(IC|ＩＣ)：/i, "仕事用ICカード："), dest: guessDest(p) })).filter(r => r.text.trim()); }
+async function autoMoveInternal(onlyId){
+  if(!CAN_EDIT || !("notes_moved" in (casts[0] || {}))) return;
+  let profs; try{ profs = await loadProfNotes(true); }catch(e){ return; }
+  let nMemo = 0, nRule = 0, nTodo = 0;
+  for(const c of casts.filter(x => x.prof_id && x.status !== "left" && (!onlyId || x.id === onlyId))){
+    for(const n of notesToMove(c, profs).filter(x => x.src.startsWith("internal:"))){
+      try{ const r = await applySplit(c, n, splitRowsOf(n.text), "auto"); nMemo++; nRule += r.rules; nTodo += r.manual; }catch(e){ /* つぎの子へ */ }
+    }
+  }
+  if(nMemo){
+    toast(`プロフの内勤連絡 ${nMemo}件を、自動で受付ルールなどに振り分けました（受付ルール ${nRule}こ${nTodo ? "・手でやること " + nTodo + "こ" : ""}）`);
+    if(editingId){ renderChecks(editingId); renderNotesMove(editingId); }
+  }
 }
 async function todoDone(mi, ti){
   const c = casts.find(x => x.id === editingId); if(!c) return;
@@ -1337,7 +1378,7 @@ function paintProf(){
   const el = $("e_prof"); if(!pf || !el) return;
   const { data, sk } = pf, ro = CAN_EDIT ? "" : "disabled";
   const o = profOpts(data, sk);
-  const optKeys = [...new Set(Object.keys(PF_OPT_LABEL).concat(Object.keys(o.options || {}), [...(pf.extraOpts || [])]))];
+  const optKeys = pfOptOrder(sk, o.options || {});
   const hp = data.hotelPrefs || {};
   const hn = hid => { const h = (pfHotels || []).find(x => x.hotel_id === hid); return h ? h.hotel_name + (h.area ? "(" + h.area + ")" : "") : ""; };
   const chips = (ids, bg, fg, mark) => (ids || []).map(hn).filter(Boolean).map(n => `<span style="background:${bg};color:${fg}">${mark} ${esc(n)}</span>`).join("");
@@ -1399,6 +1440,22 @@ function pfCollect(){
   if(before !== after) pf.dirty.add(sk);
 }
 function pfTab(i){ pfCollect(); pf.sk = pf.stores[i]; paintProf(); }
+// オプションのならびは、お店ごとの公式HPのならび（2026/10/25 に公式HPのキャストページから。キューティー・エイティーン・極門はそのお店だけの項目）
+const SAKURA_HP_OPTS = ["AF","逆AF","前立腺マッサージ","兜合わせ","玉舐め","キス","全身リップ","乳首責め","生フェラ","69","Sプレイ","Mプレイ","お泊りコース","デートコース",
+  "射精（有料）","キャスト無限射精（有料）","3P（有料）","コスプレ（有料）","ごっくん（有料）","聖水（有料）","女装されているお客様","外国人のお客様"];
+const PF_HP_OPT_ORDER = {
+  "サクラムーン": SAKURA_HP_OPTS, "ラナ鶯谷": SAKURA_HP_OPTS, "ラナ錦糸町": SAKURA_HP_OPTS, "ドレスガーデン": SAKURA_HP_OPTS, "ピーチムーン五反田": SAKURA_HP_OPTS,
+  "逆AF倶楽部": SAKURA_HP_OPTS.filter(t => t !== "Mプレイ" && t !== "キャスト無限射精（有料）"),
+  "キューティー": ["AF","逆AF","前立腺マッサージ","兜合わせ","玉舐め","キス","全身リップ","乳首責め","生フェラ","69","射精（有料）","無限射精（有料）","聖水（有料）","メイク歴3年未満","メイク歴3年以上"],
+  "18": ["AF","逆AF","前立腺マッサージ","射精","聖水","黄金","携帯写メ","バイブ","ごっくん","ソフトＳＭ","コスプレ","３Ｐ"],
+  "極門": ["アナル開発・調教","前立腺開発","逆AF","拘束プレイ","性感プレイ","浣腸プレイ","乳首開発・調教","AF（コースによっては有料）","聖水(有料）","唾責め","顔面騎乗","亀頭責め","言葉責め","キャスト射精(有料）","女装をしている方(有料）"],
+};
+function pfOptOrder(sk, opts){
+  const hp = (PF_HP_OPT_ORDER[sk] || SAKURA_HP_OPTS).map(t => hpOptKeyOf(t) || t);
+  const i3 = hp.indexOf("3P／お客様2名（有料）");   // 公式HPは「3P」1つ。プロフはキャスト2名もあるので、すぐうしろに
+  if(i3 >= 0 && !PROF_DUMMY.includes(sk)) hp.splice(i3 + 1, 0, "3P／キャスト2名（有料）");
+  return [...new Set(hp.concat(Object.keys(opts), [...(pf && pf.extraOpts || [])]))];   // 公式HPにないもの（あとで足したものなど）は最後に
+}
 function pfAddOpt(){
   const n = $("pf_newopt").value.trim(); if(!n) return;
   pfCollect(); pf.extraOpts = pf.extraOpts || new Set(); pf.extraOpts.add(n); paintProf();
@@ -1887,6 +1944,7 @@ async function addFromProf(pid){
       casts.push(r);
     }
     render(); refreshNewProfCount(); $("newProfBox").style.display = "none";
+    await autoMoveInternal(r.id);   // プロフの内勤連絡を自動で受付ルールなどに
     toast("台帳に入れました。在籍店舗を決めて保存してください");
     openEdit(r.id);
   }catch(e){ toast("台帳に入れられませんでした：" + (e.message || e)); }
