@@ -4256,7 +4256,7 @@ async function paintCastNotes(){
       <div style="font-weight:800;color:#a35a00;font-size:12.5px">📝 まだ受付ルールに移していないメモ（キャスト台帳で整理中）</div>
       ${list.map(n => `<div style="white-space:pre-wrap;margin-top:3px"><small style="color:#9C8B8F">${esc(n.label)}：</small>${esc(n.text)}</div>`).join("")}</div>` : "")
     + (c.area_note && String(c.area_note).trim() ? `<div style="background:#F2FBF6;border:1.5px solid #BFE8D2;border-radius:12px;padding:6px 10px;margin:6px 0;font-size:13px">
-      <div style="font-weight:800;color:#1a7f4b;font-size:12.5px">🗺 行けるお店・エリアと移動</div><div style="white-space:pre-wrap">${esc(c.area_note)}</div></div>` : "")
+      <div style="font-weight:800;color:#1a7f4b;font-size:12.5px">🚃 キャストの最寄り駅・行ける場所</div><div style="white-space:pre-wrap">${esc(c.area_note)}</div></div>` : "")
     + (rules ? `<details style="margin-top:4px"><summary style="cursor:pointer;font-size:12.5px;font-weight:800;color:var(--sub)">🧮 このキャストの条件を見る</summary><div class="info">${rules}</div></details>` : "")
     + (c.prof_id ? `<a class="proflink" style="font-size:12px" href="${PROF_STAFF_URL}?cast=${encodeURIComponent(c.prof_id)}" target="_blank" rel="noopener">📂 ${esc(c.official_name || c.temp_name)}のプロフを開く</a>` : "");
 }
