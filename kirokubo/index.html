@@ -137,7 +137,7 @@
   .pfOpt select{padding:4px 6px} .pfOpt input{padding:4px 8px;font-size:12.5px}
   .pfChips{display:flex;flex-wrap:wrap;gap:4px 6px;font-size:12.5px} .pfChips span{border-radius:99px;padding:2px 9px}
   .pfLog{border-top:1px dashed #F1E3E7;padding:5px 0;font-size:12.5px;line-height:1.7}
-  .pfGrid input,.pfOpt select,.pfOpt input,#e_prof textarea{width:100%;font-family:inherit;font-size:13.5px;color:var(--ink);padding:7px 10px;border:1.5px solid var(--line);border-radius:10px;background:#FFF5F8;}
+  .pfGrid input,.pfOpt select,.pfOpt input,#e_prof textarea,#e_prof select,#e_prof input[type=date],#e_prof input[id^="pf_new"]{width:100%;font-family:inherit;font-size:13.5px;color:var(--ink);padding:7px 10px;border:1.5px solid var(--line);border-radius:10px;background:#FFF5F8;}
   .pfGrid input:focus,.pfOpt select:focus,.pfOpt input:focus,#e_prof textarea:focus{outline:none;border-color:var(--pink);background:#fff;}
   @media (max-width:560px){ .pfOpt{grid-template-columns:1fr 64px} .pfOpt input{grid-column:1/-1} }
 </style>
@@ -1368,6 +1368,11 @@ async function renderProf(id){
     .concat(Object.keys(data.storeProfiles || {}).filter(k => known.includes(k))))];
   pf = { c, prof, data, logs, stores: stores.length ? stores : ["サクラムーン"], dirty: new Set() };
   pf.sk = pf.stores[0];
+  // 性格タイプ：プロフに答えがない子は、プロフ確認フォームのいちばん新しい答えを出す（あとで描きなおす）
+  if(!((data.personalityAnswers || {}).list || []).length){
+    sb.from("prof_confirm_answers").select("data").eq("cast_id", c.id).order("submitted_at", { ascending: false }).limit(1)
+      .then(r => { const a = r && r.data && r.data[0] && r.data[0].data; if(a && a.personalityAnswers && pf && pf.c.id === c.id){ pf.formPq = { personalityAnswers: a.personalityAnswers, personalityType: a.personalityType || "" }; pfCollect(); paintProf(); } }, () => {});
+  }
   // 面接日・きっかけ・退店の理由はプロフにある（入店日・退店日は台帳が空のときだけプロフから）
   $("e_interview").value = data.interviewDate || ""; $("e_joinReason").value = data.joinReason || ""; $("e_leaveReason").value = data.leaveReason || "";
   if(!$("e_join").value && data.joinDate) $("e_join").value = String(data.joinDate).slice(0, 10);
@@ -1404,16 +1409,25 @@ function paintProf(){
     <div class="pfPanel"><div class="pfHead">🏨 ホテル <small style="font-weight:400;color:#9C8B8F">（このキャストだけの◎△×。お店のホテル一覧は変わりません）</small></div><div class="pfBody">
       ${hotelHtml ? `<div class="pfChips">${hotelHtml}</div>` : `<div class="hint">まだありません</div>`}
       ${CAN_EDIT ? pfHotelEditor(hp) : ""}</div></div>
-    <div class="pfPanel"><div class="pfHead">🧩 性格タイプ・🗓 記録（ヒアリングなど）</div><div class="pfBody">
-      ${pt ? `<div style="font-size:13px;margin-bottom:4px">性格タイプ：<b>${esc(typeof pt === "string" ? pt : (pt.name || pt.type || JSON.stringify(pt)))}</b></div>` : ""}
+    ${pfPersonalityHtml(data)}
+    <div class="pfPanel"><div class="pfHead">🗓 記録・ログ（ヒアリングなど）</div><div class="pfBody">
       ${CAN_EDIT ? `<div style="background:#FFF5F8;border-radius:12px;padding:8px 10px;margin-bottom:6px">
         <div style="display:flex;gap:6px;flex-wrap:wrap"><select id="pf_lt" style="max-width:190px">${PF_LOG_TYPES.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
           <input type="date" id="pf_ld" value="${todayYmd()}" style="max-width:160px"></div>
         <textarea id="pf_lc" style="margin-top:6px;min-height:60px" placeholder="記録の中身（ヒアリングした内容など）"></textarea>
         <div style="text-align:right;margin-top:4px"><button class="btn btn-ghost btn-sm" onclick="pfAddLog()">＋ 記録を足す</button></div></div>` : ""}
-      ${pf.logs.map((l, i) => `<div class="pfLog" id="pf_log_${i}"><small style="color:#9C8B8F">${esc(l.date || "")}・${esc(PF_LOG_LABEL[l.type] || l.type || "")}・${esc(l.author || "")}</small>
-        ${CAN_EDIT ? `<a href="javascript:void(0)" onclick="pfEditLog(${i})" style="font-size:11.5px;margin-left:8px">✏️ 直す</a><a href="javascript:void(0)" onclick="pfDelLog(${i})" style="font-size:11.5px;margin-left:8px;color:#d9534f">🗑 消す</a>` : ""}
-        <div style="white-space:pre-wrap">${esc(String(l.content || "").slice(0, 600))}${String(l.content || "").length > 600 ? "…" : ""}</div></div>`).join("") || `<div class="hint">記録はまだありません</div>`}</div></div>
+      <div class="pfTabs" style="margin-bottom:8px">${["全て"].concat(PF_LOG_TYPES.map(t => t[0]), ["退店"]).map(k => `<button type="button" class="pfTab ${pfLogFilter === k ? "on" : ""}" onclick="pfLogFilter='${k}';pfCollect();paintProf()">${k === "全て" ? "全て" : esc(PF_LOG_LABEL[k] || k)}</button>`).join("")}</div>
+      ${pf.logs.map((l, i) => ({ l, i })).filter(x => pfLogFilter === "全て" || x.l.type === pfLogFilter).map(({ l, i }) => { const mk = staffMark(l.author);
+        return `<div id="pf_log_${i}" style="background:${mk.bg};border:1px solid rgba(0,0,0,.06);border-left:5px solid ${mk.color};border-radius:10px;padding:9px 12px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+          <span style="font-size:11px;font-weight:700;color:#FF6B9D">${esc(PF_LOG_LABEL[l.type] || l.type || "")}</span>
+          <span style="font-size:10.5px;color:var(--sub)">${esc(l.date || "")}</span>
+          <span style="flex:1"></span>
+          ${CAN_EDIT ? `<button type="button" title="直す" onclick="pfEditLog(${i})" style="border:none;background:rgba(255,255,255,.7);border-radius:8px;padding:2px 7px;font-size:12px;cursor:pointer">✏️</button>
+            <button type="button" title="消す" onclick="pfDelLog(${i})" style="border:none;background:rgba(255,255,255,.7);border-radius:8px;padding:2px 7px;font-size:12px;cursor:pointer">🗑</button>` : ""}
+        </div>
+        ${l.author ? `<div style="font-size:10.5px;font-weight:700;color:${mk.color};margin-bottom:3px">${mk.emoji} ${esc(l.author)}</div>` : ""}
+        <div style="font-size:14px;white-space:pre-wrap;line-height:1.6">${esc(String(l.content || ""))}</div></div>`; }).join("") || `<div class="hint">記録はまだありません</div>`}</div></div>
     ${CAN_EDIT ? `<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:6px"><button class="btn btn-primary" onclick="saveProf()">💾 プロフを保存</button></div>` : ""}`;
   reflPv("pf_c"); reflPv("pf_m");
 }
@@ -1658,6 +1672,29 @@ function pfHotelCycle(id){
   pf.hotelDirty = true; paintProf();
 }
 function pfHotelMemo(id, v){ const hp = pfHotelPrefs(); v = String(v || "").trim(); if(v) hp.memo[id] = v; else delete hp.memo[id]; pf.hotelDirty = true; }
+/* 🧩 性格タイプ（キャストがプロフのフォームで答えた25問。キャストプロフと同じ出し方） */
+const PQ_LETTER = { E: "外向的(E)", I: "内向的(I)", S: "感覚型(S)", N: "直感型(N)", T: "思考型(T)", F: "感情型(F)", J: "計画型(J)", P: "柔軟型(P)", Assertive: "安定志向(A)", Turbulent: "慎重・繊細型(T)" };
+function pfPersonalityHtml(data){
+  // プロフに答えがなければ、確認フォーム（既存キャスト）の答え
+  const fromForm = !((data.personalityAnswers || {}).list || []).length && pf && pf.formPq;
+  const src = fromForm ? pf.formPq : data;
+  const pq = src.personalityAnswers || {}, list = (pq.list || []).filter(x => x && (x.choice || x.text)), axis = pq.axisSummary || [], code = src.personalityType || "";
+  const body = list.length ? `
+    <div style="background:var(--lav-soft);border-radius:12px;padding:10px 14px;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:#7B5EA7;margin-bottom:4px">📊 集計結果</div>
+      <div style="font-size:16px;font-weight:800;margin-bottom:6px">参考タイプ：${esc(code || "（未算出）")}</div>
+      <div style="font-size:12px;line-height:2">${axis.map(a => `${esc(PQ_LETTER[a.l1] || a.l1)} ${esc(a.c1)}　：　${esc(PQ_LETTER[a.l2] || a.l2)} ${esc(a.c2)}　→　<b>${esc(a.winner ? (PQ_LETTER[a.winner] || a.winner) : "同数（判定なし）")}</b>`).join("<br>")}</div></div>
+    <details><summary style="cursor:pointer;font-size:12.5px;font-weight:700;color:var(--sub)">質問と答えを見る（${list.length}問）</summary>
+      <div style="background:#FFF5F8;border-radius:10px;padding:10px 12px;margin-top:6px;font-size:13px;line-height:1.8;max-height:360px;overflow:auto">
+        ${list.map(it => `<div style="margin-bottom:6px"><b>Q${esc(it.n)}．</b>${esc(it.q || "")}<br>　→ ${esc(it.text || "（未回答）")}</div>`).join("")}</div></details>`
+    : `<div class="hint" style="text-align:center;padding:10px 0">まだ答えがありません（キャストがプロフのフォームで答えるとここに出ます）</div>`;
+  return `<div class="pfPanel"><div class="pfHead">🧩 性格タイプ${fromForm ? ' <small style="font-weight:400;color:#9C8B8F">（プロフ確認フォームの答えから）</small>' : ""}</div><div class="pfBody">${body}</div></div>`;
+}
+// 書いた内勤の色（キャストプロフ・内勤カレンダーと同じ）
+const STAFF_MARKS = { "きゃ": { emoji: "🧡", color: "#e8590c", bg: "#fff4ee" }, "すや": { emoji: "💗", color: "#d6579e", bg: "#fff3fa" },
+  "らん": { emoji: "💙", color: "#4d96d9", bg: "#f1f7fe" }, "かみ": { emoji: "🌙", color: "#3b5bdb", bg: "#f0f3fe" }, "わか": { emoji: "🦉", color: "#8a6fd1", bg: "#f6f2fe" } };
+function staffMark(name){ return STAFF_MARKS[name] || { emoji: "🌸", color: "#c9556a", bg: "#FDF3F5" }; }
+let pfLogFilter = "全て";
 /* 🗓 記録（キャストプロフの記録と同じ表 prof_logs） */
 const PF_LOG_TYPES = [["ヒアリング", "💬 ヒアリング"], ["面接", "📋 面接"], ["入店", "✅ 入店"], ["クレーム_キャスト", "⚠️ 要望・不満"], ["クレーム_客", "🚨 クレーム（お客様から）"]];
 const PF_LOG_LABEL = Object.assign(Object.fromEntries(PF_LOG_TYPES), { "退店": "🚪 退店" });
