@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>新人が入ったら│サクラG</title>
+<link rel="icon" type="image/png" href="favicon.png?v=3">
+<style>
+  :root{ color-scheme: light; --bg:#FBF7F8; --ink:#5C4B4F; --sub:#9C8B8F; --line:#F1E3E7; --pink:#FF9EC0; --pink-deep:#e5638c; --pink-soft:#FFF0F5; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:"Hiragino Maru Gothic ProN","M PLUS Rounded 1c","Yu Gothic",sans-serif;background:var(--bg);color:var(--ink);}
+  .wrap{max-width:720px;margin:0 auto;padding:20px 16px 90px;}
+  h1{font-size:20px;font-weight:800;color:var(--pink-deep);}
+  .lead{font-size:13px;color:var(--sub);margin-top:6px;line-height:1.8;}
+  .step{background:#fff;border:1.5px solid var(--line);border-radius:18px;padding:14px 16px;margin-top:12px;display:flex;gap:12px;align-items:flex-start;}
+  .n{flex:none;width:30px;height:30px;border-radius:50%;background:var(--pink-deep);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:15px;}
+  .body{flex:1;min-width:0;}
+  .t{font-size:15px;font-weight:800;line-height:1.6;}
+  .d{font-size:13px;line-height:1.8;margin-top:4px;}
+  .tag{display:inline-block;font-size:11.5px;font-weight:800;border-radius:99px;padding:2px 10px;margin-top:6px;}
+  .now{background:#E6F6EE;color:#1a7f4b;}
+  .plan{background:#F1EAFA;color:#6030aa;}
+  .manual{background:#FFF6D6;border-radius:10px;padding:6px 10px;margin-top:6px;font-size:12.5px;line-height:1.8;}
+  .manual b{color:#a35a00;}
+  .note{background:var(--pink-soft);border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.8;margin-top:16px;}
+  .note b{color:var(--pink-deep);}
+  .back{position:fixed;left:12px;bottom:12px;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🆕 新人が入ったら</h1>
+  <div class="lead">新しいキャストが入ったときの内勤の作業です。上から順番に。<br>
+    <span class="tag now">✅ 今できる</span> ＝ 今の仕組みでできること
+    <span class="tag plan">🛠 作る予定</span> ＝ これから自動にするもの（それまでは黄色の「今は手で」のとおりに）</div>
+
+  <div class="step"><div class="n">1</div><div class="body">
+    <div class="t">📝 キャストにプロフを書いてもらう</div>
+    <div class="d">キャストプロフのフォームを送って書いてもらう。書いてもらうと、キャストプロフの内勤ページに出ます。</div>
+    <span class="tag now">✅ 今できる</span>
+  </div></div>
+
+  <div class="step"><div class="n">2</div><div class="body">
+    <div class="t">🏪 キャストプロフで在籍店舗を設定する</div>
+    <div class="d">入るお店を選ぶ。<b>エイティーン・極門</b>に出る子は、そのお店での名前（ダミー名）もここで決める。<br>
+      あとからお店を足すときも、キャストプロフで在籍店舗を足して、そのお店での名前を決める。</div>
+    <span class="tag plan">🛠 作る予定</span>
+    <div class="manual"><b>今は手で：</b>キャスト台帳の「🏪 在籍店舗」にチェック。エイティーン・極門の名前は、サクラシフトの「キャスト管理」でダミー名を入れる。</div>
+  </div></div>
+
+  <div class="step"><div class="n">3</div><div class="body">
+    <div class="t">📅 サクラシフトに自動で登録（パスワードも自動で作る）</div>
+    <div class="d">2で設定すると、サクラシフトにも自動で登録されて、ログインのパスワードも自動で作られる。エイティーン・極門の名前も、いっしょにサクラシフトに入る。</div>
+    <span class="tag plan">🛠 作る予定</span>
+    <div class="manual"><b>今は手で：</b>サクラシフトの「キャスト管理」で登録する（名前・入れるお店と媒体にチェック・エイティーン・極門のダミー名・パスワード）。</div>
+  </div></div>
+
+  <div class="step"><div class="n">4</div><div class="body">
+    <div class="t">🌐 お店ごとに「公式HPに流し込む」</div>
+    <div class="d">お店ごとにボタンを押すと、公式HPの管理画面に自動で登録されて、在籍番号も自動でキャスト台帳に入る。</div>
+    <span class="tag plan">🛠 作る予定</span>
+    <div class="manual"><b>今は手で：</b>公式HPの管理画面で、お店ごとに<b>サクラシフトと同じ名前</b>で登録する（「涼宮さな」のように名字がついていても、名前の最後が同じなら見つけられます）。在籍番号は、6で自動で見つかります。</div>
+  </div></div>
+
+  <div class="step"><div class="n">5</div><div class="body">
+    <div class="t">📺 媒体（ヘブン・ぴゅあらば・口コミ情報局）</div>
+    <div class="d">できるだけ自動で登録できるようにする。</div>
+    <span class="tag plan">🛠 作る予定</span>
+    <div class="manual"><b>今は手で：</b>媒体の管理画面に、<b>サクラシフトと同じ名前</b>で登録する。</div>
+  </div></div>
+
+  <div class="step"><div class="n">6</div><div class="body">
+    <div class="t">✅ シフトを受理して「🌐 公式HPに入れる」</div>
+    <div class="d">在籍番号は名前で自動で見つかって、キャスト台帳にも自動で入る。キャスト台帳にまだいない子は、台帳にも自動で追加される（サクラシフト・同じ名前のキャストプロフとつながる）。<br>
+      見つからないお店が出たら、そのお店の管理画面の名前を確かめる（同じ名前が何人もいるときも、手で番号を入れる）。</div>
+    <span class="tag now">✅ 今できる</span>
+  </div></div>
+
+  <div class="step"><div class="n">7</div><div class="body">
+    <div class="t">👑 キャスト台帳（店長）</div>
+    <div class="d">ランク・バック（ヒアリングが必要）・受付ルール・連絡先を入れる。<br>
+      <b>ランク・バックは、初めて出勤する前に</b>入れる（入っていないと、記録簿の精算でバックが計算できません）。</div>
+    <span class="tag now">✅ 今できる</span>
+  </div></div>
+
+  <div class="note">
+    <b>名前のきまり：</b>キャストプロフ・サクラシフト・公式HP・媒体は、<b>同じ名前</b>にしてください（名字は公式HP・媒体だけについていてもOK）。字がちがうと（「さな」と「サナ」など）、自動で見つけられません。
+  </div>
+</div>
+<a class="back" href="./">🏠 ポータル</a>
+</body>
+</html>
