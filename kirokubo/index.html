@@ -1980,7 +1980,18 @@ async function toggleNewProfs(){
         <b style="flex:1">${esc(x.name)}</b><small style="color:#9C8B8F">${esc(String(x.at).slice(0, 10))}</small>
         ${CAN_EDIT ? `<button class="btn btn-primary btn-sm" onclick="addFromProf('${esc(x.id)}')">＋ 台帳に入れる</button>
           <button class="btn btn-ghost btn-sm" onclick="sameAsCast('${esc(x.id)}')">🔗 台帳にいる子と同じ人</button>` : ""}
-        <a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(x.id)}" target="_blank" rel="noopener">📂 プロフ</a></div>`).join("") || '<div class="hint">ありません 🎉</div>');
+        <a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(x.id)}" target="_blank" rel="noopener">📂 プロフ</a>
+        ${CAN_EDIT ? `<button class="btn btn-ghost btn-sm" title="テストやまちがいで出したプロフを消す" onclick="delNewProf('${esc(x.id)}')">🗑</button>` : ""}</div>`).join("") || '<div class="hint">ありません 🎉</div>');
+}
+/* 🗑 テストやまちがいで出したプロフを消す（プロフの「削除」と同じ。台帳には何もしない） */
+async function delNewProf(pid){
+  const p = (await newProfs()).find(x => x.id === pid); if(!p) return;
+  if(!confirm(`「${p.name}」のプロフを消しますか？\n（テストやまちがいで出したもの用です。台帳のキャストは消えません）`)) return;
+  try{
+    q(await sb.from("prof_casts").update({ deleted: true }).eq("id", pid));
+    toast(`「${p.name}」のプロフを消しました`);
+    refreshNewProfCount(); $("newProfBox").style.display = "none"; toggleNewProfs();
+  }catch(e){ toast("消せませんでした：" + (e.message || e)); }
 }
 /* 🔗 同じ人のプロフが2つできたとき（キャストが別の名前でフォームを出しなおした など）
    新しいほうの答えのうち、台帳の子のプロフで空いている所だけを入れる（上書きしない）→ 新しいほうは消す */
