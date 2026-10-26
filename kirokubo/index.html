@@ -1656,6 +1656,55 @@ function pfLogsHtml(){
         <button type="button" class="pfAddBtn" onclick="pfAddLog()">追加する</button></div>` : ""}
 `;
 }
+// 📋 他店舗へ一括反映：いま見ているお店のタブの中身を、ほかのお店のタブに写す（「💾 保存」で確定。内勤管理ページと同じ）
+function pfBulkOpen(){
+  if(!pf) return;
+  pfCollect();
+  const { data, sk } = pf, o = profOpts(data, sk).options || {}, keys = pfOptOrder(sk, o);
+  const targets = pf.stores.filter(s => s !== sk);
+  if(!targets.length){ toast("ほかの在籍店舗がありません"); return; }
+  const chk = (cls, v, l, on) => `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="${cls}" data-v="${esc(v)}" ${on ? "checked" : ""} style="width:auto"> ${l}</label>`;
+  const all = cls => `<span style="font-size:11px;margin-left:6px"><a href="javascript:void(0)" onclick="document.querySelectorAll('.${cls}').forEach(b=>b.checked=true)">全部</a>・<a href="javascript:void(0)" onclick="document.querySelectorAll('.${cls}').forEach(b=>b.checked=false)">なし</a></span>`;
+  const bg = document.createElement("div"); bg.id = "bulkBg";
+  bg.style.cssText = "position:fixed;inset:0;z-index:320;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px";
+  bg.innerHTML = `<div style="background:#fff;border-radius:20px;padding:20px;width:420px;max-width:100%;max-height:90vh;overflow:auto">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px">📋 ${esc(STORE_LABEL_OF(sk))} から一括反映</div>
+    <div class="hint">写したあと「💾 保存だけ」か「💾 プロフを保存」で保存されます。バックは写しません。</div>
+    <details open style="margin-top:8px"><summary style="cursor:pointer;font-weight:800;font-size:13px">📋 基本情報${all("bkB")}</summary>
+      <div style="padding-left:8px">${PF_BASIC.map(([f, l]) => chk("bkB", f, `${l}：<small style="color:#9C8B8F">${esc(String(profGet(data, sk, f) || "（空）")).slice(0, 30)}</small>`, true)).join("")}</div></details>
+    <details style="margin-top:6px"><summary style="cursor:pointer;font-weight:800;font-size:13px">✅ オプション可否${all("bkO")}</summary>
+      <div style="padding-left:8px">${keys.map(k => chk("bkO", k, `${esc(PF_OPT_LABEL[k] || k)} <b>${esc(o[k] || "—")}</b>`, true)).join("")}</div></details>
+    <div style="margin-top:6px">${chk("bkC", "comment", "💬 本人から一言", false)}${chk("bkC", "mgrComment", "✍️ 店長から一言", false)}
+      <div class="hint" style="margin:0">紹介文は、写メ日記のウィジェットなどがお店ごとにちがうので、最初はチェックを外しています。</div></div>
+    <div style="font-size:12px;font-weight:800;color:#9C8B8F;margin-top:10px">写す先のお店</div>
+    ${targets.map(t => chk("bkT", t, esc(STORE_LABEL_OF(t)) + (PROF_DUMMY.includes(t) ? ' <small style="color:#c77700">（名前・年齢を変えたダミー店）</small>' : ""), !PROF_DUMMY.includes(t))).join("")}
+    <div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-primary" style="flex:1" onclick="pfBulkRun()">📋 写す</button>
+      <button class="btn btn-ghost" style="flex:1" onclick="document.getElementById('bulkBg').remove()">やめる</button></div></div>`;
+  document.body.appendChild(bg);
+}
+function pfBulkRun(){
+  const val = cls => [...document.querySelectorAll("." + cls + ":checked")].map(b => b.dataset.v);
+  const bf = val("bkB"), ok = val("bkO"), cf = val("bkC"), ts = val("bkT");
+  if(!ts.length){ toast("写す先のお店を選んでください"); return; }
+  if(!bf.length && !ok.length && !cf.length){ toast("写すものを選んでください"); return; }
+  const { data, sk } = pf, src = profOpts(data, sk);
+  data.storeProfiles = data.storeProfiles || {};
+  ts.forEach(t => {
+    const sp = data.storeProfiles[t] = data.storeProfiles[t] || { active: true };
+    bf.forEach(f => { sp[f] = String(profGet(data, sk, f) || ""); });
+    cf.forEach(f => { sp[f] = String(profGet(data, sk, f) || ""); });
+    if(ok.length){
+      const cur = profOpts(data, t), opts = Object.assign({}, cur.options), memo = Object.assign({}, cur.optMemo);
+      ok.forEach(k => { const v = (src.options || {})[k], m = (src.optMemo || {})[k];
+        if(v) opts[k] = v; else delete opts[k];
+        if(m) memo[k] = m; else delete memo[k]; });
+      sp.options = opts; sp.optMemo = memo;
+    }
+    pf.dirty.add(t);
+  });
+  $("bulkBg").remove(); paintProf();
+  toast(`${ts.map(STORE_LABEL_OF).join("・")} に写しました。「💾 保存だけ」か「💾 プロフを保存」で保存してください`);
+}
 function paintProf(){
   const el = $("e_prof"); if(!pf || !el) return;
   const { data, sk } = pf, ro = CAN_EDIT ? "" : "disabled";
@@ -1671,6 +1720,7 @@ function paintProf(){
     <div class="pfTabs pfStoreTabs">${pf.stores.map((s, i) => `<button type="button" class="pfTab ${s === sk ? "on" : ""}" onclick="pfTab(${i})">${esc(STORE_LABEL_OF(s))}${pf.dirty.has(s) ? " ✏️" : ""}</button>`).join("")}
       <span style="margin-left:auto"></span>
       ${CAN_EDIT && hpCanNew(pf.c, sk) ? `<button type="button" class="btn btn-primary btn-sm" onclick="hpNewOpen()">🆕 公式HPに新しく登録</button>` : ""}
+      ${CAN_EDIT && pf.stores.length > 1 ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfBulkOpen()">📋 他店舗へ一括反映</button>` : ""}
       ${CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfHpImport()">🌐 公式HPから取りこむ</button>` : ""}
       <a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(pf.prof.id)}" target="_blank" rel="noopener">📂 プロフの画面で開く</a></div>
     ${PROF_DUMMY.includes(sk) ? `<div class="hint" style="margin-bottom:6px">${esc(STORE_LABEL_OF(sk))}は名前・年齢を変えた別の設定です（公式HPにはまだ入れられません）。</div>` : ""}
