@@ -137,6 +137,8 @@
   .phCell img,.phNone{width:78px;height:104px;object-fit:cover;border-radius:8px;border:1.5px solid #F1E3E7;background:#FAF7F8} .phCell.list img,.phCell.list .phNone{width:78px;height:104px}
   .phNone{display:flex;align-items:center;justify-content:center;color:#C9B8BE;font-size:12px}
   .phCell span{display:flex;align-items:center;gap:3px} .phCell input{width:auto;margin:0} .phCell small{font-weight:400;color:#c77700}
+  .phCell.drag{touch-action:none;cursor:grab;user-select:none} .phCell.dragging{opacity:.4} .phCell.over img,.phCell.over .phNone{outline:3px dashed #E5638C;outline-offset:2px}
+  .phCell.pend img{border:2.5px solid #4DBF8E} .phCell.pend small{color:#1f9d6b}
   .phCell.moved img,.phCell.moved .phNone{border:2.5px solid #FF8FAB} .phMv{border:1px solid #F1E3E7;background:#fff;border-radius:6px;padding:1px 8px;font-size:12px;cursor:pointer} .phMv:disabled{opacity:.3}
   .phTools{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px} .phTools select{width:auto;max-width:220px}
   .pfView .ed{display:none !important} .pfBody:not(.pfView) .vw{display:none !important}
@@ -1715,6 +1717,74 @@ function pfBulkRun(){
 const PF_SLOT_LABEL = ["一覧用", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧"];
 let pfPhotoBust = Date.now(), pfPhotoBusy = false;
 let pfPhotoOrder = null, pfPhotoOrderSk = "";   // 並べかえ中の順番（表示の順に、今の枠の番号）と、どのお店のタブか
+// ↕ 並べかえ：写真をつまんで、落とした所に動かす（マウスでも指でも）
+function pfPhotoDragStart(e, i){
+  if((e.button || 0) > 0 || e.target.closest("button")) return;
+  e.preventDefault();
+  const cell = e.currentTarget; let over = -1;
+  cell.classList.add("dragging");
+  const clear = () => document.querySelectorAll("#phOrderGrid .phCell.over").forEach(x => x.classList.remove("over"));
+  const move = ev => { const el = document.elementFromPoint(ev.clientX, ev.clientY), c = el && el.closest && el.closest("#phOrderGrid .phCell");
+    clear(); over = c && c !== cell ? Number(c.dataset.i) : -1; if(over >= 0) c.classList.add("over"); };
+  const up = () => {
+    document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up);
+    cell.classList.remove("dragging"); clear();
+    if(over >= 0 && over !== i && pfPhotoOrder){ const [x] = pfPhotoOrder.splice(i, 1); pfPhotoOrder.splice(over, 0, x); pfCollect(); paintProf(); }
+  };
+  document.addEventListener("pointermove", move); document.addEventListener("pointerup", up);
+}
+// 📁 手元の写真：ドラッグ＆ドロップ・ファイルを選ぶ・貼りつけ（Ctrl+V）→ いったん「新しい写真」として見せて、「💾 入れる」で公式HPへ
+let pfPhotoPend = {}, pfPhotoPendSk = "";
+function pfPhotoAdd(files, start){
+  files = [...files].filter(f => /^image\//.test(f.type)).sort((a, b) => a.name.localeCompare(b.name, "ja", { numeric: true }));
+  if(!files.length){ toast("画像のファイルではありません"); return; }
+  if(pfPhotoPendSk !== pf.sk){ pfPhotoPend = {}; pfPhotoPendSk = pf.sk; }
+  let k = start;
+  for(const f of files){ if(k > 8) break; if(pfPhotoPend[k]) URL.revokeObjectURL(pfPhotoPend[k].url); pfPhotoPend[k] = { file: f, url: URL.createObjectURL(f) }; k++; }
+  if(files.length > 9 - start) toast(`${PF_SLOT_LABEL[8]}までしか入らないので、${files.length - (9 - start)}枚は入れていません`);
+  pfCollect(); paintProf();
+}
+// 枠の外に落としても、ブラウザが写真を開いて台帳から離れないように
+["dragover", "drop"].forEach(t => document.addEventListener(t, e => { if($("editBg") && $("editBg").classList.contains("show") && e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files")) e.preventDefault(); }));
+function pfPhotoDrop(e, k){ e.preventDefault(); e.currentTarget.classList.remove("over"); if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) pfPhotoAdd(e.dataTransfer.files, k); }
+function pfPhotoPick(files){ const sel = [...document.querySelectorAll(".phSel:checked")].map(b => Number(b.value)); pfPhotoAdd(files, sel.length ? sel[0] : 1); }
+document.addEventListener("paste", e => {
+  if(!pf || !$("editBg").classList.contains("show") || !document.querySelector(".phSel")) return;
+  const files = [...((e.clipboardData && e.clipboardData.files) || [])].filter(f => /^image\//.test(f.type));
+  if(!files.length) return;
+  const sel = [...document.querySelectorAll(".phSel:checked")].map(b => Number(b.value));
+  if(sel.length !== 1){ toast("📷 写真の、貼りつける枠に1つだけチェックしてから Ctrl+V してください"); return; }
+  e.preventDefault(); pfPhotoAdd(files, sel[0]);
+});
+// 公式HPの大きさ（一覧用 180x240・プロフ用 390x520）に切りぬいて JPEG に（はみ出す所は真ん中に合わせて切る）
+function pfPhotoJpeg(file, w, h){
+  return new Promise((ok, ng) => { const im = new Image(), u = URL.createObjectURL(file);
+    im.onload = () => { const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+      const s = Math.max(w / im.width, h / im.height), dw = im.width * s, dh = im.height * s;
+      const g = cv.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, w, h); g.drawImage(im, (w - dw) / 2, (h - dh) / 2, dw, dh);
+      URL.revokeObjectURL(u); ok(cv.toDataURL("image/jpeg", 0.92).split(",")[1]); };
+    im.onerror = () => { URL.revokeObjectURL(u); ng(new Error("画像が読めませんでした：" + file.name)); };
+    im.src = u; });
+}
+async function pfPhotoUpload(){
+  if(pfPhotoBusy) return;
+  const ks = Object.keys(pfPhotoPend).map(Number).sort((a, b) => a - b); if(!ks.length) return;
+  const { mk, no } = hpNoOf(pf.c, pf.sk), site = HP_SITE_OF[mk];
+  if(!confirm(`${STORE_LABEL_OF(pf.sk)}（${no}番）の ${ks.map(k => PF_SLOT_LABEL[k]).join("・")} に、新しい写真を入れます。今の写真は上書きされます。よろしいですか？`)) return;
+  pfPhotoBusy = true; if($("phMsg")) $("phMsg").textContent = `入れています…（${ks.length}枚・1枚10秒ほど）`;
+  try{
+    const files = [];
+    for(const k of ks) files.push({ slot: k, type: "image/jpeg", b64: await pfPhotoJpeg(pfPhotoPend[k].file, k === 0 ? 180 : 390, k === 0 ? 240 : 520) });
+    const r = await hpFn({ action: "cast_photo_copy", store: mk, no, from: { site, no }, files });
+    const res = r.results || [], ok = res.filter(x => x.ok), bad = res.filter(x => !x.ok);
+    ok.forEach(x => { const p = pfPhotoPend[x.slot]; if(p){ URL.revokeObjectURL(p.url); delete pfPhotoPend[x.slot]; } });
+    pfPhotoBust = Date.now(); pfCollect(); paintProf();
+    toast(ok.length ? `📷 ${ok.map(x => PF_SLOT_LABEL[x.slot]).join("・")} を入れました` : "入れられませんでした");
+    if($("phMsg")) $("phMsg").innerHTML = (ok.length ? `✅ ${esc(ok.map(x => PF_SLOT_LABEL[x.slot]).join("・"))} を入れました。` : "") +
+      (bad.length || !res.length ? `<span style="color:#d9534f">❌ ${esc(bad.length ? bad.map(x => PF_SLOT_LABEL[x.slot] + "：" + (x.skip || x.error || x.msg || "できませんでした")).join("／") : (r.error || "できませんでした"))}</span>` : "");
+  }catch(e){ toast("入れられませんでした：" + (e.message || e)); }
+  finally{ pfPhotoBusy = false; }
+}
 function pfPhotoMove(i, d){ const o = pfPhotoOrder, j = i + d; if(!o || j < 0 || j > 7) return; [o[i], o[j]] = [o[j], o[i]]; pfCollect(); paintProf(); }
 async function pfPhotoSaveOrder(){
   if(pfPhotoBusy || !pfPhotoOrder) return;
@@ -1743,18 +1813,24 @@ function pfPhotoHtml(){
   // ↕ 並べかえ中：プロフ用①〜⑧を ◀ ▶ で入れかえて「この順番で入れる」
   if(pfPhotoOrder && pfPhotoOrderSk === pf.sk){
     const o = pfPhotoOrder;
-    return `<div class="hint">◀ ▶ で写真を入れかえて「💾 この順番で入れる」。一覧用の写真は変わりません。</div>
-      <div class="phGrid">${o.map((src, i) => `<div class="phCell ${src !== i + 1 ? "moved" : ""}">${img(src)}
+    return `<div class="hint">写真を<b>つまんで</b>動かすか、◀ ▶ で入れかえて「💾 この順番で入れる」。一覧用の写真は変わりません。</div>
+      <div class="phGrid" id="phOrderGrid">${o.map((src, i) => `<div class="phCell drag ${src !== i + 1 ? "moved" : ""}" data-i="${i}" onpointerdown="pfPhotoDragStart(event,${i})">${img(src).replace("<img ", '<img draggable="false" ')}
         <span>${PF_SLOT_LABEL[i + 1]}${src !== i + 1 ? `<small>（今の${PF_SLOT_LABEL[src]}）</small>` : ""}</span>
         <span><button type="button" class="phMv" onclick="pfPhotoMove(${i},-1)" ${i === 0 ? "disabled" : ""}>◀</button><button type="button" class="phMv" onclick="pfPhotoMove(${i},1)" ${i === 7 ? "disabled" : ""}>▶</button></span></div>`).join("")}</div>
       <div class="phTools"><button type="button" class="btn btn-primary btn-sm" onclick="pfPhotoSaveOrder()">💾 この順番で入れる</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoOrder=null;pfCollect();paintProf()">やめる</button></div>
       <div id="phMsg" class="hint" style="margin-top:4px">入れかわる枠だけ入れなおします（1枠10秒ほど）。</div>`;
   }
-  const cells = PF_SLOT_LABEL.map((l, k) => `<label class="phCell ${k === 0 ? "list" : ""}">
-      <img src="${pfPhotoUrl(site, no, k)}" alt="${l}" loading="lazy" onerror="this.outerHTML='<div class=&quot;phNone&quot;>なし</div>'">
-      <span>${CAN_EDIT ? `<input type="checkbox" class="phSel" value="${k}"> ` : ""}${l}</span></label>`).join("");
+  // 📁 手元の写真（まだ入れていない）があれば、その枠はそれを出す
+  const pend = pfPhotoPendSk === pf.sk ? pfPhotoPend : {}, nPend = Object.keys(pend).length;
+  const cells = PF_SLOT_LABEL.map((l, k) => `<label class="phCell ${k === 0 ? "list" : ""} ${pend[k] ? "pend" : ""}" ${CAN_EDIT ? `ondragover="event.preventDefault();this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="pfPhotoDrop(event,${k})"` : ""}>
+      ${pend[k] ? `<img src="${pend[k].url}" alt="${l}">` : img(k)}
+      <span>${CAN_EDIT ? `<input type="checkbox" class="phSel" value="${k}"> ` : ""}${l}${pend[k] ? "<small>（新しい）</small>" : ""}</span></label>`).join("");
   return `<div class="phGrid">${cells}</div>
+    ${CAN_EDIT && nPend ? `<div class="phTools"><button type="button" class="btn btn-primary btn-sm" onclick="pfPhotoUpload()">💾 新しい写真を入れる（${nPend}枚）</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoPend={};pfCollect();paintProf()">やめる</button></div>` : ""}
+    ${CAN_EDIT ? `<div class="hint" style="margin-top:6px">📁 PCのフォルダから写真を<b>枠にドラッグ＆ドロップ</b>（何枚かまとめて落とすと、その枠から順に入ります）／コピーした画像は、枠に1つチェックして <b>Ctrl+V</b> で貼りつけ／
+      <a href="javascript:void(0)" onclick="$('phFile').click()">ファイルを選ぶ</a><input type="file" id="phFile" accept="image/*" multiple style="display:none" onchange="pfPhotoPick(this.files);this.value=''"></div>` : ""}
     ${CAN_EDIT ? `<div class="phTools">
       <span style="font-size:12px;color:#9C8B8F">チェックした枠を</span>
       ${srcs.length ? `<select id="phSrc">${srcs.map(x => `<option value="${esc(x.s)}">${esc(STORE_LABEL_OF(x.s))}（${x.no}番）</option>`).join("")}</select>
