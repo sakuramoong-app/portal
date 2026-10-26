@@ -4146,6 +4146,8 @@ qExt = function(id, v){
 };
 
 /* ---------- 前後の予約：時間・場所・あいだが何分か（ブッキング・移動・インターバルの確認） ---------- */
+const otherDay = {}, otherDayLoading = {};   // 日付を変えたときの、その日の予約・シフト（フォームを開きなおしたら読みなおす）
+const fmtHour = h => { h = Number(h); const hh = Math.floor(h), mm = Math.round((h - hh) * 60); return (hh >= 24 ? "翌" + (hh - 24) : hh) + ":" + String(mm).padStart(2, "0"); };
 function renderNeighbors(){
   const el = $("neighborBox"); if(!el) return;
   const c = M.casts.find(x=>x.id === $("f_cast").value);
@@ -4153,11 +4155,30 @@ function renderNeighbors(){
   // 日付を変えたとき：タイムライン・前後の予約は「いま開いている日」のものなので、その日を開いて確かめる
   const bd = $("f_day") ? $("f_day").value : day;
   if($("dayMoved")) $("dayMoved").textContent = bd && bd !== day ? "📅 " + Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) + " の予約になります（いま開いている日とちがいます）" : "";
-  if(bd && bd !== day){ el.innerHTML = `<div class="warn" style="font-size:13px">📅 日付を変えたので、上のタイムラインと前後の予約は、いま開いている日のものです。${Number(bd.slice(5, 7))}/${Number(bd.slice(8))} の空きは、その日を開いて確かめてください</div>`; return; }
   if(!c){ el.innerHTML = ""; return; }
-  const list = rows.filter(r=>r.cast_id === c.id && (!editing || r.id !== editing.id) && !["cancel", "tobi"].includes(r.status) && r.start_at && r.end_at)
+  // 日付を変えたとき：その日の予約・シフトを読んできて、同じように前後を出す（上のタイムラインは今開いている日のまま）
+  let src = rows, shiftNote = "";
+  if(bd && bd !== day){
+    const od = otherDay[bd];
+    if(!od){
+      el.innerHTML = `<div class="info" style="font-size:13px">📅 ${Number(bd.slice(5, 7))}/${Number(bd.slice(8))} の予約を読んでいます…</div>`;
+      if(!otherDayLoading[bd]){
+        otherDayLoading[bd] = true;
+        Promise.all([sb.from("kb_reservations").select("*").eq("biz_date", bd).eq("deleted", false).order("start_at"), loadShifts(bd)])
+          .then(([res, sh])=>{ otherDay[bd] = { rows: q(res) || [], sh: sh || {} }; })
+          .catch(()=>{ otherDay[bd] = { rows: [], sh: {}, err: true }; })
+          .finally(()=>{ otherDayLoading[bd] = false; renderNeighbors(); });
+      }
+      return;
+    }
+    src = od.rows;
+    const s = od.sh[c.shift_name] || od.sh[c.official_name];
+    shiftNote = od.err ? `<div style="font-size:12.5px;color:#B0213F">その日の予約が読めませんでした。その日を開いて確かめてください</div>`
+      : `<div style="font-size:12.5px;padding:2px 0">📅 ${Number(bd.slice(5, 7))}/${Number(bd.slice(8))} の出勤：${s ? `<b>${fmtHour(s.start)}〜${fmtHour(s.end)}</b>` : `<b style="color:#B0213F">シフトなし</b>`}</div>`;
+  }
+  const list = src.filter(r=>r.cast_id === c.id && (!editing || r.id !== editing.id) && !["cancel", "tobi"].includes(r.status) && r.start_at && r.end_at)
     .map(r=>{ const s = hourOf(r.start_at); let e = hourOf(r.end_at); if(e < s) e += 24; return { r, s, e }; }).sort((a, b)=>a.s - b.s);
-  if(!list.length){ el.innerHTML = `<div class="info" style="font-size:13px">📭 この日、このキャストのほかの予約はありません</div>`; return; }
+  if(!list.length){ el.innerHTML = shiftNote + `<div class="info" style="font-size:13px">📭 この日、このキャストのほかの予約はありません</div>`; return; }
   const need = c.interval_min || 0;
   let cs = null, ce = null;
   if(st && last){ const [h, m] = st.split(":").map(Number); cs = h + m / 60; if(cs < 8) cs += 24; ce = cs + (minutesOf(last.course) + last.ext * 30 + last.date * 30) / 60; }
@@ -4180,7 +4201,7 @@ function renderNeighbors(){
     if(!prev && !next) h += `<div style="font-size:12.5px;color:var(--sub)">前後に予約はありません</div>`;
   }
   el.innerHTML = `<div style="background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:6px 10px;margin:6px 0">
-    <div style="font-weight:800;font-size:13px;color:var(--sub)">🕐 前後の予約（${esc(c.official_name || c.temp_name)}）</div>${h}</div>`;
+    <div style="font-weight:800;font-size:13px;color:var(--sub)">🕐 前後の予約（${esc(c.official_name || c.temp_name)}${bd && bd !== day ? "・" + Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) : ""}）</div>${shiftNote}${h}</div>`;
 }
 /* ---------- このキャストの AF・逆AF・有料オプションの可否（キャストプロフの ◎○△×） ---------- */
 const MARK_STYLE = { "◎": ["◎", "#1f9d6b"], "○": ["○", "#1f9d6b"], "〇": ["○", "#1f9d6b"], "△": ["△", "#c77700"], "×": ["×", "#d9534f"] };
@@ -4380,7 +4401,10 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 const __onCastCal = onCast;
 onCast = function(){ const r = __onCastCal.apply(this, arguments); paintCastCal(); return r; };
 const __openFormCal = openForm;
-openForm = function(){ const r = __openFormCal.apply(this, arguments); $("castCal").style.display = "none"; return r; };
+openForm = function(){
+  for(const k in otherDay) delete otherDay[k];   // ほかの日の予約は、開くたびに読みなおす
+  const r = __openFormCal.apply(this, arguments); $("castCal").style.display = "none"; return r;
+};
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
