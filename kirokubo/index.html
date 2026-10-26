@@ -133,6 +133,16 @@
   .pfPanel{background:#fff;border:1.5px solid #F7D9E2;border-radius:16px;margin-bottom:10px;overflow:hidden}
   .pfHead{background:#FFF0F5;padding:8px 14px;font-weight:800;font-size:13.5px;color:#5C4B4F;display:flex;align-items:center;gap:6px}
   .pfBody{padding:10px 14px}
+  .pfView .ed{display:none !important} .pfBody:not(.pfView) .vw{display:none !important}
+  .pfEditBtn{margin-left:auto;background:#FFF0F5;border:1.5px solid #FFC2D1;border-radius:10px;padding:4px 10px;font-size:11.5px;font-weight:800;color:#e0507a;cursor:pointer;font-family:inherit}
+  .pfCards{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px} @media (max-width:560px){ .pfCards{grid-template-columns:1fr} }
+  .pfCard{background:#FFF7FA;border-radius:12px;padding:8px 10px} .pfCard .lb{font-size:10.5px;color:#9C8B8F;font-weight:700;margin-bottom:3px}
+  .pfCard .vw{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:700} .pfCard .vw span{flex:1;word-break:break-word}
+  .pfCopy{flex:none;border:1px solid #F1E3E7;background:#fff;border-radius:8px;padding:2px 7px;font-size:11px;cursor:pointer;font-family:inherit;color:#9C8B8F}
+  .pfCopyAll{background:linear-gradient(135deg,#7FD8B0,#4DBF8E);border:none;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:800;color:#fff;cursor:pointer;font-family:inherit}
+  .pfOptView{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px 10px} @media (max-width:560px){ .pfOptView{grid-template-columns:1fr} }
+  .pfOptV{display:flex;align-items:center;gap:8px;background:#FFF7FA;border-radius:10px;padding:7px 10px;font-size:13.5px;font-weight:700} .pfOptV .nm{flex:1} .pfOptV .nm small{display:block;font-size:11px;font-weight:400;color:#9C8B8F}
+  .pfOptV .mk{font-size:15px;color:#ccc} .pfOptV .mk1,.pfOptV .mk2{color:#FF6B9D} .pfOptV .mk3{color:#d9a400} .pfOptV .mk4{color:#999}
   .pfGrid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px} .pfGrid2 label,#e_prof .pfBody > div > label{display:block;font-size:11.5px;color:#9C8B8F;font-weight:700;margin-bottom:4px}
   .pfMeta{margin:12px 0 14px;padding:10px 0 12px;border-top:1px solid #f3e6ea;border-bottom:1px solid #f3e6ea;font-size:13px}
   .pfLogTtl{font-size:12.5px;font-weight:800;margin-bottom:8px}
@@ -140,6 +150,10 @@
   .pfLeftTag{font-size:11.5px;font-weight:800;padding:4px 12px;border-radius:10px;background:#eee;color:#888}
   .pfLeftBox{background:#f5f5f5;border-radius:8px;padding:10px;font-size:13px}
   .pfLink{border:none;background:none;color:#c9556a;font-size:11.5px;font-weight:800;padding:0;margin-right:12px;cursor:pointer;text-decoration:underline;font-family:inherit} .pfLink.del{color:#d9534f}
+  #e_logs textarea,#e_logs select,#e_logs input[type=date]{width:100%;font-family:inherit;font-size:13.5px;color:var(--ink);padding:7px 10px;border:1.5px solid var(--line);border-radius:10px;background:#FFF5F8;}
+  #e_logs .pfAddLog textarea,#e_logs .pfAddLog select,#e_logs .pfAddLog input{background:#fff}
+  #e_logs label{display:block;font-size:11.5px;color:#9C8B8F;font-weight:700;margin-bottom:4px}
+  #e_logs{padding:0 4px 6px}
   .pfAddLog{background:#F3EEFF;border-radius:12px;padding:12px} .pfAddLog .ttl{font-size:12.5px;font-weight:800;color:#5020aa;margin-bottom:8px}
   .pfAddBtn{width:100%;margin-top:8px;background:linear-gradient(135deg,#B7A6FF,#9B7EF0);border:none;border-radius:10px;padding:10px;font-size:13px;font-weight:800;color:#fff;cursor:pointer;font-family:inherit}
   .areaGrid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px} .areaGrid small,.f > small{font-size:11.5px;color:#9C8B8F;font-weight:700}
@@ -247,6 +261,10 @@
     </div>
     <div class="f" style="margin-top:10px"><label>別名（ほかのアプリ・お店での書き方。「、」で区切る）</label><input id="e_aliases"></div>
     <div class="f" style="margin-top:10px"><label>記録簿の集計名（空ならキャスト名と同じ）</label><input id="e_agg" maxlength="60"></div>
+    </details>
+
+    <details class="acc" data-acc="logs"><summary class="sec">🗓 記録・ヒアリング（面接・入店・ヒアリング・退店など）</summary>
+    <div id="e_logs"></div>
     </details>
 
     <details class="acc" data-acc="onb"><summary class="sec">🧾 入店の手続き・内勤が知っておくこと</summary>
@@ -1541,8 +1559,10 @@ async function renderProf(id){
   const el = $("e_prof"); if(!el) return;
   pf = null;
   const c = id && casts.find(x => x.id === id);
-  if(!c){ el.innerHTML = `<div class="hint">キャストを保存してから使えます。</div>`; return; }
-  if(!c.prof_id){ el.innerHTML = `<div class="hint">キャストプロフとつながっていません。</div>`; return; }
+  const lg = $("e_logs");
+  if(lg) lg.innerHTML = `<div class="hint">キャストプロフを読んでいます…</div>`;
+  if(!c){ el.innerHTML = `<div class="hint">キャストを保存してから使えます。</div>`; if(lg) lg.innerHTML = `<div class="hint">キャストを保存してから、記録を書けます。</div>`; return; }
+  if(!c.prof_id){ el.innerHTML = `<div class="hint">キャストプロフとつながっていません。</div>`; if(lg) lg.innerHTML = `<div class="hint">キャストプロフとつながっていないので、記録は書けません（記録はキャストプロフに残します）。</div>`; return; }
   el.innerHTML = `<div class="hint">キャストプロフを読んでいます…</div>`;
   let prof, logs;
   try{
@@ -1575,39 +1595,43 @@ async function renderProf(id){
   if(!$("e_leave").value && data.leaveDate) $("e_leave").value = String(data.leaveDate).slice(0, 10);
   paintProf();
 }
-function paintProf(){
-  const el = $("e_prof"); if(!pf || !el) return;
-  const { data, sk } = pf, ro = CAN_EDIT ? "" : "disabled";
-  const o = profOpts(data, sk);
-  const optKeys = pfOptOrder(sk, o.options || {});
-  const hp = data.hotelPrefs || {};
-  const hn = hid => { const h = (pfHotels || []).find(x => x.hotel_id === hid); return h ? h.hotel_name + (h.area ? "(" + h.area + ")" : "") : ""; };
-  const chips = (ids, bg, fg, mark) => (ids || []).map(hn).filter(Boolean).map(n => `<span style="background:${bg};color:${fg}">${mark} ${esc(n)}</span>`).join("");
-  const hotelHtml = chips(hp.ok, "#E6F6EE", "#1a6640", "◎") + chips(hp.conditional, "#FFF8E6", "#8a6300", "△") + chips(hp.ng, "#FFE8EC", "#c0304a", "×");
-  const pt = data.personalityType;
-  const pv = id => `<iframe id="${id}_pv" sandbox style="display:none;width:100%;height:240px;border:1px solid #eee;border-radius:8px;background:#fff"></iframe>`;
-  el.innerHTML = `
-    <div class="pfTabs pfStoreTabs">${pf.stores.map((s, i) => `<button type="button" class="pfTab ${s === sk ? "on" : ""}" onclick="pfTab(${i})">${esc(STORE_LABEL_OF(s))}${pf.dirty.has(s) ? " ✏️" : ""}</button>`).join("")}
-      <span style="margin-left:auto"></span>
-      ${CAN_EDIT && hpCanNew(pf.c, sk) ? `<button type="button" class="btn btn-primary btn-sm" onclick="hpNewOpen()">🆕 公式HPに新しく登録</button>` : ""}
-      ${CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfHpImport()">🌐 公式HPから取りこむ</button>` : ""}
-      <a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(pf.prof.id)}" target="_blank" rel="noopener">📂 プロフの画面で開く</a></div>
-    ${PROF_DUMMY.includes(sk) ? `<div class="hint" style="margin-bottom:6px">${esc(STORE_LABEL_OF(sk))}は名前・年齢を変えた別の設定です（公式HPにはまだ入れられません）。</div>` : ""}
-    <details ${pfAcc("basic")}><summary class="pfHead">📋 基本情報 ${hpLinkOf(pf.c, sk)}</summary><div class="pfBody"><div class="pfGrid">
-      ${PF_BASIC.map(([f, l]) => `<div><label>${l}</label><input id="pf_b_${f}" value="${esc(profGet(data, sk, f))}" ${ro}></div>`).join("")}</div></div></details>
-    <details ${pfAcc("opts")}><summary class="pfHead">✅ オプション可否 <small style="font-weight:400;color:#9C8B8F">◎大好き ○OK △相談 ×NG</small></summary><div class="pfBody">
-      ${optKeys.map((k, i) => `<div class="pfOpt"><span>${esc(PF_OPT_LABEL[k] || k)}</span>
-        <select id="pf_o_${i}" data-k="${esc(k)}" ${ro}>${PF_MARKS.map(m => `<option value="${m}" ${(o.options[k] || "") === m ? "selected" : ""}>${m || "－"}</option>`).join("")}</select>
-        <input id="pf_om_${i}" placeholder="メモ（条件など）" value="${esc((o.optMemo || {})[k] || "")}" ${ro}></div>`).join("")}
-      ${CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:8px"><input id="pf_newopt" placeholder="新しいオプションの名前（例：TSP（有料））" style="flex:1"><button class="btn btn-ghost btn-sm" onclick="pfAddOpt()">＋ 種類を足す</button></div>` : ""}</div></details>
-    <details ${pfAcc("intro")}><summary class="pfHead">💬 紹介文</summary><div class="pfBody">
-      <div class="hint">本人から一言</div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
-      <div class="hint" style="margin-top:8px">店長から一言</div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></details>
-    <details ${pfAcc("hotel")}><summary class="pfHead">🏨 ホテル <small style="font-weight:400;color:#9C8B8F">（このキャストだけの◎△×。お店のホテル一覧は変わりません）</small></summary><div class="pfBody">
-      ${hotelHtml ? `<div class="pfChips">${hotelHtml}</div>` : `<div class="hint">まだありません</div>`}
-      ${CAN_EDIT ? pfHotelEditor(hp) : ""}</div></details>
-    ${pfPersonalityHtml(data)}
-    <details ${pfAcc("logs")}><summary class="pfHead">🗓 記録・ログ（面接・入店・ヒアリングなど）</summary><div class="pfBody">
+// 基本情報・オプション：ふだんは見る形（カード・2列）。「✏️ 編集する」で入力の形に（内勤管理ページと同じ）
+const pfEdit = { basic: false, opts: false };
+function pfToggleEdit(k){ pfCollect(); pfEdit[k] = !pfEdit[k]; pfOpen.add(k); paintProf(); }
+function pfCopy(btn, id){
+  const v = id ? ($(id) ? $(id).value : "") : btn.dataset.v;
+  if(!v){ toast("コピーするものがありません"); return; }
+  navigator.clipboard.writeText(v).then(() => toast("📋 コピーしました")).catch(() => toast("コピーできませんでした"));
+}
+// 📋 完成プロフ全文（内勤管理ページの「完成プロフ全文をコピー」と同じ形。在籍作成・媒体に貼る用）
+function pfCopyAll(){
+  if(!pf) return;
+  pfCollect();
+  const { data, sk } = pf, g = f => String(profGet(data, sk, f) || "");
+  const o = profOpts(data, sk).options || {}, ks = pfOptOrder(sk, o), lab = k => PF_OPT_LABEL[k] || k;
+  const by = m => ks.filter(k => m.includes(o[k])).map(lab);
+  const text = `【${g("name")}】
+${g("age")}歳 / ${g("size")} / Pサイズ：${g("psize")}
+状態（竿/玉）：${g("state")} / 髪の毛：${g("hair")}
+性格：${g("personality")} / 趣味：${g("hobby")}
+チャームポイント：${g("charm")} / タバコ：${g("tabako")}
+性感帯：${g("erogenous")} / 得意技：${g("skill")}
+
+■ 本人から一言
+${g("comment")}
+
+■ 店長から一言
+${g("mgrComment")}
+
+■ オプション
+OK：${by(["◎", "○"]).join(" / ")}
+△：${by(["△"]).join(" / ") || "なし"}
+NG：${by(["×"]).join(" / ") || "なし"}`;
+  navigator.clipboard.writeText(text).then(() => toast("📋 完成プロフをコピーしました")).catch(() => toast("コピーできませんでした"));
+}
+// 🗓 記録・ヒアリング（大きい項目。キャストプロフの記録 prof_logs）
+function pfLogsHtml(){
+  return `
       ${pfLogTop()}
       <div class="pfLogTtl">📚 記録タイムライン</div>
       <div class="pfTabs" style="margin-bottom:8px">${["全て"].concat(PF_LOG_TYPES.map(t => t[0]), ["退店"]).map(k => `<button type="button" class="pfTab ${pfLogFilter === k ? "on" : ""}" onclick="pfLogFilter='${k}';pfCollect();paintProf()">${k === "全て" ? "全て" : esc(PF_LOG_LABEL[k] || k)}</button>`).join("")}</div>
@@ -1630,12 +1654,53 @@ function paintProf(){
         <select id="pf_la" style="margin-top:8px">${Object.keys(STAFF_MARKS).map(n => `<option value="${n}" ${n === operatorName() ? "selected" : ""}>${STAFF_MARKS[n].emoji} ${n}</option>`).join("")}</select>
         <textarea id="pf_lc" style="margin-top:8px;min-height:60px" placeholder="内容を入力してください（面接した内容・ヒアリングした内容など）"></textarea>
         <button type="button" class="pfAddBtn" onclick="pfAddLog()">追加する</button></div>` : ""}
-      </div></details>
+`;
+}
+function paintProf(){
+  const el = $("e_prof"); if(!pf || !el) return;
+  const { data, sk } = pf, ro = CAN_EDIT ? "" : "disabled";
+  const o = profOpts(data, sk);
+  const optKeys = pfOptOrder(sk, o.options || {});
+  const hp = data.hotelPrefs || {};
+  const hn = hid => { const h = (pfHotels || []).find(x => x.hotel_id === hid); return h ? h.hotel_name + (h.area ? "(" + h.area + ")" : "") : ""; };
+  const chips = (ids, bg, fg, mark) => (ids || []).map(hn).filter(Boolean).map(n => `<span style="background:${bg};color:${fg}">${mark} ${esc(n)}</span>`).join("");
+  const hotelHtml = chips(hp.ok, "#E6F6EE", "#1a6640", "◎") + chips(hp.conditional, "#FFF8E6", "#8a6300", "△") + chips(hp.ng, "#FFE8EC", "#c0304a", "×");
+  const pt = data.personalityType;
+  const pv = id => `<iframe id="${id}_pv" sandbox style="display:none;width:100%;height:240px;border:1px solid #eee;border-radius:8px;background:#fff"></iframe>`;
+  el.innerHTML = `
+    <div class="pfTabs pfStoreTabs">${pf.stores.map((s, i) => `<button type="button" class="pfTab ${s === sk ? "on" : ""}" onclick="pfTab(${i})">${esc(STORE_LABEL_OF(s))}${pf.dirty.has(s) ? " ✏️" : ""}</button>`).join("")}
+      <span style="margin-left:auto"></span>
+      ${CAN_EDIT && hpCanNew(pf.c, sk) ? `<button type="button" class="btn btn-primary btn-sm" onclick="hpNewOpen()">🆕 公式HPに新しく登録</button>` : ""}
+      ${CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfHpImport()">🌐 公式HPから取りこむ</button>` : ""}
+      <a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(pf.prof.id)}" target="_blank" rel="noopener">📂 プロフの画面で開く</a></div>
+    ${PROF_DUMMY.includes(sk) ? `<div class="hint" style="margin-bottom:6px">${esc(STORE_LABEL_OF(sk))}は名前・年齢を変えた別の設定です（公式HPにはまだ入れられません）。</div>` : ""}
+    <details ${pfAcc("basic")}><summary class="pfHead">📋 基本情報 ${hpLinkOf(pf.c, sk)}${CAN_EDIT ? `<button type="button" class="pfEditBtn" onclick="event.preventDefault();pfToggleEdit('basic')">${pfEdit.basic ? "✓ 見る形にもどす" : "✏️ 編集する"}</button>` : ""}</summary>
+      <div class="pfBody ${pfEdit.basic ? "" : "pfView"}"><div class="pfCards">
+      ${PF_BASIC.map(([f, l], i) => { const v = String(profGet(data, sk, f) || ""); return `<div class="pfCard"><div class="lb">${i + 1} ${l}</div>
+        <div class="vw"><span>${v ? esc(v) : "—"}</span>${v ? `<button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this)" data-v="${esc(v)}">📋</button>` : ""}</div>
+        <input class="ed" id="pf_b_${f}" value="${esc(v)}" ${ro}></div>`; }).join("")}</div>
+      <div style="text-align:right;margin-top:8px"><button type="button" class="pfCopyAll" onclick="pfCopyAll()">📋 完成プロフ全文をコピー</button></div></div></details>
+    <details ${pfAcc("opts")}><summary class="pfHead">✅ オプション可否 <small style="font-weight:400;color:#9C8B8F">◎大好き ○OK △相談 ×NG</small>${CAN_EDIT ? `<button type="button" class="pfEditBtn" onclick="event.preventDefault();pfToggleEdit('opts')">${pfEdit.opts ? "✓ 見る形にもどす" : "✏️ 編集する"}</button>` : ""}</summary>
+      <div class="pfBody ${pfEdit.opts ? "" : "pfView"}">
+      <div class="vw pfOptView">${optKeys.map(k => { const m = o.options[k] || "", memo = (o.optMemo || {})[k] || ""; return `<div class="pfOptV"><span class="nm">${esc(PF_OPT_LABEL[k] || k)}${memo ? `<small>${esc(memo)}</small>` : ""}</span><b class="mk mk${{ "◎": 1, "○": 2, "△": 3, "×": 4 }[m] || 0}">${m || "—"}</b></div>`; }).join("")}</div>
+      <div class="ed">
+      ${optKeys.map((k, i) => `<div class="pfOpt"><span>${esc(PF_OPT_LABEL[k] || k)}</span>
+        <select id="pf_o_${i}" data-k="${esc(k)}" ${ro}>${PF_MARKS.map(m => `<option value="${m}" ${(o.options[k] || "") === m ? "selected" : ""}>${m || "－"}</option>`).join("")}</select>
+        <input id="pf_om_${i}" placeholder="メモ（条件など）" value="${esc((o.optMemo || {})[k] || "")}" ${ro}></div>`).join("")}
+      ${CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:8px"><input id="pf_newopt" placeholder="新しいオプションの名前（例：TSP（有料））" style="flex:1"><button class="btn btn-ghost btn-sm" onclick="pfAddOpt()">＋ 種類を足す</button></div>` : ""}</div></div></details>
+    <details ${pfAcc("intro")}><summary class="pfHead">💬 紹介文</summary><div class="pfBody">
+      <div class="hint" style="display:flex;align-items:center;gap:6px">本人から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_c')">📋 コピー</button></div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
+      <div class="hint" style="margin-top:8px;display:flex;align-items:center;gap:6px">店長から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_m')">📋 コピー</button></div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></details>
+    <details ${pfAcc("hotel")}><summary class="pfHead">🏨 ホテル <small style="font-weight:400;color:#9C8B8F">（このキャストだけの◎△×。お店のホテル一覧は変わりません）</small></summary><div class="pfBody">
+      ${hotelHtml ? `<div class="pfChips">${hotelHtml}</div>` : `<div class="hint">まだありません</div>`}
+      ${CAN_EDIT ? pfHotelEditor(hp) : ""}</div></details>
+    ${pfPersonalityHtml(data)}
     ${CAN_EDIT ? `<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:6px">
       <button class="btn btn-ghost" onclick="hpPushLater()">🌐 公式HPにまとめて入れる</button>
       <button class="btn btn-ghost" onclick="saveProf(true)">💾 保存だけ（公式HPはあとで）</button>
       <button class="btn btn-primary" onclick="saveProf()">💾 プロフを保存</button></div>` : ""}`;
   reflPv("pf_c"); reflPv("pf_m");
+  if($("e_logs")) $("e_logs").innerHTML = pfLogsHtml();   // 🗓 記録・ヒアリングは大きい項目に
 }
 // 画面の中身 → pf.data（いま開いているお店の分）。変えたお店は pf.dirty に
 function pfCollect(){
@@ -2089,9 +2154,9 @@ const pfOpen = new Set();   // プロフの中の、開いている小さい項�
 function pfAcc(k){ return `class="pfPanel" data-p="${k}" ${pfOpen.has(k) ? "open" : ""} ontoggle="pfAccT(this)"`; }
 function pfAccT(el){ if(el.open) pfOpen.add(el.dataset.p); else pfOpen.delete(el.dataset.p); }
 function showEl(el){ for(let p = el && el.parentElement; p; p = p.parentElement) if(p.tagName === "DETAILS") p.open = true; return el; }   // 閉じている項目の中なら開く
-const EDIT_JUMP = [["basic", "👤 名前・状態"], ["onb", "🧾 手続き"], ["stores", "🏪 在籍店舗"], ["prof", "📝 プロフ"], ["terms", "⭐ バック"], ["rules", "📋 受付ルール"],
+const EDIT_JUMP = [["basic", "👤 名前・状態"], ["logs", "🗓 記録・ヒアリング"], ["onb", "🧾 手続き"], ["stores", "🏪 在籍店舗"], ["prof", "📝 プロフ"], ["terms", "⭐ バック"], ["rules", "📋 受付ルール"],
   ["private", "📞 連絡先"], ["confirm", "📨 確認フォーム"], ["notes", "📝 特記事項"], ["links", "🔗 アプリ"]];
-const PF_JUMP = [["basic", "基本情報"], ["opts", "オプション"], ["intro", "紹介文"], ["hotel", "ホテル"], ["ptype", "性格"], ["logs", "記録"]];
+const PF_JUMP = [["basic", "基本情報"], ["opts", "オプション"], ["intro", "紹介文"], ["hotel", "ホテル"], ["ptype", "性格"]];
 function paintEditJump(){
   $("editJump").innerHTML = EDIT_JUMP.map(([k, l]) => `<button type="button" onclick="jumpTo('${k}')">${l}</button>` +
       (k === "prof" ? PF_JUMP.map(([p, pl]) => `<button type="button" class="sub" onclick="jumpProf('${p}')">${pl}</button>`).join("") : "")).join("")
@@ -2181,7 +2246,7 @@ function openEdit(id){
   // 項目は最初は閉じておく（新しく足すときだけ名前の所を開く）
   if(!$("editJump").innerHTML) paintEditJump();
   document.querySelectorAll("#editBg details.acc").forEach(d => { d.open = !id && d.dataset.acc === "basic"; });
-  pfOpen.clear();
+  pfOpen.clear(); pfEdit.basic = pfEdit.opts = false;
   const c = id ? casts.find(x=>x.id===id) : { status:"interview", aliases:[], stores:{}, ranks:{}, room_ids:[] };
   $("editTitle").textContent = id ? `${nameOf(c)}（${id}）` : "＋ キャストを追加";
   $("editHint").textContent = id ? "直したら「保存する」を押してください。" : "名前が決まっていなければ、仮の名前だけでOKです。";
