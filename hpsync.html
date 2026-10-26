@@ -66,6 +66,24 @@
   </div>
 
   <div class="box">
+    <h2 style="font-size:16px;color:var(--pink-deep);margin-bottom:6px">📷 写真をほかのお店からコピーする</h2>
+    <p class="lead" style="margin:0 0 8px">ほかのお店の公式HPに出ている写真を、上の「お店」のキャストに入れます。<b>入れた枠の写真は上書きされます。</b>まず「ためす（入れない）」で確かめてから「入れる」を押してください。</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px">
+      <span>コピー元</span><select id="pcSite" style="font-size:13.5px;padding:4px 6px">
+        <option value="sakura-moon">サクラムーン</option><option value="josou-lana">ラナ鶯谷</option><option value="lana-kinshicho">ラナ錦糸町</option>
+        <option value="peach-m">ピーチムーン五反田</option><option value="dress-garden-shibuya">ドレスガーデン</option><option value="cutie-josou">キューティー</option>
+        <option value="gyaku-anal-club">逆AF倶楽部</option><option value="18-josokko-gakuen">18</option><option value="gokumon-sm">極門</option></select>
+      <label>の在籍番号 <input type="number" id="pcFrom" min="1" max="90" style="width:70px;font-size:14px;padding:4px 6px"></label>
+      <span>→ 上の「お店」の在籍番号</span><input type="number" id="pcTo" min="1" max="90" style="width:70px;font-size:14px;padding:4px 6px">
+    </div>
+    <div id="pcSlots" style="margin-top:8px;font-size:13px"></div>
+    <div style="margin-top:8px"><button class="btn" style="padding:7px 14px;font-size:13px;background:#fff;color:#E5638C;border:1.5px solid #ffc2d1" onclick="photoCopy(true)">🔍 ためす（入れない）</button>
+      <button class="btn" style="padding:7px 14px;font-size:13px;margin-left:6px" onclick="photoCopy(false)">📷 入れる</button></div>
+    <div id="pcRes" style="margin-top:8px"></div>
+    <textarea id="pcOut" readonly style="display:none;width:100%;min-height:120px;margin-top:8px;font-size:12px;font-family:monospace"></textarea>
+  </div>
+
+  <div class="box">
     <h2 style="font-size:16px;color:var(--pink-deep);margin-bottom:6px">📺 媒体に入れるか試す <select id="hvMedia" style="font-size:14px;padding:3px 6px;margin-left:6px"><option value="heaven">ヘブン</option><option value="pure">ぴゅあらば</option><option value="joho">口コミ情報局</option></select></h2>
     <p class="lead" style="margin:0 0 8px">上の「お店」で選んだお店の媒体の管理画面にログインして、出勤表を読むだけです（何も変えません）。下の「書きこみテスト」は、押したときだけ媒体を変えます。</p>
     <button class="btn" style="padding:7px 14px;font-size:13px" onclick="heavenTest()">📺 読んでみる</button>
@@ -307,6 +325,25 @@ async function photoPeek(press){
   bx.innerHTML = `<div class="ok">✅ ${esc(r.store)} ${esc(no)}番：${r.found ? "編集画面を開けました" : "編集画面が見つかりません"}（写真 ${(r.editImgs || []).length}枚分の画像）</div>
     <div class="lead" style="margin:6px 0">② 写真・画像っぽいボタンがあれば押してください（開いた画面を調べるだけで、保存はしません）。なければ、このまま下の結果をコピーしてClaudeに貼ってください。</div>
     ${all.map(b => `<button class="btn" style="padding:5px 10px;font-size:12.5px;margin:2px;background:#fff;color:#E5638C;border:1.5px solid #ffc2d1" onclick="photoPeek(this.dataset.v)" data-v="${esc(b)}">${esc(b)}</button>`).join("")}`;
+}
+
+/* ---------- 📷 写真をほかのお店からコピー ---------- */
+(function(){ const el = document.getElementById("pcSlots"); if(!el) return;
+  el.innerHTML = "入れる枠：" + ["一覧用", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧"].map((l, k) => `<label style="margin-right:8px;white-space:nowrap"><input type="checkbox" class="pcSlot" value="${k}" checked> ${l}</label>`).join(""); })();
+async function photoCopy(dry){
+  const res = document.getElementById("pcRes"), out = document.getElementById("pcOut"), store = document.getElementById("testStore").value;
+  const site = document.getElementById("pcSite").value, from = Number(document.getElementById("pcFrom").value) || 0, no = Number(document.getElementById("pcTo").value) || 0;
+  const slots = [...document.querySelectorAll(".pcSlot:checked")].map(b => Number(b.value));
+  if(store === "__all"){ res.innerHTML = `<span class="ng">上の「お店」で、入れる先のお店を1つ選んでください</span>`; return; }
+  if(!from || !no || !slots.length){ res.innerHTML = `<span class="ng">番号と入れる枠を入れてください</span>`; return; }
+  if(!dry && !confirm(`${slots.length}枠の写真を上書きします。よろしいですか？`)) return;
+  res.innerHTML = dry ? "ためしています…" : "入れています…（1分ほど）";
+  const r = await callFn({ action: "cast_photo_copy", store, no, from: { site, no: from }, slots, dry });
+  out.style.display = ""; out.value = JSON.stringify(r, null, 1);
+  if(!r.results){ res.innerHTML = `<span class="ng">❌ ${esc(r.error || r.message || "できませんでした（ロボットを新しくデプロイした？）")}</span>`; return; }
+  const lab = k => k === 0 ? "一覧用" : "①②③④⑤⑥⑦⑧"[k - 1];
+  res.innerHTML = r.results.map(x => `<div>${lab(x.slot)}：${x.ok ? (dry ? "✅ 入れられそう" : "✅ 入れました") : x.skip ? "⏭ " + esc(x.skip) : `<span class="ng">❌ ${esc(x.error || x.msg || "うまくいきませんでした")}</span>`}</div>`).join("")
+    + (dry ? "" : `<div class="lead">公式HPで写真を確かめてください（写真は「更新」しなくても出ます）。下の結果もコピーしてClaudeに貼ってください。</div>`);
 }
 
 /* ---------- 🔎 キャストのプロフを読む ---------- */
