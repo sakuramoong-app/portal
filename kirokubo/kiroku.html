@@ -4647,7 +4647,29 @@ renderDummy = function(keep){
 };
 const __openFormDm = openForm;
 openForm = function(id){ dmMode = "dummy"; tmPick = ""; $("f_namedEx").checked = false; $("f_cast").disabled = false; const r = __openFormDm.apply(this, arguments);
-  if(editing && isDummyStore(editing.store_key || "") && !editing.dummy_name) setDmMode("named"); else document.querySelectorAll("#dmModeChips .chip").forEach(b => b.classList.toggle("on", b.dataset.m === "dummy")); return r; };
+  if(editing && isDummyStore(editing.store_key || "") && !editing.dummy_name) setDmMode("named"); else document.querySelectorAll("#dmModeChips .chip").forEach(b => b.classList.toggle("on", b.dataset.m === "dummy")); dmLock(); return r; };
+
+/* 🔒 18・極門は、先に電話番号で調べないと選べない（履歴で行ける子が決まるので）。電話番号と売上店舗のほかはロック */
+function dmLock(){
+  const store = $("f_store").value, need = isDummyStore(store) && !(digits($("f_phone").value).length >= 6 && Array.isArray(custPast));
+  let msg = $("dmLockMsg");
+  if(!msg){ msg = document.createElement("div"); msg.id = "dmLockMsg"; $("dummyWrap").insertBefore(msg, $("dummyWrap").firstChild); }
+  msg.innerHTML = need ? `<div class="warn" style="font-size:14px;font-weight:800;margin-bottom:6px">📞 先に電話番号を入れて「🔍 調べる」を押してください（このお客さんの履歴で、行ける子が決まります）</div>` : "";
+  const keep = el => ["f_phone", "f_store"].includes(el.id) || el.closest(".x") || /lookupCustomer|closeForm/.test(el.getAttribute("onclick") || "");
+  document.querySelectorAll("#formBg .drawer input, #formBg .drawer select, #formBg .drawer textarea, #formBg .drawer button").forEach(el => {
+    if(keep(el)) return;
+    if(need && !el.disabled){ el.disabled = true; el.dataset.dmlock = "1"; }
+    else if(!need && el.dataset.dmlock){ el.disabled = false; delete el.dataset.dmlock; }
+  });
+  $("formBg").classList.toggle("dmlocked", need);
+  if(!need && dmMode === "named" && isDummyStore(store)) onNamedPick(true);   // 名前のある子の指名は、キャストを決まりのままに
+  if(need && document.activeElement !== $("f_phone") && !digits($("f_phone").value)) $("f_phone").classList.add("need");
+}
+const __lookupCustomerLock = lookupCustomer;
+lookupCustomer = async function(){ const r = await __lookupCustomerLock.apply(this, arguments); dmLock(); return r; };
+const __renderDummyLock = renderDummy;
+renderDummy = function(){ const r = __renderDummyLock.apply(this, arguments); dmLock(); return r; };
+$("f_phone").addEventListener("input", () => { custPast = null; dmLock(); });   // 番号を打ちなおしたら、調べなおすまでロック
 
 /* ---------- 🔎 キャストから行ける日を探す：今日から○日分の出勤（受理したシフト）と、入っている予約・あいている時間 ---------- */
 async function cfPaint(){
