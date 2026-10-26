@@ -4656,7 +4656,7 @@ function dmLock(){
   if(!msg){ msg = document.createElement("div"); msg.id = "dmLockMsg"; $("dummyWrap").insertBefore(msg, $("dummyWrap").firstChild); }
   msg.innerHTML = need ? `<div class="warn" style="font-size:14px;font-weight:800;margin-bottom:6px">📞 先に電話番号を入れて「🔍 調べる」を押してください（このお客さんの履歴で、行ける子が決まります）</div>` : "";
   const keep = el => ["f_phone", "f_store"].includes(el.id) || el.closest(".x") || /lookupCustomer|closeForm/.test(el.getAttribute("onclick") || "");
-  document.querySelectorAll("#formBg .drawer input, #formBg .drawer select, #formBg .drawer textarea, #formBg .drawer button").forEach(el => {
+  document.querySelectorAll("#formBg input, #formBg select, #formBg textarea, #formBg button").forEach(el => {
     if(keep(el)) return;
     if(need && !el.disabled){ el.disabled = true; el.dataset.dmlock = "1"; }
     else if(!need && el.dataset.dmlock){ el.disabled = false; delete el.dataset.dmlock; }
@@ -4765,6 +4765,10 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .custhist .ch-row.dm{background:#FAF6FE} .custhist .ch-row.x{opacity:.55} .custhist .ch-row .xx{color:#d9534f;font-weight:800;font-size:12.5px}
   .custhist .ch-foot{border-top:1px solid #EEE3F3;margin-top:4px;padding-top:5px;font-size:13px;color:#7a6468} .custhist .ch-foot b{color:var(--ink)}
   #dmModeChips .chip.on{background:#8a6fd1;border-color:#8a6fd1;color:#fff}
+  /* 🔒 18・極門で電話番号を調べるまでのロック：ロック中の欄はグレーに（電話番号と売上店舗は目立たせる） */
+  #formBg.dmlocked [data-dmlock]{background:#E9E6E8 !important;color:#AFA6AA !important;border-color:#DDD6D9 !important;opacity:.7;cursor:not-allowed;box-shadow:none !important}
+  #formBg.dmlocked .f:has([data-dmlock]) > label{color:#C2B9BD}
+  #formBg.dmlocked #f_phone,#formBg.dmlocked #f_store{outline:3px solid #FFB547;outline-offset:1px;background:#FFFBEF}
   .draftbox{background:#FFF8E1;border:2px solid #FFB547;border-radius:12px;padding:8px 12px;margin:0 0 10px;font-size:13.5px;color:#7a4a00;line-height:1.6}
   .rc-draft{background:#FFB547;color:#fff;border-radius:99px;padding:1px 8px;font-size:12px;font-weight:800;white-space:nowrap}
   @media (max-width:640px){
