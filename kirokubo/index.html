@@ -1109,7 +1109,7 @@ function paintAnswer(){
       s.want === "change" ? `<div class="ansText">${esc(s.text || "")}</div><div class="hint">${k === "self" ? "↑ この文章にしてほしい" : "↑ こういう内容で書いてほしい"}</div>` : ""); }).join("");
   // ✅ オプション（ピンク＝公式HPとちがう）
   const opts = Object.keys(d.options || {}).map(k => {
-    const v = d.options[k], hpv = (d.hpOptions || {})[k] || ((k.indexOf("3P") === 0) ? (d.hpOptions || {})["3P（有料）"] : "") || "";
+    const v = d.options[k], hpv = (d.hpOptions || {})[k] || ((k.indexOf("3P／お客様") === 0) ? (d.hpOptions || {})["3P（有料）"] : "")   /* 公式HPの「3P（有料）」はお客様2名のこと（キャスト2名は公式HPにない） */ || "";
     const mean = d.optMeaning && d.optMeaning[k] && d.optMeaning[k][v] ? `（${esc(d.optMeaning[k][v])}）` : "";
     const chg = hpv && hpv !== v;
     return `<tr class="${chg ? "chg" : ""}"><td>${esc(k)}</td><td><b>${esc(v)}</b>${mean}</td><td>${esc(hpv || "")}</td><td>${esc((d.optMemo || {})[k] || "")}</td></tr>`;
