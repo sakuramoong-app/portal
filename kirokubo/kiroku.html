@@ -391,6 +391,8 @@
     </details>
     <!-- 🔎 キャストから行ける日を探す（「○○はいつなら空いてる？」の電話用） -->
     <details class="fold" id="castFind" ontoggle="if(this.open) cfPaint()"><summary>🔎 キャストから行ける日を探す<small>「○○ちゃんはいつなら空いてる？」のとき：出勤日と、空いている時間を2週間分</small></summary>
+      <style>#castFind select{font-family:inherit;font-size:14px;font-weight:700;padding:8px 34px 8px 14px;border:1.5px solid var(--line);border-radius:99px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23e5638c' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 12px center;color:var(--ink);appearance:none;-webkit-appearance:none;cursor:pointer}
+        #castFind select:focus{outline:none;border-color:var(--pink)}</style>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:4px 0 8px"><select id="cf_cast" onchange="cfPaint()" style="max-width:260px"></select>
         <select id="cf_days" onchange="cfPaint()" style="width:auto"><option value="14">2週間</option><option value="7">1週間</option><option value="28">4週間</option></select></div>
       <div id="cf_out"></div>
