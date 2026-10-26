@@ -954,14 +954,24 @@ function dmPhoto(d, w){
   return `<a href="https://www.${site}.com/gal/gal-${no}.html" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="flex:none;line-height:0"><img src="https://www.${site}.com/galpic/gal180x240-${no}.jpg" alt="" loading="lazy" onerror="this.parentNode.remove()" style="width:${w}px;height:${Math.round(w * 4 / 3)}px;object-fit:cover;border-radius:8px;background:#eee"></a>`;
 }
 // 近さ（100 がいちばん近い）。比べられるものがなければ null
-function matchScore(dm, sp){
+// 見た目のタグ（SQL 157。ダミー名は kb_dummy_names.look、キャストは master_casts.look）
+const LOOK = { vibe: ["清楚", "かわいい系", "きれい系", "ギャル", "ボーイッシュ", "大人っぽい", "ロリ系"], len: ["ショート", "ボブ", "ミディアム", "ロング"], color: ["黒", "暗め", "明るめ", "金・派手"] };
+function lookText(lk){ lk = lk || {}; return [(lk.vibe || []).join("・"), lk.len, lk.color, lk.wig ? "ウィッグ可" : ""].filter(Boolean).join(" "); }
+// 重み：身長40・カップ30・Pサイズ30・AF/逆AF（できないと大きく下げる）＞ 見た目（雰囲気25・髪の長さ18・髪の明るさ15。ウィッグで変えられる子は髪を見ない）
+function matchScore(dm, sp, c){
   let s = 100, n = 0;
   if(dm.height && sp.height){ s -= Math.min(40, Math.abs(dm.height - sp.height) * 2); n++; }
   if(dm.cup && sp.cup){ s -= Math.min(30, Math.abs(dm.cup.charCodeAt(0) - sp.cup.charCodeAt(0)) * 8); n++; }
   if(dm.psize && sp.psize){ s -= Math.min(30, Math.abs(Number(dm.psize) - sp.psize) * 6); n++; }
-  [["af", "AF"], ["rev_af", "逆AF"], ["shasei", "射精"]].forEach(([k])=>{
-    if(dm[k] === "◎" || dm[k] === "○"){ n++; if(sp[k] === "×") s -= 40; else if(sp[k] === "△") s -= 10; else if(!sp[k]) s -= 5; }
+  [["af", 50, 20], ["rev_af", 50, 20], ["shasei", 40, 10]].forEach(([k, x, tri])=>{
+    if(dm[k] === "◎" || dm[k] === "○"){ n++; if(sp[k] === "×") s -= x; else if(sp[k] === "△") s -= tri; else if(!sp[k]) s -= 5; }
   });
+  const a = dm.look || {}, b = (c && c.look) || {};
+  if((a.vibe || []).length && (b.vibe || []).length){ const same = a.vibe.filter(v => b.vibe.includes(v)).length; s -= Math.round(25 * (1 - same / Math.min(a.vibe.length, b.vibe.length))); n++; }
+  if(!b.wig){
+    const step = (k, per, max) => { const i = LOOK[k].indexOf(a[k]), j = LOOK[k].indexOf(b[k]); if(i >= 0 && j >= 0){ s -= Math.min(max, Math.abs(i - j) * per); n++; } };
+    step("len", 6, 18); step("color", 5, 15);
+  }
   return n ? Math.max(0, Math.round(s)) : null;
 }
 async function renderDummyMatch(){
@@ -971,7 +981,7 @@ async function renderDummyMatch(){
   const dm = M.dummies.find(d=>d.store_key === store && d.name === name) || {};
   const spec = [dm.age ? dm.age + "歳" : "", dm.height ? "T" + dm.height : "", dm.weight ? dm.weight + "kg" : "", dm.cup ? dm.cup + "カップ" : "", dm.psize ? "P" + dm.psize : ""].filter(Boolean).join(" ");
   const ops = [["AF", dm.af], ["逆AF", dm.rev_af], ["射精", dm.shasei]].filter(x=>x[1]).map(x=>x[0] + x[1]).join(" ");
-  el.innerHTML = `<div style="font-size:12.5px;margin-top:6px;display:flex;gap:8px;align-items:flex-start">${dmPhoto(dm, 90)}<div><b>🎭 ${esc(name)}</b>：${esc(spec || "データなし")} ${esc(ops)}${dm.note ? `<br><small>${esc(dm.note)}</small>` : ""}</div></div>
+  el.innerHTML = `<div style="font-size:12.5px;margin-top:6px;display:flex;gap:8px;align-items:flex-start">${dmPhoto(dm, 90)}<div><b>🎭 ${esc(name)}</b>：${esc(spec || "データなし")} ${esc(ops)}${lookText(dm.look) ? `<br><small>👀 ${esc(lookText(dm.look))}</small>` : ""}${dm.note ? `<br><small>${esc(dm.note)}</small>` : ""}</div></div>
     <div style="font-size:12px;color:var(--sub);margin-top:4px">近いキャストを探しています…</div>`;
   try{
     const [profs, shifts] = await Promise.all([loadProfs(), loadShifts(day)]);
@@ -980,7 +990,7 @@ async function renderDummyMatch(){
       const sh = shifts[c.shift_name] || shifts[c.official_name];
       if(!sh) return null;
       const sp = specOfProf(profs[c.prof_id] || {});
-      return { c, sh, sp, score: matchScore(dm, sp) };
+      return { c, sh, sp, score: matchScore(dm, sp, c) };
     }).filter(Boolean).sort((a, b)=>(b.score == null ? -1 : b.score) - (a.score == null ? -1 : a.score));
     const head = el.firstElementChild.outerHTML;
     if(!rows.length){ el.innerHTML = head + `<div class="warn" style="margin-top:4px">この日（${esc(day)}）出勤のキャストが、サクラシフトに見つかりません</div>`; return; }
@@ -990,7 +1000,7 @@ async function renderDummyMatch(){
         return `<div style="display:flex;gap:6px;align-items:center;background:#fff;border-radius:10px;padding:6px 8px;margin-bottom:4px;font-size:12.5px">
           ${pctBadge(x.score)}
           <div style="flex:1"><b>${esc(x.c.official_name || x.c.temp_name)}</b> <small>${hourLabel(x.sh.start)}〜${hourLabel(x.sh.end)}${x.sh.confirmed ? "" : "（未確定）"}</small><br>
-            <small style="color:var(--sub)">${esc(x.sp.size || "サイズなし")} P${esc(x.sp.psizeText || "？")}　${esc(op)}</small></div>
+            <small style="color:var(--sub)">${esc(x.sp.size || "サイズなし")} P${esc(x.sp.psizeText || "？")}　${esc(op)}${lookText(x.c.look) ? "　👀" + esc(lookText(x.c.look)) : ""}</small></div>
           <button type="button" class="btn btn-ghost btn-sm" onclick="$('f_cast').value='${x.c.id}';onCast()">この人にする</button></div>`;
       }).join("")
       + `<div style="font-size:11px;color:var(--sub)">％は身長・カップ・Pサイズ・AF/逆AF/射精の近さの目安です（体重はキャストプロフにないので比べていません）</div>`;
@@ -1001,7 +1011,7 @@ async function renderDummyMatch(){
 function openDummyData(id){
   const d = M.dummies.find(x=>x.id === id); if(!d) return;
   const sel = (k)=>`<select id="dd_${k}">${MARKS.map(m=>`<option value="${m}" ${d[k] === m ? "selected" : ""}>${m || "－"}</option>`).join("")}</select>`;
-  $("dummyEdit").innerHTML = `<div style="font-size:12.5px;font-weight:800;margin-bottom:4px">🎭 ${esc(d.name)} のデータ</div>
+  $("dummyEdit").innerHTML = `<div style="font-size:12.5px;font-weight:800;margin-bottom:4px;display:flex;gap:8px;align-items:flex-end">${dmPhoto(d, 72)}🎭 ${esc(d.name)} のデータ</div>
     <div class="grid3">
       <div class="f"><label>年齢</label><input id="dd_age" type="number" value="${d.age ?? ""}"></div>
       <div class="f"><label>身長（cm）</label><input id="dd_height" type="number" value="${d.height ?? ""}"></div>
@@ -1014,6 +1024,9 @@ function openDummyData(id){
       <div class="f"><label>指名料（円・空ならふつう）</label><input id="dd_nomi" type="number" step="500" value="${d.nomination_fee ?? ""}" placeholder="例：3000"></div>
       <div class="f"><label>公式HPの番号（写真用）</label><input id="dd_hpno" type="number" value="${d.hp_no ?? ""}" placeholder="gal-○○ の数字"></div>
     </div>
+    ${"look" in d ? `<div class="f" style="margin-top:6px"><label>👀 見た目（公式HPの写真を見て選ぶ・マッチ率に使います）</label>
+      <div style="display:flex;flex-wrap:wrap;gap:4px 10px;font-size:13px">${LOOK.vibe.map(v => `<label style="display:flex;gap:3px;align-items:center;font-weight:600"><input type="checkbox" class="dd_vibe" value="${v}" style="width:auto" ${((d.look || {}).vibe || []).includes(v) ? "checked" : ""}>${v}</label>`).join("")}</div>
+      <div style="display:flex;gap:6px;margin-top:4px">${[["len", "髪の長さ"], ["color", "髪の明るさ"]].map(([k, l]) => `<select id="dd_${k}" style="flex:1"><option value="">${l}（－）</option>${LOOK[k].map(v => `<option ${(d.look || {})[k] === v ? "selected" : ""}>${v}</option>`).join("")}</select>`).join("")}</div></div>` : ""}
     <div class="f"><label>メモ</label><input id="dd_note" maxlength="500" value="${esc(d.note || "")}"></div>
     <div style="display:flex;gap:6px;margin-top:6px"><button type="button" class="btn btn-primary btn-sm" onclick="saveDummyData(${id})">保存</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="renderDummyEdit()">もどる</button></div>`;
@@ -1024,6 +1037,7 @@ async function saveDummyData(id){
               cup: $("dd_cup").value.trim().toUpperCase(), af: $("dd_af").value, rev_af: $("dd_rev_af").value, shasei: $("dd_shasei").value, note: $("dd_note").value.trim() };
   if(M.dummies.some(x => "nomination_fee" in x)) u.nomination_fee = n("nomi");   // SQL 155 のあと
   if(M.dummies.some(x => "hp_no" in x)) u.hp_no = n("hpno");   // SQL 156 のあと
+  if($("dd_len")) u.look = { vibe: [...document.querySelectorAll(".dd_vibe:checked")].map(x => x.value), len: $("dd_len").value, color: $("dd_color").value };   // SQL 157 のあと
   try{
     q(await sb.from("kb_dummy_names").update(u).eq("id", id));
     Object.assign(M.dummies.find(x=>x.id === id), u);
@@ -4628,7 +4642,7 @@ function crList(c, store, sp, ctx){
     else if(mine.length && !mine.includes(d.name)) why = `この子は前に「${mine.join("・")}」で行っています`;
     else if(usedBy.length && !usedBy.includes(c.id)) why = `前に ${usedBy.map(castName).join("・")} がこの名前で行っています`;
     else if(!mine.length && metOther) why = `この子は18・極門でこのお客さんに会っています`;
-    const s = matchScore(d, sp);
+    const s = matchScore(d, sp, c);
     return { d, why, s: s == null ? -1 : s, prev: mine.includes(d.name), own: !!own && d.name === own, owners };
   }).sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || (b.own ? 1 : 0) - (a.own ? 1 : 0) || (b.prev ? 1 : 0) - (a.prev ? 1 : 0) || b.s - a.s);
 }
@@ -4709,7 +4723,7 @@ async function crPaint(){
       ${hh && hh.other.length ? `<div style="font-size:12px;color:#7a4a00;font-weight:700;margin-bottom:4px">👀 ${esc(castName(c.id))} はほかのお店でこのお客さんに会ったことがあります：${hh.other.slice(0, 3).map(p => md(p) + " " + esc(storeLabel(p.store_key))).join("、")}</div>` : ""}
       ${list.map(x => { const d = x.d, spec = [d.age ? d.age + "歳" : "", d.height ? "T" + d.height : "", d.cup ? d.cup : "", d.psize ? "P" + d.psize : ""].filter(Boolean).join(" ");
         return `<div class="tm-c" style="${x.why ? "opacity:.45" : x.prev || x.own ? "box-shadow:0 0 0 2px #2f9e6e inset" : ""}">${pctBadge(x.s)}${dmPhoto(d, 42)}
-          <div style="flex:1"><b>🎭${esc(d.name)}</b>${x.owners.length ? ` <small style="color:#8a6fd1;font-weight:800">専用</small>` : ""} <small>${esc(spec || "データなし")}${d.nomination_fee != null ? "・指名料 " + yen(d.nomination_fee) : ""}</small>
+          <div style="flex:1"><b>🎭${esc(d.name)}</b>${x.owners.length ? ` <small style="color:#8a6fd1;font-weight:800">専用</small>` : ""} <small>${esc(spec || "データなし")}${d.nomination_fee != null ? "・指名料 " + yen(d.nomination_fee) : ""}${lookText(d.look) ? "・👀" + esc(lookText(d.look)) : ""}</small>
           ${x.own ? `<br><small style="color:#2f9e6e;font-weight:800">この子の専用の名前です</small>` : x.prev ? `<br><small style="color:#2f9e6e;font-weight:800">前回この名前で行っています</small>` : ""}${x.why ? `<br><small style="color:#d9534f;font-weight:700">${esc(x.why)}</small>` : ""}</div>
           ${$("f_dummy").value === d.name ? `<b style="color:#2f9e6e;font-size:12.5px">✅ この名前にしています</b>` : `<button type="button" class="btn btn-ghost btn-sm" ${x.why ? "disabled" : ""} onclick="crChoose('${esc(d.name).replace(/'/g, "")}')">この名前にする</button>`}</div>`; }).join("") || `<div class="warn">このお店のダミー名がありません</div>`}
       <div style="font-size:11px;color:var(--sub)">％は身長・カップ・Pサイズ・AF/逆AF/射精の近さの目安です</div>`;

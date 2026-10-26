@@ -304,6 +304,7 @@
       <div class="f"><label>⌛ 長いコースは何分まで（空＝上限なし）</label><input type="number" id="e_longMax" min="30" max="1440" step="10"></div>
       <div class="f"><label>それより長いと</label><select id="e_longOver"><option value="">（上限なし）</option><option value="ask">キャストに確認してから</option><option value="ng">受けない（NG）</option></select></div>
     </div>
+    <div class="f" id="e_lookWrap" style="margin-top:8px;display:none"><label>👀 見た目（18・極門のダミー名とのマッチ率に使います）</label><div id="e_look"></div></div>
     <div class="f" style="margin-top:8px"><label>🚃 キャストの最寄り駅・各店までの時間</label>
       <div class="areaGrid">
         <div><small>最寄り駅</small><input id="e_station" maxlength="40" placeholder="例：東池袋"></div>
@@ -2477,6 +2478,7 @@ function openEdit(id){
   $("e_special").value = c.special_notes || ""; $("e_ng").value = c.ng_notes || ""; $("e_note").value = c.note || "";
   $("e_interval").value = c.interval_min || 0;
   $("e_longMax").value = c.long_max || ""; $("e_longOver").value = c.long_over || ""; setArea(c.area_note || "");
+  renderLook(c);
   const st = c.stores || {};
   $("e_stores").innerHTML = stores.map(s=>{
     const v = st[s.key];
@@ -2513,6 +2515,18 @@ const isPane = () => document.body.classList.contains("pane") && window.matchMed
   bg.addEventListener("mousedown", e=>{ down = e.target === bg; });
   bg.addEventListener("click", e=>{ if(e.target === bg && down && !isPane()) closeEdit(); }); })();
 
+// 👀 見た目のタグ（master_casts.look：{ vibe:[...], len, color, wig }）。記録簿の18・極門のマッチ率に使う
+const LOOK = { vibe: ["清楚", "かわいい系", "きれい系", "ギャル", "ボーイッシュ", "大人っぽい", "ロリ系"], len: ["ショート", "ボブ", "ミディアム", "ロング"], color: ["黒", "暗め", "明るめ", "金・派手"] };
+function renderLook(c){
+  const on = "look" in (casts[0] || {}); $("e_lookWrap").style.display = on ? "" : "none"; if(!on) return;
+  const lk = (c && c.look) || {};
+  $("e_look").innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13.5px">${LOOK.vibe.map(v => `<label style="display:flex;gap:3px;align-items:center;font-weight:600"><input type="checkbox" class="e_vibe" value="${v}" style="width:auto" ${(lk.vibe || []).includes(v) ? "checked" : ""}>${v}</label>`).join("")}</div>
+    <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${[["len", "髪の長さ"], ["color", "髪の明るさ"]].map(([k, l]) => `<select id="e_look_${k}" style="flex:1;min-width:120px"><option value="">${l}（－）</option>${LOOK[k].map(v => `<option ${lk[k] === v ? "selected" : ""}>${v}</option>`).join("")}</select>`).join("")}
+      <label style="display:flex;gap:4px;align-items:center;font-size:13.5px;font-weight:600"><input type="checkbox" id="e_look_wig" style="width:auto" ${lk.wig ? "checked" : ""}>ウィッグで変えられる（髪では点を下げない）</label></div>`;
+}
+function getLook(){
+  return { vibe: [...document.querySelectorAll(".e_vibe:checked")].map(x => x.value), len: $("e_look_len").value, color: $("e_look_color").value, wig: $("e_look_wig").checked };
+}
 async function saveCast(){
   if(!CAN_EDIT){ toast("作成中のため、直せるのは店長だけです"); return; }
   if(pf && $("pf_c")){ pfCollect(); if((pf.dirty.size || pf.hotelDirty) && confirm("プロフも直しています。いっしょにプロフも保存しますか？\n（公式HPには入れません。あとで「🌐 公式HPにまとめて入れる」で入れられます）")) await saveProf(true); }
@@ -2543,6 +2557,7 @@ async function saveCast(){
   };
   if(keepShift) row.shift_name = keepShift;
   if("onboarding" in (casts[0] || {})) row.onboarding = getOnb(before);   // 入店の手続き（SQL 148 のあと）
+  if("look" in (casts[0] || {})) row.look = getLook();   // 見た目のタグ（SQL 157 のあと）
   // 受付ルール用（SQL 100 のあと）。上限が空なら「上限なし」
   if("long_max" in (casts[0] || {})){
     const lm = Number($("e_longMax").value) || null;
