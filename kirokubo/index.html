@@ -2088,11 +2088,13 @@ function renderOnb(c){
     <div class="f"><label>👜 仕事ポーチ（在籍作成ルームで選んだもの）</label><div id="onb_kit" style="font-size:14px;padding:4px 2px">${c && (c.room_ids || []).length ? "読んでいます…" : "在籍作成ルームとつながっていません"}</div></div>
     <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${ONB_STEPS.map(([k, l]) => `<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
       <input type="checkbox" id="onb_${k}" ${o[k] ? "checked" : ""} style="width:auto;transform:scale(1.25)"> ${l}
-      ${o[k] ? `<small style="color:#1f9d6b;font-weight:800">✅ ${esc(md2(o[k].at))} ${esc(o[k].by || "")}</small>` : `<small style="color:#c77700;font-weight:800">まだ</small>`}</label>`).join("")}</div>
+      ${o[k] ? `<small style="color:#1f9d6b;font-weight:800">✅ ${o[k].at ? esc(md2(o[k].at)) + " " + esc(o[k].by || "") : "エクセルから"}</small>` : `<small style="color:#c77700;font-weight:800">まだ</small>`}</label>`).join("")}</div>
     <div class="grid" style="margin-top:10px">
       <div class="f"><label>💳 仕事用のICカード</label>${sel("onb_ic", ONB_IC, o.ic, "（まだ聞いていない）")}</div>
       <div class="f"><label>🚬 タバコ</label>${sel("onb_tabako", ONB_TABAKO, o.tabako, "（まだ聞いていない）")}<small id="onb_tabakoProf" style="display:block;color:#9C8B8F;margin-top:3px"></small></div>
-    </div>`;
+    </div>
+    ${o.excel ? `<div style="margin-top:8px;background:#F3FAF4;border-radius:10px;padding:6px 10px;font-size:12.5px;line-height:1.7;color:#4a6b50">📗 <b>エクセル（バック一覧）に書いてあったこと</b>
+      ${[["pouch", "仕事ポーチ"], ["docs", "説明・業務委託・印鑑"], ["ic", "IC"], ["tabako", "タバコ"]].filter(([k]) => o.excel[k]).map(([k, l]) => `<div><small style="color:#8aa08e">${l}：</small>${esc(o.excel[k])}</div>`).join("")}</div>` : ""}`;
   if(c && (c.room_ids || []).length){
     sb.from("room_rooms").select("room_id,kit_choice,created_at").in("room_id", c.room_ids).then(res => {
       if(editingId !== c.id || !$("onb_kit")) return;
