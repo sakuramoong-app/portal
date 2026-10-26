@@ -533,7 +533,15 @@
       </div>
       <!-- ダミーのお店（極門・エイティーン）だけ -->
       <div id="dummyWrap" style="display:none;background:#F6F2FE;border-radius:12px;padding:8px 10px;margin-bottom:8px">
-        <div class="f"><label>🎭 ダミー名（お客さんに伝える名前）</label>
+        <!-- 18・極門：ダミー指名か、名前のある子（台帳で18・極門の名前を持っている子）の指名か -->
+        <div class="chips" id="dmModeChips" style="margin-bottom:6px">
+          <button type="button" class="chip" data-m="dummy" onclick="setDmMode('dummy')">🎭 ダミー指名</button>
+          <button type="button" class="chip" data-m="named" onclick="setDmMode('named')">👤 名前のある子を指名</button></div>
+        <div id="namedBox" style="display:none">
+          <div class="f"><label>👤 指名された子（このお店の名前）</label><select id="f_named" onchange="onNamedPick()"></select></div>
+          <label style="display:flex;gap:6px;align-items:center;font-size:13px;margin-top:6px;cursor:pointer"><input type="checkbox" id="f_namedEx" style="width:auto" onchange="onNamedPick()"> 特例で、ほかの子を行かせる（下の「キャスト」で選ぶ）</label>
+        </div>
+        <div class="f" id="dummyRow"><label>🎭 ダミー名（お客さんに伝える名前）</label>
           <div style="display:flex;gap:6px"><select id="f_dummy" style="flex:1" onchange="recalc();renderDummyMatch()"></select>
             <button type="button" class="btn btn-ghost btn-sm" onclick="toggleDummyEdit()">⚙️ 一覧</button></div></div>
         <div id="dummyEdit" style="display:none;margin-top:6px"></div>
@@ -1271,6 +1279,12 @@ function renderCastChecks(c){
       longNg = true;
       warn.unshift(`🎭 このお客さんは前に「${dmNow}」で ${who.map(castName).join("・")} が行っています（${been[0].biz_date.slice(5).replace("-", "/")}）。${who.map(castName).join("・")} 以外では行けません`);
     }
+    // 前に18・極門でこの子が（ちがう名前で）行っていたら、ダミー指名では行けない（顔でばれる）
+    if(!who.length){
+      const dsx = M.stores.filter(s => s.dummy).map(s => s.key);
+      const met = custPast.filter(p => dsx.includes(p.store_key) && p.cast_id === c.id && !["cancel", "tobi"].includes(p.status) && (!editing || p.id !== editing.id));
+      if(met.length){ longNg = true; warn.unshift(`🎭 ${castName(c.id)} は、このお客さんに18・極門で行ったことがあります（${met[0].biz_date.slice(5).replace("-", "/")} ${storeLabel(met[0].store_key)}${met[0].dummy_name ? "🎭" + met[0].dummy_name : ""}）。ダミー「${dmNow}」では行けません`); }
+    }
   }
   if(c.long_max && mins > c.long_max){
     if(c.long_over === "ng"){ longNg = true; warn.unshift(`⌛ ${c.long_max}分までのキャストです（それより長いコースは受けない）`); }
@@ -1327,10 +1341,14 @@ async function lookupCustomer(keepName){
     const pastAll = q(await sb.from("kb_reservations").select("id,biz_date,store_key,cast_id,dummy_name,course,status").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(200)) || [];
     custPast = pastAll;
     const past = pastAll.slice(0, 10);
-    const casts = [...new Set(past.map(p=>castName(p.cast_id)))];
+    const casts = [...new Set(pastAll.filter(p => !["cancel", "tobi"].includes(p.status)).map(p=>castName(p.cast_id)))];
     $("custInfo").innerHTML = (c.ng ? `<div class="warn">⚠️ NG客です：${esc(c.ng_reason||"理由なし")}</div>` : "") +
-      `<div class="hist">これまで ${past.length}件${past.length>=10?"以上":""}（新しい順）：${past.map(p=>`${p.biz_date.slice(5).replace("-","/")} ${esc(storeLabel(p.store_key))} ${p.dummy_name ? "🎭" + esc(p.dummy_name) + "→" : ""}${esc(castName(p.cast_id))} ${esc(p.course)}${p.status==="cancel"?"(キャンセル)":p.status==="tobi"?"(トビ)":""}`).join("、") || "なし"}<br>
-       指名したことのあるキャスト（記録簿）：${casts.map(esc).join("、") || "なし"}</div>`;
+      // 履歴は1回ずつ1行で、大きめ・濃いめに（受付でいちばん大事なので）
+      `<div class="custhist"><div class="ch-head">📋 これまで ${pastAll.length}件${pastAll.length > 10 ? "（新しい10件）" : ""}</div>
+        ${past.map(p => { const x = p.status === "cancel" ? "キャンセル" : p.status === "tobi" ? "トビ" : "";
+          return `<div class="ch-row ${x ? "x" : ""} ${M.stores.some(s => s.dummy && s.key === p.store_key) ? "dm" : ""}"><span class="d">${p.biz_date.slice(5).replace("-","/")}</span><span class="s">${esc(storeLabel(p.store_key))}</span>
+            <span class="c">${p.dummy_name ? `<span class="dn">🎭${esc(p.dummy_name)}</span> → ` : ""}<b>${esc(castName(p.cast_id))}</b></span><span class="k">${esc(p.course)}</span>${x ? `<span class="xx">${x}</span>` : ""}</div>`; }).join("") || `<div class="ch-row">なし</div>`}
+        <div class="ch-foot">指名したことのあるキャスト：<b>${casts.map(esc).join("、") || "なし"}</b></div></div>`;
     if(!editing){
       const cid = $("f_cast").value;
       setVisit(visitFrom(pastAll, cid));
@@ -4477,6 +4495,87 @@ renderCastChecks = function(){ const r = __renderCastChecksNeed.apply(this, argu
 const __openFormBlink = openForm;
 openForm = function(){ const r = __openFormBlink.apply(this, arguments); needSoon(); return r; };
 
+/* ---------- 🎭 18・極門の受付：ダミー指名（このお客さんに行ける子だけ出す）／名前のある子を指名（その子だけ。特例でほかの子も） ----------
+   行ける子＝この日出勤していて、このお客さんに18・極門で行ったことがない子（前に同じダミー名で行った子がいれば、その子だけ）
+   ほかのお店で会ったことは、名前の横に出す（外さない） */
+let dmMode = "dummy";
+const DUMMY_STORES = () => M.stores.filter(s => s.dummy).map(s => s.key);
+function namedCasts(store){ return M.casts.filter(c => c.status !== "left" && c.stores && c.stores[store] && c.stores[store].name); }
+function setDmMode(m){
+  dmMode = m;
+  document.querySelectorAll("#dmModeChips .chip").forEach(b => b.classList.toggle("on", b.dataset.m === m));
+  $("namedBox").style.display = m === "named" ? "" : "none";
+  $("dummyRow").style.display = m === "named" ? "none" : "";
+  if(m === "named"){
+    const store = $("f_store").value, list = namedCasts(store), cur = $("f_cast").value;
+    $("f_named").innerHTML = `<option value="">（指名された子を選ぶ）</option>` + list.map(c => `<option value="${c.id}">${esc(c.stores[store].name)}（${esc(c.official_name || c.temp_name)}）</option>`).join("");
+    if(list.some(c => c.id === cur)) $("f_named").value = cur;
+    else if(cur && editing && editing.cast_id === cur) $("f_namedEx").checked = true;   // 前に特例でほかの子にした予約
+    if($("f_dummy").value){ $("f_dummy").value = ""; }
+    onNamedPick(true);
+  } else { $("f_cast").disabled = false; }
+  recalc(); renderDummyMatch();
+}
+function onNamedPick(quiet){
+  const id = $("f_named").value, ex = $("f_namedEx").checked;
+  $("f_cast").disabled = !ex;   // 特例でないときは、指名された子に決まり
+  if(!ex && $("f_cast").value !== id){ $("f_cast").value = id; onCast(); }   // 特例でないときは、指名された子（まだ選んでいなければ空）
+  if(!quiet) recalc();
+}
+// このお客さんの18・極門・ほかのお店の履歴（キャストごと）
+function custHistByCast(){
+  const ds = DUMMY_STORES(), out = {};
+  (Array.isArray(custPast) ? custPast : []).filter(p => !["cancel", "tobi"].includes(p.status)).forEach(p => {
+    const o = out[p.cast_id] = out[p.cast_id] || { dummy: [], other: [] };
+    (ds.includes(p.store_key) ? o.dummy : o.other).push(p);
+  });
+  return out;
+}
+const __renderDummyMatchM = renderDummyMatch;
+renderDummyMatch = async function(){
+  const el = $("dummyMatch"), store = $("f_store").value;
+  if(!isDummyStore(store)){ el.innerHTML = ""; return; }
+  if(dmMode === "named"){ el.innerHTML = namedCasts(store).length ? "" : `<div class="warn" style="margin-top:4px">台帳で、このお店の名前を持っている子がいません（台帳の「🏪 在籍店舗」でこのお店の名前を入れてください）</div>`; return; }
+  await __renderDummyMatchM.apply(this, arguments);
+  // 出した一覧を「行ける子／行けない子」に分けなおす
+  const name = $("f_dummy").value; if(!name || !el.querySelector("button")) return;
+  const hist = custHistByCast(), md = s => s.biz_date.slice(5).replace("-", "/");
+  const same = Object.entries(hist).filter(([, h]) => h.dummy.some(p => p.store_key === store && p.dummy_name === name)).map(([id]) => id);
+  const rowsEl = [...el.querySelectorAll("button")].map(b => b.closest("div[style*='display:flex']")).filter(Boolean);
+  const ng = [];
+  rowsEl.forEach(r => {
+    const id = ((r.querySelector("button").getAttribute("onclick") || "").match(/value='([^']+)'/) || [])[1]; const h = hist[id];
+    const note = [];
+    if(h && h.dummy.length) note.push(`18・極門：${h.dummy.map(p => md(p) + " " + storeLabel(p.store_key) + (p.dummy_name ? "🎭" + p.dummy_name : "")).join("、")}`);
+    if(h && h.other.length) note.push(`ほかのお店：${h.other.slice(0, 3).map(p => md(p) + " " + storeLabel(p.store_key)).join("、")}`);
+    if(note.length) r.querySelector("div").insertAdjacentHTML("beforeend", `<br><small style="color:#7a4a00;font-weight:700">👀 会ったことあり　${esc(note.join("／"))}</small>`);
+    const bad = same.length ? !same.includes(id) : !!(h && h.dummy.length);
+    if(bad){ r.style.opacity = ".45"; r.querySelector("button").disabled = true; ng.push(r); }
+    else if(same.includes(id)) r.style.boxShadow = "0 0 0 2px #2f9e6e inset";
+  });
+  const head = same.length ? `<div class="info" style="margin:6px 0 2px;font-size:12.5px">🎭 このお客さんは前に「${esc(name)}」で <b>${same.map(castName).map(esc).join("・")}</b> が行っています → この子だけが行けます</div>`
+    : Array.isArray(custPast) ? `<div style="font-size:12px;margin:6px 0 2px;color:#2f9e6e;font-weight:800">✅ 行ける子：18・極門でこのお客さんに行ったことがない子（うすい子は行けません）</div>`
+    : `<div class="warn" style="margin:6px 0 2px;font-size:12.5px">先に電話番号で「🔍 調べる」と、このお客さんに行ける子だけにしぼれます</div>`;
+  const list = el.querySelector("div[style*='font-weight:800;margin:6px 0 2px']");
+  if(list) list.insertAdjacentHTML("beforebegin", head);
+  ng.forEach(r => r.parentNode.appendChild(r));   // 行けない子は下へ
+  const foot = [...el.children].find(x => /％は身長/.test(x.textContent || "")); if(foot) el.appendChild(foot);   // 説明はいちばん下に
+};
+// お客さんを調べたら、行ける子を出しなおす。店を変えたら、ダミー指名から
+const __lookupCustomerDm = lookupCustomer;
+lookupCustomer = async function(){ const r = await __lookupCustomerDm.apply(this, arguments); try{ renderDummyMatch(); }catch(e){} return r; };
+const __renderDummyM = renderDummy;
+renderDummy = function(keep){
+  const r = __renderDummyM.apply(this, arguments);
+  if(!isDummyStore($("f_store").value)){ $("f_cast").disabled = false; return r; }
+  if(dmMode === "named") setDmMode("named");   // お店を変えたときは、そのお店の名前で選びなおす
+  else document.querySelectorAll("#dmModeChips .chip").forEach(b => b.classList.toggle("on", b.dataset.m === "dummy"));
+  return r;
+};
+const __openFormDm = openForm;
+openForm = function(id){ dmMode = "dummy"; $("f_namedEx").checked = false; $("f_cast").disabled = false; const r = __openFormDm.apply(this, arguments);
+  if(editing && isDummyStore(editing.store_key || "") && !editing.dummy_name) setDmMode("named"); else document.querySelectorAll("#dmModeChips .chip").forEach(b => b.classList.toggle("on", b.dataset.m === "dummy")); return r; };
+
 /* ---------- 📱 スマホで入れた予約は「仮入力」：PCで開いたら、キャストに送ったかを確かめるチェックが必須。保存すると取り入れる ---------- */
 function IS_PHONE(){ return matchMedia("(max-width:640px)").matches || /iPhone|Android.+Mobile/i.test(navigator.userAgent); }
 function draftBoxPaint(){
@@ -4516,6 +4615,14 @@ function spGo(w){
 }
 document.head.insertAdjacentHTML("beforeend", `<style>
   .spbar{display:none}
+  .custhist{background:#fff;border:1.5px solid #E8D8F0;border-radius:12px;padding:8px 10px;margin-top:8px;font-size:14px;color:var(--ink)}
+  .custhist .ch-head{font-weight:800;font-size:13.5px;color:#5c3d7a;margin-bottom:4px}
+  .custhist .ch-row{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;padding:5px 2px;border-top:1px dashed #EEE3F3}
+  .custhist .ch-row .d{font-weight:800;min-width:42px} .custhist .ch-row .s{color:#7a6468;font-size:13px} .custhist .ch-row .k{color:#7a6468;font-size:13px}
+  .custhist .ch-row .c b{font-size:15px} .custhist .ch-row .dn{background:#EFE6FA;color:#5c3d7a;border-radius:99px;padding:1px 8px;font-weight:800;font-size:13px}
+  .custhist .ch-row.dm{background:#FAF6FE} .custhist .ch-row.x{opacity:.55} .custhist .ch-row .xx{color:#d9534f;font-weight:800;font-size:12.5px}
+  .custhist .ch-foot{border-top:1px solid #EEE3F3;margin-top:4px;padding-top:5px;font-size:13px;color:#7a6468} .custhist .ch-foot b{color:var(--ink)}
+  #dmModeChips .chip.on{background:#8a6fd1;border-color:#8a6fd1;color:#fff}
   .draftbox{background:#FFF8E1;border:2px solid #FFB547;border-radius:12px;padding:8px 12px;margin:0 0 10px;font-size:13.5px;color:#7a4a00;line-height:1.6}
   .rc-draft{background:#FFB547;color:#fff;border-radius:99px;padding:1px 8px;font-size:12px;font-weight:800;white-space:nowrap}
   @media (max-width:640px){
