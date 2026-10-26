@@ -180,6 +180,7 @@
   #editBg details.acc > details.pfPanel, #e_prof details.pfPanel{margin-left:8px;margin-right:2px}
   #editBg details.pfPanel > summary.pfHead{font-size:13.5px;color:#7a5560}
   .pfTools{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}
+  .subT{font-size:13px;font-weight:800;color:var(--pink-deep);margin:14px 0 6px;padding-top:10px;border-top:1.5px dashed var(--line)} .pfBody > .subT:first-child{margin-top:0;padding-top:0;border-top:none}
   /* プロフのお店のタブは、ジャンプのすぐ下に固定（プロフの所にいるあいだ） */
   #editBg{--stickTop:-24px}
   @media (min-width:1100px){ body.pane #editBg{--stickTop:-16px} }
@@ -321,27 +322,28 @@
       <div id="e_notesMove"></div>
       <div id="e_checks"></div>
     </div></details>
-    <details class="pfPanel" data-p="move"><summary class="pfHead">🚃 最寄り駅・長いコース・見た目</summary><div class="pfBody">
-      <div class="f"><label>🚃 キャストの最寄り駅・各店までの時間</label>
-        <div class="areaGrid">
-          <div><small>最寄り駅</small><input id="e_station" maxlength="40" placeholder="例：東池袋"></div>
-          <div><small>池袋まで（分）</small><input type="number" id="e_tIke" min="0" max="300" step="5" placeholder="分"></div>
-          <div><small>鶯谷まで（分）</small><input type="number" id="e_tUgu" min="0" max="300" step="5" placeholder="分"></div>
-          <div><small>五反田まで（分）</small><input type="number" id="e_tGoh" min="0" max="300" step="5" placeholder="分"></div>
-        </div>
-        <small style="display:block;margin-top:6px">そのほか（移動のメモ。なければ空でOK）</small><textarea id="e_area" style="min-height:40px" placeholder="例：終電 0:30／タクシーOK"></textarea></div>
-      <div class="grid" style="margin-top:10px">
-        <div class="f"><label>⌛ 長いコースは何分まで（空＝上限なし）</label><input type="number" id="e_longMax" min="30" max="1440" step="10"></div>
-        <div class="f"><label>それより長いと</label><select id="e_longOver"><option value="">（上限なし）</option><option value="ask">キャストに確認してから</option><option value="ng">受けない（NG）</option></select></div>
+    <details class="pfPanel" data-p="etc"><summary class="pfHead">🗂 移動・コース・系統・メモ</summary><div class="pfBody">
+      <div class="subT">🚃 最寄り駅・移動</div>
+      <div class="areaGrid">
+        <div><small>最寄り駅</small><input id="e_station" maxlength="40" placeholder="例：東池袋"></div>
+        <div><small>池袋まで（分）</small><input type="number" id="e_tIke" min="0" max="300" step="5" placeholder="分"></div>
+        <div><small>鶯谷まで（分）</small><input type="number" id="e_tUgu" min="0" max="300" step="5" placeholder="分"></div>
+        <div><small>五反田まで（分）</small><input type="number" id="e_tGoh" min="0" max="300" step="5" placeholder="分"></div>
       </div>
-      <div class="f" id="e_lookWrap" style="margin-top:8px;display:none"><label>👀 見た目（18・極門のダミー名とのマッチ率に使います）</label><div id="e_look"></div></div>
-    </div></details>
-    <details class="pfPanel" data-p="notes"><summary class="pfHead">📝 特記事項・NG・メモ</summary><div class="pfBody">
-      <div class="hint" style="margin:0 0 8px;background:#FFF6D6;border-radius:10px;padding:6px 10px">⚠️ 特記事項・NG は<b>上の「🖊 受付ルール」に移していきます</b>。ここに書いたものは、受付ルールに移すまで受付に「まだ移していないメモ」として出ます。</div>
-      <div class="f"><label>特記事項 <small style="font-weight:400;color:#9C8B8F">… 内勤が理解しておくこと（お客さんには言わない）。お客さんに言うことは上の「確認事項」へ</small></label><textarea id="e_special"></textarea></div>
-      <div class="f" style="margin-top:10px"><label>NG <small style="font-weight:400;color:#9C8B8F">… キャストが受けないこと（内勤がつけるか判断する材料）</small></label><textarea id="e_ng"></textarea></div>
-      <div class="f" style="margin-top:10px"><label>メモ <small style="font-weight:400;color:#9C8B8F">… そのほか（受付には出ません）</small></label><textarea id="e_note"></textarea></div>
-      <div class="f" style="margin-top:10px"><label>⏱ 予約と予約の間（インターバル・分） <small style="font-weight:400;color:#9C8B8F">… 「予約の間を30分あけてほしい」など。記録簿のタイムラインで予約の前後がグレーになります（0＝なし）</small></label><input type="number" id="e_interval" min="0" max="240" step="5" style="max-width:140px"></div>
+      <small style="display:block;margin-top:6px">そのほか（移動のメモ。なければ空でOK）</small><textarea id="e_area" style="min-height:40px" placeholder="例：終電 0:30／タクシーOK"></textarea>
+      <div class="subT">⌚ コース制限・インターバル</div>
+      <div class="grid">
+        <div class="f"><label>長いコースは何分まで（空＝上限なし）</label><input type="number" id="e_longMax" min="30" max="1440" step="10"></div>
+        <div class="f"><label>それより長いと</label><select id="e_longOver"><option value="">（上限なし）</option><option value="ask">キャストに確認してから</option><option value="ng">受けない（NG）</option></select></div>
+        <div class="f"><label>予約と予約の間（インターバル・分） <small style="font-weight:400;color:#9C8B8F">… タイムラインで予約の前後がグレーに（0＝なし）</small></label><input type="number" id="e_interval" min="0" max="240" step="5"></div>
+      </div>
+      <div id="e_lookWrap" style="display:none"><div class="subT">👧 系統</div>
+        <div class="hint" style="margin:0 0 6px">18・極門のダミー名とのマッチ率に使います</div><div id="e_look"></div></div>
+      <div class="subT">📝 メモ</div>
+      <div class="f"><label>メモ <small style="font-weight:400;color:#9C8B8F">… そのほか（受付には出ません）</small></label><textarea id="e_note"></textarea></div>
+      <div class="hint" style="margin:10px 0 8px;background:#FFF6D6;border-radius:10px;padding:6px 10px">⚠️ 特記事項・NG は<b>「🖊 受付ルール」に移すまで</b>ここに残ります。受付には「まだ移していないメモ」として出ます。</div>
+      <div class="f"><label>特記事項 <small style="font-weight:400;color:#9C8B8F">… 内勤が理解しておくこと（お客さんには言わない）</small></label><textarea id="e_special"></textarea></div>
+      <div class="f" style="margin-top:10px"><label>NG <small style="font-weight:400;color:#9C8B8F">… キャストが受けないこと</small></label><textarea id="e_ng"></textarea></div>
     </div></details>
     <details class="pfPanel" data-p="hotel"><summary class="pfHead">🏨 ホテル <small style="font-weight:400;color:#9C8B8F">（このキャストだけの◎△×。お店のホテル一覧は変わりません）</small></summary><div class="pfBody">
       <div id="e_hotel"></div>
@@ -2414,7 +2416,7 @@ function pfAccT(el){ if(el.open) pfOpen.add(el.dataset.p); else pfOpen.delete(el
 function showEl(el){ for(let p = el && el.parentElement; p; p = p.parentElement) if(p.tagName === "DETAILS") p.open = true; return el; }   // 閉じている項目の中なら開く
 const EDIT_JUMP = [["basic", "👤 入店時情報"], ["logs", "🗓 記録・ログ"], ["stores", "🏪 在籍店舗"], ["prof", "📝 プロフ"], ["rules", "📋 記録簿関連"], ["confirm", "📨 更新フォームURL"], ["links", "🔗 アプリ"]];
 const PF_JUMP = [["ptype", "性格"], ["basic", "基本情報"], ["intro", "紹介文"], ["opts", "オプション"], ["photo", "写真"]];
-const SUB_JUMP = { basic: [["private", "連絡先"]], rules: [["rules", "受付ルール"], ["notes", "特記事項"], ["hotel", "ホテル"], ["terms", "バック"]] };   // 大きい項目の中の小さい項目（プロフのほか）
+const SUB_JUMP = { basic: [["private", "連絡先"]], rules: [["rules", "受付ルール"], ["etc", "移動・メモ"], ["hotel", "ホテル"], ["terms", "バック"]] };   // 大きい項目の中の小さい項目（プロフのほか）
 function paintEditJump(){
   $("editJump").innerHTML = EDIT_JUMP.map(([k, l]) => `<button type="button" onclick="jumpTo('${k}')">${l}</button>` +
       (k === "prof" ? PF_JUMP.map(([p, pl]) => `<button type="button" class="sub" onclick="jumpProf('${p}')">${pl}</button>`).join("") : "") +
