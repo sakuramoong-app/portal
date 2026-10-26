@@ -1965,7 +1965,7 @@ async function pfPhotoSaveOrder(){
 function pfPhotoUrl(site, no, k){ return `https://www.${site}.com/galpic/` + (k === 0 ? `gal180x240-${no}.jpg` : `gal390x520-${no}${k === 1 ? "" : "-" + (k - 1)}.jpg`) + "?v=" + pfPhotoBust; }
 function pfPhotoHtml(){
   const { mk, no } = hpNoOf(pf.c, pf.sk), site = HP_SITE_OF[mk];
-  if(!site || !no) return `<div class="hint">このお店の公式HPの在籍番号がまだないので、写真を出せません（「🏪 在籍店舗」に番号を入れてください）。</div>`;
+  if(!site || !no) return `<div class="hint">このお店の公式HPの在籍番号がまだないので、写真を出せません（「🏪 在籍店舗」に番号を入れてください）。</div>` + (CAN_EDIT ? pfFormPhHtml() : "");
   const srcs = pf.stores.filter(s => s !== pf.sk).map(s => ({ s, ...hpNoOf(pf.c, s) })).filter(x => x.no && HP_SITE_OF[x.mk]);
   const img = k => `<img src="${pfPhotoUrl(site, no, k)}" alt="${PF_SLOT_LABEL[k]}" loading="lazy" onerror="this.outerHTML='<div class=&quot;phNone&quot;>なし</div>'">`;
   // ↕ 並べかえ中：プロフ用①〜⑧を ◀ ▶ で入れかえて「この順番で入れる」
@@ -1997,7 +1997,61 @@ function pfPhotoHtml(){
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoRun('ng')">🖼 撮影準備中にする</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoOrder=[1,2,3,4,5,6,7,8];pfPhotoOrderSk=pf.sk;pfCollect();paintProf()">↕ 並べかえ</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoBust=Date.now();pfCollect();paintProf()">🔄 読みなおす</button></div>
-      <div id="phMsg" class="hint" style="margin-top:4px">写真は「更新」しなくても公式HPに出ます。入れた枠の写真は上書きされます。</div>` : ""}`;
+      <div id="phMsg" class="hint" style="margin-top:4px">写真は「更新」しなくても公式HPに出ます。入れた枠の写真は上書きされます。</div>` : ""}
+    ${CAN_EDIT ? pfFormPhHtml() : ""}`;
+}
+/* ---------- 📨 キャストが確認フォームから送った写真（Storage の cast-form-photos／<合言葉>/…。SQL 159）。消すまで残る ---------- */
+let pfFormPh = { cid: null, list: null, err: "" };
+async function pfFormPhLoad(){
+  const cid = pf && pf.c && pf.c.id; if(!cid) return;
+  pfFormPh = { cid, list: null, err: "" };
+  try{
+    const links = q(await sb.from("prof_confirm_links").select("token").eq("cast_id", cid)) || [], all = [];
+    for(const l of links){
+      const { data, error } = await sb.storage.from("cast-form-photos").list(l.token, { limit: 100, sortBy: { column: "created_at", order: "desc" } });
+      if(error) throw error;
+      (data || []).filter(x => x.id).forEach(x => all.push({ path: l.token + "/" + x.name, name: x.name, size: (x.metadata || {}).size || 0, type: (x.metadata || {}).mimetype || "", at: x.created_at || "" }));
+    }
+    if(all.length){ const { data, error } = await sb.storage.from("cast-form-photos").createSignedUrls(all.map(x => x.path), 3600); if(error) throw error; (data || []).forEach((d, i) => { all[i].url = d.signedUrl; }); }
+    pfFormPh.list = all.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  }catch(e){ pfFormPh.list = []; pfFormPh.err = e.message || String(e); }
+  if(pf && pf.c && pf.c.id === cid){ pfCollect(); paintProf(); }
+}
+function pfFormPhHtml(){
+  if(!pf || !pf.c) return "";
+  if(pfFormPh.cid !== pf.c.id){ setTimeout(pfFormPhLoad, 0); return ""; }
+  const L = pfFormPh.list;
+  if(!L) return `<div class="hint" style="margin-top:8px">📨 フォームから届いた写真を読んでいます…</div>`;
+  if(pfFormPh.err) return /bucket|not found/i.test(pfFormPh.err) ? "" : `<div class="hint" style="margin-top:8px;color:#d9534f">📨 フォームから届いた写真を読めませんでした：${esc(pfFormPh.err)}</div>`;
+  if(!L.length) return "";
+  const mb = L.reduce((a, x) => a + x.size, 0) / 1048576, md = s => { const d = new Date(s); return isNaN(d) ? "" : (d.getMonth() + 1) + "/" + d.getDate(); };
+  return `<div style="background:#F4F0FF;border-radius:14px;padding:10px 12px;margin-top:10px">
+    <div style="font-weight:800;font-size:13.5px">📨 キャストがフォームから送った写真（${L.length}枚・${mb.toFixed(1)}MB）</div>
+    <div class="hint" style="margin:2px 0 8px">上の枠に<b>1つチェック</b>して「📥 枠に入れる」→ ✂️ トリミング → 「💾 新しい写真を入れる」。元の写真は「⬇ PCに保存」。<b>消すまで残ります</b>（置き場所は全部で1GBまでなので、いらなくなったら🗑）。</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px">${L.map((x, i) => `<div style="background:#fff;border-radius:10px;padding:6px;font-size:11.5px">
+      <a href="${esc(x.url)}" target="_blank" rel="noopener"><img src="${esc(x.url)}" alt="" loading="lazy" style="width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;background:#eee" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:'（この形式はここでは見られません。PCに保存して開いてください）',style:'font-size:11px;color:#9C8B8F;padding:20px 4px'}))"></a>
+      <div style="color:#9C8B8F;margin:2px 0">${md(x.at)}・${(x.size / 1048576).toFixed(1)}MB</div>
+      <div style="display:flex;flex-wrap:wrap;gap:3px">
+        <button type="button" class="phMv" style="width:auto;padding:2px 6px" onclick="pfFormPhTake(${i})">📥 枠に入れる</button>
+        <a class="phMv" style="width:auto;padding:2px 6px;text-decoration:none" href="${esc(x.url)}&download=${encodeURIComponent((pf.c.official_name || pf.c.temp_name || "photo") + "_" + x.name)}">⬇ PCに保存</a>
+        <button type="button" class="phMv" style="width:auto;padding:2px 6px;color:#c9556a" onclick="pfFormPhDel(${i})">🗑</button></div></div>`).join("")}</div></div>`;
+}
+async function pfFormPhTake(i){
+  const x = (pfFormPh.list || [])[i]; if(!x) return;
+  const sel = [...document.querySelectorAll(".phSel:checked")].map(b => Number(b.value));
+  if(sel.length !== 1){ toast("📷 上の枠に、入れる所を1つだけチェックしてください"); return; }
+  try{
+    toast("写真を読んでいます…");
+    const b = await (await fetch(x.url)).blob();
+    pfPhotoAdd([new File([b], x.name, { type: b.type || x.type || "image/jpeg" })], sel[0]);
+  }catch(e){ toast("読めませんでした：" + (e.message || e)); }
+}
+async function pfFormPhDel(i){
+  const x = (pfFormPh.list || [])[i]; if(!x) return;
+  if(!confirm("この写真を消しますか？（PCに保存していなければ、もとに戻せません）")) return;
+  const { error } = await sb.storage.from("cast-form-photos").remove([x.path]);
+  if(error){ toast("消せませんでした：" + error.message); return; }
+  toast("🗑 消しました"); pfFormPhLoad();
 }
 async function pfPhotoRun(mode){
   if(pfPhotoBusy) return;
