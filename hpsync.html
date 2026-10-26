@@ -329,20 +329,23 @@ async function photoPeek(press){
 
 /* ---------- 📷 写真をほかのお店からコピー ---------- */
 (function(){ const el = document.getElementById("pcSlots"); if(!el) return;
-  el.innerHTML = "入れる枠：" + ["一覧用", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧"].map((l, k) => `<label style="margin-right:8px;white-space:nowrap"><input type="checkbox" class="pcSlot" value="${k}" checked> ${l}</label>`).join(""); })();
+  const L = ["一覧用", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧"];
+  el.innerHTML = "コピーして入れる枠：" + L.map((l, k) => `<label style="margin-right:8px;white-space:nowrap"><input type="checkbox" class="pcSlot" value="${k}" checked> ${l}</label>`).join("")
+    + `<div style="margin-top:6px">撮影準備中（入れる先のお店の「NG画像」）にする枠：` + L.map((l, k) => `<label style="margin-right:8px;white-space:nowrap"><input type="checkbox" class="pcNg" value="${k}" onchange="if(this.checked)document.querySelectorAll('.pcSlot')[${k}].checked=false"> ${l}</label>`).join("") + `</div>`; })();
 async function photoCopy(dry){
   const res = document.getElementById("pcRes"), out = document.getElementById("pcOut"), store = document.getElementById("testStore").value;
   const site = document.getElementById("pcSite").value, from = Number(document.getElementById("pcFrom").value) || 0, no = Number(document.getElementById("pcTo").value) || 0;
-  const slots = [...document.querySelectorAll(".pcSlot:checked")].map(b => Number(b.value));
+  const ng = [...document.querySelectorAll(".pcNg:checked")].map(b => Number(b.value));
+  const slots = [...document.querySelectorAll(".pcSlot:checked")].map(b => Number(b.value)).filter(k => !ng.includes(k));
   if(store === "__all"){ res.innerHTML = `<span class="ng">上の「お店」で、入れる先のお店を1つ選んでください</span>`; return; }
-  if(!from || !no || !slots.length){ res.innerHTML = `<span class="ng">番号と入れる枠を入れてください</span>`; return; }
-  if(!dry && !confirm(`${slots.length}枠の写真を上書きします。よろしいですか？`)) return;
+  if(!from || !no || !(slots.length + ng.length)){ res.innerHTML = `<span class="ng">番号と入れる枠を入れてください</span>`; return; }
+  if(!dry && !confirm(`${slots.length + ng.length}枠の写真を上書きします。よろしいですか？`)) return;
   res.innerHTML = dry ? "ためしています…" : "入れています…（1分ほど）";
-  const r = await callFn({ action: "cast_photo_copy", store, no, from: { site, no: from }, slots, dry });
+  const r = await callFn({ action: "cast_photo_copy", store, no, from: { site, no: from }, slots, ng, dry });
   out.style.display = ""; out.value = JSON.stringify(r, null, 1);
   if(!r.results){ res.innerHTML = `<span class="ng">❌ ${esc(r.error || r.message || "できませんでした（ロボットを新しくデプロイした？）")}</span>`; return; }
   const lab = k => k === 0 ? "一覧用" : "①②③④⑤⑥⑦⑧"[k - 1];
-  res.innerHTML = r.results.map(x => `<div>${lab(x.slot)}：${x.ok ? (dry ? "✅ 入れられそう" : "✅ 入れました") : x.skip ? "⏭ " + esc(x.skip) : `<span class="ng">❌ ${esc(x.error || x.msg || "うまくいきませんでした")}</span>`}</div>`).join("")
+  res.innerHTML = r.results.map(x => `<div>${lab(x.slot)}：${x.ok ? (dry ? "✅ 入れられそう" : "✅ 入れました") + (x.ng ? "（撮影準備中）" : "") : x.skip ? "⏭ " + esc(x.skip) : `<span class="ng">❌ ${esc(x.error || x.msg || "うまくいきませんでした")}</span>`}</div>`).join("")
     + (dry ? "" : `<div class="lead">公式HPで写真を確かめてください（写真は「更新」しなくても出ます）。下の結果もコピーしてClaudeに貼ってください。</div>`);
 }
 
