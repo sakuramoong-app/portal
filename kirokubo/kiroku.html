@@ -389,6 +389,12 @@
     <details class="fold" id="viewBoard" open><summary>🗺 今どこに誰が<small>名前をつまんで移動・長押しでその子の予約を追加・ダブルクリックで本日のキャスト一覧のその子の枠へ・今いないは押すと色が変わる</small></summary>
       <div class="wrapx"><div id="boardGrid"></div></div>
     </details>
+    <!-- 🔎 キャストから行ける日を探す（「○○はいつなら空いてる？」の電話用） -->
+    <details class="fold" id="castFind" ontoggle="if(this.open) cfPaint()"><summary>🔎 キャストから行ける日を探す<small>「○○ちゃんはいつなら空いてる？」のとき：出勤日と、あいている時間を2週間分</small></summary>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:4px 0 8px"><select id="cf_cast" onchange="cfPaint()" style="max-width:260px"></select>
+        <select id="cf_days" onchange="cfPaint()" style="width:auto"><option value="14">2週間</option><option value="7">1週間</option><option value="28">4週間</option></select></div>
+      <div id="cf_out"></div>
+    </details>
     <!-- ここ（タブ・日付・並び）は、下に読み進めても上に残る -->
     <div class="stickybar">
     <div class="tabs" id="tabs">
@@ -4575,6 +4581,53 @@ renderDummy = function(keep){
 const __openFormDm = openForm;
 openForm = function(id){ dmMode = "dummy"; $("f_namedEx").checked = false; $("f_cast").disabled = false; const r = __openFormDm.apply(this, arguments);
   if(editing && isDummyStore(editing.store_key || "") && !editing.dummy_name) setDmMode("named"); else document.querySelectorAll("#dmModeChips .chip").forEach(b => b.classList.toggle("on", b.dataset.m === "dummy")); return r; };
+
+/* ---------- 🔎 キャストから行ける日を探す：今日から○日分の出勤（受理したシフト）と、入っている予約・あいている時間 ---------- */
+async function cfPaint(){
+  const sel = $("cf_cast"), out = $("cf_out");
+  if(!sel.options.length){
+    const cs = M.casts.filter(c => c.status !== "left").sort((a, b) => String(a.kana || castName(a.id)).localeCompare(String(b.kana || castName(b.id)), "ja"));
+    sel.innerHTML = `<option value="">（キャストを選ぶ）</option>` + cs.map(c => `<option value="${c.id}">${esc(castName(c.id))}</option>`).join("");
+  }
+  const c = M.casts.find(x => x.id === sel.value);
+  if(!c){ out.innerHTML = `<div class="hint2" style="font-size:12.5px;color:var(--sub)">キャストを選ぶと、出勤日とあいている時間が出ます</div>`; return; }
+  const n = Number($("cf_days").value) || 14, from = KB.bizDateOf();
+  const ymds = Array.from({ length: n }, (_, i) => new Date(Date.parse(from + "T00:00:00Z") + i * 864e5).toISOString().slice(0, 10));
+  out.innerHTML = `<div class="hint2" style="font-size:12.5px;color:var(--sub)">読んでいます…</div>`;
+  try{
+    const sh = await castShiftDays(c, [...new Set(ymds.map(weekKeyOfYmd))]);
+    const rs = q(await sb.from("kb_reservations").select("id,biz_date,start_at,end_at,status,area").eq("cast_id", c.id).eq("deleted", false).gte("biz_date", ymds[0]).lte("biz_date", ymds[ymds.length - 1])) || [];
+    if(sel.value !== c.id) return;
+    const gap = (c.interval_min || 0) / 60, DOWJ = ["日", "月", "火", "水", "木", "金", "土"];
+    const rowsH = ymds.map(ymd => {
+      const s = sh[ymd], d = new Date(ymd + "T12:00:00Z"), lab = `${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOWJ[d.getUTCDay()]})`;
+      if(!s) return `<div class="cf-row off"><b>${lab}</b><span>お休み</span></div>`;
+      const bk = rs.filter(r => r.biz_date === ymd && !["cancel", "tobi"].includes(r.status) && r.start_at && r.end_at)
+        .map(r => { const a = hourOf(r.start_at); let b = hourOf(r.end_at); if(b < a) b += 24; return { a, b, r }; }).sort((x, y) => x.a - y.a);
+      // あいている時間＝出勤時間から、予約（＋このキャストの「予約の間」）を引いたもの。30分より短いすき間は出さない
+      const free = []; let t = s.start;
+      bk.forEach(x => { if(x.a - gap - t >= 0.5) free.push([t, x.a - gap]); t = Math.max(t, x.b + gap); });
+      if(s.end - t >= 0.5) free.push([t, s.end]);
+      return `<div class="cf-row"><b>${lab}</b><span class="sh">出勤 ${fmtHour(s.start)}〜${fmtHour(s.end)}</span>
+        <span class="fr">${free.length ? "あき " + free.map(([a, b]) => `<b>${fmtHour(a)}〜${fmtHour(b)}</b>`).join("・") : `<b style="color:#d9534f">うまっています</b>`}</span>
+        ${bk.length ? `<span class="bk">予約 ${bk.map(x => `${fmtHour(x.a)}〜${fmtHour(x.b)}${x.r.area ? " " + esc(x.r.area) : ""}`).join("・")}</span>` : ""}
+        ${KB.CAN_EDIT ? `<button type="button" class="rc-open" onclick="cfBook('${c.id}','${ymd}')">＋ この日で予約</button>` : ""}</div>`;
+    }).join("");
+    out.innerHTML = `<div class="cf-list">${rowsH}</div><div class="hint2" style="font-size:11.5px;color:var(--sub);margin-top:4px">出勤は、内勤が受理したシフトだけです。${gap ? `このキャストは予約の間を${c.interval_min}分あけます（あきの時間は、それを引いてあります）。` : ""}</div>`;
+  }catch(e){ out.innerHTML = `<div class="warn">読めませんでした：${esc(e.message || e)}</div>`; }
+}
+function cfBook(cid, ymd){
+  openForm(null);
+  $("f_day").value = ymd; $("f_day").dispatchEvent(new Event("change"));
+  $("f_cast").value = cid; if($("f_cast").value !== cid && $("f_castAll")){ $("f_castAll").checked = true; fillCastSel(); $("f_cast").value = cid; }
+  onCast();
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .cf-list{display:flex;flex-direction:column;gap:4px}
+  .cf-row{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;background:#fff;border:1.5px solid #F1E3E7;border-radius:10px;padding:6px 10px;font-size:13.5px}
+  .cf-row.off{background:#FAF7F8;color:#B9A9AE;padding:4px 10px;font-size:12.5px} .cf-row > b{min-width:62px}
+  .cf-row .sh{color:#7a6468} .cf-row .fr b{color:#1f9d6b} .cf-row .bk{color:#9C8B8F;font-size:12.5px} .cf-row .rc-open{margin-left:auto}
+</style>`);
 
 /* ---------- 📱 スマホで入れた予約は「仮入力」：PCで開いたら、キャストに送ったかを確かめるチェックが必須。保存すると取り入れる ---------- */
 function IS_PHONE(){ return matchMedia("(max-width:640px)").matches || /iPhone|Android.+Mobile/i.test(navigator.userAgent); }
