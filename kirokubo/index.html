@@ -133,6 +133,11 @@
   .pfPanel{background:#fff;border:1.5px solid #F7D9E2;border-radius:16px;margin-bottom:10px;overflow:hidden}
   .pfHead{background:#FFF0F5;padding:8px 14px;font-weight:800;font-size:13.5px;color:#5C4B4F;display:flex;align-items:center;gap:6px}
   .pfBody{padding:10px 14px}
+  .phGrid{display:flex;flex-wrap:wrap;gap:8px} .phCell{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11.5px;font-weight:800;color:#7a6468;cursor:pointer}
+  .phCell img,.phNone{width:78px;height:104px;object-fit:cover;border-radius:8px;border:1.5px solid #F1E3E7;background:#FAF7F8} .phCell.list img,.phCell.list .phNone{width:78px;height:104px}
+  .phNone{display:flex;align-items:center;justify-content:center;color:#C9B8BE;font-size:12px}
+  .phCell span{display:flex;align-items:center;gap:3px} .phCell input{width:auto;margin:0}
+  .phTools{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px} .phTools select{width:auto;max-width:220px}
   .pfView .ed{display:none !important} .pfBody:not(.pfView) .vw{display:none !important}
   .pfEditBtn{margin-left:auto;background:#FFF0F5;border:1.5px solid #FFC2D1;border-radius:10px;padding:4px 10px;font-size:11.5px;font-weight:800;color:#e0507a;cursor:pointer;font-family:inherit}
   .pfCards{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px} @media (max-width:560px){ .pfCards{grid-template-columns:1fr} }
@@ -1705,6 +1710,52 @@ function pfBulkRun(){
   $("bulkBg").remove(); paintProf();
   toast(`${ts.map(STORE_LABEL_OF).join("・")} に写しました。「💾 保存だけ」か「💾 プロフを保存」で保存してください`);
 }
+// 📷 写真（公式HPに出ている写真。このお店のタブの在籍番号で）：ほかのお店からコピー・撮影準備中（お店のNG画像）にする
+const PF_SLOT_LABEL = ["一覧用", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧"];
+let pfPhotoBust = Date.now(), pfPhotoBusy = false;
+function pfPhotoUrl(site, no, k){ return `https://www.${site}.com/galpic/` + (k === 0 ? `gal180x240-${no}.jpg` : `gal390x520-${no}${k === 1 ? "" : "-" + (k - 1)}.jpg`) + "?v=" + pfPhotoBust; }
+function pfPhotoHtml(){
+  const { mk, no } = hpNoOf(pf.c, pf.sk), site = HP_SITE_OF[mk];
+  if(!site || !no) return `<div class="hint">このお店の公式HPの在籍番号がまだないので、写真を出せません（「🏪 在籍店舗」に番号を入れてください）。</div>`;
+  const srcs = pf.stores.filter(s => s !== pf.sk).map(s => ({ s, ...hpNoOf(pf.c, s) })).filter(x => x.no && HP_SITE_OF[x.mk]);
+  const cells = PF_SLOT_LABEL.map((l, k) => `<label class="phCell ${k === 0 ? "list" : ""}">
+      <img src="${pfPhotoUrl(site, no, k)}" alt="${l}" loading="lazy" onerror="this.outerHTML='<div class=&quot;phNone&quot;>なし</div>'">
+      <span>${CAN_EDIT ? `<input type="checkbox" class="phSel" value="${k}"> ` : ""}${l}</span></label>`).join("");
+  return `<div class="phGrid">${cells}</div>
+    ${CAN_EDIT ? `<div class="phTools">
+      <span style="font-size:12px;color:#9C8B8F">チェックした枠を</span>
+      ${srcs.length ? `<select id="phSrc">${srcs.map(x => `<option value="${esc(x.s)}">${esc(STORE_LABEL_OF(x.s))}（${x.no}番）</option>`).join("")}</select>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoRun('copy')">📷 の同じ枠からコピー</button>` : ""}
+      <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoRun('ng')">🖼 撮影準備中にする</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoBust=Date.now();pfCollect();paintProf()">🔄 読みなおす</button></div>
+      <div id="phMsg" class="hint" style="margin-top:4px">写真は「更新」しなくても公式HPに出ます。入れた枠の写真は上書きされます。</div>` : ""}`;
+}
+async function pfPhotoRun(mode){
+  if(pfPhotoBusy) return;
+  const sel = [...document.querySelectorAll(".phSel:checked")].map(b => Number(b.value));
+  if(!sel.length){ toast("写真の枠にチェックしてください"); return; }
+  const { mk, no } = hpNoOf(pf.c, pf.sk), site = HP_SITE_OF[mk];
+  let from = { site, no };
+  if(mode === "copy"){
+    const s = $("phSrc") && $("phSrc").value, x = s && hpNoOf(pf.c, s);
+    if(!x || !x.no || !HP_SITE_OF[x.mk]){ toast("コピー元のお店を選んでください"); return; }
+    from = { site: HP_SITE_OF[x.mk], no: x.no };
+  }
+  const what = mode === "copy" ? `${STORE_LABEL_OF($("phSrc").value)}の同じ枠の写真に` : "撮影準備中（このお店のNG画像）に";
+  if(!confirm(`${STORE_LABEL_OF(pf.sk)}（${no}番）の ${sel.map(k => PF_SLOT_LABEL[k]).join("・")} を、${what}します。今の写真は上書きされます。よろしいですか？`)) return;
+  pfPhotoBusy = true; if($("phMsg")) $("phMsg").textContent = "入れています…（1枠10秒ほど）";
+  try{
+    const r = await hpFn({ action: "cast_photo_copy", store: mk, no, from, slots: mode === "copy" ? sel : [], ng: mode === "ng" ? sel : [] });
+    const res = r.results || [];
+    const ok = res.filter(x => x.ok).map(x => PF_SLOT_LABEL[x.slot]), bad = res.filter(x => !x.ok);
+    toast(ok.length ? `📷 ${ok.join("・")} を入れました` : "入れられませんでした");
+    pfPhotoBust = Date.now(); pfCollect(); paintProf();
+    if($("phMsg")) $("phMsg").innerHTML = (ok.length ? `✅ ${esc(ok.join("・"))} を入れました。` : "") +
+      (bad.length ? `<span style="color:#d9534f">❌ ${bad.map(x => esc(PF_SLOT_LABEL[x.slot] + "：" + (x.skip || x.error || x.msg || "できませんでした"))).join("／")}</span>` : "") +
+      (!res.length ? `<span style="color:#d9534f">❌ ${esc(r.error || "できませんでした")}</span>` : "");
+  }catch(e){ toast("入れられませんでした：" + (e.message || e)); }
+  finally{ pfPhotoBusy = false; }
+}
 function paintProf(){
   const el = $("e_prof"); if(!pf || !el) return;
   const { data, sk } = pf, ro = CAN_EDIT ? "" : "disabled";
@@ -1724,6 +1775,7 @@ function paintProf(){
       ${CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfHpImport()">🌐 公式HPから取りこむ</button>` : ""}
       <a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(pf.prof.id)}" target="_blank" rel="noopener">📂 プロフの画面で開く</a></div>
     ${PROF_DUMMY.includes(sk) ? `<div class="hint" style="margin-bottom:6px">${esc(STORE_LABEL_OF(sk))}は名前・年齢を変えた別の設定です（公式HPにはまだ入れられません）。</div>` : ""}
+    <details ${pfAcc("photo")}><summary class="pfHead">📷 写真 <small style="font-weight:400;color:#9C8B8F">（公式HPに出ている写真）</small></summary><div class="pfBody">${pfPhotoHtml()}</div></details>
     <details ${pfAcc("basic")}><summary class="pfHead">📋 基本情報 ${hpLinkOf(pf.c, sk)}${CAN_EDIT ? `<button type="button" class="pfEditBtn" onclick="event.preventDefault();pfToggleEdit('basic')">${pfEdit.basic ? "✓ 見る形にもどす" : "✏️ 編集する"}</button>` : ""}</summary>
       <div class="pfBody ${pfEdit.basic ? "" : "pfView"}"><div class="pfCards">
       ${PF_BASIC.map(([f, l], i) => { const v = String(profGet(data, sk, f) || ""); return `<div class="pfCard"><div class="lb">${i + 1} ${l}</div>
@@ -2206,7 +2258,7 @@ function pfAccT(el){ if(el.open) pfOpen.add(el.dataset.p); else pfOpen.delete(el
 function showEl(el){ for(let p = el && el.parentElement; p; p = p.parentElement) if(p.tagName === "DETAILS") p.open = true; return el; }   // 閉じている項目の中なら開く
 const EDIT_JUMP = [["basic", "👤 名前・状態"], ["logs", "🗓 記録・ヒアリング"], ["onb", "🧾 手続き"], ["stores", "🏪 在籍店舗"], ["prof", "📝 プロフ"], ["terms", "⭐ バック"], ["rules", "📋 受付ルール"],
   ["private", "📞 連絡先"], ["confirm", "📨 確認フォーム"], ["notes", "📝 特記事項"], ["links", "🔗 アプリ"]];
-const PF_JUMP = [["basic", "基本情報"], ["opts", "オプション"], ["intro", "紹介文"], ["hotel", "ホテル"], ["ptype", "性格"]];
+const PF_JUMP = [["photo", "写真"], ["basic", "基本情報"], ["opts", "オプション"], ["intro", "紹介文"], ["hotel", "ホテル"], ["ptype", "性格"]];
 function paintEditJump(){
   $("editJump").innerHTML = EDIT_JUMP.map(([k, l]) => `<button type="button" onclick="jumpTo('${k}')">${l}</button>` +
       (k === "prof" ? PF_JUMP.map(([p, pl]) => `<button type="button" class="sub" onclick="jumpProf('${p}')">${pl}</button>`).join("") : "")).join("")
