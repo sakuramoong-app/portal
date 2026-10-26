@@ -133,6 +133,15 @@
   .pfPanel{background:#fff;border:1.5px solid #F7D9E2;border-radius:16px;margin-bottom:10px;overflow:hidden}
   .pfHead{background:#FFF0F5;padding:8px 14px;font-weight:800;font-size:13.5px;color:#5C4B4F;display:flex;align-items:center;gap:6px}
   .pfBody{padding:10px 14px}
+  .pfGrid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px} .pfGrid2 label,#e_prof .pfBody > div > label{display:block;font-size:11.5px;color:#9C8B8F;font-weight:700;margin-bottom:4px}
+  .pfMeta{margin:12px 0 14px;padding:10px 0 12px;border-top:1px solid #f3e6ea;border-bottom:1px solid #f3e6ea;font-size:13px}
+  .pfLogTtl{font-size:12.5px;font-weight:800;margin-bottom:8px}
+  .pfRetire{background:#fff0f0;border:1.5px solid #FF8FAB;border-radius:10px;padding:6px 14px;font-size:12px;font-weight:800;color:#e0507a;cursor:pointer;font-family:inherit}
+  .pfLeftTag{font-size:11.5px;font-weight:800;padding:4px 12px;border-radius:10px;background:#eee;color:#888}
+  .pfLeftBox{background:#f5f5f5;border-radius:8px;padding:10px;font-size:13px}
+  .pfLink{border:none;background:none;color:#c9556a;font-size:11.5px;font-weight:800;padding:0;margin-right:12px;cursor:pointer;text-decoration:underline;font-family:inherit} .pfLink.del{color:#d9534f}
+  .pfAddLog{background:#F3EEFF;border-radius:12px;padding:12px} .pfAddLog .ttl{font-size:12.5px;font-weight:800;color:#5020aa;margin-bottom:8px}
+  .pfAddBtn{width:100%;margin-top:8px;background:linear-gradient(135deg,#B7A6FF,#9B7EF0);border:none;border-radius:10px;padding:10px;font-size:13px;font-weight:800;color:#fff;cursor:pointer;font-family:inherit}
   .areaGrid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px} .areaGrid small,.f > small{font-size:11.5px;color:#9C8B8F;font-weight:700}
   @media (max-width:560px){ .areaGrid{grid-template-columns:1fr 1fr} .areaGrid > div:first-child{grid-column:1/-1} }
   /* アコーディオン（最初は閉じておく）と、上に固定の「項目へジャンプ」 */
@@ -1538,7 +1547,7 @@ async function renderProf(id){
   let prof, logs;
   try{
     const [p, lg] = await Promise.all([
-      sb.from("prof_casts").select("id,name,data").eq("id", c.prof_id).single(),
+      sb.from("prof_casts").select("id,name,data,updated_at").eq("id", c.prof_id).single(),
       sb.from("prof_logs").select("log_id,type,date,content,author,created_at").eq("cast_id", c.prof_id).order("date", { ascending: false }).order("created_at", { ascending: false }).limit(40),
     ]);
     prof = q(p); logs = q(lg) || [];
@@ -1598,24 +1607,30 @@ function paintProf(){
       ${hotelHtml ? `<div class="pfChips">${hotelHtml}</div>` : `<div class="hint">まだありません</div>`}
       ${CAN_EDIT ? pfHotelEditor(hp) : ""}</div></details>
     ${pfPersonalityHtml(data)}
-    <details ${pfAcc("logs")}><summary class="pfHead">🗓 記録・ログ（ヒアリングなど）</summary><div class="pfBody">
-      ${CAN_EDIT ? `<div style="background:#FFF5F8;border-radius:12px;padding:8px 10px;margin-bottom:6px">
-        <div style="display:flex;gap:6px;flex-wrap:wrap"><select id="pf_lt" style="max-width:190px">${PF_LOG_TYPES.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
-          <input type="date" id="pf_ld" value="${todayYmd()}" style="max-width:160px"></div>
-        <textarea id="pf_lc" style="margin-top:6px;min-height:60px" placeholder="記録の中身（ヒアリングした内容など）"></textarea>
-        <div style="text-align:right;margin-top:4px"><button class="btn btn-ghost btn-sm" onclick="pfAddLog()">＋ 記録を足す</button></div></div>` : ""}
+    <details ${pfAcc("logs")}><summary class="pfHead">🗓 記録・ログ（面接・入店・ヒアリングなど）</summary><div class="pfBody">
+      ${pfLogTop()}
+      <div class="pfLogTtl">📚 記録タイムライン</div>
       <div class="pfTabs" style="margin-bottom:8px">${["全て"].concat(PF_LOG_TYPES.map(t => t[0]), ["退店"]).map(k => `<button type="button" class="pfTab ${pfLogFilter === k ? "on" : ""}" onclick="pfLogFilter='${k}';pfCollect();paintProf()">${k === "全て" ? "全て" : esc(PF_LOG_LABEL[k] || k)}</button>`).join("")}</div>
+      <div style="max-height:340px;overflow-y:auto;margin-bottom:12px">
       ${pf.logs.map((l, i) => ({ l, i })).filter(x => pfLogFilter === "全て" || x.l.type === pfLogFilter).map(({ l, i }) => { const mk = staffMark(l.author);
         return `<div id="pf_log_${i}" style="background:${mk.bg};border:1px solid rgba(0,0,0,.06);border-left:5px solid ${mk.color};border-radius:10px;padding:9px 12px;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
           <span style="font-size:11px;font-weight:700;color:#FF6B9D">${esc(PF_LOG_LABEL[l.type] || l.type || "")}</span>
-          <span style="font-size:10.5px;color:var(--sub)">${esc(logDay(l.date))}</span>
           <span style="flex:1"></span>
-          ${CAN_EDIT ? `<button type="button" title="直す" onclick="pfEditLog(${i})" style="border:none;background:rgba(255,255,255,.7);border-radius:8px;padding:2px 7px;font-size:12px;cursor:pointer">✏️</button>
-            <button type="button" title="消す" onclick="pfDelLog(${i})" style="border:none;background:rgba(255,255,255,.7);border-radius:8px;padding:2px 7px;font-size:12px;cursor:pointer">🗑</button>` : ""}
+          <span style="font-size:10.5px;color:var(--sub)">${esc(logDay(l.date))}</span>
         </div>
         <div style="font-size:10.5px;font-weight:700;color:${mk.color};margin-bottom:3px">${mk.emoji} ${l.author ? esc(l.author) : "書いた人の記録なし"}</div>
-        <div style="font-size:14px;white-space:pre-wrap;line-height:1.6">${esc(String(l.content || ""))}</div></div>`; }).join("") || `<div class="hint">記録はまだありません</div>`}</div></details>
+        <div style="font-size:14px;white-space:pre-wrap;line-height:1.6">${esc(String(l.content || ""))}</div>
+        ${CAN_EDIT ? `<div style="margin-top:4px"><button type="button" class="pfLink" onclick="pfEditLog(${i})">編集</button><button type="button" class="pfLink del" onclick="pfDelLog(${i})">削除</button></div>` : ""}</div>`; }).join("") || `<div class="hint" style="text-align:center;padding:16px 0">記録はまだありません</div>`}
+      </div>
+      ${CAN_EDIT ? `<div class="pfAddLog">
+        <div class="ttl">➕ 記録を追加</div>
+        <div class="pfGrid2"><select id="pf_lt">${PF_LOG_TYPES.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
+          <input type="date" id="pf_ld" value="${todayYmd()}"></div>
+        <select id="pf_la" style="margin-top:8px">${Object.keys(STAFF_MARKS).map(n => `<option value="${n}" ${n === operatorName() ? "selected" : ""}>${STAFF_MARKS[n].emoji} ${n}</option>`).join("")}</select>
+        <textarea id="pf_lc" style="margin-top:8px;min-height:60px" placeholder="内容を入力してください（面接した内容・ヒアリングした内容など）"></textarea>
+        <button type="button" class="pfAddBtn" onclick="pfAddLog()">追加する</button></div>` : ""}
+      </div></details>
     ${CAN_EDIT ? `<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:6px">
       <button class="btn btn-ghost" onclick="hpPushLater()">🌐 公式HPにまとめて入れる</button>
       <button class="btn btn-ghost" onclick="saveProf(true)">💾 保存だけ（公式HPはあとで）</button>
@@ -1927,7 +1942,7 @@ async function pfAddLog(){
   try{
     const logId = "LOG-" + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2));
     q(await sb.from("prof_logs").insert({ log_id: logId, cast_id: pf.prof.id, cast_name: pf.prof.name, type: $("pf_lt").value, date: $("pf_ld").value || todayYmd(),
-      reservation_date: "", content: content.slice(0, 10000), author: operatorName().slice(0, 20) }));
+      reservation_date: "", content: content.slice(0, 10000), author: (($("pf_la") && $("pf_la").value) || operatorName()).slice(0, 20) }));
     toast("記録を足しました"); await pfReloadLogs();
   }catch(e){ toast("記録を足せませんでした：" + (e.message || e)); }
 }
@@ -1946,6 +1961,51 @@ async function pfDelLog(i){
   try{ q(await sb.from("prof_logs").delete().eq("log_id", l.log_id)); toast("記録を消しました"); await pfReloadLogs(); }
   catch(e){ toast("消せませんでした：" + (e.message || e)); }
 }
+// 🗓 記録・ログの上：面接日・入店日・入店理由（台帳の「名前・状態・日付」と同じ欄。「💾 保存する」で保存）・退店にする・プロフの提出日時
+function pfDT(d){ if(!d) return "—"; const t = new Date(d); if(isNaN(t)) return String(d); const j = new Date(t.getTime() + 9 * 3600e3), p = n => String(n).padStart(2, "0");
+  return `${j.getUTCFullYear()}/${p(j.getUTCMonth() + 1)}/${p(j.getUTCDate())} ${p(j.getUTCHours())}:${p(j.getUTCMinutes())}`; }
+function pfLogTop(){
+  const c = pf.c, left = $("e_status").value === "left", ro = CAN_EDIT ? "" : "disabled";
+  const sync = id => `oninput="$('${id}').value=this.value"`;
+  return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px">${left
+      ? `<span class="pfLeftTag">退店済み（${esc($("e_leave").value || c.leave_date || "")}）</span>`
+      : (CAN_EDIT ? `<button type="button" class="pfRetire" onclick="openRetire()">🚪 退店にする</button>` : "")}</div>
+    <div class="pfGrid2">
+      <div><label>📋 面接日</label><input type="date" id="pf_iv" value="${esc($("e_interview").value)}" ${sync("e_interview")} ${ro}></div>
+      <div><label>✅ 入店日</label><input type="date" id="pf_jd" value="${esc($("e_join").value)}" ${sync("e_join")} ${ro}></div></div>
+    <div style="margin-top:10px"><label>💭 入店理由・目標</label><textarea id="pf_jr" maxlength="200" style="min-height:50px" placeholder="入店理由や目標があれば記入してください" ${sync("e_joinReason")} ${ro}>${esc($("e_joinReason").value)}</textarea></div>
+    ${left ? `<div style="margin-top:10px"><label>🚪 退店日・退店理由</label><div class="pfLeftBox"><div style="color:var(--sub)">${esc($("e_leave").value || "")}</div><div style="white-space:pre-wrap">${esc($("e_leaveReason").value || "（理由未記入）")}</div></div></div>` : ""}
+    ${CAN_EDIT ? `<div class="hint" style="margin-top:4px">面接日・入店日・入店理由は、いちばん下の「💾 保存する」で保存されます</div>` : ""}
+    <div class="pfGrid2 pfMeta"><div><label>📤 プロフ提出日時</label><div>${esc(pfDT(pf.data.submittedAt))}</div></div>
+      <div><label>🔄 プロフ最終更新日時</label><div>${esc(pfDT(pf.prof.updated_at))}</div></div></div>`;
+}
+// 🚪 退店にする：理由を書く → 状態「退店」・退店日＝今日・退店の理由を入れて、記録に「退店」を足して保存
+function openRetire(){
+  if(!pf || !CAN_EDIT) return;
+  const bg = document.createElement("div"); bg.id = "retireBg";
+  bg.style.cssText = "position:fixed;inset:0;z-index:320;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px";
+  bg.innerHTML = `<div style="background:#fff;border-radius:20px;padding:22px;width:360px;max-width:100%">
+    <div style="font-size:16px;font-weight:800;margin-bottom:6px">🚪 ${esc(nameOf(pf.c))}さんを退店にする</div>
+    <div class="hint">退店日は今日（${todayYmd()}）になります。状態が「退店」になり、記録に「退店」が残ります。</div>
+    <label style="display:block;font-size:12px;font-weight:800;margin:10px 0 4px">退店理由</label>
+    <textarea id="retireReason" style="width:100%;min-height:80px;border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;font-family:inherit;background:#FFF5F8" placeholder="退店理由を入力してください"></textarea>
+    <div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-primary" style="flex:1" onclick="confirmRetire()">退店にする</button>
+      <button class="btn btn-ghost" style="flex:1" onclick="document.getElementById('retireBg').remove()">キャンセル</button></div></div>`;
+  document.body.appendChild(bg);
+}
+async function confirmRetire(){
+  const reason = $("retireReason").value.trim(), today = todayYmd();
+  $("retireBg").remove();
+  $("e_status").value = "left"; $("e_leave").value = today; $("e_leaveReason").value = reason;
+  try{
+    const logId = "LOG-" + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2));
+    q(await sb.from("prof_logs").insert({ log_id: logId, cast_id: pf.prof.id, cast_name: pf.prof.name, type: "退店", date: today, reservation_date: "", content: (reason || "（理由未記入）").slice(0, 10000), author: operatorName().slice(0, 20) }));
+  }catch(e){ toast("退店の記録を足せませんでした：" + (e.message || e)); }
+  await saveCast();   // 状態・退店日・理由を保存（プロフの退店日・理由も）
+  if(pf) await pfReloadLogs();
+}
+// 「名前・状態・日付」で直したら、記録・ログの上の欄にも（同じ欄が2か所にあるので）
+document.addEventListener("input", e => { const m = { e_interview: "pf_iv", e_join: "pf_jd", e_joinReason: "pf_jr" }[e.target.id]; if(m && $(m)) $(m).value = e.target.value; });
 // prof_update_confirmed に送る形（サクラムーンは旧データにも同じものを入れる。キャストプロフの setField・答えの反映 saveReflect と同じ）
 function profPayload(prof, data){
   const saku = (data.storeProfiles || {})["サクラムーン"] || {};
