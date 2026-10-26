@@ -679,7 +679,7 @@ const FREE_SUFFIX = { "":"", free:"フリー", special_free:"特別フリー", e
 
 let M = {};              // マスタ一式
 let day = "", rows = [], editing = null, curCustomer = null, visit = "new", mediaSel = [];
-let backOv = "", backOvFor = -1;   // 報酬を手で直した値（予約ごと）
+let backOv = "", backOvFor = -1, backOvNote = "";   // 報酬を手で直した値と、その理由（予約ごと）
 let cbackOv = "", cbackFor = -1;   // バック表にないランク×コースのとき、受付で入れたコースのバック（予約ごと）
 let custPast = null;   // 電話番号で見つけたお客さんの、これまでの予約（キャストを変えたら本指名・店リピを決めなおす）
 let showMoney = false;
@@ -1340,6 +1340,7 @@ function missingRequired(){
     [!radioVal("f_afw") || !radioVal("f_rafw"), "AF・逆AF", "afBox"],
     [!$("f_pay").value, "支払い方法", "f_pay"],
     [!mediaSel.length, "媒体", "f_media"],
+    [!!($("f_backov") && $("f_backov").value !== "" && !backOvNote.trim() && (($("backDet") && ($("backDet").open = true)), true)), "報酬を手で直した理由", "f_backovNote"],
   ].filter(x=>x[0]).map(x=>[x[1], x[2]]);
 }
 function markMissing(list){
@@ -1436,7 +1437,7 @@ function recalc(){
   optSummary();
   const c = last = calc();
   // 報酬を手で直した値（打ったら覚えておく。描きなおしても消えない）
-  if(backOvFor !== (editing ? editing.id : 0)){ backOvFor = editing ? editing.id : 0; backOv = editing && editing.back_override != null ? String(editing.back_override) : ""; }
+  if(backOvFor !== (editing ? editing.id : 0)){ backOvFor = editing ? editing.id : 0; backOv = editing && editing.back_override != null ? String(editing.back_override) : ""; backOvNote = (editing && editing.back_override_note) || ""; }
   const ov = backOv;
   const back = c.courseBack + c.optionBack + c.extra;
   $("calc").innerHTML = `
@@ -1468,6 +1469,8 @@ function recalc(){
     ${ov !== "" ? `<div class="row total"><span>報酬（手で直した）</span><b>${yen(Number(ov) || 0)}</b></div>` : ""}
     <div class="f" style="margin-top:8px"><label>報酬を手で直す（空なら自動）…特例などで、報酬の合計をこの金額にしたいとき。精算もこの金額になります</label>
       <input type="number" id="f_backov" value="${esc(ov)}" ${KB.CAN_EDIT?"":"disabled"} oninput="backOv=this.value" onchange="recalc()" placeholder="例：15000"></div>
+    ${ov !== "" ? `<div class="f" style="margin-top:6px"><label>手で直した理由<span class="req">必須</span></label>
+      <input id="f_backovNote" maxlength="200" value="${esc(backOvNote)}" ${KB.CAN_EDIT?"":"disabled"} oninput="backOvNote=this.value;this.classList.remove('miss')" placeholder="例：店長OKの特例（○○の件）"></div>` : ""}
     <div class="why">${esc(c.why.join("\n"))}</div>`;
   if(bm){ if($("backDet")) $("backDet").open = true; loadBackRef(bm); }   // たたんであると見落とすので開く
   // コースの説明（極門など）
@@ -1571,6 +1574,7 @@ async function saveRes(){
       total: c.total, payment: c.pay, card_total: c.pay === "cash" ? 0 : c.total,
       course_back: c.courseBack, option_back: c.optionBack, extra_back: c.extra,
       back_override: ovRaw === "" ? null : Number(ovRaw),
+      ...(("back_override_note" in (rows[0] || editing || {})) || ovRaw !== "" ? { back_override_note: ovRaw === "" ? "" : backOvNote.trim() } : {}),
       status: $("f_status").value, confirm_call: $("f_confirm").value.trim(), note: $("f_note").value, updated_by: by,
     };
     if(editing) q(await sb.from("kb_reservations").update(row).eq("id", editing.id));
