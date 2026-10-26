@@ -1159,7 +1159,7 @@ function renderDummyEdit(){
   const list = M.dummies.filter(d=>d.store_key===store);
   $("dummyEdit").innerHTML = `<div style="font-size:12px;font-weight:800;margin-bottom:4px">${esc(storeLabel(store))} のダミー名</div>`
     + (list.length ? list.map(d=>`<span class="chip" style="cursor:default"><a href="javascript:void(0)" onclick="openDummyData(${d.id})" title="データを入れる・直す">${esc(d.name)}${d.height || d.cup || d.psize ? "" : " ✏️"}</a> <a href="javascript:void(0)" onclick="removeDummy(${d.id})" style="color:#c9556a">×</a></span>`).join(" ") + `<div style="font-size:11px;color:var(--sub);margin-top:4px">名前を押すと、身長・カップなどのデータを入れられます（マッチ率に使います）</div>` : `<span style="font-size:12px;color:var(--sub)">まだありません</span>`)
-    + `<div style="display:flex;gap:6px;margin-top:6px"><input id="dummyNew" maxlength="40" placeholder="ダミー名を足す" style="flex:1" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addDummy();}">
+    + `<div style="display:flex;gap:6px;margin-top:6px"><input id="dummyNew" maxlength="40" placeholder="ダミー名を足す（公式HPの名前と完全一致）" style="flex:1" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addDummy();}">
        <button type="button" class="btn btn-ghost btn-sm" onclick="addDummy()">足す</button></div>`;
 }
 async function addDummy(){
