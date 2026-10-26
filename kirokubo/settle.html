@@ -169,22 +169,21 @@ function render(){
   ids.sort((a, b)=>String(first(a)).localeCompare(String(first(b))));
   const cs = ids.map(id=>({ id, c: calcCast(id) }));
   const sum = cs.reduce((a, x)=>({ total: a.total + x.c.total, take: a.take + x.c.takeHome, drop: a.drop + x.c.drop, zappi: a.zappi + x.c.zappi, done: a.done + (x.c.cd.settled ? 1 : 0), shop: a.shop + x.c.shopDrop }), { total: 0, take: 0, drop: 0, zappi: 0, done: 0, shop: 0 });
-  // 店落ちを22時まで／22時からに分ける（予約の始まりで。雑費・交通費バック・プラスマイナスは、その子の最初の予約の時間帯）
+  // 店落ち（暫定的な残額＋雑費）を22時まで／22時からに分ける（予約の始まりで。雑費は、その子の最初の予約の時間帯）。交通費バック・プラスマイナスは入れない
   const night = r => { if(!r.start_at) return false; const d = new Date(new Date(r.start_at).getTime() + 9 * 3600 * 1000); let h = d.getUTCHours(); if(h < 8) h += 24; return h >= 22; };
   const split = [0, 0];
   cs.forEach(({ c }) => {
     const mine = [...c.live].sort((a, b) => String(a.start_at || "").localeCompare(String(b.start_at || "")));
-    let rest = c.shopDrop;
-    mine.forEach(r => { const v = (r.total || 0) - (Number(backOf(r)) || 0); split[night(r) ? 1 : 0] += v; rest -= v; });
-    split[mine[0] && night(mine[0]) ? 1 : 0] += rest;
+    mine.forEach(r => { split[night(r) ? 1 : 0] += (r.total || 0) - (Number(backOf(r)) || 0); });
+    split[mine[0] && night(mine[0]) ? 1 : 0] += c.zappi || 0;
   });
   $("sum").innerHTML = `<div class="s">精算済み<b>${sum.done} / ${cs.length}人</b></div>
     <div class="s ${showMoney ? "" : "hide"}">総額<b>${yen(sum.total)}</b></div>
     <div class="s ${showMoney ? "" : "hide"}">キャスト手取り<b>${yen(sum.take)}</b></div>
     <div class="s ${showMoney ? "" : "hide"}">投函額（−はお店から渡す）<b>${yen(sum.drop)}</b></div>
     <div class="s ${showMoney ? "" : "hide"}">店落ち<b>${yen(sum.shop)}</b></div>
-    <div class="s ${showMoney ? "" : "hide"}">☀️ 22時まで<b>${yen(split[0])}</b></div>
-    <div class="s ${showMoney ? "" : "hide"}">🌙 22時から<b>${yen(split[1])}</b></div>
+    <div class="s ${showMoney ? "" : "hide"}">☀️ 22時まで（暫定＋雑費）<b>${yen(split[0])}</b></div>
+    <div class="s ${showMoney ? "" : "hide"}">🌙 22時から（暫定＋雑費）<b>${yen(split[1])}</b></div>
     <button class="btn btn-ghost btn-sm" onclick="showMoney=!showMoney;render()">${showMoney ? "🙈 金額をかくす" : "👁 金額を見る"}</button>`;
   if(!cs.length){ $("list").innerHTML = `<div class="gate">この日（${esc(day)}）の受付はまだありません</div>`; return; }
   $("list").innerHTML = cs.map(({ id, c })=>cardHtml(id, c)).join("");
