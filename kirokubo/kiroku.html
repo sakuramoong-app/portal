@@ -2296,7 +2296,8 @@ function noteWithStatus(note, prevSt, newSt, by){
   const d = new Date(Date.now() + 9 * 3600 * 1000), p2 = n => String(n).padStart(2, "0");
   const piece = `${STATUS[newSt] || newSt}（${d.getUTCMonth() + 1}/${d.getUTCDate()} ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}${by ? " " + by : ""}）`;
   const lines = note.split("\n"), i = lines.findIndex(l => l.startsWith("🔁 状態："));
-  if(i < 0) return (note.trim() ? note.replace(/\s+$/, "") + "\n" : "") + "🔁 状態：" + (prevSt ? (STATUS[prevSt] || prevSt) + " → " : "") + piece;   // 経緯がまだない予約は、前の状態から書く
+  // 新しく登録したとき：「登録時：○○」。経緯がまだない前からの予約は、前の状態から書く
+  if(i < 0) return (note.trim() ? note.replace(/\s+$/, "") + "\n" : "") + "🔁 状態：" + (prevSt ? (STATUS[prevSt] || prevSt) + " → " + piece : "登録時「" + (STATUS[newSt] || newSt) + "」" + piece.slice(piece.indexOf("（")));
   lines[i] += " → " + piece;
   return lines.join("\n");
 }
