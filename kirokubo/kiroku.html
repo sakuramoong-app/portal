@@ -522,7 +522,7 @@
       <div class="row2" style="margin-top:8px">
         <div class="f"><label>売上店舗<span class="req">必須</span></label><select id="f_store" onchange="onStore()"></select></div>
         <div class="f"><label>キャスト（フリーのときは行く人）<span class="req">必須</span></label><select id="f_cast" onchange="onCast()"></select>
-          <label style="display:block;font-size:12px;color:var(--sub);margin-top:4px"><input type="checkbox" id="f_castAll" onchange="fillCastSel()" style="width:auto;display:inline;vertical-align:middle;margin-right:4px"> シフトにない人も出す</label></div>
+          <label style="display:block;font-size:12px;color:var(--sub);margin-top:4px"><input type="checkbox" id="f_castAll" onchange="fillCastSel()" style="width:auto;display:inline;vertical-align:middle;margin-right:4px"> シフトにない人も出す</label><div id="castLink"></div></div>
       </div>
       <!-- ダミーのお店（極門・エイティーン）だけ -->
       <div id="dummyWrap" style="display:none;background:#F6F2FE;border-radius:12px;padding:8px 10px;margin-bottom:8px">
@@ -554,10 +554,10 @@
       <div class="row2" style="margin-top:10px">
         <div class="f"><label>エリア<span class="req">必須</span></label>
           <select id="f_areaSel" onchange="onAreaSel()"></select>
-          <input id="f_area" maxlength="60" placeholder="場所（駅・地名など。例：川崎）" style="display:none;margin-top:6px" oninput="showAreaFee();recalc()"></div>
+          <input id="f_area" maxlength="60" placeholder="場所（駅・地名など。例：川崎）" style="display:none;margin-top:6px" oninput="showAreaFee();recalc()"><div id="castArea"></div></div>
         <div class="f"><label>ホテル・自宅（部屋番号）<span class="req">種類は必須</span></label>
           <div style="display:flex;gap:6px"><select id="f_place" style="max-width:110px" onchange="checkNewHotel()"><option value="">（種類）</option><option value="love">ラブホ</option><option value="biz">ビジホ</option><option value="home">自宅</option></select>
-          <input id="f_address" maxlength="200" list="hotelList" oninput="recalc();checkNewHotel()" style="flex:1"></div><datalist id="hotelList"></datalist></div>
+          <input id="f_address" maxlength="200" list="hotelList" oninput="recalc();checkNewHotel()" style="flex:1"></div><datalist id="hotelList"></datalist><div id="castHotel"></div></div>
       </div>
       <div id="bizBox"></div>
       <div class="f" style="margin-top:6px"><label>📍 地図のURL（自宅やリストにない場所のとき。お客さんの場所として覚えます）</label><input id="f_map" maxlength="500" placeholder="https://maps.app.goo.gl/…（登録されているホテルなら自動で入ります）" oninput="this.dataset.auto='';recalc()"></div>
@@ -1249,7 +1249,7 @@ function renderCastChecks(c){
   // 🌙 お泊り：池袋・鶯谷・五反田以外（遠方）は本指名のみ（新規・店リピのときに出す）
   try{
     const area = $("f_area").value.trim();
-    if(String(calc().course || "").includes("泊") && area && !/池袋|鶯谷|五反田/.test(area) && (visit === "new" || visit === "repeat")) warn.push("🌙 遠方泊りは本指名のみです（池袋・鶯谷・五反田以外のお泊り）");
+    if(String(calc().course || "").includes("泊") && area && !/池袋|鶯谷|五反田/.test(area) && (visit === "new" || visit === "repeat")) ann.unshift({ text: "🌙 遠方泊りは本指名のみです（池袋・鶯谷・五反田以外のお泊り）" });
   }catch(e){}
   let longNg = false;
   if(custNg){ longNg = true; warn.unshift(`🙅 このお客さんは、このキャストNGです${custNg.reason ? "（" + custNg.reason + "）" : ""}。別のキャストにしてください`); }
@@ -4261,7 +4261,7 @@ let castNotesSeq = 0;
 async function paintCastNotes(){
   const seq = ++castNotesSeq, el = $("castInfo");
   const c = M.casts.find(x => x.id === $("f_cast").value);
-  if(!c){ el.innerHTML = ""; return; }
+  if(!c){ el.innerHTML = ""; ["castHotel", "castArea", "castLink"].forEach(k => { $(k).innerHTML = ""; }); return; }
   let profs = null;
   try{ profs = await loadProfs(); }catch(e){ /* プロフが読めなくても台帳のメモは出す */ }
   if(seq !== castNotesSeq) return;
@@ -4276,16 +4276,17 @@ async function paintCastNotes(){
   if(hl(hp.conditional)) hotelLines.push(`<div>△ ${hl(hp.conditional)}</div>`);
   if(hl(hp.ng)) hotelLines.push(`<div style="color:#B0213F;font-weight:700">× ${hl(hp.ng)}</div>`);
   M.castChecks.filter(x => x.cast_id === c.id && String(x.text).startsWith("🏨")).forEach(x => hotelLines.push(`<div style="white-space:pre-wrap">${esc(String(x.text).replace(/^🏨\s*/, ""))}</div>`));
+  // 🏨 ホテルは「ホテル・自宅」の下、🚃 最寄り駅は「エリア」の下、📒 台帳はキャストの下（いつも同じ場所に）
+  $("castHotel").innerHTML = hotelLines.length ? `<div style="background:#F2F7FF;border:1.5px solid #B9CDF2;border-radius:12px;padding:6px 10px;margin:6px 0;font-size:13px">
+      <div style="font-weight:800;color:#2b5aa8;font-size:12.5px">🏨 このキャストのホテル</div>${hotelLines.join("")}</div>` : "";
+  $("castArea").innerHTML = c.area_note && String(c.area_note).trim() ? `<div style="background:#F2FBF6;border:1.5px solid #BFE8D2;border-radius:12px;padding:6px 10px;margin:6px 0;font-size:13px">
+      <div style="font-weight:800;color:#1a7f4b;font-size:12.5px">🚃 キャストの最寄り駅・各店までの時間</div><div style="white-space:pre-wrap">${esc(c.area_note)}</div></div>` : "";
+  $("castLink").innerHTML = c.id ? `<a class="proflink" style="font-size:12px;margin-top:6px" href="index.html?cast=${encodeURIComponent(c.id)}" target="_blank" rel="noopener">📒 ${esc(c.official_name || c.temp_name)}のキャスト台帳を開く</a>` : "";
   el.innerHTML =
-    (hotelLines.length ? `<div style="background:#F2F7FF;border:1.5px solid #B9CDF2;border-radius:12px;padding:6px 10px;margin:6px 0;font-size:13px">
-      <div style="font-weight:800;color:#2b5aa8;font-size:12.5px">🏨 このキャストのホテル</div>${hotelLines.join("")}</div>` : "") +
     (list.length ? `<div style="background:#FFF9EE;border:1.5px dashed #FFB547;border-radius:12px;padding:6px 10px;margin:6px 0;font-size:13px">
       <div style="font-weight:800;color:#a35a00;font-size:12.5px">📝 まだ受付ルールに移していないメモ（キャスト台帳で整理中）</div>
       ${list.map(n => `<div style="white-space:pre-wrap;margin-top:3px"><small style="color:#9C8B8F">${esc(n.label)}：</small>${esc(n.text)}</div>`).join("")}</div>` : "")
-    + (c.area_note && String(c.area_note).trim() ? `<div style="background:#F2FBF6;border:1.5px solid #BFE8D2;border-radius:12px;padding:6px 10px;margin:6px 0;font-size:13px">
-      <div style="font-weight:800;color:#1a7f4b;font-size:12.5px">🚃 キャストの最寄り駅・各店までの時間</div><div style="white-space:pre-wrap">${esc(c.area_note)}</div></div>` : "")
-    + (rules ? `<details style="margin-top:4px"><summary style="cursor:pointer;font-size:12.5px;font-weight:800;color:var(--sub)">🧮 このキャストの条件を見る</summary><div class="info">${rules}</div></details>` : "")
-    + (c.id ? `<a class="proflink" style="font-size:12px" href="index.html?cast=${encodeURIComponent(c.id)}" target="_blank" rel="noopener">📒 ${esc(c.official_name || c.temp_name)}のキャスト台帳を開く</a>` : "");
+    + (rules ? `<details style="margin-top:4px"><summary style="cursor:pointer;font-size:12.5px;font-weight:800;color:var(--sub)">🧮 このキャストの条件を見る</summary><div class="info">${rules}</div></details>` : "");
 }
 const __onCastNM = onCast;
 onCast = function(){ __onCastNM.apply(this, arguments); paintCastNotes(); };
