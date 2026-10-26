@@ -4608,10 +4608,10 @@ async function cfPaint(){
       const free = []; let t = s.start;
       bk.forEach(x => { if(x.a - gap - t >= 0.5) free.push([t, x.a - gap]); t = Math.max(t, x.b + gap); });
       if(s.end - t >= 0.5) free.push([t, s.end]);
-      return `<div class="cf-row"><b>${lab}</b><span class="sh">出勤 ${fmtHour(s.start)}〜${fmtHour(s.end)}</span>
+      return `<div class="cf-row"><b>${lab}</b>${KB.CAN_EDIT ? `<button type="button" class="rc-open" onclick="cfBook('${c.id}','${ymd}')">＋ この日で予約</button>` : ""}
+        <span class="sh">出勤 ${fmtHour(s.start)}〜${fmtHour(s.end)}</span>
         <span class="fr">${free.length ? "空き " + free.map(([a, b]) => `<b>${fmtHour(a)}〜${fmtHour(b)}</b>`).join("・") : `<b style="color:#d9534f">うまっています</b>`}</span>
-        ${bk.length ? `<span class="bk">予約 ${bk.map(x => `${fmtHour(x.a)}〜${fmtHour(x.b)}${x.r.area ? " " + esc(x.r.area) : ""}`).join("・")}</span>` : ""}
-        ${KB.CAN_EDIT ? `<button type="button" class="rc-open" onclick="cfBook('${c.id}','${ymd}')">＋ この日で予約</button>` : ""}</div>`;
+        ${bk.length ? `<span class="bk">予約 ${bk.map(x => `${fmtHour(x.a)}〜${fmtHour(x.b)}${x.r.area ? " " + esc(x.r.area) : ""}`).join("・")}</span>` : ""}</div>`;
     }).join("");
     out.innerHTML = `<div class="cf-list">${rowsH}</div><div class="hint2" style="font-size:11.5px;color:var(--sub);margin-top:4px">出勤は、内勤が受理したシフトだけです。${gap ? `このキャストは予約の間を${c.interval_min}分あけます（空きの時間は、それを引いてあります）。` : ""}</div>`;
   }catch(e){ out.innerHTML = `<div class="warn">読めませんでした：${esc(e.message || e)}</div>`; }
@@ -4626,7 +4626,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .cf-list{display:flex;flex-direction:column;gap:4px}
   .cf-row{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;background:#fff;border:1.5px solid #F1E3E7;border-radius:10px;padding:6px 10px;font-size:13.5px}
   .cf-row.off{background:#FAF7F8;color:#B9A9AE;padding:4px 10px;font-size:12.5px} .cf-row > b{min-width:62px}
-  .cf-row .sh{color:#7a6468} .cf-row .fr b{color:#1f9d6b} .cf-row .bk{color:#9C8B8F;font-size:12.5px} .cf-row .rc-open{margin-left:auto}
+  .cf-row .sh{color:#7a6468} .cf-row .fr b{color:#1f9d6b} .cf-row .bk{color:#9C8B8F;font-size:12.5px} .cf-row .rc-open{padding:3px 10px;font-size:12.5px}
 </style>`);
 
 /* ---------- 📱 スマホで入れた予約は「仮入力」：PCで開いたら、キャストに送ったかを確かめるチェックが必須。保存すると取り入れる ---------- */
