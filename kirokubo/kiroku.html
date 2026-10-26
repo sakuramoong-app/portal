@@ -4775,7 +4775,7 @@ function dmLock(){
   let msg = $("dmLockMsg");
   if(!msg){ msg = document.createElement("div"); msg.id = "dmLockMsg"; $("dummyWrap").insertBefore(msg, $("dummyWrap").firstChild); }
   msg.innerHTML = need ? `<div class="warn" style="font-size:14px;font-weight:800;margin-bottom:6px">📞 先に電話番号を入れて「🔍 調べる」を押してください（このお客さんの履歴で、行ける子が決まります）</div>` : "";
-  const keep = el => ["f_phone", "f_store"].includes(el.id) || el.closest(".x") || /lookupCustomer|closeForm/.test(el.getAttribute("onclick") || "");
+  const keep = el => ["f_phone", "f_store"].includes(el.id) || el.closest(".x") || el.closest("#dummyEdit") || /lookupCustomer|closeForm|toggleDummyEdit/.test(el.getAttribute("onclick") || "");   // ⚙️ 一覧（ダミー名の設定）は電話番号なしでも
   document.querySelectorAll("#formBg input, #formBg select, #formBg textarea, #formBg button").forEach(el => {
     if(keep(el)) return;
     if(need && !el.disabled){ el.disabled = true; el.dataset.dmlock = "1"; }
