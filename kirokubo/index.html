@@ -173,6 +173,13 @@
   details.acc > summary.sec::after, details.pfPanel > summary.pfHead::after{content:"▼";margin-left:auto;font-size:11px;color:#C9A6B1;transition:transform .15s}
   details.acc[open] > summary.sec::after, details.pfPanel[open] > summary.pfHead::after{transform:rotate(180deg)}
   details.pfPanel{scroll-margin-top:calc(var(--jumpH, 50px) + 60px)}
+  /* 大きい項目（ピンクの帯・大きい字）と小さい項目（白い箱・小さい字）を見分けやすく */
+  #editBg details.acc > summary.sec{background:linear-gradient(135deg,#ff9fb8,#e5638c);color:#fff;font-size:16.5px;font-weight:800;padding:12px 16px;border-radius:14px;box-shadow:0 4px 12px rgba(229,99,140,.22);margin:16px 0 10px}
+  #editBg details.acc > summary.sec::after{color:#fff;font-size:13px}
+  #editBg details.acc[open]{background:#FFF8FA;border-radius:16px;padding:0 0 4px}
+  #editBg details.acc > details.pfPanel, #e_prof details.pfPanel{margin-left:8px;margin-right:2px}
+  #editBg details.pfPanel > summary.pfHead{font-size:13.5px;color:#7a5560}
+  .pfTools{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}
   /* プロフのお店のタブは、ジャンプのすぐ下に固定（プロフの所にいるあいだ） */
   #editBg{--stickTop:-24px}
   @media (min-width:1100px){ body.pane #editBg{--stickTop:-16px} }
@@ -252,33 +259,50 @@
     <div class="hint" id="editHint"></div>
     <div class="jump" id="editJump"></div>
 
-    <details class="acc" data-acc="basic"><summary class="sec">👤 名前・状態・日付</summary>
-    <div class="grid">
-      <div class="f"><label>正式な名前（公式HPの書き方）</label><input id="e_official" maxlength="60"></div>
-      <div class="f"><label>読み（ひらがな）</label><input id="e_kana" maxlength="60"></div>
-      <div class="f"><label>仮の名前（源氏名が決まる前）</label><input id="e_temp" maxlength="60"></div>
-      <div class="f"><label>状態</label>
-        <select id="e_status">
-          <option value="interview">面接中</option><option value="new">入店前</option>
-          <option value="active">在籍</option><option value="break">お休み中</option><option value="left">退店</option>
-        </select></div>
-      <div class="f"><label>入店日</label><input type="date" id="e_join"></div>
-      <div class="f"><label>退店日</label><input type="date" id="e_leave"></div>
-      <div class="f"><label>面接日</label><input type="date" id="e_interview"></div>
-      <div class="f"><label>入店のきっかけ</label><input id="e_joinReason" maxlength="200"></div>
-      <div class="f" style="grid-column:1/-1"><label>退店の理由</label><input id="e_leaveReason" maxlength="300"></div>
-    </div>
-    <div class="f" style="margin-top:10px"><label>別名（ほかのアプリ・お店での書き方。「、」で区切る）</label><input id="e_aliases"></div>
-    <div class="f" style="margin-top:10px"><label>記録簿の集計名（空ならキャスト名と同じ）</label><input id="e_agg" maxlength="60"></div>
+    <details class="acc" data-acc="basic"><summary class="sec">👤 入店時情報</summary>
+    <details class="pfPanel" data-p="name"><summary class="pfHead">🪪 名前情報</summary><div class="pfBody">
+      <div class="grid">
+        <div class="f"><label>正式な名前（公式HPの書き方）</label><input id="e_official" maxlength="60"></div>
+        <div class="f"><label>よみがな（ひらがな）</label><input id="e_kana" maxlength="60"></div>
+        <div class="f"><label>仮の名前（源氏名が決まる前）</label><input id="e_temp" maxlength="60"></div>
+        <div class="f"><label>記録簿の集計名（空ならキャスト名と同じ）</label><input id="e_agg" maxlength="60"></div>
+      </div>
+      <div class="f" style="margin-top:10px"><label>別名（ほかのアプリ・お店での書き方。「、」で区切る）</label><input id="e_aliases"></div>
+    </div></details>
+    <details class="pfPanel" data-p="status"><summary class="pfHead">🚦 状態・面接日</summary><div class="pfBody">
+      <div class="grid">
+        <div class="f"><label>状態</label>
+          <select id="e_status">
+            <option value="interview">面接中</option><option value="new">入店前</option>
+            <option value="active">在籍</option><option value="break">お休み中</option><option value="left">退店</option>
+          </select></div>
+        <div class="f"><label>面接日</label><input type="date" id="e_interview"></div>
+      </div>
+    </div></details>
+    <details class="pfPanel" data-p="join"><summary class="pfHead">🌸 入店日・入店のきっかけ</summary><div class="pfBody">
+      <div class="grid">
+        <div class="f"><label>入店日</label><input type="date" id="e_join"></div>
+        <div class="f"><label>入店のきっかけ</label><input id="e_joinReason" maxlength="200"></div>
+      </div>
+    </div></details>
+    <details class="pfPanel" data-p="leave"><summary class="pfHead">🍂 退店日・退店理由</summary><div class="pfBody">
+      <div class="grid">
+        <div class="f"><label>退店日</label><input type="date" id="e_leave"></div>
+        <div class="f"><label>退店の理由</label><input id="e_leaveReason" maxlength="300"></div>
+      </div>
+    </div></details>
+    <details class="pfPanel" data-p="onb"><summary class="pfHead">🧾 その他必要情報</summary><div class="pfBody">
+      <div class="hint" style="margin:0 0 8px">チェックして「💾 保存する」。チェックした日と人が残ります。ここはキャストには見えません。</div>
+      <div id="e_onb"></div>
+    </div></details>
+    <details class="pfPanel" data-p="private"><summary class="pfHead">📞 連絡先（内勤だけ）</summary><div class="pfBody">
+      <div class="hint" style="margin:0 0 8px">電話番号・住所・誕生日など。<b>内勤ならだれでも見られて・直せます</b>（キャストのページには出ません）。見たり直したりすると、だれが・いつかが残ります。</div>
+      <div id="e_private"></div>
+    </div></details>
     </details>
 
-    <details class="acc" data-acc="logs"><summary class="sec">🗓 記録・ヒアリング（面接・入店・ヒアリング・退店など）</summary>
+    <details class="acc" data-acc="logs"><summary class="sec">🗓 記録・ログ（ヒアリングなど）</summary>
     <div id="e_logs"></div>
-    </details>
-
-    <details class="acc" data-acc="onb"><summary class="sec">🧾 入店の手続き・内勤が知っておくこと</summary>
-    <div class="hint" style="margin:-4px 0 8px">チェックして「💾 保存する」。チェックした日と人が残ります。ここはキャストには見えません。</div>
-    <div id="e_onb"></div>
     </details>
 
     <details class="acc" data-acc="stores"><summary class="sec">🏪 在籍店舗</summary>
@@ -291,47 +315,47 @@
     <div id="e_prof"></div>
     </details>
 
-    <details class="acc" data-acc="terms"><summary class="sec">⭐ バック（ランク）・条件</summary>
-    <div class="hint" style="margin:-4px 0 8px">変えるときは「🔁 バック・条件を変える」から。<b>ヒアリング内容がないと変えられません。</b></div>
-    <div id="e_terms"></div>
-    <button class="btn btn-ghost edit-only" id="termsBtn" style="width:100%;margin-top:8px" onclick="openTerms()">🔁 バック・条件を変える（ヒアリング必須）</button>
-    </details>
-
-    <details class="acc" data-acc="rules"><summary class="sec">📋 受付ルール</summary>
+    <details class="acc" data-acc="rules"><summary class="sec">📋 記録簿関連</summary>
     <div class="hint" style="margin:-4px 0 8px">受付でこのキャストを選ぶと、お客様の条件（新規・外国人・コースなど）に当てはまるものだけが出ます。足したり直したりするとすぐ保存されます。</div>
-    <div id="e_notesMove"></div>
-    <div id="e_checks"></div>
-    <div class="grid" style="margin-top:10px">
-      <div class="f"><label>⌛ 長いコースは何分まで（空＝上限なし）</label><input type="number" id="e_longMax" min="30" max="1440" step="10"></div>
-      <div class="f"><label>それより長いと</label><select id="e_longOver"><option value="">（上限なし）</option><option value="ask">キャストに確認してから</option><option value="ng">受けない（NG）</option></select></div>
-    </div>
-    <div class="f" id="e_lookWrap" style="margin-top:8px;display:none"><label>👀 見た目（18・極門のダミー名とのマッチ率に使います）</label><div id="e_look"></div></div>
-    <div class="f" style="margin-top:8px"><label>🚃 キャストの最寄り駅・各店までの時間</label>
-      <div class="areaGrid">
-        <div><small>最寄り駅</small><input id="e_station" maxlength="40" placeholder="例：東池袋"></div>
-        <div><small>池袋まで（分）</small><input type="number" id="e_tIke" min="0" max="300" step="5" placeholder="分"></div>
-        <div><small>鶯谷まで（分）</small><input type="number" id="e_tUgu" min="0" max="300" step="5" placeholder="分"></div>
-        <div><small>五反田まで（分）</small><input type="number" id="e_tGoh" min="0" max="300" step="5" placeholder="分"></div>
+    <details class="pfPanel" data-p="rules"><summary class="pfHead">🖊 受付ルール</summary><div class="pfBody">
+      <div id="e_notesMove"></div>
+      <div id="e_checks"></div>
+    </div></details>
+    <details class="pfPanel" data-p="move"><summary class="pfHead">🚃 最寄り駅・長いコース・見た目</summary><div class="pfBody">
+      <div class="f"><label>🚃 キャストの最寄り駅・各店までの時間</label>
+        <div class="areaGrid">
+          <div><small>最寄り駅</small><input id="e_station" maxlength="40" placeholder="例：東池袋"></div>
+          <div><small>池袋まで（分）</small><input type="number" id="e_tIke" min="0" max="300" step="5" placeholder="分"></div>
+          <div><small>鶯谷まで（分）</small><input type="number" id="e_tUgu" min="0" max="300" step="5" placeholder="分"></div>
+          <div><small>五反田まで（分）</small><input type="number" id="e_tGoh" min="0" max="300" step="5" placeholder="分"></div>
+        </div>
+        <small style="display:block;margin-top:6px">そのほか（移動のメモ。なければ空でOK）</small><textarea id="e_area" style="min-height:40px" placeholder="例：終電 0:30／タクシーOK"></textarea></div>
+      <div class="grid" style="margin-top:10px">
+        <div class="f"><label>⌛ 長いコースは何分まで（空＝上限なし）</label><input type="number" id="e_longMax" min="30" max="1440" step="10"></div>
+        <div class="f"><label>それより長いと</label><select id="e_longOver"><option value="">（上限なし）</option><option value="ask">キャストに確認してから</option><option value="ng">受けない（NG）</option></select></div>
       </div>
-      <small style="display:block;margin-top:6px">そのほか（移動のメモ。なければ空でOK）</small><textarea id="e_area" style="min-height:40px" placeholder="例：終電 0:30／タクシーOK"></textarea></div>
+      <div class="f" id="e_lookWrap" style="margin-top:8px;display:none"><label>👀 見た目（18・極門のダミー名とのマッチ率に使います）</label><div id="e_look"></div></div>
+    </div></details>
+    <details class="pfPanel" data-p="notes"><summary class="pfHead">📝 特記事項・NG・メモ</summary><div class="pfBody">
+      <div class="hint" style="margin:0 0 8px;background:#FFF6D6;border-radius:10px;padding:6px 10px">⚠️ 特記事項・NG は<b>上の「🖊 受付ルール」に移していきます</b>。ここに書いたものは、受付ルールに移すまで受付に「まだ移していないメモ」として出ます。</div>
+      <div class="f"><label>特記事項 <small style="font-weight:400;color:#9C8B8F">… 内勤が理解しておくこと（お客さんには言わない）。お客さんに言うことは上の「確認事項」へ</small></label><textarea id="e_special"></textarea></div>
+      <div class="f" style="margin-top:10px"><label>NG <small style="font-weight:400;color:#9C8B8F">… キャストが受けないこと（内勤がつけるか判断する材料）</small></label><textarea id="e_ng"></textarea></div>
+      <div class="f" style="margin-top:10px"><label>メモ <small style="font-weight:400;color:#9C8B8F">… そのほか（受付には出ません）</small></label><textarea id="e_note"></textarea></div>
+      <div class="f" style="margin-top:10px"><label>⏱ 予約と予約の間（インターバル・分） <small style="font-weight:400;color:#9C8B8F">… 「予約の間を30分あけてほしい」など。記録簿のタイムラインで予約の前後がグレーになります（0＝なし）</small></label><input type="number" id="e_interval" min="0" max="240" step="5" style="max-width:140px"></div>
+    </div></details>
+    <details class="pfPanel" data-p="hotel"><summary class="pfHead">🏨 ホテル <small style="font-weight:400;color:#9C8B8F">（このキャストだけの◎△×。お店のホテル一覧は変わりません）</small></summary><div class="pfBody">
+      <div id="e_hotel"></div>
+    </div></details>
+    <details class="pfPanel" data-p="terms"><summary class="pfHead">⭐ バック（ランク）・条件</summary><div class="pfBody">
+      <div class="hint" style="margin:0 0 8px">変えるときは「🔁 バック・条件を変える」から。<b>ヒアリング内容がないと変えられません。</b></div>
+      <div id="e_terms"></div>
+      <button class="btn btn-ghost edit-only" id="termsBtn" style="width:100%;margin-top:8px" onclick="openTerms()">🔁 バック・条件を変える（ヒアリング必須）</button>
+    </div></details>
     </details>
 
-    <details class="acc" data-acc="private"><summary class="sec">📞 連絡先（内勤だけ）</summary>
-    <div class="hint" style="margin:-4px 0 8px">電話番号・住所・誕生日など。<b>内勤ならだれでも見られて・直せます</b>（キャストのページには出ません）。見たり直したりすると、だれが・いつかが残ります。</div>
-    <div id="e_private"></div>
-    </details>
-
-    <details class="acc" data-acc="confirm"><summary class="sec">📨 プロフ確認フォーム（既存キャスト）</summary>
+    <details class="acc" data-acc="confirm"><summary class="sec">📨 既存キャスト用 プロフ更新フォームURL</summary>
     <div class="hint" style="margin:-4px 0 8px">キャスト専用のURLを作って、LINEで送ってください。キャストには<b>公式HPの内容だけ</b>が見えます（特記事項・NG・連絡先は見えません）。答えが届いたら、ここで台帳の内容と照らし合わせます。</div>
     <div id="e_confirm"></div>
-    </details>
-
-    <details class="acc" data-acc="notes"><summary class="sec">📝 特記事項・NG・メモ</summary>
-    <div class="hint" style="margin:-4px 0 8px;background:#FFF6D6;border-radius:10px;padding:6px 10px">⚠️ 特記事項・NG は<b>上の「📋 受付ルール」に移していきます</b>。ここに書いたものは、受付ルールに移すまで受付に「まだ移していないメモ」として出ます。</div>
-    <div class="f"><label>特記事項 <small style="font-weight:400;color:#9C8B8F">… 内勤が理解しておくこと（お客さんには言わない）。お客さんに言うことは上の「確認事項」へ</small></label><textarea id="e_special"></textarea></div>
-    <div class="f" style="margin-top:10px"><label>NG <small style="font-weight:400;color:#9C8B8F">… キャストが受けないこと（内勤がつけるか判断する材料）</small></label><textarea id="e_ng"></textarea></div>
-    <div class="f" style="margin-top:10px"><label>メモ <small style="font-weight:400;color:#9C8B8F">… そのほか（受付には出ません）</small></label><textarea id="e_note"></textarea></div>
-    <div class="f" style="margin-top:10px"><label>⏱ 予約と予約の間（インターバル・分） <small style="font-weight:400;color:#9C8B8F">… 「予約の間を30分あけてほしい」など。記録簿のタイムラインで予約の前後がグレーになります（0＝なし）</small></label><input type="number" id="e_interval" min="0" max="240" step="5" style="max-width:140px"></div>
     </details>
 
     <details class="acc" data-acc="links"><summary class="sec">🔗 つながっているアプリのデータ</summary>
@@ -1631,7 +1655,15 @@ function pfCopyAll(){
   const { data, sk } = pf, g = f => String(profGet(data, sk, f) || "");
   const o = profOpts(data, sk).options || {}, ks = pfOptOrder(sk, o), lab = k => PF_OPT_LABEL[k] || k;
   const by = m => ks.filter(k => m.includes(o[k])).map(lab);
-  const text = `【${g("name")}】
+  // 🧩 性格タイプ（プロフの答え、なければ確認フォームの答え）。お店ごとにAIで紹介文を作るときに使う
+  const psrc = ((data.personalityAnswers || {}).list || []).length ? data : (pf.formPq || data), pq = psrc.personalityAnswers || {};
+  const plist = (pq.list || []).filter(x => x && (x.choice || x.text));
+  const ptxt = plist.length ? `■ 性格タイプ：${psrc.personalityType || "（未算出）"}
+${(pq.axisSummary || []).map(a => `${PQ_LETTER[a.l1] || a.l1} ${a.c1}：${PQ_LETTER[a.l2] || a.l2} ${a.c2} → ${a.winner ? (PQ_LETTER[a.winner] || a.winner) : "同数"}`).join("\n")}
+${plist.map(it => `Q${it.n}．${it.q || ""} → ${it.text || "（未回答）"}`).join("\n")}
+
+` : "";
+  const text = `${ptxt}【${g("name")}】
 ${g("age")}歳 / ${g("size")} / Pサイズ：${g("psize")}
 状態（竿/玉）：${g("state")} / 髪の毛：${g("hair")}
 性格：${g("personality")} / 趣味：${g("hobby")}
@@ -1891,21 +1923,25 @@ function paintProf(){
   const pt = data.personalityType;
   const pv = id => `<iframe id="${id}_pv" sandbox style="display:none;width:100%;height:240px;border:1px solid #eee;border-radius:8px;background:#fff"></iframe>`;
   el.innerHTML = `
-    <div class="pfTabs pfStoreTabs">${pf.stores.map((s, i) => `<button type="button" class="pfTab ${s === sk ? "on" : ""}" onclick="pfTab(${i})">${esc(STORE_LABEL_OF(s))}${pf.dirty.has(s) ? " ✏️" : ""}</button>`).join("")}
-      <span style="margin-left:auto"></span>
-      ${CAN_EDIT && hpCanNew(pf.c, sk) ? `<button type="button" class="btn btn-primary btn-sm" onclick="hpNewOpen()">🆕 公式HPに新しく登録</button>` : ""}
+    <div class="pfTools">
       ${CAN_EDIT && pf.stores.length > 1 ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfBulkOpen()">📋 他店舗へ一括反映</button>` : ""}
+      <button type="button" class="btn btn-ghost btn-sm" onclick="pfCopyAll()" title="性格タイプ〜オプション可否を文でコピー（お店ごとの紹介文をAIで作るときに）">📋 完成プロフ全文をコピー</button>
       ${CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfHpImport()">🌐 公式HPから取りこむ</button>` : ""}
       <a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(pf.prof.id)}" target="_blank" rel="noopener">📂 プロフの画面で開く</a></div>
+    <div class="pfTabs pfStoreTabs">${pf.stores.map((s, i) => `<button type="button" class="pfTab ${s === sk ? "on" : ""}" onclick="pfTab(${i})">${esc(STORE_LABEL_OF(s))}${pf.dirty.has(s) ? " ✏️" : ""}</button>`).join("")}
+      <span style="margin-left:auto"></span>
+      ${CAN_EDIT && hpCanNew(pf.c, sk) ? `<button type="button" class="btn btn-primary btn-sm" onclick="hpNewOpen()">🆕 公式HPに新しく登録</button>` : ""}</div>
     ${PROF_DUMMY.includes(sk) ? `<div class="hint" style="margin-bottom:6px">${esc(STORE_LABEL_OF(sk))}は名前・年齢を変えた別の設定です（公式HPにはまだ入れられません）。</div>` : ""}
-    <details ${pfAcc("photo")}><summary class="pfHead">📷 写真 <small style="font-weight:400;color:#9C8B8F">（公式HPに出ている写真）</small></summary><div class="pfBody">${pfPhotoHtml()}</div></details>
+    ${pfPersonalityHtml(data)}
     <details ${pfAcc("basic")}><summary class="pfHead">📋 基本情報 ${hpLinkOf(pf.c, sk)}${CAN_EDIT ? `<button type="button" class="pfEditBtn" onclick="event.preventDefault();pfToggleEdit('basic')">${pfEdit.basic ? "✓ 見る形にもどす" : "✏️ 編集する"}</button>` : ""}</summary>
       <div class="pfBody ${pfEdit.basic ? "" : "pfView"}"><div class="pfCards">
       ${PF_BASIC.map(([f, l], i) => { const v = String(profGet(data, sk, f) || ""); return `<div class="pfCard"><div class="lb">${i + 1} ${l}</div>
         <div class="vw"><span>${v ? esc(v) : "—"}</span>${v ? `<button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this)" data-v="${esc(v)}">📋</button>` : ""}</div>
-        <input class="ed" id="pf_b_${f}" value="${esc(v)}" ${ro}></div>`; }).join("")}</div>
-      <div style="text-align:right;margin-top:8px"><button type="button" class="pfCopyAll" onclick="pfCopyAll()">📋 完成プロフ全文をコピー</button></div></div></details>
-    <details ${pfAcc("opts")}><summary class="pfHead">✅ オプション可否 <small style="font-weight:400;color:#9C8B8F">◎大好き ○OK △相談 ×NG</small>${CAN_EDIT ? `<button type="button" class="pfEditBtn" onclick="event.preventDefault();pfToggleEdit('opts')">${pfEdit.opts ? "✓ 見る形にもどす" : "✏️ 編集する"}</button>` : ""}</summary>
+        <input class="ed" id="pf_b_${f}" value="${esc(v)}" ${ro}></div>`; }).join("")}</div></div></details>
+    <details ${pfAcc("intro")}><summary class="pfHead">💬 紹介文</summary><div class="pfBody">
+      <div class="hint" style="display:flex;align-items:center;gap:6px">本人から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_c')">📋 コピー</button></div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
+      <div class="hint" style="margin-top:8px;display:flex;align-items:center;gap:6px">店長から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_m')">📋 コピー</button></div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></details>
+    <details ${pfAcc("opts")}><summary class="pfHead">✅ オプション可否◎○△×${CAN_EDIT ? `<button type="button" class="pfEditBtn" onclick="event.preventDefault();pfToggleEdit('opts')">${pfEdit.opts ? "✓ 見る形にもどす" : "✏️ 編集する"}</button>` : ""}</summary>
       <div class="pfBody ${pfEdit.opts ? "" : "pfView"}">
       <div class="vw pfOptView">${optKeys.map(k => { const m = o.options[k] || "", memo = (o.optMemo || {})[k] || ""; return `<div class="pfOptV"><span class="nm">${esc(PF_OPT_LABEL[k] || k)}${memo ? `<small>${esc(memo)}</small>` : ""}</span><b class="mk mk${{ "◎": 1, "○": 2, "△": 3, "×": 4 }[m] || 0}">${m || "—"}</b></div>`; }).join("")}</div>
       <div class="ed">
@@ -1913,19 +1949,16 @@ function paintProf(){
         <select id="pf_o_${i}" data-k="${esc(k)}" ${ro}>${PF_MARKS.map(m => `<option value="${m}" ${(o.options[k] || "") === m ? "selected" : ""}>${m || "－"}</option>`).join("")}</select>
         <input id="pf_om_${i}" placeholder="メモ（条件など）" value="${esc((o.optMemo || {})[k] || "")}" ${ro}></div>`).join("")}
       ${CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:8px"><input id="pf_newopt" placeholder="新しいオプションの名前（例：TSP（有料））" style="flex:1"><button class="btn btn-ghost btn-sm" onclick="pfAddOpt()">＋ 種類を足す</button></div>` : ""}</div></div></details>
-    <details ${pfAcc("intro")}><summary class="pfHead">💬 紹介文</summary><div class="pfBody">
-      <div class="hint" style="display:flex;align-items:center;gap:6px">本人から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_c')">📋 コピー</button></div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
-      <div class="hint" style="margin-top:8px;display:flex;align-items:center;gap:6px">店長から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_m')">📋 コピー</button></div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></details>
-    <details ${pfAcc("hotel")}><summary class="pfHead">🏨 ホテル <small style="font-weight:400;color:#9C8B8F">（このキャストだけの◎△×。お店のホテル一覧は変わりません）</small></summary><div class="pfBody">
-      ${hotelHtml ? `<div class="pfChips">${hotelHtml}</div>` : `<div class="hint">まだありません</div>`}
-      ${CAN_EDIT ? pfHotelEditor(hp) : ""}</div></details>
-    ${pfPersonalityHtml(data)}
+    <details ${pfAcc("photo")}><summary class="pfHead">📷 写真 <small style="font-weight:400;color:#9C8B8F">（公式HPに出ている写真）</small></summary><div class="pfBody">${pfPhotoHtml()}</div></details>
     ${CAN_EDIT ? `<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:6px">
       <button class="btn btn-ghost" onclick="hpPushLater()">🌐 公式HPにまとめて入れる</button>
       <button class="btn btn-ghost" onclick="saveProf(true)">💾 保存だけ（公式HPはあとで）</button>
       <button class="btn btn-primary" onclick="saveProf()">💾 プロフを保存</button></div>` : ""}`;
   reflPv("pf_c"); reflPv("pf_m");
   if($("e_logs")) $("e_logs").innerHTML = pfLogsHtml();   // 🗓 記録・ヒアリングは大きい項目に
+  // 🏨 ホテルは「📋 記録簿関連」の中に（中身はプロフ。保存はプロフの保存と同じ）
+  if($("e_hotel")) $("e_hotel").innerHTML = `${hotelHtml ? `<div class="pfChips">${hotelHtml}</div>` : `<div class="hint">まだありません</div>`}
+    ${CAN_EDIT ? pfHotelEditor(hp) + `<div style="text-align:right;margin-top:8px"><button class="btn btn-primary btn-sm" onclick="saveProf(true)">💾 ホテルを保存</button></div>` : ""}`;
 }
 // 画面の中身 → pf.data（いま開いているお店の分）。変えたお店は pf.dirty に
 function pfCollect(){
@@ -2379,12 +2412,13 @@ const pfOpen = new Set();   // プロフの中の、開いている小さい項�
 function pfAcc(k){ return `class="pfPanel" data-p="${k}" ${pfOpen.has(k) ? "open" : ""} ontoggle="pfAccT(this)"`; }
 function pfAccT(el){ if(el.open) pfOpen.add(el.dataset.p); else pfOpen.delete(el.dataset.p); }
 function showEl(el){ for(let p = el && el.parentElement; p; p = p.parentElement) if(p.tagName === "DETAILS") p.open = true; return el; }   // 閉じている項目の中なら開く
-const EDIT_JUMP = [["basic", "👤 名前・状態"], ["logs", "🗓 記録・ヒアリング"], ["onb", "🧾 手続き"], ["stores", "🏪 在籍店舗"], ["prof", "📝 プロフ"], ["terms", "⭐ バック"], ["rules", "📋 受付ルール"],
-  ["private", "📞 連絡先"], ["confirm", "📨 確認フォーム"], ["notes", "📝 特記事項"], ["links", "🔗 アプリ"]];
-const PF_JUMP = [["photo", "写真"], ["basic", "基本情報"], ["opts", "オプション"], ["intro", "紹介文"], ["hotel", "ホテル"], ["ptype", "性格"]];
+const EDIT_JUMP = [["basic", "👤 入店時情報"], ["logs", "🗓 記録・ログ"], ["stores", "🏪 在籍店舗"], ["prof", "📝 プロフ"], ["rules", "📋 記録簿関連"], ["confirm", "📨 更新フォームURL"], ["links", "🔗 アプリ"]];
+const PF_JUMP = [["ptype", "性格"], ["basic", "基本情報"], ["intro", "紹介文"], ["opts", "オプション"], ["photo", "写真"]];
+const SUB_JUMP = { basic: [["private", "連絡先"]], rules: [["rules", "受付ルール"], ["notes", "特記事項"], ["hotel", "ホテル"], ["terms", "バック"]] };   // 大きい項目の中の小さい項目（プロフのほか）
 function paintEditJump(){
   $("editJump").innerHTML = EDIT_JUMP.map(([k, l]) => `<button type="button" onclick="jumpTo('${k}')">${l}</button>` +
-      (k === "prof" ? PF_JUMP.map(([p, pl]) => `<button type="button" class="sub" onclick="jumpProf('${p}')">${pl}</button>`).join("") : "")).join("")
+      (k === "prof" ? PF_JUMP.map(([p, pl]) => `<button type="button" class="sub" onclick="jumpProf('${p}')">${pl}</button>`).join("") : "") +
+      (SUB_JUMP[k] || []).map(([p, pl]) => `<button type="button" class="sub" onclick="jumpSub('${k}','${p}')">${pl}</button>`).join("")).join("")
     + `<button type="button" class="all" onclick="accAll(true)">全部ひらく</button><button type="button" class="all" onclick="accAll(false)">全部とじる</button>`;
   // ジャンプの高さ（スマホ1段・PC2段）→ プロフのお店のタブをそのすぐ下に固定
   const setH = () => { const h = $("editJump").offsetHeight; if(h) $("editBg").style.setProperty("--jumpH", h + "px"); };
@@ -2401,8 +2435,13 @@ function jumpProf(p){
   if(!d){ if(a) a.scrollIntoView({ block: "start", behavior: "smooth" }); return; }
   d.open = true; pfOpen.add(p); d.scrollIntoView({ block: "start", behavior: "smooth" });
 }
+function jumpSub(k, p){
+  const a = document.querySelector(`#editBg details.acc[data-acc="${k}"]`); if(!a) return; a.open = true;
+  const d = a.querySelector(`:scope > details.pfPanel[data-p="${p}"]`); if(!d) return;
+  d.open = true; d.scrollIntoView({ block: "start", behavior: "smooth" });
+}
 function accAll(on){
-  document.querySelectorAll("#editBg details.acc, #e_prof details.pfPanel").forEach(d => { d.open = on; });
+  document.querySelectorAll("#editBg details.acc, #editBg details.pfPanel").forEach(d => { d.open = on; });
   if(on) PF_JUMP.forEach(([p]) => pfOpen.add(p)); else pfOpen.clear();
 }
 // 🚃 最寄り駅・各店までの時間：台帳には1つの文（area_note）で入れる。例「最寄り：東池袋／池袋まで10分・鶯谷まで25分」＋改行してそのほかのメモ
@@ -2471,6 +2510,8 @@ function openEdit(id){
   // 項目は最初は閉じておく（新しく足すときだけ名前の所を開く）
   if(!$("editJump").innerHTML) paintEditJump();
   document.querySelectorAll("#editBg details.acc").forEach(d => { d.open = !id && d.dataset.acc === "basic"; });
+  document.querySelectorAll("#editBg details.acc > details.pfPanel").forEach(d => { d.open = !id && d.dataset.p === "name"; });   // 新しいキャストは名前情報だけ開いておく
+  if($("e_hotel")) $("e_hotel").innerHTML = `<div class="hint">プロフとつながると、ここでこのキャストのホテルの◎△×を入れられます</div>`;
   pfOpen.clear(); pfEdit.basic = pfEdit.opts = false;
   const c = id ? casts.find(x=>x.id===id) : { status:"interview", aliases:[], stores:{}, ranks:{}, room_ids:[] };
   $("editTitle").textContent = id ? `${nameOf(c)}（${id}）` : "＋ キャストを追加";
