@@ -2490,7 +2490,13 @@ function renderToday(){
   const card = live.filter(r=>r.payment !== "cash").reduce((a, r)=>a + (r.total || 0), 0);
   const st = Object.values(castDays || {}).map(c=>c.status || "");
   const t = (k, v)=>`<div class="t"><div class="k">${k}</div><div class="v">${v}</div></div>`;
-  el.innerHTML = t("今日の店落ち（暫定＋雑費）", yen(total - back + zappi)) + t("カード合計", yen(card)) + t("予約件数", live.length + "件")
+  // 12時〜22時／22時〜5時（予約の始まりで分ける）。雑費はその日のキャストの最初の予約の時間帯に入れる。内勤日払いは引かない
+  const night = r => { if(!r.start_at) return false; let h = hourOf(r.start_at); if(h < 8) h += 24; return h >= 22; };
+  const part = [0, 0];
+  live.forEach(r => { part[night(r) ? 1 : 0] += (r.total || 0) - backOf(r); });
+  ids.forEach(id => { const first = live.filter(r => r.cast_id === id).sort((a, b) => String(a.start_at || "").localeCompare(String(b.start_at || "")))[0];
+    try{ part[first && night(first) ? 1 : 0] += calcCast(id).zappi || 0; }catch(e){} });
+  el.innerHTML = t("今日の店落ち（暫定＋雑費）", yen(total - back + zappi)) + t("☀️ 12時〜22時（暫定＋雑費）", yen(part[0])) + t("🌙 22時〜5時（暫定＋雑費）", yen(part[1])) + t("カード合計", yen(card)) + t("予約件数", live.length + "件")
     + t("予約のあるキャスト", ids.length + "名") + t("お茶", st.filter(s=>s === "お茶").length + "名") + t("欠勤", st.filter(s=>s === "欠勤").length + "名")
     + t("キャンセル・トビ", rows.filter(r=>r.status === "cancel").length + "件・" + rows.filter(r=>r.status === "tobi").length + "件");
 }
