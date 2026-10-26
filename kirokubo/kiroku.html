@@ -369,7 +369,7 @@
   <nav class="spbar" id="spBar">
     <button type="button" onclick="spGo('add')">＋<b>予約</b></button>
     <button type="button" onclick="spGo('list')">📋<b>キャスト一覧</b></button>
-    <button type="button" onclick="spGo('board')">🗺<b>今どこに誰が</b></button>
+    <button type="button" onclick="spGo('tl')">⏱<b>全体を見たい</b></button>
     <a href="customers.html">🔍<b>お客さん</b></a>
   </nav>
   <div id="gate" class="gate">読み込み中…</div>
@@ -979,6 +979,7 @@ function openDummyData(id){
       <div class="f"><label>AF</label>${sel("af")}</div>
       <div class="f"><label>逆AF</label>${sel("rev_af")}</div>
       <div class="f"><label>射精</label>${sel("shasei")}</div>
+      <div class="f"><label>指名料（円・空ならふつう）</label><input id="dd_nomi" type="number" step="500" value="${d.nomination_fee ?? ""}" placeholder="例：3000"></div>
     </div>
     <div class="f"><label>メモ</label><input id="dd_note" maxlength="500" value="${esc(d.note || "")}"></div>
     <div style="display:flex;gap:6px;margin-top:6px"><button type="button" class="btn btn-primary btn-sm" onclick="saveDummyData(${id})">保存</button>
@@ -988,6 +989,7 @@ async function saveDummyData(id){
   const n = k => { const v = $("dd_" + k).value; return v === "" ? null : Number(v); };
   const u = { age: n("age"), height: n("height"), weight: n("weight"), psize: n("psize"),
               cup: $("dd_cup").value.trim().toUpperCase(), af: $("dd_af").value, rev_af: $("dd_rev_af").value, shasei: $("dd_shasei").value, note: $("dd_note").value.trim() };
+  if(M.dummies.some(x => "nomination_fee" in x)) u.nomination_fee = n("nomi");   // SQL 155 のあと
   try{
     q(await sb.from("kb_dummy_names").update(u).eq("id", id));
     Object.assign(M.dummies.find(x=>x.id === id), u);
@@ -1260,6 +1262,16 @@ function renderCastChecks(c){
   }catch(e){}
   let longNg = false;
   if(custNg){ longNg = true; warn.unshift(`🙅 このお客さんは、このキャストNGです${custNg.reason ? "（" + custNg.reason + "）" : ""}。別のキャストにしてください`); }
+  // 🎭 ダミー：このお客さんが前にこのダミー名で会った子（実際に行ったキャスト）以外では行けない（「あの時の子じゃない」になるので）
+  const dmNow = isDummyStore($("f_store").value) && $("f_dummy") ? $("f_dummy").value : "";
+  if(dmNow && Array.isArray(custPast)){
+    const been = custPast.filter(p => p.store_key === $("f_store").value && p.dummy_name === dmNow && !["cancel", "tobi"].includes(p.status) && (!editing || p.id !== editing.id));
+    const who = [...new Set(been.map(p => p.cast_id))];
+    if(who.length && !who.includes(c.id)){
+      longNg = true;
+      warn.unshift(`🎭 このお客さんは前に「${dmNow}」で ${who.map(castName).join("・")} が行っています（${been[0].biz_date.slice(5).replace("-", "/")}）。${who.map(castName).join("・")} 以外では行けません`);
+    }
+  }
   if(c.long_max && mins > c.long_max){
     if(c.long_over === "ng"){ longNg = true; warn.unshift(`⌛ ${c.long_max}分までのキャストです（それより長いコースは受けない）`); }
     else conf.unshift({ text: `⌛ ${c.long_max}分を超えるので、キャストに確認した` });
@@ -1311,15 +1323,17 @@ async function lookupCustomer(keepName){
     if(!c){ custPast = []; $("custInfo").innerHTML = `<div class="info">🆕 はじめての電話番号です（保存すると新しいお客さんとして登録します）</div>`; if(!editing) setVisit("new"); return; }
     if(!keepName || !$("f_name").value) $("f_name").value = c.name || "";
     $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = c.ng_reason || c.note || "";
-    const past = q(await sb.from("kb_reservations").select("id,biz_date,store_key,cast_id,dummy_name,course,status").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(10)) || [];
-    custPast = past;
+    // ダミーで行った子の確認（renderCastChecks）のため、多めに読む。履歴に出すのは新しい10件
+    const pastAll = q(await sb.from("kb_reservations").select("id,biz_date,store_key,cast_id,dummy_name,course,status").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(200)) || [];
+    custPast = pastAll;
+    const past = pastAll.slice(0, 10);
     const casts = [...new Set(past.map(p=>castName(p.cast_id)))];
     $("custInfo").innerHTML = (c.ng ? `<div class="warn">⚠️ NG客です：${esc(c.ng_reason||"理由なし")}</div>` : "") +
       `<div class="hist">これまで ${past.length}件${past.length>=10?"以上":""}（新しい順）：${past.map(p=>`${p.biz_date.slice(5).replace("-","/")} ${esc(storeLabel(p.store_key))} ${p.dummy_name ? "🎭" + esc(p.dummy_name) + "→" : ""}${esc(castName(p.cast_id))} ${esc(p.course)}${p.status==="cancel"?"(キャンセル)":p.status==="tobi"?"(トビ)":""}`).join("、") || "なし"}<br>
        指名したことのあるキャスト（記録簿）：${casts.map(esc).join("、") || "なし"}</div>`;
     if(!editing){
       const cid = $("f_cast").value;
-      setVisit(visitFrom(past, cid));
+      setVisit(visitFrom(pastAll, cid));
     }
   }catch(e){ $("custInfo").innerHTML = `<div class="warn">お客さんを探せませんでした：${esc(e.message||e)}</div>`; }
 }
@@ -1347,6 +1361,7 @@ function missingRequired(quiet){   // quiet：ピカピカ用（たたんであ�
     [!radioVal("f_afw") || !radioVal("f_rafw"), "AF・逆AF", "afBox"],
     [!$("f_pay").value, "支払い方法", "f_pay"],
     [!mediaSel.length, "媒体", "f_media"],
+    [!!(editing && editing.phone_draft && !IS_PHONE() && $("f_draftOk") && !$("f_draftOk").checked), "スマホの仮入力：キャストに送ったか確かめた", "f_draftBox"],
     [!!($("f_backov") && $("f_backov").value !== "" && !backOvNote.trim() && (quiet || (($("backDet") && ($("backDet").open = true)), true))), "報酬を手で直した理由", "f_backovNote"],
   ].filter(x=>x[0]).map(x=>[x[1], x[2]]);
 }
@@ -1371,6 +1386,9 @@ function calc(){
     nomination = (M.set.nomination || {}).default || 2000;
     const nr = cast && rulesOn(cast.id).find(r=>r.kind==="nomination_fee");
     if(nr){ nomination = nr.params.amount; why.push(`指名料：特例 ${yen(nomination)}`); }
+    // ダミー（エイティーンなど）は子ごとの指名料（公式HPの★）
+    const dm = isDummyStore(store) && $("f_dummy") && M.dummies.find(x => x.store_key === store && x.name === $("f_dummy").value);
+    if(dm && dm.nomination_fee != null){ nomination = Number(dm.nomination_fee) || 0; why.push(`指名料：🎭${dm.name} は ${yen(nomination)}`); }
     if(g === "cutie" && $("f_nh").checked){ nomination += 3000; why.push("NH料金：指名料＋3,000円"); }
   }
   const extSet = (M.set.extension || {})[g] || { price:10000, back:5000 };
@@ -1582,6 +1600,8 @@ async function saveRes(){
       course_back: c.courseBack, option_back: c.optionBack, extra_back: c.extra,
       back_override: ovRaw === "" ? null : Number(ovRaw),
       ...(("back_override_note" in (rows[0] || editing || {})) || ovRaw !== "" ? { back_override_note: ovRaw === "" ? "" : backOvNote.trim() } : {}),
+      // 📱 スマホで保存したら「仮入力」。PCで（キャストに送ったか確かめて）保存すると取り入れる（SQL 155 のあと）
+      ...(("phone_draft" in (rows[0] || editing || {})) || IS_PHONE() ? (IS_PHONE() ? { phone_draft: true, phone_draft_by: by, phone_draft_at: new Date().toISOString() } : { phone_draft: false }) : {}),
       status: $("f_status").value, confirm_call: $("f_confirm").value.trim(), note: $("f_note").value, updated_by: by,
       ...(() => { const lg = statusLog(editing ? (rows.find(x => x.id === editing.id) || editing) : null, $("f_status").value, by); return lg ? { memo_log: lg } : {}; })(),   // 備考に状態の経緯
     };
@@ -3616,7 +3636,7 @@ function resCard(r){
     <div class="rc-top">
       ${ed ? `<input type="time" class="rc-time" value="${hm(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}
       <span class="rc-end">〜${hm(r.end_at)}</span>
-      <span class="rc-store">${r.dummy_name ? "🎭" + esc(r.dummy_name) + "・" : ""}${esc(storeLabel(r.store_key) || "")}</span>
+      ${r.phone_draft ? `<span class="rc-draft" title="スマホで仮入力。PCで開いて確かめると取り入れます">📱仮入力</span>` : ""}<span class="rc-store">${r.dummy_name ? "🎭" + esc(r.dummy_name) + "・" : ""}${esc(storeLabel(r.store_key) || "")}</span>
       ${stSel}${told}
       <span style="flex:1"></span>
       <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ くわしく開く</button>
@@ -4457,15 +4477,47 @@ renderCastChecks = function(){ const r = __renderCastChecksNeed.apply(this, argu
 const __openFormBlink = openForm;
 openForm = function(){ const r = __openFormBlink.apply(this, arguments); needSoon(); return r; };
 
+/* ---------- 📱 スマホで入れた予約は「仮入力」：PCで開いたら、キャストに送ったかを確かめるチェックが必須。保存すると取り入れる ---------- */
+function IS_PHONE(){ return matchMedia("(max-width:640px)").matches || /iPhone|Android.+Mobile/i.test(navigator.userAgent); }
+function draftBoxPaint(){
+  let box = $("f_draftBox");
+  if(!box){ box = document.createElement("div"); box.id = "f_draftBox"; const d = $("formBg").querySelector(".drawer"); d.insertBefore(box, d.querySelector("h2") ? d.querySelector("h2").nextSibling : d.children[1]); }
+  if(!(editing && editing.phone_draft)){ box.innerHTML = ""; box.style.display = "none"; return; }
+  const who = [editing.phone_draft_by, editing.phone_draft_at ? new Date(editing.phone_draft_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""].filter(Boolean).join(" ");
+  box.style.display = "";
+  box.innerHTML = IS_PHONE()
+    ? `<div class="draftbox">📱 スマホの仮入力です（${esc(who)}）。事務所のPCで確かめて取り入れます。</div>`
+    : `<div class="draftbox">📱 <b>スマホで仮入力された予約です</b>（${esc(who)}）。内容を確かめてから保存すると取り入れます。
+        <label style="display:flex;gap:8px;align-items:center;margin-top:6px;font-size:14.5px;cursor:pointer"><input type="checkbox" id="f_draftOk" style="width:auto;transform:scale(1.3)"> ✅ キャストに予約を送ったか、もう一度確かめた<span class="req">必須</span></label></div>`;
+}
+function draftAlertPaint(){
+  let el = $("draftAlert");
+  if(!el){ el = document.createElement("div"); el.id = "draftAlert"; $("callAlerts").parentNode.insertBefore(el, $("callAlerts")); }
+  const ds = IS_PHONE() ? [] : rows.filter(r => r.phone_draft);
+  el.innerHTML = ds.length ? `<div class="draftbox" style="margin:8px 0">📱 <b>スマホの仮入力が ${ds.length}件あります。</b>開いて、内容とキャストに送ったかを確かめて保存してください。
+    <div style="margin-top:4px">${ds.map(r => `<button type="button" class="rc-open" style="margin:2px" onclick="openForm(${r.id})">${hm(r.start_at)} ${esc(castName(r.cast_id))}${r.dummy_name ? "（🎭" + esc(r.dummy_name) + "）" : ""}</button>`).join("")}</div></div>` : "";
+}
+const __openFormDraft = openForm;
+openForm = function(){ const r = __openFormDraft.apply(this, arguments); draftBoxPaint(); return r; };
+const __loadDayDraft = loadDay;
+loadDay = async function(){ const r = await __loadDayDraft.apply(this, arguments); draftAlertPaint(); return r; };
+const __renderListDraft = renderList;   // 最初の読みこみ（この上書きより前に始まる）や、一覧を描きなおしたときにも
+renderList = function(){ const r = __renderListDraft.apply(this, arguments); try{ draftAlertPaint(); }catch(e){} return r; };
+const __saveResDraft = saveRes;
+saveRes = async function(){ const wasOpen = $("formBg").classList.contains("show"); const r = await __saveResDraft.apply(this, arguments);
+  if(wasOpen && !$("formBg").classList.contains("show") && IS_PHONE()) toast("📱 仮入力で保存しました（事務所のPCで確かめて取り入れます）"); return r; };
+
 /* ---------- 📱 スマホ（外出中・車の中で少しだけ使う）：上に「よく使う4つ」・はみ出しを直す・長い説明はしまう ---------- */
 function spGo(w){
   if(w === "add"){ openForm(null); return; }
   const top = el => { if(!el) return; const y = el.getBoundingClientRect().top + window.scrollY - (($("spBar") && $("spBar").offsetHeight) || 0) - 6; window.scrollTo({ top: y, behavior: "smooth" }); };
   if(w === "list"){ showView("list"); top($("tabs")); }
-  if(w === "board"){ $("viewBoard").open = true; top($("viewBoard")); }
+  if(w === "tl"){ showView("tl"); top($("tabs")); }
 }
 document.head.insertAdjacentHTML("beforeend", `<style>
   .spbar{display:none}
+  .draftbox{background:#FFF8E1;border:2px solid #FFB547;border-radius:12px;padding:8px 12px;margin:0 0 10px;font-size:13.5px;color:#7a4a00;line-height:1.6}
+  .rc-draft{background:#FFB547;color:#fff;border-radius:99px;padding:1px 8px;font-size:12px;font-weight:800;white-space:nowrap}
   @media (max-width:640px){
     .spbar{display:flex;position:sticky;top:0;z-index:60;gap:4px;background:var(--bg);padding:6px 0;margin:-4px 0 6px;box-shadow:0 6px 10px -8px rgba(0,0,0,.25)}
     .spbar button,.spbar a{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;border:1.5px solid #FFC2D1;background:#fff;border-radius:12px;padding:6px 2px;font-family:inherit;font-size:17px;color:#E5638C;text-decoration:none;cursor:pointer}
@@ -4475,6 +4527,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
     body:has(.modal-bg.show) .spbar{display:none}
     header.kbh .navinhead .kbnav{flex-wrap:nowrap;overflow-x:auto;gap:4px;padding-bottom:2px} header.kbh .navinhead .kbnav a{padding:5px 10px;font-size:12px;white-space:nowrap}
     .stickybar{position:static;box-shadow:none}
+    #viewBoard{display:none}   /* 今どこに誰がはスマホでは出さない（外に出る前に、状態を完璧にしておく前提） */
     details.fold > summary small{display:none}
     #formBg .row2 > .f > div{flex-wrap:wrap}
     body:has(#formBg.show) a[title="ポータルに戻る"]{display:none !important}
