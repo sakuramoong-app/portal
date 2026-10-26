@@ -1575,7 +1575,8 @@ async function saveRes(){
       course_back: c.courseBack, option_back: c.optionBack, extra_back: c.extra,
       back_override: ovRaw === "" ? null : Number(ovRaw),
       ...(("back_override_note" in (rows[0] || editing || {})) || ovRaw !== "" ? { back_override_note: ovRaw === "" ? "" : backOvNote.trim() } : {}),
-      status: $("f_status").value, confirm_call: $("f_confirm").value.trim(), note: noteWithStatus($("f_note").value, editing ? editing.status : "", $("f_status").value, by), updated_by: by,
+      status: $("f_status").value, confirm_call: $("f_confirm").value.trim(), note: $("f_note").value, updated_by: by,
+      ...(() => { const lg = statusLog(editing ? (rows.find(x => x.id === editing.id) || editing) : null, $("f_status").value, by); return lg ? { memo_log: lg } : {}; })(),   // 備考に状態の経緯
     };
     if(editing) q(await sb.from("kb_reservations").update(row).eq("id", editing.id));
     else { row.created_by = by; q(await sb.from("kb_reservations").insert(row)); }
@@ -2289,21 +2290,15 @@ renderTL = function(){ __renderTL3(); renderSlots(); };
 function statusKeys(cur){ return Object.keys(STATUS).filter(k=>!STATUS_OLD.includes(k) || k === cur); }
 function whenShort(t){ if(!t) return ""; const d = new Date(t); return (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
 function logOf(r){ return Array.isArray(r.memo_log) ? r.memo_log : []; }
-// 備考に「🔁 状態：外国人1コール待ち（10/26 09:30 きゃ）→ 1H前確認電話（10/26 12:00 蘭子）」と経緯を足していく
-function noteWithStatus(note, prevSt, newSt, by){
-  note = String(note || "");
-  if(!newSt || prevSt === newSt) return note;
-  const d = new Date(Date.now() + 9 * 3600 * 1000), p2 = n => String(n).padStart(2, "0");
-  const piece = `${STATUS[newSt] || newSt}（${d.getUTCMonth() + 1}/${d.getUTCDate()} ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}${by ? " " + by : ""}）`;
-  const lines = note.split("\n"), i = lines.findIndex(l => l.startsWith("🔁 状態："));
-  // 新しく登録したとき：「登録時：○○」。経緯がまだない前からの予約は、前の状態から書く
-  if(i < 0) return (note.trim() ? note.replace(/\s+$/, "") + "\n" : "") + "🔁 状態：" + (prevSt ? (STATUS[prevSt] || prevSt) + " → " + piece : "登録時「" + (STATUS[newSt] || newSt) + "」" + piece.slice(piece.indexOf("（")));
-  lines[i] += " → " + piece;
-  return lines.join("\n");
+// 備考（対応ログ）に状態の経緯：登録したとき「🔁 登録時の状態：○○」、受付の画面で変えたとき「🔁 状態 ○○ →「△△」」
+function statusLog(r, newSt, by){
+  const prev = r ? r.status : "";
+  if(!newSt || prev === newSt) return null;
+  const text = r ? `🔁 状態 ${STATUS[prev] || prev || "（なし）"} →「${STATUS[newSt] || newSt}」` : `🔁 登録時の状態：「${STATUS[newSt] || newSt}」`;
+  return logOf(r || {}).concat([{ at: new Date().toISOString(), by: by || "（担当者なし）", text }]);
 }
 async function pushLog(id, text, extra){
   const r = rows.find(x=>x.id === id); if(!r) return false;
-  if(extra && extra.status && extra.status !== r.status) extra = Object.assign({}, extra, { note: noteWithStatus(r.note, r.status, extra.status, KB.operatorName()) });   // 備考に状態の経緯
   const log = logOf(r).concat([{ at: new Date().toISOString(), by: KB.operatorName() || "（担当者なし）", text }]);
   try{
     q(await sb.from("kb_reservations").update(Object.assign({ memo_log: log, updated_by: KB.operatorName() }, extra || {})).eq("id", id));
