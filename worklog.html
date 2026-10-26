@@ -60,6 +60,12 @@
   .row{flex-wrap:wrap;}
   .sugg{flex-basis:100%;font-size:12px;font-weight:700;color:#1f5fbf;background:#EEF5FF;border-radius:8px;padding:5px 8px;margin-top:4px;line-height:1.6;}
   .sugg .ib{margin-left:4px;}
+  .appTabs{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 10px;}
+  .appTabs .chip small{font-weight:700;opacity:.8;margin-left:2px;}
+  .kindTabs{display:flex;gap:4px;flex-wrap:wrap;}
+  .chip.sm{padding:4px 10px;font-size:11.5px;}
+  .apptag{flex:0 0 auto;font-size:10.5px;font-weight:800;color:#7a6468;border-radius:99px;padding:2px 8px;white-space:nowrap;}
+  .kindtag{flex:0 0 auto;font-size:12px;}
   .back{position:fixed;left:12px;bottom:12px;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);}
 </style>
 </head>
@@ -246,7 +252,9 @@ function rowHtml(r, i, opts){
   const isDone = r.kind === "done";
   let h = `<div class="row ${isDone ? "done" : ""}" ${CAN && !isDone ? `data-id="${r.id}" data-group="${opts.group}"` : ""}>`;
   if(opts.num) h += `<span class="num">${i + 1}</span>`;
+  if(opts.tag && r.kind === "idea") h += `<span class="kindtag">💡</span>`;
   h += `<span class="t ${CAN ? "can" : ""}" ${CAN ? `onclick="startEdit(this,${r.id})"` : ""}>${esc(r.title)}</span>`;
+  if(opts.tag) h += appTag(r.app);
   if(isDone && r.done_at) h += `<span class="d">✓ ${fmt(r.done_at)}</span>`;
   if(CAN){
     if(r.kind === "idea") h += `<button class="ib go" onclick="setKind(${r.id},'task')">→ やることへ</button>`;
@@ -266,14 +274,22 @@ function addHtml(app, kind, ph){
     onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addItem('${kind}',decodeURIComponent('${encodeURIComponent(app)}'),'${id}');}">
     <button class="ib go" onclick="addItem('${kind}',decodeURIComponent('${encodeURIComponent(app)}'),'${id}')">追加</button></div>`;
 }
+// アプリの色（項目の横の札）
+const APP_COLOR = { "ポータル":"#FFE3EC", "サクラシフト":"#E6F6EE", "内勤カレンダー":"#E7F2FD", "在籍作成ルーム":"#F1EAFA", "キャストプロフ":"#FFF0F5",
+  "記録簿・キャスト台帳":"#FFF4DC", "公式HP連携・一括在籍登録":"#E3F4F7", "新しいアプリ・その他":"#F1ECEA" };
+let boardApp = (()=>{ try{ return localStorage.getItem("mgrApp") || "all"; }catch(e){ return "all"; } })();
+let boardKind = "all";   // 未完了の中：all／task（やること）／idea（アイデア）
+function setBoardApp(a){ boardApp = a; try{ localStorage.setItem("mgrApp", a); }catch(e){} renderBoard(); }
+function setBoardKind(k){ boardKind = k; renderBoard(); }
+function appTag(app){ return `<span class="apptag" style="background:${APP_COLOR[app] || "#F1ECEA"}">${esc(app || "（なし）")}</span>`; }
 function renderBoard(){
   document.getElementById("boardNote").innerHTML = CAN
-    ? "文章をクリックで編集・<b>長押しで並べ替え</b>（やることは、上から完成させたい順に）。"
+    ? "文章をクリックで編集・<b>長押しで並べ替え</b>（同じアプリのやることの中で。上から完成させたい順に）。"
     : "見るだけです（書きかえは、担当「きゃ」のときだけできます）。";
   document.getElementById("quick").style.display = CAN ? "" : "none";
   const qa = document.getElementById("qApp"), cur = qa.value;
   qa.innerHTML = appList().map(a=>`<option>${esc(a)}</option>`).join("");
-  if(cur) qa.value = cur;
+  if(boardApp !== "all") qa.value = boardApp; else if(cur) qa.value = cur;
 
   // 全体像
   const vs = list("", "vision");
@@ -283,24 +299,33 @@ function renderBoard(){
   document.getElementById("box-vision").classList.toggle("show", open.vision !== false);
   document.getElementById("caret-vision").textContent = open.vision !== false ? "▴" : "▾";
 
-  // アプリごと
-  document.getElementById("apps").innerHTML = appList().map(app=>{
-    const ideas = list(app, "idea"), tasks = list(app, "task"), dones = list(app, "done").sort((a, b)=>String(b.done_at).localeCompare(String(a.done_at)));
-    const k = "app:" + app, isOpen = !!open[k];
-    const kEnc = encodeURIComponent(k);
-    let b = `<div class="sec"><span>📋 やること（完成させたい順）</span></div>`;
-    b += tasks.length ? tasks.map((r, i)=>rowHtml(r, i, { num: true, group: "task:" + app })).join("") : `<div class="none">（ありません）</div>`;
-    b += addHtml(app, "task", "＋ やることを足す");
-    b += `<div class="sec"><span>💡 アイデア</span></div>`;
-    b += ideas.length ? ideas.map((r, i)=>rowHtml(r, i, { group: "idea:" + app })).join("") : `<div class="none">（ありません）</div>`;
-    b += addHtml(app, "idea", "＋ アイデアを足す");
-    const dk = "done:" + app, dOpen = !!open[dk];
-    b += `<div class="sec" style="cursor:pointer" onclick="toggleKey(decodeURIComponent('${encodeURIComponent(dk)}'))"><span>✅ 完了（${dones.length}）</span><span>${dOpen ? "▴" : "▾"}</span></div>`;
-    if(dOpen) b += dones.length ? dones.map((r, i)=>rowHtml(r, i, {})).join("") : `<div class="none">（ありません）</div>`;
-    return `<div class="card"><div class="card-h" onclick="toggleKey(decodeURIComponent('${kEnc}'))">
-        <span>${esc(app)}</span><small>📋${tasks.length}　💡${ideas.length}　✅${dones.length} ${isOpen ? "▴" : "▾"}</small></div>
-      <div class="card-b ${isOpen ? "show" : ""}">${b}</div></div>`;
-  }).join("");
+  // アプリのタブ（すべて／アプリごと）→ 未完了（やること・アイデア）と完了
+  const apps = appList();
+  if(boardApp !== "all" && !apps.includes(boardApp)) boardApp = "all";
+  const inApp = r => boardApp === "all" || r.app === boardApp;
+  const notDone = r => r.kind === "task" || r.kind === "idea";
+  const appOrder = a => { const i = apps.indexOf(a); return i < 0 ? 99 : i; };
+  const cnt = a => rows.filter(r => notDone(r) && (a === "all" || r.app === a)).length;
+  let h = `<div class="appTabs">${[["all", "すべて"]].concat(apps.map(a => [a, a])).map(([a, l]) =>
+    `<button class="chip ${boardApp === a ? "on" : ""}" onclick="setBoardApp(decodeURIComponent('${encodeURIComponent(a)}'))">${esc(l)} <small>${cnt(a)}</small></button>`).join("")}</div>`;
+  // 未完了：やること（アプリの順 → 完成させたい順）、そのあとアイデア
+  const open1 = rows.filter(r => notDone(r) && inApp(r) && (boardKind === "all" || r.kind === boardKind))
+    .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "task" ? -1 : 1) || appOrder(a.app) - appOrder(b.app) || (Number(a.sort) || 0) - (Number(b.sort) || 0) || a.id - b.id);
+  const nT = rows.filter(r => r.kind === "task" && inApp(r)).length, nI = rows.filter(r => r.kind === "idea" && inApp(r)).length;
+  h += `<div class="card"><div class="card-h" style="cursor:default"><span>📋 未完了 <small>${open1.length}</small></span>
+      <span class="kindTabs">${[["all", "ぜんぶ"], ["task", "📋 やること " + nT], ["idea", "💡 アイデア " + nI]].map(([k, l]) =>
+        `<button class="chip sm ${boardKind === k ? "on" : ""}" onclick="setBoardKind('${k}')">${l}</button>`).join("")}</span></div>
+    <div class="card-b show">`;
+  const nOf = {};   // 番号はアプリごとに 1 から（そのアプリで完成させたい順）
+  h += open1.length ? open1.map(r => rowHtml(r, r.kind === "task" ? (nOf[r.app] = (nOf[r.app] || 0) + 1) - 1 : 0, { num: r.kind === "task", group: r.kind + ":" + r.app, tag: true })).join("") : `<div class="none">（ありません）</div>`;
+  if(boardApp !== "all") h += addHtml(boardApp, "task", "＋ " + boardApp + " のやることを足す") + addHtml(boardApp, "idea", "＋ " + boardApp + " のアイデアを足す");
+  h += `</div></div>`;
+  // 完了（新しい順）
+  const dones = rows.filter(r => r.kind === "done" && inApp(r)).sort((a, b) => String(b.done_at).localeCompare(String(a.done_at)));
+  const dOpen = !!open["done:" + boardApp];
+  h += `<div class="card"><div class="card-h" onclick="toggleKey(decodeURIComponent('${encodeURIComponent("done:" + boardApp)}'))"><span>✅ 完了 <small>${dones.length}</small></span><small>${dOpen ? "▴" : "▾"}</small></div>
+    <div class="card-b ${dOpen ? "show" : ""}">${dones.length ? dones.map(r => rowHtml(r, 0, { tag: true })).join("") : `<div class="none">（ありません）</div>`}</div></div>`;
+  document.getElementById("apps").innerHTML = h;
 }
 function toggleKey(k){ open[k] = !open[k]; try{ localStorage.setItem("mgrOpen", JSON.stringify(open)); }catch(e){} renderBoard(); }
 function toggleBox(k){ open[k] = open[k] === false; try{ localStorage.setItem("mgrOpen", JSON.stringify(open)); }catch(e){} renderBoard(); }
