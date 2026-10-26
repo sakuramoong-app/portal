@@ -365,6 +365,13 @@
 <div class="wrap wide">
   <!-- いちばん上：記録簿の右に、ページの切りかえ（新しい記録簿・受付・精算・キャスト台帳） -->
   <header class="kbh"><h1>📒 記録簿</h1><div id="navArea" class="navinhead"></div></header>
+  <!-- 📱 スマホのときだけ：よく使う4つへすぐ行ける（上に固定） -->
+  <nav class="spbar" id="spBar">
+    <button type="button" onclick="spGo('add')">＋<b>予約</b></button>
+    <button type="button" onclick="spGo('list')">📋<b>キャスト一覧</b></button>
+    <button type="button" onclick="spGo('board')">🗺<b>今どこに誰が</b></button>
+    <a href="customers.html">🔍<b>お客さん</b></a>
+  </nav>
   <div id="gate" class="gate">読み込み中…</div>
 
   <div id="main" style="display:none">
@@ -4449,6 +4456,30 @@ const __renderCastChecksNeed = renderCastChecks;
 renderCastChecks = function(){ const r = __renderCastChecksNeed.apply(this, arguments); needSoon(); return r; };
 const __openFormBlink = openForm;
 openForm = function(){ const r = __openFormBlink.apply(this, arguments); needSoon(); return r; };
+
+/* ---------- 📱 スマホ（外出中・車の中で少しだけ使う）：上に「よく使う4つ」・はみ出しを直す・長い説明はしまう ---------- */
+function spGo(w){
+  if(w === "add"){ openForm(null); return; }
+  const top = el => { if(!el) return; const y = el.getBoundingClientRect().top + window.scrollY - (($("spBar") && $("spBar").offsetHeight) || 0) - 6; window.scrollTo({ top: y, behavior: "smooth" }); };
+  if(w === "list"){ showView("list"); top($("tabs")); }
+  if(w === "board"){ $("viewBoard").open = true; top($("viewBoard")); }
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .spbar{display:none}
+  @media (max-width:640px){
+    .spbar{display:flex;position:sticky;top:0;z-index:60;gap:4px;background:var(--bg);padding:6px 0;margin:-4px 0 6px;box-shadow:0 6px 10px -8px rgba(0,0,0,.25)}
+    .spbar button,.spbar a{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;border:1.5px solid #FFC2D1;background:#fff;border-radius:12px;padding:6px 2px;font-family:inherit;font-size:17px;color:#E5638C;text-decoration:none;cursor:pointer}
+    .spbar button:first-child{background:linear-gradient(135deg,#FF8FAB,#FF6B9D);color:#fff;border-color:transparent}
+    .spbar b{font-size:11px;font-weight:800}
+    header.kbh{gap:6px;margin-bottom:6px} header.kbh h1{font-size:16px} header.kbh .navinhead{min-width:0;flex-basis:100%}
+    body:has(.modal-bg.show) .spbar{display:none}
+    header.kbh .navinhead .kbnav{flex-wrap:nowrap;overflow-x:auto;gap:4px;padding-bottom:2px} header.kbh .navinhead .kbnav a{padding:5px 10px;font-size:12px;white-space:nowrap}
+    .stickybar{position:static;box-shadow:none}
+    details.fold > summary small{display:none}
+    #formBg .row2 > .f > div{flex-wrap:wrap}
+    body:has(#formBg.show) a[title="ポータルに戻る"]{display:none !important}
+  }
+</style>`);
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
