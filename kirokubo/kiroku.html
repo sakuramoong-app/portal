@@ -2480,23 +2480,24 @@ async function toggleTodo(id, i){
   catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
 
-/* ---------- 📊 今日の数字（内勤用）：店落ち（暫定＋雑費）・カード・件数・人数・お茶・欠勤 ---------- */
+/* ---------- 📊 今日の数字（内勤用）：店落ち（精算と同じ・22時まで／22時から）・カード・件数・人数・お茶・欠勤 ---------- */
 function renderToday(){
   const el = $("todayGrid"); if(!el) return;
   const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi");
-  const total = live.reduce((a, r)=>a + (r.total || 0), 0), back = live.reduce((a, r)=>a + backOf(r), 0);
   const ids = [...new Set(live.map(r=>r.cast_id).filter(Boolean))];
-  let zappi = 0; ids.forEach(id=>{ try{ zappi += calcCast(id).zappi || 0; }catch(e){} });
   const card = live.filter(r=>r.payment !== "cash").reduce((a, r)=>a + (r.total || 0), 0);
   const st = Object.values(castDays || {}).map(c=>c.status || "");
   const t = (k, v)=>`<div class="t"><div class="k">${k}</div><div class="v">${v}</div></div>`;
-  // 12時〜22時／22時〜5時（予約の始まりで分ける）。雑費はその日のキャストの最初の予約の時間帯に入れる。内勤日払いは引かない
-  const night = r => { if(!r.start_at) return false; let h = hourOf(r.start_at); if(h < 8) h += 24; return h >= 22; };
+  // 精算の「店落ち」を22時まで／22時からに分ける（予約の始まりで分ける）。雑費・交通費バック・プラスマイナスは、その子のその日最初の予約の時間帯に入れる。内勤日払いは引かない
+  const night = r => !!r.start_at && hourOf(r.start_at) >= 22;
   const part = [0, 0];
-  live.forEach(r => { part[night(r) ? 1 : 0] += (r.total || 0) - backOf(r); });
-  ids.forEach(id => { const first = live.filter(r => r.cast_id === id).sort((a, b) => String(a.start_at || "").localeCompare(String(b.start_at || "")))[0];
-    try{ part[first && night(first) ? 1 : 0] += calcCast(id).zappi || 0; }catch(e){} });
-  el.innerHTML = t("今日の店落ち（暫定＋雑費）", yen(total - back + zappi)) + t("☀️ 12時〜22時（暫定＋雑費）", yen(part[0])) + t("🌙 22時〜5時（暫定＋雑費）", yen(part[1])) + t("カード合計", yen(card)) + t("予約件数", live.length + "件")
+  ids.forEach(id => {
+    const mine = live.filter(r => r.cast_id === id).sort((a, b) => String(a.start_at || "").localeCompare(String(b.start_at || "")));
+    let rest = 0; try{ rest = calcCast(id).shopDrop || 0; }catch(e){}
+    mine.forEach(r => { const v = (r.total || 0) - (Number(backOf(r)) || 0); part[night(r) ? 1 : 0] += v; rest -= v; });
+    part[mine[0] && night(mine[0]) ? 1 : 0] += rest;
+  });
+  el.innerHTML = t("今日の店落ち（精算と同じ）", yen(part[0] + part[1])) + t("☀️ 22時までの店落ち", yen(part[0])) + t("🌙 22時からの店落ち", yen(part[1])) + t("カード合計", yen(card)) + t("予約件数", live.length + "件")
     + t("予約のあるキャスト", ids.length + "名") + t("お茶", st.filter(s=>s === "お茶").length + "名") + t("欠勤", st.filter(s=>s === "欠勤").length + "名")
     + t("キャンセル・トビ", rows.filter(r=>r.status === "cancel").length + "件・" + rows.filter(r=>r.status === "tobi").length + "件");
 }
