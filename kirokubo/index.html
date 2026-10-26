@@ -136,7 +136,8 @@
   .phGrid{display:flex;flex-wrap:wrap;gap:8px} .phCell{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11.5px;font-weight:800;color:#7a6468;cursor:pointer}
   .phCell img,.phNone{width:78px;height:104px;object-fit:cover;border-radius:8px;border:1.5px solid #F1E3E7;background:#FAF7F8} .phCell.list img,.phCell.list .phNone{width:78px;height:104px}
   .phNone{display:flex;align-items:center;justify-content:center;color:#C9B8BE;font-size:12px}
-  .phCell span{display:flex;align-items:center;gap:3px} .phCell input{width:auto;margin:0}
+  .phCell span{display:flex;align-items:center;gap:3px} .phCell input{width:auto;margin:0} .phCell small{font-weight:400;color:#c77700}
+  .phCell.moved img,.phCell.moved .phNone{border:2.5px solid #FF8FAB} .phMv{border:1px solid #F1E3E7;background:#fff;border-radius:6px;padding:1px 8px;font-size:12px;cursor:pointer} .phMv:disabled{opacity:.3}
   .phTools{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px} .phTools select{width:auto;max-width:220px}
   .pfView .ed{display:none !important} .pfBody:not(.pfView) .vw{display:none !important}
   .pfEditBtn{margin-left:auto;background:#FFF0F5;border:1.5px solid #FFC2D1;border-radius:10px;padding:4px 10px;font-size:11.5px;font-weight:800;color:#e0507a;cursor:pointer;font-family:inherit}
@@ -1713,11 +1714,43 @@ function pfBulkRun(){
 // 📷 写真（公式HPに出ている写真。このお店のタブの在籍番号で）：ほかのお店からコピー・撮影準備中（お店のNG画像）にする
 const PF_SLOT_LABEL = ["一覧用", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧"];
 let pfPhotoBust = Date.now(), pfPhotoBusy = false;
+let pfPhotoOrder = null, pfPhotoOrderSk = "";   // 並べかえ中の順番（表示の順に、今の枠の番号）と、どのお店のタブか
+function pfPhotoMove(i, d){ const o = pfPhotoOrder, j = i + d; if(!o || j < 0 || j > 7) return; [o[i], o[j]] = [o[j], o[i]]; pfCollect(); paintProf(); }
+async function pfPhotoSaveOrder(){
+  if(pfPhotoBusy || !pfPhotoOrder) return;
+  const o = pfPhotoOrder.slice();
+  if(o.every((s, i) => s === i + 1)){ toast("順番が変わっていません"); return; }
+  const { mk, no } = hpNoOf(pf.c, pf.sk), site = HP_SITE_OF[mk];
+  const ch = o.map((s, i) => s !== i + 1 ? `${PF_SLOT_LABEL[i + 1]}←今の${PF_SLOT_LABEL[s]}` : "").filter(Boolean);
+  if(!confirm(`${STORE_LABEL_OF(pf.sk)}（${no}番）の写真を並べかえます。\n${ch.join("\n")}\nよろしいですか？`)) return;
+  pfPhotoBusy = true; if($("phMsg")) $("phMsg").textContent = `入れています…（${ch.length}枠・1枠10秒ほど）`;
+  try{
+    const r = await hpFn({ action: "cast_photo_copy", store: mk, no, from: { site, no }, order: o });
+    const res = r.results || [], bad = res.filter(x => !x.ok);
+    pfPhotoOrder = null; pfPhotoBust = Date.now(); pfCollect(); paintProf();
+    toast(res.length && !bad.length ? "↕ 並べかえました" : "並べかえられなかった枠があります");
+    if($("phMsg")) $("phMsg").innerHTML = res.length && !bad.length ? "✅ 並べかえました。" :
+      `<span style="color:#d9534f">❌ ${esc(bad.length ? bad.map(x => PF_SLOT_LABEL[x.slot] + "：" + (x.skip || x.error || x.msg || "できませんでした")).join("／") : (r.error || "できませんでした"))}</span>`;
+  }catch(e){ toast("並べかえられませんでした：" + (e.message || e)); }
+  finally{ pfPhotoBusy = false; }
+}
 function pfPhotoUrl(site, no, k){ return `https://www.${site}.com/galpic/` + (k === 0 ? `gal180x240-${no}.jpg` : `gal390x520-${no}${k === 1 ? "" : "-" + (k - 1)}.jpg`) + "?v=" + pfPhotoBust; }
 function pfPhotoHtml(){
   const { mk, no } = hpNoOf(pf.c, pf.sk), site = HP_SITE_OF[mk];
   if(!site || !no) return `<div class="hint">このお店の公式HPの在籍番号がまだないので、写真を出せません（「🏪 在籍店舗」に番号を入れてください）。</div>`;
   const srcs = pf.stores.filter(s => s !== pf.sk).map(s => ({ s, ...hpNoOf(pf.c, s) })).filter(x => x.no && HP_SITE_OF[x.mk]);
+  const img = k => `<img src="${pfPhotoUrl(site, no, k)}" alt="${PF_SLOT_LABEL[k]}" loading="lazy" onerror="this.outerHTML='<div class=&quot;phNone&quot;>なし</div>'">`;
+  // ↕ 並べかえ中：プロフ用①〜⑧を ◀ ▶ で入れかえて「この順番で入れる」
+  if(pfPhotoOrder && pfPhotoOrderSk === pf.sk){
+    const o = pfPhotoOrder;
+    return `<div class="hint">◀ ▶ で写真を入れかえて「💾 この順番で入れる」。一覧用の写真は変わりません。</div>
+      <div class="phGrid">${o.map((src, i) => `<div class="phCell ${src !== i + 1 ? "moved" : ""}">${img(src)}
+        <span>${PF_SLOT_LABEL[i + 1]}${src !== i + 1 ? `<small>（今の${PF_SLOT_LABEL[src]}）</small>` : ""}</span>
+        <span><button type="button" class="phMv" onclick="pfPhotoMove(${i},-1)" ${i === 0 ? "disabled" : ""}>◀</button><button type="button" class="phMv" onclick="pfPhotoMove(${i},1)" ${i === 7 ? "disabled" : ""}>▶</button></span></div>`).join("")}</div>
+      <div class="phTools"><button type="button" class="btn btn-primary btn-sm" onclick="pfPhotoSaveOrder()">💾 この順番で入れる</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoOrder=null;pfCollect();paintProf()">やめる</button></div>
+      <div id="phMsg" class="hint" style="margin-top:4px">入れかわる枠だけ入れなおします（1枠10秒ほど）。</div>`;
+  }
   const cells = PF_SLOT_LABEL.map((l, k) => `<label class="phCell ${k === 0 ? "list" : ""}">
       <img src="${pfPhotoUrl(site, no, k)}" alt="${l}" loading="lazy" onerror="this.outerHTML='<div class=&quot;phNone&quot;>なし</div>'">
       <span>${CAN_EDIT ? `<input type="checkbox" class="phSel" value="${k}"> ` : ""}${l}</span></label>`).join("");
@@ -1727,6 +1760,7 @@ function pfPhotoHtml(){
       ${srcs.length ? `<select id="phSrc">${srcs.map(x => `<option value="${esc(x.s)}">${esc(STORE_LABEL_OF(x.s))}（${x.no}番）</option>`).join("")}</select>
         <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoRun('copy')">📷 の同じ枠からコピー</button>` : ""}
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoRun('ng')">🖼 撮影準備中にする</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoOrder=[1,2,3,4,5,6,7,8];pfPhotoOrderSk=pf.sk;pfCollect();paintProf()">↕ 並べかえ</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoBust=Date.now();pfCollect();paintProf()">🔄 読みなおす</button></div>
       <div id="phMsg" class="hint" style="margin-top:4px">写真は「更新」しなくても公式HPに出ます。入れた枠の写真は上書きされます。</div>` : ""}`;
 }
