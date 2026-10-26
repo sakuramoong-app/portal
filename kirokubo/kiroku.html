@@ -1579,7 +1579,10 @@ async function saveRes(){
     };
     if(editing) q(await sb.from("kb_reservations").update(row).eq("id", editing.id));
     else { row.created_by = by; q(await sb.from("kb_reservations").insert(row)); }
-    closeForm(); { const bd = $("f_day") && $("f_day").value; toast(bd && bd !== day ? "保存しました🌸（" + Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) + " の予約にしました）" : "保存しました🌸"); } loadDay();
+    { const bd = $("f_day") && $("f_day").value; closeForm();
+      // 日付を変えて保存したら、その日の画面にうつる
+      if(bd && bd !== day){ $("day").value = bd; toast("保存しました🌸（" + Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) + " の画面にうつりました）"); } else toast("保存しました🌸"); }
+    loadDay();
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
 async function removeRes(){
