@@ -904,7 +904,7 @@ async function loadShifts(ymd){
   });
   return (shiftCache[ymd] = out);
 }
-function hourLabel(h){ return h >= 24 ? "翌" + (h - 24) + ":00" : h + ":00"; }
+function hourLabel(h){ h = Number(h); const hh = Math.floor(h), mm = Math.round((h - hh) * 60); return (hh >= 24 ? "翌" + (hh - 24) : hh) + ":" + String(mm).padStart(2, "0"); }   // 18.5 → 18:30
 // キャストプロフから、身長・カップ・Pサイズ・AF など
 function specOfProf(d){
   const sp = (d.storeProfiles && d.storeProfiles["サクラムーン"]) || {};
@@ -1673,10 +1673,14 @@ function drawTimeline(){
   const el = $("castTimeline"); if(!el) return;
   const c = M.casts.find(x=>x.id === $("f_cast").value);
   if(!c){ el.innerHTML = ""; $("footWarn").textContent = ""; return; }
-  const sh = shiftCache[day];
-  if(!sh){ loadShifts(day).then(()=>drawTimeline()).catch(()=>{}); }
+  // 日付を変えたときは、その日の予約・シフトで（読んでいなければ読んでから描きなおす）
+  const bd = $("f_day") && $("f_day").value && $("f_day").value !== day ? $("f_day").value : "";
+  const od = bd ? otherDay[bd] : null;
+  if(bd && !od) loadOtherDay(bd);
+  const sh = bd ? (od && od.sh) : shiftCache[day];
+  if(!sh && !bd){ loadShifts(day).then(()=>drawTimeline()).catch(()=>{}); }
   const shift = sh ? (sh[c.shift_name] || sh[c.official_name]) : null;
-  const others = rows.filter(r=>r.cast_id === c.id && (!editing || r.id !== editing.id) && r.status !== "cancel" && r.status !== "tobi" && r.start_at && r.end_at)
+  const others = (bd ? (od ? od.rows : []) : rows).filter(r=>r.cast_id === c.id && (!editing || r.id !== editing.id) && r.status !== "cancel" && r.status !== "tobi" && r.start_at && r.end_at)
     .map(r=>{ const s = hourOf(r.start_at); let e = hourOf(r.end_at); if(e < s) e += 24; return { s, e, label: hm(r.start_at) + "〜" + hm(r.end_at) + (r.area ? " " + r.area : ""), st: r.status }; });
   let cur = null;
   const st = $("f_start").value;
@@ -1691,7 +1695,7 @@ function drawTimeline(){
   const outShift = cur && shift && (cur.s < shift.start || cur.e > shift.end);
   $("footWarn").textContent = clash ? (gap ? "⚠️ 予約が重なっています（予約の間 " + c.interval_min + "分あけ）" : "⚠️ 予約が重なっています") : (outShift ? "⚠️ 出勤時間の外です" : "");
   const ticks = [11, 14, 17, 20, 23, 26, 29].map(h=>`<span>${h >= 24 ? "翌" + (h - 24) : h}時</span>`).join("");
-  el.innerHTML = `<div class="tl"><div class="ttl">📅 本日のタイムライン（${esc(c.official_name || c.temp_name)}）
+  el.innerHTML = `<div class="tl"><div class="ttl">📅 ${bd ? Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) + " の" : "本日の"}タイムライン（${esc(c.official_name || c.temp_name)}）
       ${shift ? `<span style="font-weight:400;color:#c9cbe0">出勤 ${hourLabel(shift.start)}〜${hourLabel(shift.end)}${shift.confirmed ? "" : "（未確定）"}</span>` : `<span style="font-weight:400;color:#c9cbe0">${sh ? "シフトが見つかりません" : "シフトを読み込み中…"}</span>`}</div>
     <div class="axis">${ticks}</div>
     <div class="bar">
@@ -4147,6 +4151,14 @@ qExt = function(id, v){
 
 /* ---------- 前後の予約：時間・場所・あいだが何分か（ブッキング・移動・インターバルの確認） ---------- */
 const otherDay = {}, otherDayLoading = {};   // 日付を変えたときの、その日の予約・シフト（フォームを開きなおしたら読みなおす）
+function loadOtherDay(bd){
+  if(otherDayLoading[bd]) return;
+  otherDayLoading[bd] = true;
+  Promise.all([sb.from("kb_reservations").select("*").eq("biz_date", bd).eq("deleted", false).order("start_at"), loadShifts(bd)])
+    .then(([res, sh])=>{ otherDay[bd] = { rows: q(res) || [], sh: sh || {} }; })
+    .catch(()=>{ otherDay[bd] = { rows: [], sh: {}, err: true }; })
+    .finally(()=>{ otherDayLoading[bd] = false; renderNeighbors(); drawTimeline(); });
+}
 const fmtHour = h => { h = Number(h); const hh = Math.floor(h), mm = Math.round((h - hh) * 60); return (hh >= 24 ? "翌" + (hh - 24) : hh) + ":" + String(mm).padStart(2, "0"); };
 function renderNeighbors(){
   const el = $("neighborBox"); if(!el) return;
@@ -4154,7 +4166,7 @@ function renderNeighbors(){
   const st = $("f_start").value;
   // 日付を変えたとき：タイムライン・前後の予約は「いま開いている日」のものなので、その日を開いて確かめる
   const bd = $("f_day") ? $("f_day").value : day;
-  if($("dayMoved")) $("dayMoved").textContent = bd && bd !== day ? "📅 " + Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) + " の予約になります（いま開いている日とちがいます）" : "";
+  if($("dayMoved")) $("dayMoved").textContent = bd && bd !== day ? "📅 " + Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) + " の予約になります（タイムライン・前後の予約もこの日のもの）" : "";
   if(!c){ el.innerHTML = ""; return; }
   // 日付を変えたとき：その日の予約・シフトを読んできて、同じように前後を出す（上のタイムラインは今開いている日のまま）
   let src = rows, shiftNote = "";
@@ -4162,13 +4174,7 @@ function renderNeighbors(){
     const od = otherDay[bd];
     if(!od){
       el.innerHTML = `<div class="info" style="font-size:13px">📅 ${Number(bd.slice(5, 7))}/${Number(bd.slice(8))} の予約を読んでいます…</div>`;
-      if(!otherDayLoading[bd]){
-        otherDayLoading[bd] = true;
-        Promise.all([sb.from("kb_reservations").select("*").eq("biz_date", bd).eq("deleted", false).order("start_at"), loadShifts(bd)])
-          .then(([res, sh])=>{ otherDay[bd] = { rows: q(res) || [], sh: sh || {} }; })
-          .catch(()=>{ otherDay[bd] = { rows: [], sh: {}, err: true }; })
-          .finally(()=>{ otherDayLoading[bd] = false; renderNeighbors(); });
-      }
+      loadOtherDay(bd);
       return;
     }
     src = od.rows;
