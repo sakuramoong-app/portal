@@ -543,7 +543,8 @@
         <div class="chips" id="dmModeChips" style="margin-bottom:6px">
           <button type="button" class="chip" data-m="dummy" onclick="setDmMode('dummy')">🎭 ダミー指名</button>
           <button type="button" class="chip" data-m="named" onclick="setDmMode('named')">👤 名前のある子を指名</button>
-          <button type="button" class="chip" data-m="time" onclick="setDmMode('time')">⏱ 時間から探す</button></div>
+          <button type="button" class="chip" data-m="time" onclick="setDmMode('time')">⏱ 時間から探す</button>
+          <button type="button" class="chip" data-m="cast" onclick="setDmMode('cast')">🙋 実際の子から選ぶ</button></div>
         <div id="timeBox" style="display:none">
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px"><b>何時から？</b>
             <input type="time" id="f_tStart" step="300" style="width:auto" oninput="$('f_start').value=this.value;recalc();tmPaint()">
@@ -4551,6 +4552,7 @@ renderDummyMatch = async function(){
   const el = $("dummyMatch"), store = $("f_store").value;
   if(!isDummyStore(store)){ el.innerHTML = ""; return; }
   if(dmMode === "time"){ el.innerHTML = ""; tmPaint(); return; }   // ⏱ 時間から探す は timeBox に出す
+  if(dmMode === "cast"){ crPaint(); return; }   // 🙋 実際の子から選ぶ
   if(dmMode === "named"){ el.innerHTML = namedCasts(store).length ? "" : `<div class="warn" style="margin-top:4px">台帳で、このお店の名前を持っている子がいません（台帳の「🏪 在籍店舗」でこのお店の名前を入れてください）</div>`; return; }
   await __renderDummyMatchM.apply(this, arguments);
   // 出した一覧を「行ける子／行けない子」に分けなおす
@@ -4622,6 +4624,45 @@ async function tmPaint(){
             ${hh && hh.other.length ? `<br><small style="color:#7a4a00;font-weight:700">👀 ほかのお店で会ったことあり：${hh.other.slice(0, 3).map(p => md(p) + " " + esc(storeLabel(p.store_key))).join("、")}</small>` : ""}</div>
             <button type="button" class="btn btn-ghost btn-sm" onclick="tmChoose('${esc(pick.d.name).replace(/'/g, "")}','${c.id}')">この子で行く</button></div>`; }).join("")}` : ok.length ? `<div class="hint2" style="font-size:12px;color:var(--sub);margin-top:4px">ダミー名を押すと、その名前で行ける子が出ます</div>` : ""}`;
   }catch(err){ out.innerHTML = `<div class="warn">探せませんでした：${esc(err.message || err)}</div>`; }
+}
+/* 🙋 実際の子から選ぶ：上の「キャスト」で選んだ子に、近い順のダミー名（このお客さんの履歴で出せない名前はうすく） */
+let crSeq = 0;
+async function crPaint(){
+  const el = $("dummyMatch"), store = $("f_store").value, seq = ++crSeq;
+  const c = M.casts.find(x => x.id === $("f_cast").value);
+  if(!c){ el.innerHTML = `<div class="hint2" style="font-size:12.5px;color:var(--sub);margin-top:6px">👆 上の「キャスト」で、実際に行く子を選んでください。その子に近い順にダミー名が出ます</div>`; return; }
+  el.innerHTML = `<div class="hint2" style="font-size:12.5px;color:var(--sub);margin-top:6px">探しています…</div>`;
+  try{
+    const profs = await loadProfs(); if(seq !== crSeq) return;
+    const sp = specOfProf(profs[c.prof_id] || {}), hist = custHistByCast(), md = p => p.biz_date.slice(5).replace("-", "/");
+    const past = (Array.isArray(custPast) ? custPast : []).filter(p => p.store_key === store && p.dummy_name && !["cancel", "tobi"].includes(p.status) && (!editing || p.id !== editing.id));
+    const mine = [...new Set(past.filter(p => p.cast_id === c.id).map(p => p.dummy_name))];   // この子がこのお客さんに使ったダミー名
+    const metOther = hist[c.id] && hist[c.id].dummy.some(p => p.store_key !== store);   // もう一方のお店（18⇔極門）で会っている
+    const list = M.dummies.filter(d => d.store_key === store && d.active !== false).map(d => {
+      const usedBy = [...new Set(past.filter(p => p.dummy_name === d.name).map(p => p.cast_id))];
+      let why = "";
+      if(mine.length && !mine.includes(d.name)) why = `この子は前に「${mine.join("・")}」で行っています`;
+      else if(usedBy.length && !usedBy.includes(c.id)) why = `前に ${usedBy.map(castName).join("・")} がこの名前で行っています`;
+      else if(!mine.length && metOther) why = `この子は18・極門でこのお客さんに会っています`;
+      const s = matchScore(d, sp);
+      return { d, why, s: s == null ? -1 : s, prev: mine.includes(d.name) };
+    }).sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || (b.prev ? 1 : 0) - (a.prev ? 1 : 0) || b.s - a.s);
+    const hh = hist[c.id];
+    el.innerHTML = `<div style="font-size:12.5px;font-weight:800;margin:6px 0 4px">🎭 ${esc(castName(c.id))} に近いダミー名${Array.isArray(custPast) ? "" : ` <span style="color:#d9534f">※先に電話番号で「🔍 調べる」</span>`}</div>
+      ${hh && hh.other.length ? `<div style="font-size:12px;color:#7a4a00;font-weight:700;margin-bottom:4px">👀 ${esc(castName(c.id))} はほかのお店でこのお客さんに会ったことがあります：${hh.other.slice(0, 3).map(p => md(p) + " " + esc(storeLabel(p.store_key))).join("、")}</div>` : ""}
+      ${list.map(x => { const d = x.d, spec = [d.age ? d.age + "歳" : "", d.height ? "T" + d.height : "", d.cup ? d.cup : "", d.psize ? "P" + d.psize : ""].filter(Boolean).join(" ");
+        return `<div class="tm-c" style="${x.why ? "opacity:.45" : x.prev ? "box-shadow:0 0 0 2px #2f9e6e inset" : ""}"><b style="min-width:40px;color:#8a6fd1">${x.s < 0 ? "－" : x.s + "%"}</b>
+          <div style="flex:1"><b>🎭${esc(d.name)}</b> <small>${esc(spec || "データなし")}${d.nomination_fee != null ? "・指名料 " + yen(d.nomination_fee) : ""}</small>
+          ${x.prev ? `<br><small style="color:#2f9e6e;font-weight:800">前回この名前で行っています</small>` : ""}${x.why ? `<br><small style="color:#d9534f;font-weight:700">${esc(x.why)}</small>` : ""}</div>
+          ${$("f_dummy").value === d.name ? `<b style="color:#2f9e6e;font-size:12.5px">✅ この名前にしています</b>` : `<button type="button" class="btn btn-ghost btn-sm" ${x.why ? "disabled" : ""} onclick="crChoose('${esc(d.name).replace(/'/g, "")}')">この名前にする</button>`}</div>`; }).join("") || `<div class="warn">このお店のダミー名がありません</div>`}
+      <div style="font-size:11px;color:var(--sub)">％は身長・カップ・Pサイズ・AF/逆AF/射精の近さの目安です</div>`;
+  }catch(e){ el.innerHTML = `<div class="warn">探せませんでした：${esc(e.message || e)}</div>`; }
+}
+const __onCastCr = onCast;   // 🙋 のとき、キャストを変えたら出しなおす
+onCast = function(){ const r = __onCastCr.apply(this, arguments); if(dmMode === "cast" && isDummyStore($("f_store").value)) crPaint(); return r; };
+function crChoose(name){
+  if(![...$("f_dummy").options].some(o => o.value === name)) $("f_dummy").insertAdjacentHTML("beforeend", `<option>${esc(name)}</option>`);
+  $("f_dummy").value = name; recalc(); toast(`🎭${name} → ${castName($("f_cast").value)} にしました`); crPaint();
 }
 function tmChoose(name, cid){
   if(![...$("f_dummy").options].some(o => o.value === name)) $("f_dummy").insertAdjacentHTML("beforeend", `<option>${esc(name)}</option>`);
