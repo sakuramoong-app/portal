@@ -540,11 +540,14 @@
       <!-- ダミーのお店（極門・エイティーン）だけ -->
       <div id="dummyWrap" style="display:none;background:#F6F2FE;border-radius:12px;padding:8px 10px;margin-bottom:8px">
         <!-- 18・極門：ダミー指名か、名前のある子（台帳で18・極門の名前を持っている子）の指名か -->
-        <div class="chips" id="dmModeChips" style="margin-bottom:6px">
-          <button type="button" class="chip" data-m="dummy" onclick="setDmMode('dummy')">🎭 ダミー指名</button>
-          <button type="button" class="chip" data-m="named" onclick="setDmMode('named')">👤 名前のある子を指名</button>
-          <button type="button" class="chip" data-m="time" onclick="setDmMode('time')">⏱ 時間から探す</button>
-          <button type="button" class="chip" data-m="cast" onclick="setDmMode('cast')">🙋 実際の子から選ぶ</button></div>
+        <div id="dmModeChips" style="margin-bottom:6px">
+          <div class="dmgrp"><div class="dmgl">🎭 18・極門在籍キャスト指名</div><div class="chips">
+            <button type="button" class="chip" data-m="dummy" onclick="setDmMode('dummy')">ダミー在籍指名</button>
+            <button type="button" class="chip" data-m="named" onclick="setDmMode('named')">個人または複数人専用在籍指名</button></div></div>
+          <div class="dmgrp"><div class="dmgl">🙋 誰行ける？（時間指定）</div><div class="chips">
+            <button type="button" class="chip" data-m="time" onclick="setDmMode('time')">⏱ 行けるダミー名から</button>
+            <button type="button" class="chip" data-m="cast" onclick="setDmMode('cast')">⏱ 行けるサクラ在籍の子から</button></div></div>
+          <div style="font-size:11.5px;color:var(--sub)">※専用の名前を持っている子（例：葵つばさ→つばさ）は、フリーでも指名でもその名前で行きます</div></div>
         <div id="timeBox" style="display:none">
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px"><b>何時から？</b>
             <input type="time" id="f_tStart" step="300" style="width:auto" oninput="$('f_start').value=this.value;recalc();tmPaint()">
@@ -943,6 +946,13 @@ function specOfProf(d){
   return { height: t ? Number(t[1]) : null, cup: cup ? cup[1].toUpperCase() : "", psize: p ? Number(p[1]) : null,
            af: opts["AF"] || "", rev_af: opts["逆AF"] || "", shasei: opts["キャスト射精"] || "", size, psizeText: ps };
 }
+// ダミー名の写真（公式HPの在籍番号 hp_no から。SQL 156）。押すと公式HPのその子のページ
+const DUMMY_SITE = { eighteen: "18-josokko-gakuen", gokumon: "gokumon-sm" };
+function dmPhoto(d, w){
+  const site = DUMMY_SITE[d && d.store_key], no = d && Number(d.hp_no);
+  if(!site || !no) return "";
+  return `<a href="https://www.${site}.com/gal/gal-${no}.html" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="flex:none;line-height:0"><img src="https://www.${site}.com/galpic/gal180x240-${no}.jpg" alt="" loading="lazy" onerror="this.parentNode.remove()" style="width:${w}px;height:${Math.round(w * 4 / 3)}px;object-fit:cover;border-radius:8px;background:#eee"></a>`;
+}
 // 近さ（100 がいちばん近い）。比べられるものがなければ null
 function matchScore(dm, sp){
   let s = 100, n = 0;
@@ -961,7 +971,7 @@ async function renderDummyMatch(){
   const dm = M.dummies.find(d=>d.store_key === store && d.name === name) || {};
   const spec = [dm.age ? dm.age + "歳" : "", dm.height ? "T" + dm.height : "", dm.weight ? dm.weight + "kg" : "", dm.cup ? dm.cup + "カップ" : "", dm.psize ? "P" + dm.psize : ""].filter(Boolean).join(" ");
   const ops = [["AF", dm.af], ["逆AF", dm.rev_af], ["射精", dm.shasei]].filter(x=>x[1]).map(x=>x[0] + x[1]).join(" ");
-  el.innerHTML = `<div style="font-size:12.5px;margin-top:6px"><b>🎭 ${esc(name)}</b>：${esc(spec || "データなし")} ${esc(ops)}${dm.note ? `<br><small>${esc(dm.note)}</small>` : ""}</div>
+  el.innerHTML = `<div style="font-size:12.5px;margin-top:6px;display:flex;gap:8px;align-items:flex-start">${dmPhoto(dm, 90)}<div><b>🎭 ${esc(name)}</b>：${esc(spec || "データなし")} ${esc(ops)}${dm.note ? `<br><small>${esc(dm.note)}</small>` : ""}</div></div>
     <div style="font-size:12px;color:var(--sub);margin-top:4px">近いキャストを探しています…</div>`;
   try{
     const [profs, shifts] = await Promise.all([loadProfs(), loadShifts(day)]);
@@ -978,7 +988,7 @@ async function renderDummyMatch(){
       + rows.map(x=>{
         const op = [["AF", x.sp.af], ["逆AF", x.sp.rev_af], ["射精", x.sp.shasei]].map(o=>o[0] + (o[1] || "？")).join(" ");
         return `<div style="display:flex;gap:6px;align-items:center;background:#fff;border-radius:10px;padding:6px 8px;margin-bottom:4px;font-size:12.5px">
-          <b style="min-width:42px;color:${x.score == null ? "#9C8B8F" : x.score >= 80 ? "#2f9e6e" : x.score >= 60 ? "#c98a00" : "#c9556a"}">${x.score == null ? "－" : x.score + "%"}</b>
+          ${pctBadge(x.score)}
           <div style="flex:1"><b>${esc(x.c.official_name || x.c.temp_name)}</b> <small>${hourLabel(x.sh.start)}〜${hourLabel(x.sh.end)}${x.sh.confirmed ? "" : "（未確定）"}</small><br>
             <small style="color:var(--sub)">${esc(x.sp.size || "サイズなし")} P${esc(x.sp.psizeText || "？")}　${esc(op)}</small></div>
           <button type="button" class="btn btn-ghost btn-sm" onclick="$('f_cast').value='${x.c.id}';onCast()">この人にする</button></div>`;
@@ -1002,6 +1012,7 @@ function openDummyData(id){
       <div class="f"><label>逆AF</label>${sel("rev_af")}</div>
       <div class="f"><label>射精</label>${sel("shasei")}</div>
       <div class="f"><label>指名料（円・空ならふつう）</label><input id="dd_nomi" type="number" step="500" value="${d.nomination_fee ?? ""}" placeholder="例：3000"></div>
+      <div class="f"><label>公式HPの番号（写真用）</label><input id="dd_hpno" type="number" value="${d.hp_no ?? ""}" placeholder="gal-○○ の数字"></div>
     </div>
     <div class="f"><label>メモ</label><input id="dd_note" maxlength="500" value="${esc(d.note || "")}"></div>
     <div style="display:flex;gap:6px;margin-top:6px"><button type="button" class="btn btn-primary btn-sm" onclick="saveDummyData(${id})">保存</button>
@@ -1012,6 +1023,7 @@ async function saveDummyData(id){
   const u = { age: n("age"), height: n("height"), weight: n("weight"), psize: n("psize"),
               cup: $("dd_cup").value.trim().toUpperCase(), af: $("dd_af").value, rev_af: $("dd_rev_af").value, shasei: $("dd_shasei").value, note: $("dd_note").value.trim() };
   if(M.dummies.some(x => "nomination_fee" in x)) u.nomination_fee = n("nomi");   // SQL 155 のあと
+  if(M.dummies.some(x => "hp_no" in x)) u.hp_no = n("hpno");   // SQL 156 のあと
   try{
     q(await sb.from("kb_dummy_names").update(u).eq("id", id));
     Object.assign(M.dummies.find(x=>x.id === id), u);
@@ -4519,9 +4531,9 @@ function setDmMode(m){
   dmMode = m;
   document.querySelectorAll("#dmModeChips .chip").forEach(b => b.classList.toggle("on", b.dataset.m === m));
   $("namedBox").style.display = m === "named" ? "" : "none";
-  $("timeBox").style.display = m === "time" ? "" : "none";
+  $("timeBox").style.display = m === "time" || m === "cast" ? "" : "none";
   $("dummyRow").style.display = m === "dummy" ? "" : "none";
-  if(m === "time"){ $("f_tStart").value = $("f_start").value; $("f_cast").disabled = false; recalc(); tmPaint(); return; }
+  if(m === "time" || m === "cast"){ $("f_tStart").value = $("f_start").value; $("f_cast").disabled = false; recalc(); tmPaint(); if(m === "time") return; }
   if(m === "named"){
     const store = $("f_store").value, list = namedCasts(store), cur = $("f_cast").value;
     $("f_named").innerHTML = `<option value="">（指名された子を選ぶ）</option>` + list.map(c => `<option value="${c.id}">${esc(c.stores[store].name)}（${esc(c.official_name || c.temp_name)}）</option>`).join("");
@@ -4552,7 +4564,7 @@ renderDummyMatch = async function(){
   const el = $("dummyMatch"), store = $("f_store").value;
   if(!isDummyStore(store)){ el.innerHTML = ""; return; }
   if(dmMode === "time"){ el.innerHTML = ""; tmPaint(); return; }   // ⏱ 時間から探す は timeBox に出す
-  if(dmMode === "cast"){ crPaint(); return; }   // 🙋 実際の子から選ぶ
+  if(dmMode === "cast"){ crPaint(); tmPaint(); return; }   // 🙋 行けるサクラ在籍の子から
   if(dmMode === "named"){ el.innerHTML = namedCasts(store).length ? "" : `<div class="warn" style="margin-top:4px">台帳で、このお店の名前を持っている子がいません（台帳の「🏪 在籍店舗」でこのお店の名前を入れてください）</div>`; return; }
   await __renderDummyMatchM.apply(this, arguments);
   // 出した一覧を「行ける子／行けない子」に分けなおす
@@ -4567,7 +4579,10 @@ renderDummyMatch = async function(){
     if(h && h.dummy.length) note.push(`18・極門：${h.dummy.map(p => md(p) + " " + storeLabel(p.store_key) + (p.dummy_name ? "🎭" + p.dummy_name : "")).join("、")}`);
     if(h && h.other.length) note.push(`ほかのお店：${h.other.slice(0, 3).map(p => md(p) + " " + storeLabel(p.store_key)).join("、")}`);
     if(note.length) r.querySelector("div").insertAdjacentHTML("beforeend", `<br><small style="color:#7a4a00;font-weight:700">👀 会ったことあり　${esc(note.join("／"))}</small>`);
-    const bad = same.length ? !same.includes(id) : !!(h && h.dummy.length);
+    const owners = ownersOf(store, name), own = ownName(M.casts.find(x => x.id === id), store);   // 専用の名前は、その子だけ。専用の名前を持つ子は、その名前だけ
+    const ownWhy = owners.length ? (owners.some(o => o.id === id) ? "" : `「${name}」は ${owners.map(o => castName(o.id)).join("・")} 専用`) : own ? `この子は自分の名前「${own}」で行きます` : "";
+    if(ownWhy) r.querySelector("div").insertAdjacentHTML("beforeend", `<br><small style="color:#d9534f;font-weight:700">${esc(ownWhy)}</small>`);
+    const bad = !!ownWhy || (same.length ? !same.includes(id) : !!(h && h.dummy.length));
     if(bad){ r.style.opacity = ".45"; r.querySelector("button").disabled = true; ng.push(r); }
     else if(same.includes(id)) r.style.boxShadow = "0 0 0 2px #2f9e6e inset";
   });
@@ -4579,13 +4594,53 @@ renderDummyMatch = async function(){
   ng.forEach(r => r.parentNode.appendChild(r));   // 行けない子は下へ
   const foot = [...el.children].find(x => /％は身長/.test(x.textContent || "")); if(foot) el.appendChild(foot);   // 説明はいちばん下に
 };
-/* ⏱ 時間から探す：その時間に出せるダミー名（このお客さんの履歴を見て）→ 選ぶと、そのダミー名で行ける実際の子 */
+// マッチ率：高いほど目立たせる（80%〜 緑の太字、60%〜 オレンジ、それより下はうすく）
+function pctBadge(v){
+  if(v == null || v < 0) return `<b class="pct pct-no">－</b>`;
+  return `<b class="pct ${v >= 80 ? "pct-hi" : v >= 60 ? "pct-mid" : "pct-lo"}">${v}%</b>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .pct{min-width:46px;text-align:center;border-radius:8px;padding:3px 4px;font-size:13px;flex:none}
+  .pct-hi{background:#2f9e6e;color:#fff;font-size:15px} .pct-mid{background:#FFE9C7;color:#b35c00} .pct-lo{color:#9C8B8F;font-weight:600} .pct-no{color:#C9BDC0}
+  .tm-dm.hi{border-color:#2f9e6e;background:#E8F7EF} .tm-dm.hi.on{background:#8a6fd1;border-color:#8a6fd1}
+</style>`);
+/* 18・極門の名前：個人（または複数人）専用の名前を持っている子は、フリーでも指名でも、その名前で行く。専用の名前は、その子たちだけ */
+function ownName(c, store){ return (c && c.stores && c.stores[store] && c.stores[store].name) || ""; }
+function ownersOf(store, name){ return namedCasts(store).filter(c => c.stores[store].name === name); }
+function dmNamesOf(store){   // このお店のダミー名＋専用の名前（ダミー一覧にない名前も足す）
+  const ds = M.dummies.filter(d => d.store_key === store && d.active !== false);
+  namedCasts(store).forEach(c => { const n = c.stores[store].name; if(!ds.some(d => d.name === n)) ds.push({ name: n, store_key: store, hp_no: c.stores[store].siteNo }); });
+  return ds;
+}
+function crCtx(store){
+  return { hist: custHistByCast(), past: (Array.isArray(custPast) ? custPast : []).filter(p => p.store_key === store && p.dummy_name && !["cancel", "tobi"].includes(p.status) && (!editing || p.id !== editing.id)) };
+}
+// この子が出せる名前（近い順）。出せない名前は why に理由
+function crList(c, store, sp, ctx){
+  const { hist, past } = ctx, own = ownName(c, store);
+  const mine = [...new Set(past.filter(p => p.cast_id === c.id).map(p => p.dummy_name))];   // この子がこのお客さんに使った名前
+  const metOther = hist[c.id] && hist[c.id].dummy.some(p => p.store_key !== store);   // もう一方のお店（18⇔極門）で会っている
+  return dmNamesOf(store).map(d => {
+    const usedBy = [...new Set(past.filter(p => p.dummy_name === d.name).map(p => p.cast_id))], owners = ownersOf(store, d.name);
+    let why = "";
+    if(own && d.name !== own) why = `この子は自分の名前「${own}」で行きます`;
+    else if(owners.length && !owners.some(o => o.id === c.id)) why = `${owners.map(o => castName(o.id)).join("・")} 専用の名前です`;
+    else if(mine.length && !mine.includes(d.name)) why = `この子は前に「${mine.join("・")}」で行っています`;
+    else if(usedBy.length && !usedBy.includes(c.id)) why = `前に ${usedBy.map(castName).join("・")} がこの名前で行っています`;
+    else if(!mine.length && metOther) why = `この子は18・極門でこのお客さんに会っています`;
+    const s = matchScore(d, sp);
+    return { d, why, s: s == null ? -1 : s, prev: mine.includes(d.name), own: !!own && d.name === own, owners };
+  }).sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || (b.own ? 1 : 0) - (a.own ? 1 : 0) || (b.prev ? 1 : 0) - (a.prev ? 1 : 0) || b.s - a.s);
+}
+/* 誰行ける？（時間指定）
+   ⏱ time：その時間に出せるダミー名 → 選ぶと、その名前で行けるサクラ在籍の子（近い順）
+   🙋 cast：その時間に行けるサクラ在籍の子 → 選ぶと、その子が出せるダミー名（近い順。下の dummyMatch に出す） */
 let tmPick = "", tmSeq = 0;
 async function tmPaint(){
-  const out = $("tmOut"), store = $("f_store").value, seq = ++tmSeq;
-  if(!out || dmMode !== "time" || !isDummyStore(store)) return;
+  const out = $("tmOut"), store = $("f_store").value, seq = ++tmSeq, byCast = dmMode === "cast";
+  if(!out || !["time", "cast"].includes(dmMode) || !isDummyStore(store)) return;
   const st = $("f_start").value, bd = ($("f_day") && $("f_day").value) || day;
-  if(!st){ out.innerHTML = `<div class="hint2" style="font-size:12.5px;color:var(--sub)">何時からかを入れると、出せるダミー名が出ます</div>`; return; }
+  if(!st){ out.innerHTML = `<div class="hint2" style="font-size:12.5px;color:var(--sub)">何時からかを入れると、${byCast ? "行けるサクラ在籍の子" : "出せるダミー名"}が出ます</div>`; return; }
   const [h, mi] = st.split(":").map(Number); let s = h + mi / 60; if(s < 8) s += 24;
   const len = (minutesOf($("f_course").value) || 60) / 60 + ((Number($("f_ext").value) || 0) + (Number($("f_date").value) || 0)) * 0.5, e = s + len;
   out.innerHTML = `<div class="hint2" style="font-size:12.5px;color:var(--sub)">探しています…</div>`;
@@ -4593,7 +4648,6 @@ async function tmPaint(){
     const [shifts, profs] = await Promise.all([loadShifts(bd), loadProfs()]);
     const rs = bd === day ? rows : (q(await sb.from("kb_reservations").select("id,cast_id,start_at,end_at,status,biz_date").eq("biz_date", bd).eq("deleted", false)) || []);
     if(seq !== tmSeq) return;
-    const hist = custHistByCast();
     // その時間に行けるか：出勤の時間の中で、ほかの予約（＋予約の間）と重ならない
     const free = c => {
       const sh = shifts[c.shift_name] || shifts[c.official_name]; if(!sh || s < sh.start || e > sh.end) return false;
@@ -4602,58 +4656,61 @@ async function tmPaint(){
         (() => { const a = hourOf(r.start_at); let b = hourOf(r.end_at); if(b < a) b += 24; return a - gap < e && s < b + gap; })());
     };
     const okCasts = M.casts.filter(c => c.status !== "left" && free(c));
-    const dms = M.dummies.filter(d => d.store_key === store && d.active !== false);
-    const md = p => p.biz_date.slice(5).replace("-", "/");
-    const list = dms.map(d => {
-      const same = (Array.isArray(custPast) ? custPast : []).filter(p => p.store_key === store && p.dummy_name === d.name && !["cancel", "tobi"].includes(p.status) && (!editing || p.id !== editing.id));
-      const sameIds = [...new Set(same.map(p => p.cast_id))];
-      const cands = sameIds.length ? okCasts.filter(c => sameIds.includes(c.id))
-        : okCasts.filter(c => !(hist[c.id] && hist[c.id].dummy.length));
-      const sc = c => { const x = matchScore(d, specOfProf(profs[c.prof_id] || {})); return x == null ? -1 : x; };
-      cands.sort((a, b) => sc(b) - sc(a));
-      return { d, sameIds, same, cands, sc };
+    const ctx = crCtx(store), hist = ctx.hist, md = p => p.biz_date.slice(5).replace("-", "/");
+    const opts = {}; okCasts.forEach(c => { opts[c.id] = crList(c, store, specOfProf(profs[c.prof_id] || {}), ctx); });
+    const noLook = Array.isArray(custPast) ? "" : ` <span style="color:#d9534f">※先に電話番号で「🔍 調べる」と、このお客さんの履歴で絞れます</span>`;
+    if(byCast){
+      const cur = $("f_cast").value;
+      const L = okCasts.map(c => { const ok = opts[c.id].filter(x => !x.why); return { c, ok, best: ok[0], why: (opts[c.id].find(x => x.own) || opts[c.id][0] || {}).why || "出せる名前がありません" }; });
+      const ok = L.filter(x => x.ok.length).sort((a, b) => (b.best.own ? 1 : 0) - (a.best.own ? 1 : 0) || b.best.s - a.best.s), ng = L.filter(x => !x.ok.length);
+      out.innerHTML = `<div style="font-size:12.5px;font-weight:800;margin:2px 0 4px">👤 ${fmtHour(s)}〜${fmtHour(e)} に行けるサクラ在籍の子（${ok.length}人）${noLook}</div>
+        <div class="tm-dms">${ok.map(x => `<button type="button" class="tm-dm ${x.c.id === cur ? "on" : ""} ${x.best.own || x.best.s >= 80 ? "hi" : ""}" onclick="tmCast('${x.c.id}')">${esc(castName(x.c.id))}<small>${x.best.own ? "🎭" + esc(x.best.d.name) + "（専用）" : "🎭" + esc(x.best.d.name) + (x.best.s < 0 ? "" : " " + x.best.s + "%" + (x.best.s >= 80 ? "🔥" : ""))}</small></button>`).join("") || `<div class="warn">この時間に行ける子がいません</div>`}</div>
+        ${ng.length ? `<details style="margin-top:4px;font-size:12px;color:var(--sub)"><summary>この時間に出勤しているけど行けない子（${ng.length}）</summary>${ng.map(x => `<div>👤${esc(castName(x.c.id))}：${esc(x.why)}</div>`).join("")}</details>` : ""}
+        <div class="hint2" style="font-size:12px;color:var(--sub);margin-top:4px">${ok.some(x => x.c.id === cur) ? `↓ 下に「${esc(castName(cur))}」が出せるダミー名が近い順に出ています` : "子を押すと、その子が出せるダミー名が近い順に出ます"}</div>`;
+      return;
+    }
+    const list = dmNamesOf(store).map(d => {
+      const same = ctx.past.filter(p => p.dummy_name === d.name), sameIds = [...new Set(same.map(p => p.cast_id))], owners = ownersOf(store, d.name);
+      const scOf = {};
+      const cands = okCasts.filter(c => { const it = opts[c.id].find(x => x.d.name === d.name); if(it && !it.why){ scOf[c.id] = it.s; return true; } return false; });
+      cands.sort((a, b) => scOf[b.id] - scOf[a.id]);
+      return { d, sameIds, same, owners, cands, sc: c => scOf[c.id] };
     });
     const ok = list.filter(x => x.cands.length), ng = list.filter(x => !x.cands.length);
     const pick = list.find(x => x.d.name === tmPick && x.cands.length);
-    out.innerHTML = `<div style="font-size:12.5px;font-weight:800;margin:2px 0 4px">🎭 ${fmtHour(s)}〜${fmtHour(e)} に出せるダミー名（${ok.length}人）${Array.isArray(custPast) ? "" : ` <span style="color:#d9534f">※先に電話番号で「🔍 調べる」と、このお客さんの履歴で絞れます</span>`}</div>
-      <div class="tm-dms">${ok.map(x => `<button type="button" class="tm-dm ${x.d.name === tmPick ? "on" : ""}" onclick="tmPick='${esc(x.d.name).replace(/'/g, "")}';tmPaint()">${esc(x.d.name)}${x.d.nomination_fee != null ? `<small>${yen(x.d.nomination_fee)}</small>` : ""}${x.sameIds.length ? `<small>前回の子</small>` : `<small>${x.cands.length}人</small>`}</button>`).join("") || `<div class="warn">この時間に出せるダミー名がありません</div>`}</div>
-      ${ng.length ? `<details style="margin-top:4px;font-size:12px;color:var(--sub)"><summary>出せないダミー名（${ng.length}）</summary>${ng.map(x => `<div>🎭${esc(x.d.name)}：${x.sameIds.length ? `前回（${md(x.same[0])}）の ${x.sameIds.map(castName).map(esc).join("・")} がこの時間に行けない` : "この時間に行ける子がいない"}</div>`).join("")}</details>` : ""}
-      ${pick ? `<div style="font-size:12.5px;font-weight:800;margin:8px 0 4px">👤 「${esc(pick.d.name)}」で行ける子${pick.sameIds.length ? "（前回この名前で行った子）" : "（近い順）"}</div>
+    out.innerHTML = `<div style="font-size:12.5px;font-weight:800;margin:2px 0 4px">🎭 ${fmtHour(s)}〜${fmtHour(e)} に出せるダミー名（${ok.length}人）${noLook}</div>
+      <div class="tm-dms">${ok.map(x => `<button type="button" class="tm-dm ${x.d.name === tmPick ? "on" : ""} ${x.owners.length || x.sc(x.cands[0]) >= 80 ? "hi" : ""}" onclick="tmPick='${esc(x.d.name).replace(/'/g, "")}';tmPaint()">${dmPhoto(x.d, 54)}${esc(x.d.name)}${x.d.nomination_fee != null ? `<small>${yen(x.d.nomination_fee)}</small>` : ""}${x.owners.length ? `<small>専用</small>` : x.sameIds.length ? `<small>前回の子</small>` : `<small>${x.cands.length}人</small>`}</button>`).join("") || `<div class="warn">この時間に出せるダミー名がありません</div>`}</div>
+      ${ng.length ? `<details style="margin-top:4px;font-size:12px;color:var(--sub)"><summary>出せないダミー名（${ng.length}）</summary>${ng.map(x => `<div>🎭${esc(x.d.name)}：${x.owners.length ? `${x.owners.map(o => castName(o.id)).map(esc).join("・")} 専用の名前（この時間に行けない／このお客さんに出せない）` : x.sameIds.length ? `前回（${md(x.same[0])}）の ${x.sameIds.map(castName).map(esc).join("・")} がこの時間に行けない` : "この時間に行ける子がいない"}</div>`).join("")}</details>` : ""}
+      ${pick ? `<div style="font-size:12.5px;font-weight:800;margin:8px 0 4px">👤 「${esc(pick.d.name)}」で行けるサクラ在籍の子${pick.owners.length ? "（この名前の専用の子）" : pick.sameIds.length ? "（前回この名前で行った子）" : "（近い順）"}</div>
         ${pick.cands.map(c => { const hh = hist[c.id], sh = shifts[c.shift_name] || shifts[c.official_name];
-          return `<div class="tm-c"><b style="min-width:40px;color:#8a6fd1">${pick.sc(c) < 0 ? "－" : pick.sc(c) + "%"}</b><div style="flex:1"><b>${esc(castName(c.id))}</b> <small>${fmtHour(sh.start)}〜${fmtHour(sh.end)}</small>
+          return `<div class="tm-c">${pctBadge(pick.sc(c))}<div style="flex:1"><b>${esc(castName(c.id))}</b> <small>${fmtHour(sh.start)}〜${fmtHour(sh.end)}</small>
             ${hh && hh.other.length ? `<br><small style="color:#7a4a00;font-weight:700">👀 ほかのお店で会ったことあり：${hh.other.slice(0, 3).map(p => md(p) + " " + esc(storeLabel(p.store_key))).join("、")}</small>` : ""}</div>
             <button type="button" class="btn btn-ghost btn-sm" onclick="tmChoose('${esc(pick.d.name).replace(/'/g, "")}','${c.id}')">この子で行く</button></div>`; }).join("")}` : ok.length ? `<div class="hint2" style="font-size:12px;color:var(--sub);margin-top:4px">ダミー名を押すと、その名前で行ける子が出ます</div>` : ""}`;
   }catch(err){ out.innerHTML = `<div class="warn">探せませんでした：${esc(err.message || err)}</div>`; }
 }
-/* 🙋 実際の子から選ぶ：上の「キャスト」で選んだ子に、近い順のダミー名（このお客さんの履歴で出せない名前はうすく） */
+function tmCast(cid){
+  $("f_cast").value = cid; if($("f_cast").value !== cid && $("f_castAll")){ $("f_castAll").checked = true; fillCastSel(); $("f_cast").value = cid; }
+  onCast(); recalc(); tmPaint();
+}
+/* 🙋 サクラ在籍の子から：選んだ子に、近い順のダミー名（このお客さんの履歴・専用の名前で出せない名前はうすく） */
 let crSeq = 0;
 async function crPaint(){
   const el = $("dummyMatch"), store = $("f_store").value, seq = ++crSeq;
   const c = M.casts.find(x => x.id === $("f_cast").value);
-  if(!c){ el.innerHTML = `<div class="hint2" style="font-size:12.5px;color:var(--sub);margin-top:6px">👆 上の「キャスト」で、実際に行く子を選んでください。その子に近い順にダミー名が出ます</div>`; return; }
+  if(!c){ el.innerHTML = `<div class="hint2" style="font-size:12.5px;color:var(--sub);margin-top:6px">👆 上の一覧（または「キャスト」）で、実際に行く子を選んでください。その子に近い順にダミー名が出ます</div>`; return; }
   el.innerHTML = `<div class="hint2" style="font-size:12.5px;color:var(--sub);margin-top:6px">探しています…</div>`;
   try{
     const profs = await loadProfs(); if(seq !== crSeq) return;
-    const sp = specOfProf(profs[c.prof_id] || {}), hist = custHistByCast(), md = p => p.biz_date.slice(5).replace("-", "/");
-    const past = (Array.isArray(custPast) ? custPast : []).filter(p => p.store_key === store && p.dummy_name && !["cancel", "tobi"].includes(p.status) && (!editing || p.id !== editing.id));
-    const mine = [...new Set(past.filter(p => p.cast_id === c.id).map(p => p.dummy_name))];   // この子がこのお客さんに使ったダミー名
-    const metOther = hist[c.id] && hist[c.id].dummy.some(p => p.store_key !== store);   // もう一方のお店（18⇔極門）で会っている
-    const list = M.dummies.filter(d => d.store_key === store && d.active !== false).map(d => {
-      const usedBy = [...new Set(past.filter(p => p.dummy_name === d.name).map(p => p.cast_id))];
-      let why = "";
-      if(mine.length && !mine.includes(d.name)) why = `この子は前に「${mine.join("・")}」で行っています`;
-      else if(usedBy.length && !usedBy.includes(c.id)) why = `前に ${usedBy.map(castName).join("・")} がこの名前で行っています`;
-      else if(!mine.length && metOther) why = `この子は18・極門でこのお客さんに会っています`;
-      const s = matchScore(d, sp);
-      return { d, why, s: s == null ? -1 : s, prev: mine.includes(d.name) };
-    }).sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || (b.prev ? 1 : 0) - (a.prev ? 1 : 0) || b.s - a.s);
-    const hh = hist[c.id];
+    const ctx = crCtx(store), md = p => p.biz_date.slice(5).replace("-", "/");
+    const list = crList(c, store, specOfProf(profs[c.prof_id] || {}), ctx), own = ownName(c, store);
+    const hh = ctx.hist[c.id];
     el.innerHTML = `<div style="font-size:12.5px;font-weight:800;margin:6px 0 4px">🎭 ${esc(castName(c.id))} に近いダミー名${Array.isArray(custPast) ? "" : ` <span style="color:#d9534f">※先に電話番号で「🔍 調べる」</span>`}</div>
+      ${own ? `<div class="info" style="margin:0 0 4px;font-size:12.5px">👤 ${esc(castName(c.id))} はこのお店の専用の名前「<b>${esc(own)}</b>」を持っています → フリーでも指名でも「${esc(own)}」で行きます</div>` : ""}
       ${hh && hh.other.length ? `<div style="font-size:12px;color:#7a4a00;font-weight:700;margin-bottom:4px">👀 ${esc(castName(c.id))} はほかのお店でこのお客さんに会ったことがあります：${hh.other.slice(0, 3).map(p => md(p) + " " + esc(storeLabel(p.store_key))).join("、")}</div>` : ""}
       ${list.map(x => { const d = x.d, spec = [d.age ? d.age + "歳" : "", d.height ? "T" + d.height : "", d.cup ? d.cup : "", d.psize ? "P" + d.psize : ""].filter(Boolean).join(" ");
-        return `<div class="tm-c" style="${x.why ? "opacity:.45" : x.prev ? "box-shadow:0 0 0 2px #2f9e6e inset" : ""}"><b style="min-width:40px;color:#8a6fd1">${x.s < 0 ? "－" : x.s + "%"}</b>
-          <div style="flex:1"><b>🎭${esc(d.name)}</b> <small>${esc(spec || "データなし")}${d.nomination_fee != null ? "・指名料 " + yen(d.nomination_fee) : ""}</small>
-          ${x.prev ? `<br><small style="color:#2f9e6e;font-weight:800">前回この名前で行っています</small>` : ""}${x.why ? `<br><small style="color:#d9534f;font-weight:700">${esc(x.why)}</small>` : ""}</div>
+        return `<div class="tm-c" style="${x.why ? "opacity:.45" : x.prev || x.own ? "box-shadow:0 0 0 2px #2f9e6e inset" : ""}">${pctBadge(x.s)}${dmPhoto(d, 42)}
+          <div style="flex:1"><b>🎭${esc(d.name)}</b>${x.owners.length ? ` <small style="color:#8a6fd1;font-weight:800">専用</small>` : ""} <small>${esc(spec || "データなし")}${d.nomination_fee != null ? "・指名料 " + yen(d.nomination_fee) : ""}</small>
+          ${x.own ? `<br><small style="color:#2f9e6e;font-weight:800">この子の専用の名前です</small>` : x.prev ? `<br><small style="color:#2f9e6e;font-weight:800">前回この名前で行っています</small>` : ""}${x.why ? `<br><small style="color:#d9534f;font-weight:700">${esc(x.why)}</small>` : ""}</div>
           ${$("f_dummy").value === d.name ? `<b style="color:#2f9e6e;font-size:12.5px">✅ この名前にしています</b>` : `<button type="button" class="btn btn-ghost btn-sm" ${x.why ? "disabled" : ""} onclick="crChoose('${esc(d.name).replace(/'/g, "")}')">この名前にする</button>`}</div>`; }).join("") || `<div class="warn">このお店のダミー名がありません</div>`}
       <div style="font-size:11px;color:var(--sub)">％は身長・カップ・Pサイズ・AF/逆AF/射精の近さの目安です</div>`;
   }catch(e){ el.innerHTML = `<div class="warn">探せませんでした：${esc(e.message || e)}</div>`; }
@@ -4806,6 +4863,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .custhist .ch-row.dm{background:#FAF6FE} .custhist .ch-row.x{opacity:.55} .custhist .ch-row .xx{color:#d9534f;font-weight:800;font-size:12.5px}
   .custhist .ch-foot{border-top:1px solid #EEE3F3;margin-top:4px;padding-top:5px;font-size:13px;color:#7a6468} .custhist .ch-foot b{color:var(--ink)}
   #dmModeChips .chip.on{background:#8a6fd1;border-color:#8a6fd1;color:#fff}
+  #dmModeChips .dmgrp{background:#fff;border-radius:10px;padding:5px 8px;margin-bottom:5px} #dmModeChips .dmgl{font-size:12px;font-weight:800;color:#5c3d7a;margin-bottom:3px}
   /* 🔒 18・極門で電話番号を調べるまでのロック：ロック中の欄はグレーに（電話番号と売上店舗は目立たせる） */
   #formBg.dmlocked [data-dmlock]{background:#E9E6E8 !important;color:#AFA6AA !important;border-color:#DDD6D9 !important;opacity:.7;cursor:not-allowed;box-shadow:none !important}
   #formBg.dmlocked .f:has([data-dmlock]) > label{color:#C2B9BD}
