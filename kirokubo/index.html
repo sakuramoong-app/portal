@@ -240,6 +240,11 @@
     <div class="f" style="margin-top:10px"><label>記録簿の集計名（空ならキャスト名と同じ）</label><input id="e_agg" maxlength="60"></div>
     </details>
 
+    <details class="acc" data-acc="onb"><summary class="sec">🧾 入店の手続き・内勤が知っておくこと</summary>
+    <div class="hint" style="margin:-4px 0 8px">チェックして「💾 保存する」。チェックした日と人が残ります。ここはキャストには見えません。</div>
+    <div id="e_onb"></div>
+    </details>
+
     <details class="acc" data-acc="stores"><summary class="sec">🏪 在籍店舗</summary>
     <div class="hint" style="margin:-4px 0 8px">チェック＝在籍している店舗。その店での名前・公式HPの在籍番号も入れられます（あとで公式HPへの自動反映に使います）。</div>
     <div class="stores" id="e_stores"></div>
@@ -1549,6 +1554,7 @@ async function renderProf(id){
   stores.sort((a, b) => ord(a) - ord(b));
   pf = { c, prof, data, logs, stores: stores.length ? stores : ["サクラムーン"], dirty: new Set() };
   pf.sk = pf.stores[0];
+  onbProfTabako(profGet(data, "サクラムーン", "tabako"));   // 🧾 手続きの「タバコ」の下に、プロフフォームの答え
   // 性格タイプ：プロフに答えがない子は、プロフ確認フォームのいちばん新しい答えを出す（あとで描きなおす）
   if(!((data.personalityAnswers || {}).list || []).length){
     sb.from("prof_confirm_answers").select("data").eq("cast_id", c.id).order("submitted_at", { ascending: false }).limit(1)
@@ -2023,7 +2029,7 @@ const pfOpen = new Set();   // プロフの中の、開いている小さい項�
 function pfAcc(k){ return `class="pfPanel" data-p="${k}" ${pfOpen.has(k) ? "open" : ""} ontoggle="pfAccT(this)"`; }
 function pfAccT(el){ if(el.open) pfOpen.add(el.dataset.p); else pfOpen.delete(el.dataset.p); }
 function showEl(el){ for(let p = el && el.parentElement; p; p = p.parentElement) if(p.tagName === "DETAILS") p.open = true; return el; }   // 閉じている項目の中なら開く
-const EDIT_JUMP = [["basic", "👤 名前・状態"], ["stores", "🏪 在籍店舗"], ["prof", "📝 プロフ"], ["terms", "⭐ バック"], ["rules", "📋 受付ルール"],
+const EDIT_JUMP = [["basic", "👤 名前・状態"], ["onb", "🧾 手続き"], ["stores", "🏪 在籍店舗"], ["prof", "📝 プロフ"], ["terms", "⭐ バック"], ["rules", "📋 受付ルール"],
   ["private", "📞 連絡先"], ["confirm", "📨 確認フォーム"], ["notes", "📝 特記事項"], ["links", "🔗 アプリ"]];
 const PF_JUMP = [["basic", "基本情報"], ["opts", "オプション"], ["intro", "紹介文"], ["hotel", "ホテル"], ["ptype", "性格"], ["logs", "記録"]];
 function paintEditJump(){
@@ -2071,6 +2077,38 @@ function getArea(){
   const t = AREA_SHOPS.map(([id, n]) => { const v = String($(id).value).trim(); return v ? `${n}まで${v}分` : ""; }).filter(Boolean).join("・");
   return [[st ? "最寄り：" + st : "", t].filter(Boolean).join("／"), $("e_area").value.trim()].filter(Boolean).join("\n");
 }
+// 🧾 入店の手続き・内勤が知っておくこと（master_casts.onboarding：{ explain:{at,by}, ..., ic:"あり", tabako:"紙" }）
+const ONB_STEPS = [["explain", "面接で口頭の説明をした"], ["contract", "業務委託の書類"], ["idcopy", "公的証明書のコピー"], ["inkan", "印鑑"]];
+const ONB_IC = ["", "あり", "なし"], ONB_TABAKO = ["", "吸わない", "紙タバコ", "電子タバコ", "紙と電子の両方"];
+const KIT_LABEL = { shop: "事務所で買う（500円）", own: "自分で用意する" };
+function renderOnb(c){
+  const o = (c && c.onboarding) || {}, md2 = at => { const d = new Date(at); return isNaN(d) ? "" : (d.getMonth() + 1) + "/" + d.getDate(); };
+  const sel = (id, list, v, emptyLabel) => `<select id="${id}">${list.map(x => `<option value="${x}" ${x === (v || "") ? "selected" : ""}>${x || emptyLabel}</option>`).join("")}</select>`;
+  $("e_onb").innerHTML = `
+    <div class="f"><label>👜 仕事ポーチ（在籍作成ルームで選んだもの）</label><div id="onb_kit" style="font-size:14px;padding:4px 2px">${c && (c.room_ids || []).length ? "読んでいます…" : "在籍作成ルームとつながっていません"}</div></div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${ONB_STEPS.map(([k, l]) => `<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
+      <input type="checkbox" id="onb_${k}" ${o[k] ? "checked" : ""} style="width:auto;transform:scale(1.25)"> ${l}
+      ${o[k] ? `<small style="color:#1f9d6b;font-weight:800">✅ ${esc(md2(o[k].at))} ${esc(o[k].by || "")}</small>` : `<small style="color:#c77700;font-weight:800">まだ</small>`}</label>`).join("")}</div>
+    <div class="grid" style="margin-top:10px">
+      <div class="f"><label>💳 仕事用のICカード</label>${sel("onb_ic", ONB_IC, o.ic, "（まだ聞いていない）")}</div>
+      <div class="f"><label>🚬 タバコ</label>${sel("onb_tabako", ONB_TABAKO, o.tabako, "（まだ聞いていない）")}<small id="onb_tabakoProf" style="display:block;color:#9C8B8F;margin-top:3px"></small></div>
+    </div>`;
+  if(c && (c.room_ids || []).length){
+    sb.from("room_rooms").select("room_id,kit_choice,created_at").in("room_id", c.room_ids).then(res => {
+      if(editingId !== c.id || !$("onb_kit")) return;
+      const rs = (res.data || []).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+      const k = rs.map(r => r.kit_choice && r.kit_choice.type).find(Boolean);
+      $("onb_kit").innerHTML = k ? `<b>${esc(KIT_LABEL[k] || k)}</b>` : `<span style="color:#c77700;font-weight:800">まだ選んでいません</span>`;
+    });
+  }
+}
+function onbProfTabako(v){ const el = $("onb_tabakoProf"); if(el) el.textContent = v ? "プロフフォームの答え：" + v : ""; }
+function getOnb(c){
+  const o = Object.assign({}, (c && c.onboarding) || {}), by = operatorName(), at = new Date().toISOString();
+  ONB_STEPS.forEach(([k]) => { const on = $("onb_" + k).checked; if(on && !o[k]) o[k] = { at, by }; if(!on) delete o[k]; });
+  o.ic = $("onb_ic").value; o.tabako = $("onb_tabako").value;
+  return o;
+}
 /* ---------- 編集 ---------- */
 function openEdit(id){
   // ほかのキャストに切りかえるとき、プロフを直したままなら確かめる
@@ -2095,6 +2133,7 @@ function openEdit(id){
   renderNotesMove(id);
   renderProf(id);
   renderPrivateClosed(id);
+  renderOnb(id ? c : null);
   renderConfirm(id);
   $("e_special").value = c.special_notes || ""; $("e_ng").value = c.ng_notes || ""; $("e_note").value = c.note || "";
   $("e_interval").value = c.interval_min || 0;
@@ -2164,6 +2203,7 @@ async function saveCast(){
     interval_min: Math.max(0, Math.min(240, Number($("e_interval").value) || 0)),
   };
   if(keepShift) row.shift_name = keepShift;
+  if("onboarding" in (casts[0] || {})) row.onboarding = getOnb(before);   // 入店の手続き（SQL 148 のあと）
   // 受付ルール用（SQL 100 のあと）。上限が空なら「上限なし」
   if("long_max" in (casts[0] || {})){
     const lm = Number($("e_longMax").value) || null;
@@ -2187,6 +2227,7 @@ async function saveCast(){
     $("editTitle").textContent = `${nameOf(saved)}（${saved.id}）`;
     $("delBtn").style.display = "";
     if(pf && pf.c && pf.c.id === saved.id) pf.c = saved;
+    renderOnb(saved); if(pf && pf.c && pf.c.id === saved.id) onbProfTabako(profGet(pf.data, "サクラムーン", "tabako"));
     render(); toast("保存しました🌸");
     if(saved) await saveProfDates(saved);
     if(saved) await syncShift(saved, prevStores);
