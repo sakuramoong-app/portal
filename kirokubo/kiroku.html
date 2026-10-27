@@ -2447,7 +2447,13 @@ function cardHtml(id, c){
   return `<div class="card ${done ? "done" : ""}" id="card-${id}">
     <h2>${esc(castName(id))}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : "未精算"}</span>
       ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
-    <table class="res"><tr><th>時間</th><th>店舗</th><th>コース</th><th class="money">総額</th><th class="money">報酬</th></tr>${res}</table>
+    <div class="sbig">
+      ${c.drop >= 0
+        ? `<div class="sb drop"><div class="k">💰 投函額<small>（封筒に入れて投函する額）</small></div><div class="v">${yen(c.drop)}</div><div class="s">総額 ${yen(c.total)} − 手取り ${yen(c.takeHome)}${c.cardPaid ? " − カード払分 " + yen(c.cardPaid) : ""}</div>
+            ${c.deposited != null ? `<div class="s2 ${c.diff < 0 ? "ng" : "ok"}">投函した額 ${yen(c.deposited)}${c.diff === 0 ? "　ぴったり ✅" : c.diff < 0 ? "　未精算 −" + yen(-c.diff) : "　お釣り ＋" + yen(c.diff)}</div>` : ""}</div>`
+        : `<div class="sb give"><div class="k">💴 お店からキャストに渡す<small>（カード決済で現金がないため）</small></div><div class="v">${yen(-c.drop)}</div><div class="s">投函はなし</div></div>`}
+      <div class="sb take"><div class="k">👛 手取り（本日のお給料）</div><div class="v">${yen(c.takeHome)}</div><div class="s">報酬 ${yen(c.reward)}${c.option ? "＋OP " + yen(c.option) : ""}${c.transportBack + c.plus ? "＋プラス " + yen(c.transportBack + c.plus) : ""} − 雑費 ${yen(c.zappi)}${c.minus ? "−マイナス " + yen(c.minus) : ""}</div></div>
+    </div>    <table class="res"><tr><th>時間</th><th>店舗</th><th>コース</th><th class="money">総額</th><th class="money">報酬</th></tr>${res}</table>
     ${c.why.length ? `<div class="note2">🧮 ${c.why.map(esc).join("<br>")}</div>` : ""}
     ${c.cardUnconfirmed ? `<div class="warn" style="margin:6px 0">⚠️ お支払いが「カード」のままの予約が ${c.cardUnconfirmed}件あります。カード決済の完了を確認して、本日のキャスト一覧のカードのプルダウンで「✅ 決済済み」にしてください。</div>` : ""}
     <div class="scalc">
@@ -2523,7 +2529,15 @@ function unsettle(id){
   saveDay(id, { settled: false, settled_at: null, settle_snapshot: null });
 }
 
-/* ---------- 🖼 精算明細を画像でコピー（LINE に貼りつけ）。コピーできないブラウザは画像を保存 ---------- */
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .sbig{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin:8px 0}
+  .sb{border-radius:14px;padding:10px 14px} .sb .k{font-size:13px;font-weight:800} .sb .k small{font-weight:600;margin-left:4px;font-size:11.5px}
+  .sb .v{font-size:34px;font-weight:900;line-height:1.2;margin:2px 0} .sb .s{font-size:12px;opacity:.85} .sb .s2{font-size:13px;font-weight:800;margin-top:4px}
+  .sb.drop{background:#FFF59D;border:3px solid #F2C200;color:#5c4b00} .sb.drop .v{color:#E0001B;text-decoration:underline double;text-underline-offset:6px}
+  .sb.give{background:#E3F1FF;border:3px solid #2f7fd0;color:#1f4f80} .sb.give .v{color:#2f7fd0}
+  .sb.take{background:#FFE3F0;border:2px solid #F7B6CF;color:#6b3550} .sb.take .v{color:#5C4B4F}
+  .sb .s2.ng{color:#d9534f} .sb .s2.ok{color:#2f9e6e}
+</style>`);/* ---------- 🖼 精算明細を画像でコピー（LINE に貼りつけ）。コピーできないブラウザは画像を保存 ---------- */
 function settleCanvas(id){
   const c = calcCast(id), d = new Date(day + "T12:00:00Z");
   const L = [];   // [左, 右, 種類]
@@ -2540,10 +2554,9 @@ function settleCanvas(id){
   c.minusItems.forEach(x=>{ if(Number(x.amount)) L.push([x.label || "マイナス", "−" + yen(x.amount)]); });
   L.push(["", "", "line"]);
   L.push(["本日のお給料", yen(c.takeHome), "big"]);
-  if(c.drop >= 0) L.push(["投函額", yen(c.drop), "big2"]); else L.push(["お店からお渡し（カード決済のため）", yen(-c.drop), "big2"]);
-  const S = 2, W = 560, PAD = 28, FONT = '"Hiragino Maru Gothic ProN","M PLUS Rounded 1c","Yu Gothic","Meiryo",sans-serif';
+ const S = 2, W = 560, PAD = 28, FONT = '"Hiragino Maru Gothic ProN","M PLUS Rounded 1c","Yu Gothic","Meiryo",sans-serif';
   const hOf = k => k === "line" ? 18 : k === "big" || k === "big2" ? 44 : 34;
-  const H = 96 + L.reduce((a, x)=>a + hOf(x[2]), 0) + 64;
+  const BOX = 112, H = 96 + BOX + L.reduce((a, x)=>a + hOf(x[2]), 0) + 64;
   const cv = document.createElement("canvas"); cv.width = W * S; cv.height = H * S;
   const g = cv.getContext("2d"); g.scale(S, S);
   g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, W, H);
@@ -2551,7 +2564,15 @@ function settleCanvas(id){
   g.fillStyle = grd; g.fillRect(0, 0, W, 72);
   g.fillStyle = "#fff"; g.font = `bold 15px ${FONT}`; g.fillText(`精算　${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]})`, PAD, 28);
   g.font = `bold 24px ${FONT}`; g.fillText(`${castName(id)}さん`, PAD, 58);
-  let y = 96;
+  // 💰 投函額（いちばん大きく。黄色の箱に赤い字）／カードで現金がないときは「お店から渡す」
+  const give = c.drop < 0;
+  g.fillStyle = give ? "#E3F1FF" : "#FFF59D"; g.strokeStyle = give ? "#2f7fd0" : "#F2C200"; g.lineWidth = 3;
+  g.beginPath(); g.roundRect ? g.roundRect(PAD, 88, W - PAD * 2, BOX - 8, 14) : g.rect(PAD, 88, W - PAD * 2, BOX - 8); g.fill(); g.stroke();
+  g.textAlign = "left"; g.fillStyle = give ? "#1f4f80" : "#5c4b00"; g.font = `bold 17px ${FONT}`;
+  g.fillText(give ? "💴 お店からキャストに渡す" : "💰 投函額（封筒に入れて投函）", PAD + 16, 118);
+  g.textAlign = "right"; g.fillStyle = give ? "#2f7fd0" : "#E0001B"; g.font = `900 42px ${FONT}`;
+  g.fillText(yen(Math.abs(c.drop)), W - PAD - 16, 178);
+  let y = 96 + BOX;
   L.forEach(([l, v, k])=>{
     const h = hOf(k);
     if(k === "line"){ g.strokeStyle = "#F1C9D5"; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(PAD, y + 6); g.lineTo(W - PAD, y + 6); g.stroke(); g.setLineDash([]); y += h; return; }
