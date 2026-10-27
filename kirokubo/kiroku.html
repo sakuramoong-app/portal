@@ -622,8 +622,8 @@
           <div class="f"><label>スタイルブックの番号</label><input id="f_dBook" maxlength="100" placeholder="例：12、60" oninput="recalc()"></div>
         </div>
         <div class="f" style="margin-top:6px"><label>👙 下着（お金はバック無OP）</label><div class="chips" id="f_under"></div></div>
-        <label style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:13.5px;font-weight:800"><input type="checkbox" id="f_makeup" style="width:auto" onchange="recalc()"> 💄 メイク道具を持っていく</label>
-        <div style="font-size:11.5px;color:#8a2a55;margin-top:4px">↑ ここに入れたものは「女レ道具セット」として、キャストへの予約連絡（詳細）に持ち物で入ります</div>
+        <input type="checkbox" id="f_makeup" style="display:none">
+        <div style="font-size:11.5px;color:#8a2a55;margin-top:4px">↑ ここに入れたもの＋💄メイク道具は「女レ道具セット」として、キャストへの予約連絡（詳細）に持ち物で入ります</div>
       </div>
       <div id="courseInfo"></div>
       <div id="placePick"></div>
@@ -1120,12 +1120,12 @@ function setDress(d){
   underSel = d.under || ""; $("f_makeup").checked = !!d.makeup; paintWig();
 }
 const underLabel = k => (UNDER.find(x => x[0] === k) || [])[1] || "";
-function dressText(d){ if(!d) return ""; return [d.h ? d.h + "cm" : "", d.w ? d.w + "kg" : "", d.wig ? "ウィッグ" + d.wig : "", d.cloth ? "服：" + d.cloth : "", d.book ? "📖" + d.book : "", d.under ? "下着：" + underLabel(d.under) : "", d.makeup ? "💄メイク道具" : ""].filter(Boolean).join("・"); }
+function dressText(d){ if(!d) return ""; return [d.h ? d.h + "cm" : "", d.w ? d.w + "kg" : "", d.wig ? "ウィッグ" + d.wig : "", d.cloth ? "服：" + d.cloth : "", d.book ? "📖" + d.book : "", d.under ? "下着：" + underLabel(d.under) : ""].filter(Boolean).join("・"); }
 // 🧳 女レ道具セット（キャストへの予約連絡の持ち物）
-function dressKit(d){
-  if(!d) return "";
+function dressKit(d){   // キューティーはいつもメイク道具を持っていく
+  d = d || {};
   return [d.wig ? "ウィッグ（" + d.wig + "）" : "", d.cloth || d.book ? "洋服（" + [d.cloth, d.book ? "スタイルブック " + d.book : ""].filter(Boolean).join("・") + "）" : "",
-    d.under ? "下着（" + underLabel(d.under) + "）" : "", d.makeup ? "メイク道具" : ""].filter(Boolean).join("／")
+    d.under ? "下着（" + underLabel(d.under) + "）" : "", "メイク道具"].filter(Boolean).join("／")
     + (d.h || d.w ? `\n　お客様：${[d.h ? "身長" + d.h + "cm" : "", d.w ? "体重" + d.w + "kg" : ""].filter(Boolean).join("・")}` : "");
 }
 
