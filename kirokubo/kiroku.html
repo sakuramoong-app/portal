@@ -613,14 +613,17 @@
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-weight:800;font-size:13.5px;color:#b0306a">👗 お客さんの女装
           <a href="https://www.cutie-josou.com/system13.html" target="_blank" rel="noopener" style="font-size:12.5px">📖 スタイルブックを見る</a></div>
         <div class="row2" style="margin-top:6px">
-          <div class="f"><label>身長（cm）</label><input type="number" id="f_dH" min="100" max="230" placeholder="例：172"></div>
-          <div class="f"><label>体重（kg）</label><input type="number" id="f_dW" min="30" max="200" placeholder="例：65"></div>
+          <div class="f"><label>身長（cm）</label><input type="number" id="f_dH" min="100" max="230" placeholder="例：172" oninput="recalc()"></div>
+          <div class="f"><label>体重（kg）</label><input type="number" id="f_dW" min="30" max="200" placeholder="例：65" oninput="recalc()"></div>
         </div>
         <div class="f" style="margin-top:6px"><label>ウィッグ（明るさ×長さ）</label><div id="f_wig" class="wiggrid"></div></div>
         <div class="row2" style="margin-top:6px">
-          <div class="f"><label>洋服の希望（あれば）</label><input id="f_dCloth" maxlength="200" placeholder="例：セーラー服・ミニスカ"></div>
-          <div class="f"><label>スタイルブックの番号</label><input id="f_dBook" maxlength="100" placeholder="例：12、60"></div>
+          <div class="f"><label>洋服の希望（あれば）</label><input id="f_dCloth" maxlength="200" placeholder="例：セーラー服・ミニスカ" oninput="recalc()"></div>
+          <div class="f"><label>スタイルブックの番号</label><input id="f_dBook" maxlength="100" placeholder="例：12、60" oninput="recalc()"></div>
         </div>
+        <div class="f" style="margin-top:6px"><label>👙 下着（お金はバック無OP）</label><div class="chips" id="f_under"></div></div>
+        <label style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:13.5px;font-weight:800"><input type="checkbox" id="f_makeup" style="width:auto" onchange="recalc()"> 💄 メイク道具を持っていく</label>
+        <div style="font-size:11.5px;color:#8a2a55;margin-top:4px">↑ ここに入れたものは「女レ道具セット」として、キャストへの予約連絡（詳細）に持ち物で入ります</div>
       </div>
       <div id="courseInfo"></div>
       <div id="placePick"></div>
@@ -1099,20 +1102,32 @@ function storeOnlyFields(){
 let HAS_DRESS = false;
 Promise.resolve(sb.from("kb_reservations").select("dress").limit(1)).then(res=>{ HAS_DRESS = !!res && !res.error; }).catch(()=>{});
 const WIG_COL = [["黒", "#1d1a1a"], ["茶", "#7b4a2a"], ["金", "#c9a06a"]], WIG_LEN = ["ショート", "ミディアム", "ロング"];
-let wigSel = "";
+let wigSel = "", underSel = "";
+// 👙 下着：お金はバック無OP（calc でオプションに足す）
+const UNDER = [["set", "上下セット", 3000], ["pants", "パンツのみ", 1000], ["bra", "ブラレンタル＋パンツ", 1000]];
 function paintWig(){
   $("f_wig").innerHTML = WIG_COL.map(([c, col]) => WIG_LEN.map(l => { const v = c + l;
-    return `<button type="button" class="wigb ${wigSel === v ? "on" : ""}" onclick="wigSel=wigSel==='${v}'?'':'${v}';paintWig()"><span class="sw" style="background:${col};height:${l === "ショート" ? 10 : l === "ミディアム" ? 16 : 22}px"></span>${v}</button>`; }).join("")).join("");
+    return `<button type="button" class="wigb ${wigSel === v ? "on" : ""}" onclick="wigSel=wigSel==='${v}'?'':'${v}';paintWig();recalc()"><span class="sw" style="background:${col};height:${l === "ショート" ? 10 : l === "ミディアム" ? 16 : 22}px"></span>${v}</button>`; }).join("")).join("");
+  $("f_under").innerHTML = [["", "なし", 0]].concat(UNDER).map(([k, l, p]) => `<button type="button" class="chip ${underSel === k ? "on" : ""}" onclick="underSel='${k}';paintWig();recalc()">${l}${p ? " " + yen(p) : ""}</button>`).join("");
 }
 function getDress(){
   const n = id => { const v = $(id).value; return v === "" ? null : Number(v); };
-  const d = { h: n("f_dH"), w: n("f_dW"), wig: wigSel, cloth: $("f_dCloth").value.trim(), book: $("f_dBook").value.trim() };
-  return Object.values(d).some(v => v !== null && v !== "") ? d : null;
+  const d = { h: n("f_dH"), w: n("f_dW"), wig: wigSel, cloth: $("f_dCloth").value.trim(), book: $("f_dBook").value.trim(), under: underSel, makeup: $("f_makeup").checked };
+  return Object.values(d).some(v => v !== null && v !== "" && v !== false) ? d : null;
 }
 function setDress(d){
-  d = d || {}; $("f_dH").value = d.h ?? ""; $("f_dW").value = d.w ?? ""; wigSel = d.wig || ""; $("f_dCloth").value = d.cloth || ""; $("f_dBook").value = d.book || ""; paintWig();
+  d = d || {}; $("f_dH").value = d.h ?? ""; $("f_dW").value = d.w ?? ""; wigSel = d.wig || ""; $("f_dCloth").value = d.cloth || ""; $("f_dBook").value = d.book || "";
+  underSel = d.under || ""; $("f_makeup").checked = !!d.makeup; paintWig();
 }
-function dressText(d){ if(!d) return ""; return [d.h ? d.h + "cm" : "", d.w ? d.w + "kg" : "", d.wig ? "ウィッグ" + d.wig : "", d.cloth ? "服：" + d.cloth : "", d.book ? "📖" + d.book : ""].filter(Boolean).join("・"); }
+const underLabel = k => (UNDER.find(x => x[0] === k) || [])[1] || "";
+function dressText(d){ if(!d) return ""; return [d.h ? d.h + "cm" : "", d.w ? d.w + "kg" : "", d.wig ? "ウィッグ" + d.wig : "", d.cloth ? "服：" + d.cloth : "", d.book ? "📖" + d.book : "", d.under ? "下着：" + underLabel(d.under) : "", d.makeup ? "💄メイク道具" : ""].filter(Boolean).join("・"); }
+// 🧳 女レ道具セット（キャストへの予約連絡の持ち物）
+function dressKit(d){
+  if(!d) return "";
+  return [d.wig ? "ウィッグ（" + d.wig + "）" : "", d.cloth || d.book ? "洋服（" + [d.cloth, d.book ? "スタイルブック " + d.book : ""].filter(Boolean).join("・") + "）" : "",
+    d.under ? "下着（" + underLabel(d.under) + "）" : "", d.makeup ? "メイク道具" : ""].filter(Boolean).join("／")
+    + (d.h || d.w ? `\n　お客様：${[d.h ? "身長" + d.h + "cm" : "", d.w ? "体重" + d.w + "kg" : ""].filter(Boolean).join("・")}` : "");
+}
 
 /* ---------- AF・逆AF の希望（必ず聞く） ---------- */
 function radioVal(name){ const el = document.querySelector('input[name="' + name + '"]:checked'); return el ? el.value : ""; }
@@ -1545,6 +1560,8 @@ function calc(){
     if(o.code === "af" && !$("o_gyakuaf")){ const a = radioVal("f_afw") === "yes", ra = radioVal("f_rafw") === "yes"; label = a && !ra ? "AF" : ra && !a ? "逆AF" : o.label; }
     opts.push({ group:g, code:o.code, label, qty, price:p, back:b, manual:o.manual });
   });
+  // 👙 キューティーの下着（バック無OP）
+  if(store === "cutie" && typeof underSel !== "undefined" && underSel){ const u = UNDER.find(x => x[0] === underSel); if(u) opts.push({ group:g, code:"underwear", label:"下着（" + u[1] + "）", qty:1, price:u[2], back:0, manual:true }); }
   if($("f_xop_label").value.trim()){
     opts.push({ group:g, code:"custom", label:$("f_xop_label").value.trim(), qty:1, price:+$("f_xop_price").value||0, back:+$("f_xop_back").value||0, manual:true });
   }
@@ -1836,13 +1853,18 @@ recalc = function(){
   // 希望プレイを予約連絡に入れる
   const pw = $("f_play").value.trim();
   if(pw) $("msg").value = $("msg").value.replace(/(【バック無OP】[^\n]*)/, "$1\n【希望プレイ】" + pw);
+  // 🧳 キューティー：女レ道具セットを持ち物として
+  const kit = $("f_store").value === "cutie" ? dressKit(getDress()) : "";
+  if(kit) $("msg").value = $("msg").value.replace(/(【バック無OP】[^\n]*(\n【希望プレイ】[^\n]*)?)/, "$1\n【持ち物：女レ道具セット】" + kit);
   drawTimeline();
 };
 
 /* ---------- そのキャストの本日のタイムライン（11時〜翌5時） ---------- */
 const TL_FROM = 11, TL_TO = 31;   // 11時〜翌7時（残業で朝まで働く子もいるので）
 function hourOf(iso){ const d = new Date(new Date(iso).getTime() + 9 * 3600 * 1000); let h = d.getUTCHours() + d.getUTCMinutes() / 60; if(h < 8) h += 24; return h; }
-function pct(h){ return Math.max(0, Math.min(100, (h - TL_FROM) / (TL_TO - TL_FROM) * 100)); }
+// 出すはんい：出勤の前後2時間（シフトの外に予約があれば、そこまでのばす）。drawTimeline で決める
+let tlA = TL_FROM, tlB = TL_TO;
+function pct(h){ return Math.max(0, Math.min(100, (h - tlA) / (tlB - tlA) * 100)); }
 function drawTimeline(){
   const el = $("castTimeline"); if(!el) return;
   const c = M.casts.find(x=>x.id === $("f_cast").value);
@@ -1868,10 +1890,16 @@ function drawTimeline(){
   const clash = cur && others.some(o=>o.s - gap < cur.e && cur.s < o.e + gap);
   const outShift = cur && shift && (cur.s < shift.start || cur.e > shift.end);
   $("footWarn").textContent = clash ? (gap ? "⚠️ 予約が重なっています（予約の間 " + c.interval_min + "分あけ）" : "⚠️ 予約が重なっています") : (outShift ? "⚠️ 出勤時間の外です" : "");
-  const ticks = [11, 14, 17, 20, 23, 26, 29].map(h=>`<span>${h >= 24 ? "翌" + (h - 24) : h}時</span>`).join("");
+  { let a = shift ? shift.start - 2 : TL_FROM, b = shift ? shift.end + 2 : TL_TO;
+    others.concat(cur ? [cur] : []).forEach(o=>{ a = Math.min(a, o.s - 0.5); b = Math.max(b, o.e + 0.5); });
+    tlA = Math.max(6, Math.floor(a)); tlB = Math.min(36, Math.ceil(b)); if(tlB - tlA < 4) tlB = tlA + 4; }
+  const span = tlB - tlA, step = span > 14 ? 3 : span > 8 ? 2 : 1, tk = [];
+  for(let h = tlA; h <= tlB; h += step) tk.push(h);
+  if(tk[tk.length - 1] !== tlB && tlB - tk[tk.length - 1] >= step / 2) tk.push(tlB);
+  const ticks = tk.map(h=>`<span style="position:absolute;left:${pct(h)}%;transform:translateX(${h === tlA ? "0" : h === tlB ? "-100%" : "-50%"})">${h >= 24 ? "翌" + (h - 24) : h}時</span>`).join("");
   el.innerHTML = `<div class="tl"><div class="ttl">📅 ${bd ? Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) + " の" : "本日の"}タイムライン（${esc(c.official_name || c.temp_name)}）
       ${shift ? `<span style="font-weight:400;color:#c9cbe0">出勤 ${hourLabel(shift.start)}〜${hourLabel(shift.end)}${shift.confirmed ? "" : "（未確定）"}</span>` : `<span style="font-weight:400;color:#c9cbe0">${sh ? "シフトが見つかりません" : "シフトを読み込み中…"}</span>`}</div>
-    <div class="axis">${ticks}</div>
+    <div class="axis" style="position:relative;height:14px;display:block">${ticks}</div>
     <div class="bar">
       ${shift ? `<div class="shift" style="left:${pct(shift.start)}%;width:${pct(shift.end) - pct(shift.start)}%"></div>` : ""}
       ${others.map(o=>`<div class="bk st ${o.st}" style="left:${pct(o.s)}%;width:${Math.max(2, pct(o.e) - pct(o.s))}%" title="${esc(o.label)}">${esc(o.label)}</div>`).join("")}
