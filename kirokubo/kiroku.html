@@ -286,6 +286,10 @@
   .rc-time{font-family:inherit;font-size:20px;font-weight:800;padding:2px 6px;border:1.5px solid #EAD7DD;border-radius:8px;color:var(--ink);background:#fff;} .rc-end{font-size:15px;font-weight:700;color:var(--sub);}
   .rc-store{font-size:14px;font-weight:800;white-space:nowrap;} .rc-top .told{font-size:12.5px;} .rc-open{font-family:inherit;font-size:13px;font-weight:800;border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:5px 12px;cursor:pointer;}
   .rc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0;}
+  .rc-top{gap:6px 10px;padding:6px 10px;} .rc-time{font-size:17px;padding:1px 4px;} .rc-end{font-size:14px;}
+  .rc-k{font-size:14px;white-space:nowrap;} .rc-k small{font-size:12px;color:var(--sub);} .rc-yen{color:#e5638c;font-size:15.5px;} .rc-top select{font-family:inherit;font-size:13px;padding:2px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;}
+  .rc-more > summary{cursor:pointer;font-size:12.5px;font-weight:800;color:var(--sub);padding:4px 10px;list-style:none;} .rc-more > summary::before{content:"▶ ";font-size:10px;} .rc-more[open] > summary::before{content:"▼ ";}
+  .rc-more[open] > summary{border-bottom:1.5px solid #F1E3E7;}
   .rc-box{padding:8px 10px;border-right:1.5px solid #F1E3E7;font-size:14px;} .rc-box:last-child{border-right:none;}
   .rc-h{font-size:12px;font-weight:800;color:var(--sub);margin-bottom:4px;} .rc-row{margin:3px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
   .rc-row select,.rc-num{font-family:inherit;font-size:14px;padding:3px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;} .rc-num{width:56px;}
@@ -3725,25 +3729,29 @@ function resCard(r){
   const afw = [r.af_wish === "yes" ? "AF" : "", r.rev_af_wish === "yes" ? "逆AF" : ""].filter(Boolean).join("・");
   const cardStep = r.payment !== "cash" ? cardSel(r).replace(/^<br>/, "") : "";
   const payUrl = r.payment === "card" && (r.card_step || "unsent") === "unsent" ? `<a class="payurl" href="${PAY_ADMIN_URL}" target="_blank" rel="noopener">💳 決済URLを作る（${esc(PAY_ADMIN_URL)}）</a>` : "";
+  // 1〜2行に：時間・お店・状態・場所・コース・総額（支払い）・電話・カードの状態・伝えた。ほかは「くわしく」にたたむ
+  const nLog = logOf(r).length;
   return `<div class="rescard ${cx ? "cx" : ""}">
     <div class="rc-top">
-      ${ed ? `<input type="time" class="rc-time" value="${hm(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}
-      <span class="rc-end">〜${hm(r.end_at)}</span>
+      ${ed ? `<input type="time" class="rc-time" value="${hm(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>
       ${r.phone_draft ? `<span class="rc-draft" title="スマホで仮入力。PCで開いて確かめると取り入れます">📱仮入力</span>` : ""}<span class="rc-store">${r.dummy_name ? "🎭" + esc(r.dummy_name) + "・" : ""}${esc(storeLabel(r.store_key) || "")}</span>
-      ${stSel}${told}
+      ${stSel}
+      <span class="rc-k">📍<b>${esc(r.area || "エリアなし")}</b></span>
+      <span class="rc-k">${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""}${r.extension_count ? "＋延長" + r.extension_count : ""}</span>
+      <span class="rc-k">総額 <b class="rc-yen">${yen(r.total)}</b><small>（${esc(PAY_LABEL[r.payment] || "")}）</small></span>
+      ${c.phone ? `<span class="rc-k tel">📞${esc(c.phone)}</span>` : ""}${c.ng ? `<span class="rc-k" style="color:#C62828;font-weight:800">⚠️NG客</span>` : ""}
+      ${cardStep}${payUrl}${told}
       <span style="flex:1"></span>
-      <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ くわしく開く</button>
+      <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ 開く</button>
     </div>
+    <details class="rc-more" ${rcOpen.has(r.id) ? "open" : ""} ontoggle="rcToggle(${r.id},this.open)"><summary>くわしく（お客さん・場所・OP・備考${nLog ? " " + nLog + "件" : ""}）</summary>
     <div class="rc-grid">
       <div class="rc-box"><div class="rc-h">💴 コース・料金</div>
         <div class="rc-row">${ed ? `<select onchange="qCourse(${r.id},this.value)">${prices.map(p=>`<option value="${esc(p.course)}" ${p.course === r.course ? "selected" : ""}>${esc(p.course)}${/^\d+$/.test(p.course) ? "分" : ""}</option>`).join("")}${prices.some(p=>p.course === r.course) ? "" : `<option selected>${esc(r.course || "")}</option>`}</select>` : esc(r.course)}
           延長 ${ed ? `<input type="number" min="0" class="rc-num" value="${r.extension_count || 0}" onchange="qExt(${r.id},this.value)">` : (r.extension_count || 0)}回
           ${r.free_kind ? `<small>${esc(FREE_SUFFIX[r.free_kind] || "")}</small>` : ""}</div>
         <div class="rc-row"><small>OP：${esc(ops || "なし")}${afw ? "　希望：" + esc(afw) : ""}</small> ${ed ? `<button type="button" class="mini" onclick="openForm(${r.id})">OPを直す</button>` : ""}</div>
-        <div class="rc-row">${ed ? `<select onchange="qPay(${r.id},this.value)">${Object.keys(PAY_LABEL).map(k=>`<option value="${k}" ${k === r.payment ? "selected" : ""}>${PAY_LABEL[k]}</option>`).join("")}</select>` : esc(PAY_LABEL[r.payment] || "")}
-          ${cardStep}</div>
-        ${payUrl ? `<div class="rc-row">${payUrl}</div>` : ""}
-        <div class="rc-total">総額 <b>${showMoney || true ? yen(r.total) : ""}</b></div>
+        <div class="rc-row">支払い ${ed ? `<select onchange="qPay(${r.id},this.value)">${Object.keys(PAY_LABEL).map(k=>`<option value="${k}" ${k === r.payment ? "selected" : ""}>${PAY_LABEL[k]}</option>`).join("")}</select>` : esc(PAY_LABEL[r.payment] || "")}</div>
       </div>
       <div class="rc-box"><div class="rc-h">👤 お客さん</div>
         <div class="rc-row"><b>${c.ng ? "⚠️" : ""}${esc(c.name || "（名前なし）")}</b> <small>${(VISIT.find(v=>v[0] === r.visit_kind) || [])[1] || ""}</small></div>
@@ -3756,9 +3764,11 @@ function resCard(r){
         ${todosHtml(r)}
       </div>
       <div class="rc-box rc-biko"><div class="rc-h">📝 備考</div>${memoBoxes(r)}</div>
-    </div>
+    </div></details>
   </div>`;
 }
+const rcOpen = new Set();   // 「くわしく」を開いている予約（描きなおしても開いたまま）
+function rcToggle(id, on){ if(on) rcOpen.add(id); else rcOpen.delete(id); }
 renderListTable = function(){
   const el = $("list"); if(!el || !M.casts) return;
   const byStart = (a, b)=>String(a.start_at).localeCompare(String(b.start_at));

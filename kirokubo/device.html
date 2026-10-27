@@ -97,7 +97,12 @@ async function refresh(){
       <td>${esc(d.label)}${d.this_device ? " <b>（この端末）</b>" : ""}</td><td>${when(d.created_at)} ${esc(d.created_by || "")}</td><td>${when(d.last_seen)}</td>
       <td>${d.revoked ? `<button class="btn btn-ghost btn-sm" onclick="revoke(${d.id},false)">もどす</button>` : `<button class="btn btn-danger btn-sm" onclick="revoke(${d.id},true)">外す</button>`}</td></tr>`).join("") + `</table>`
       : `<span class="lead">まだありません</span>`;
-  }catch(e){ $("list").innerHTML = `<span class="lead">${esc(e.message || e)}</span>`; }
+    // 前に登録したのに「まだ登録されていません」＝このブラウザが合い鍵を忘れた（外されたのではない）
+    if(!st.registered && l.some(d => !d.revoked)) $("list").insertAdjacentHTML("beforeend", `<div class="lead" style="background:#FFF6D6;border-radius:10px;padding:8px 10px;margin-top:8px;line-height:1.8">
+      ⚠️ 前にこの端末を登録したのに「まだ登録されていません」と出るときは、<b>このブラウザが合い鍵を忘れています</b>（一覧の登録は外れていません）。よくある理由：<br>
+      ・ブラウザの「閉じるときにCookieとサイトのデータを消す」がON（Edge：設定 → プライバシー → 閉じるときに閲覧データをクリア）<br>
+      ・登録したときと<b>ちがうブラウザ</b>で開いている（Edge と Chrome、ふつうの画面とシークレット／InPrivate）<br>
+      ・スマホは、<b>LINEの中で開いた画面</b>・Safari・ホーム画面のアイコンが、それぞれ別あつかい（いつも同じものから開く）</div>`);
 }
 async function register(){
   const label = $("label").value.trim(), pass = $("pass1").value;
