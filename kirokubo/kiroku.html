@@ -1325,7 +1325,14 @@ function renderCastChecks(c){
     if(String(calc().course || "").includes("泊") && area && !/池袋|鶯谷|五反田/.test(area) && (visit === "new" || visit === "repeat")) ann.unshift({ text: "🌙 遠方泊りは本指名のみです（池袋・鶯谷・五反田以外のお泊り）" });
   }catch(e){}
   let longNg = false;
-  if(custNg){ longNg = true; warn.unshift(`🙅 このお客さんは、このキャストNGです${custNg.reason ? "（" + custNg.reason + "）" : ""}。別のキャストにしてください`); }
+  let askHtml = "";
+  if(custNg && custNg.ask){   // 🤔 エクセルの備考から見分けた、判断にまようキャストNG → 内勤が決めるまで保存しない
+    longNg = true;
+    askHtml = `<div class="ngask">🤔 <b>キャストNG？ 関係ない？</b>（台帳エクセルの備考に「NG」などの言葉がありました）
+      <div class="q">${esc(custNg.reason || "")}</div>
+      <button type="button" class="btn btn-danger btn-sm" onclick="castNgDecide(${custNg.id},true)">🙅 ${esc(castName(c.id))}はNG（受けない）</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="castNgDecide(${custNg.id},false)">関係ない（NGではない）</button></div>`;
+  } else if(custNg){ longNg = true; warn.unshift(`🙅 このお客さんは、このキャストNGです${custNg.reason ? "（" + custNg.reason + "）" : ""}。別のキャストにしてください`); }
   // 🎭 ダミー：このお客さんが前にこのダミー名で会った子（実際に行ったキャスト）以外では行けない（「あの時の子じゃない」になるので）
   const dmNow = isDummyStore($("f_store").value) && $("f_dummy") ? $("f_dummy").value : "";
   if(dmNow && Array.isArray(custPast)){
@@ -1348,7 +1355,7 @@ function renderCastChecks(c){
   }
   const box = (x, kind)=>`<label style="display:flex;gap:8px;align-items:flex-start;font-size:13.5px;padding:3px 0;cursor:pointer">
       <input type="checkbox" class="cchk" data-kind="${kind}" data-text="${esc(x.text)}" ${keep.has(x.text) ? "checked" : ""} style="margin-top:3px;transform:scale(1.25)"> <span>${esc(x.text)}</span></label>`;
-  let h = "";
+  let h = askHtml;
   if(warn.length) h += `<div style="background:#FFE8EC;border:2px solid #E5486C;border-radius:12px;padding:8px 10px;margin:6px 0;font-size:13.5px;font-weight:700;color:#B0213F">🚫 ${warn.map(esc).join("<br>🚫 ")}</div>`;
   if(ann.length) h += `<div style="background:#FFF4E5;border:2px solid #FFB547;border-radius:12px;padding:8px 10px;margin:6px 0">
     <div style="font-weight:800;font-size:13px;color:#a35a00;margin-bottom:4px">📣 お客様に案内（案内したらチェック）</div>${ann.map(x=>box(x, "announce")).join("")}
@@ -1398,7 +1405,10 @@ async function lookupCustomer(keepName){
     custPast = pastAll;
     const past = pastAll.slice(0, 10);
     const casts = [...new Set(pastAll.filter(p => !["cancel", "tobi"].includes(p.status)).map(p=>castName(p.cast_id)))];
-    $("custInfo").innerHTML = (c.ng ? `<div class="warn">⚠️ NG客です：${esc(c.ng_reason||"理由なし")}</div>` : "") +
+    $("custInfo").innerHTML = (c.ng && c.ng_ask ? `<div class="ngask">🤔 <b>出禁・店NG？</b>（台帳エクセルの備考から見分けました。条件つきの書き方なので、内勤が決めてください）<div class="q">${esc(c.ng_reason || "")}</div>
+        <button type="button" class="btn btn-danger btn-sm" onclick="custNgDecide(${c.id},true)">⚠️ NG客（受けない）</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="custNgDecide(${c.id},false)">NGではない（受けてOK）</button></div>`
+      : c.ng ? `<div class="warn">⚠️ NG客です：${esc(c.ng_reason||"理由なし")}</div>` : "") +
       // 履歴は1回ずつ1行で、大きめ・濃いめに（受付でいちばん大事なので）
       `<div class="custhist"><div class="ch-head">📋 これまで ${pastAll.length}件${pastAll.length > 10 ? "（新しい10件）" : ""}</div>
         ${past.map(p => { const x = p.status === "cancel" ? "キャンセル" : p.status === "tobi" ? "トビ" : "";
@@ -1626,6 +1636,7 @@ async function saveRes(){
   const waiting = String($("f_status").value).startsWith("wait_");
   const ck = checksForSave();
   // 出禁・店NGのお客さんは受けない（NGが解除になったら「NG客」を「NGではない」に直してから）
+  if(!cancelLike && curCustomer && curCustomer.ng && curCustomer.ng_ask){ toast("🤔 このお客さんが出禁・店NGか、先に決めてください（お客さんの欄のボタン）"); $("custInfo").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && $("f_ng").value === "1"){ toast("🚫 出禁・店NGのお客さんです。受けられません（解除なら、お客さんの「NG客」を直してから）"); $("custInfo").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.longNg){ toast("🚫 このキャストでは受けられません（赤い枠の理由を見てください）"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.missAnnounce){ toast("📣 お客様に案内することに、まだチェックがついていません"); $("castChecks").scrollIntoView({ block: "center" }); return; }
@@ -4157,7 +4168,11 @@ async function checkOldNomi(){
       try{ const h = await sb.from("kb_cust_history").select("biz_date").eq("customer_id", custId).eq("cast_id", cid).eq("status", "done").order("biz_date", { ascending: false }).limit(1); if(!h.error && h.data && h.data[0]) rows2.push(h.data[0]); }catch(e){}
       rows2.sort((a, b)=>String(b.biz_date).localeCompare(String(a.biz_date)));
       // このお客さんは、このキャストNG？（顧客台帳）
-      try{ const n = await sb.from("kb_cust_cast_ng").select("reason").eq("customer_id", custId).eq("cast_id", cid).limit(1); if(!n.error && n.data && n.data[0]) ng = { cid, reason: n.data[0].reason || "" }; }catch(e){}
+      try{
+        let n = await sb.from("kb_cust_cast_ng").select("id,reason,ask").eq("customer_id", custId).eq("cast_id", cid).limit(1);
+        if(n.error) n = await sb.from("kb_cust_cast_ng").select("id,reason").eq("customer_id", custId).eq("cast_id", cid).limit(1);   // SQL 162 の前
+        if(!n.error && n.data && n.data[0]) ng = { cid, id: n.data[0].id, reason: n.data[0].reason || "", ask: !!n.data[0].ask };
+      }catch(e){}
       const last = rows2[0];
       if(last){
         const lim = new Date((day || KB.bizDateOf()) + "T00:00:00Z"); lim.setUTCFullYear(lim.getUTCFullYear() - 3);
@@ -4173,6 +4188,31 @@ async function checkOldNomi(){
   oldNomi = found; custCastNg = ng;
   if(changed) renderCastChecks(M.casts.find(x=>x.id === $("f_cast").value));
 }
+// 🤔 要確認のNG（SQL 162）を内勤が決める（キャストNG：残す＝NG／消す＝関係ない。NG客：NGのまま／NGを外す）
+async function castNgDecide(id, isNg){
+  const by = KB.operatorName();
+  try{
+    if(isNg) q(await sb.from("kb_cust_cast_ng").update({ ask: false, ask_done: true }).eq("id", id));
+    else q(await sb.from("kb_cust_cast_ng").delete().eq("id", id));
+    toast(isNg ? `🙅 キャストNGにしました（${by}）` : `キャストNGではない、にしました（${by}）`);
+    custCastNg = null; await checkOldNomi(); renderCastChecks(M.casts.find(x => x.id === $("f_cast").value));
+  }catch(e){ toast("できませんでした：" + (e.message || e)); }
+}
+async function custNgDecide(id, isNg){
+  const by = KB.operatorName(), u = isNg ? { ng_ask: false, ng_ask_done: true } : { ng: false, ng_ask: false, ng_ask_done: true };
+  try{
+    q(await sb.from("kb_customers").update(u).eq("id", id));
+    if(curCustomer && curCustomer.id === id) Object.assign(curCustomer, u);
+    $("f_ng").value = isNg ? "1" : "0";
+    toast(isNg ? `⚠️ NG客にしました（${by}）` : `NGではない、にしました（${by}）`);
+    lookupCustomer(true);
+  }catch(e){ toast("できませんでした：" + (e.message || e)); }
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .ngask{background:#FFF8E1;border:2px solid #F5B400;border-radius:12px;padding:8px 10px;margin:6px 0;font-size:13.5px;color:#6b4e00}
+  .ngask .q{background:#fff;border-radius:8px;padding:6px 8px;margin:6px 0;white-space:pre-wrap;font-size:13px}
+  .ngask .btn{margin:2px 4px 0 0}
+</style>`);
 const __lookupCustomerON = lookupCustomer;
 lookupCustomer = async function(){
   const r = await __lookupCustomerON.apply(this, arguments);

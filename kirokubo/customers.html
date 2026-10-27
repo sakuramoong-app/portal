@@ -169,7 +169,9 @@ function paintDetail(){
   const ed = KB.CAN_EDIT ? "" : "disabled";
   $("detail").innerHTML = `
     <h2>${esc(c.name || "（名前なし）")} <small style="font-size:13px;color:var(--sub)">📞 ${esc(fmtPhone(c.phone))}</small></h2>
-    ${c.ng ? `<div class="ngbox">⚠️ NG客：${esc(c.ng_reason || "理由なし")}</div>` : ""}
+    ${c.ng && c.ng_ask ? `<div class="ngbox" style="background:#FFF8E1;border-color:#F5B400;color:#6b4e00">🤔 <b>出禁・店NG？</b>（台帳エクセルの備考から見分けました。条件つきの書き方なので、内勤が決めてください）<br>${esc(c.ng_reason || "")}
+        ${KB.CAN_EDIT ? `<div style="margin-top:6px"><button class="btn btn-danger btn-sm" onclick="custNgDecide(true)">⚠️ NG客（受けない）</button> <button class="btn btn-ghost btn-sm" onclick="custNgDecide(false)">NGではない</button></div>` : ""}</div>`
+      : c.ng ? `<div class="ngbox">⚠️ NG客：${esc(c.ng_reason || "理由なし")}</div>` : ""}
     ${c._ngs.length ? `<div class="ngbox" style="background:#FFF4E5;border-color:#FFB547;color:#A35A00;margin-top:6px">🙅 キャストNG：${c._ngs.map(n=>esc(n.cast_id ? castLabel(n.cast_id) : n.cast_name) + (n.reason ? "（" + esc(n.reason) + "）" : "")).join("、")}</div>` : ""}
     <div class="csec"><div class="stats">
       <div class="c"><div class="k">利用回数</div><div class="v">${done.length}回</div></div>
@@ -195,8 +197,8 @@ function paintDetail(){
     </div>
 
     <div class="csec"><h3>🙅 キャストごとのNG（このキャストには付けない）</h3>
-      ${c._ngs.length ? c._ngs.map(n=>`<div class="pl"><b>${esc(n.cast_id ? castLabel(n.cast_id) : n.cast_name)}</b><span>${esc(n.reason || "")}</span><span class="src">${n.source === "excel" ? "台帳エクセルより" : esc(n.by_name || "")}</span>
-        ${KB.CAN_EDIT ? `<button class="btn btn-danger btn-sm" onclick="delCastNg(${n.id})">消す</button>` : ""}</div>`).join("") : `<div class="src">なし</div>`}
+      ${c._ngs.length ? c._ngs.map(n=>`<div class="pl" ${n.ask ? 'style="background:#FFF8E1;border-radius:8px"' : ""}><b>${n.ask ? "🤔 " : ""}${esc(n.cast_id ? castLabel(n.cast_id) : n.cast_name)}</b><span>${esc(n.reason || "")}</span><span class="src">${n.source === "excel" ? "台帳エクセルより" : esc(n.by_name || "")}${n.ask ? "・<b>要確認</b>（NG？関係ない？）" : ""}</span>
+        ${KB.CAN_EDIT ? (n.ask ? `<button class="btn btn-danger btn-sm" onclick="castNgOk(${n.id})">🙅 NG</button><button class="btn btn-ghost btn-sm" onclick="delCastNg(${n.id})">関係ない（消す）</button>` : `<button class="btn btn-danger btn-sm" onclick="delCastNg(${n.id})">消す</button>`) : ""}</div>`).join("") : `<div class="src">なし</div>`}
       ${KB.CAN_EDIT ? `<div class="row" style="margin-top:6px"><select id="ng_cast" style="font-family:inherit;padding:6px;border-radius:8px;border:1.5px solid var(--line)"><option value="">キャストを選ぶ</option>${M.casts.filter(x=>x.status !== "left").map(x=>`<option value="${x.id}">${esc(x.official_name || x.temp_name)}</option>`).join("")}</select>
         <input id="ng_reason" placeholder="理由" maxlength="300" style="flex:1;min-width:140px;font-family:inherit;padding:6px 8px;border-radius:8px;border:1.5px solid var(--line)">
         <button class="btn btn-ghost btn-sm" onclick="addCastNg()">＋ 足す</button></div>` : ""}
@@ -273,6 +275,14 @@ async function addCastNg(){
 async function delCastNg(id){
   if(!confirm("このキャストNGを消しますか？")) return;
   try{ q(await sb.from("kb_cust_cast_ng").delete().eq("id", id)); openCustomer(cur.id); }catch(e){ toast("消せませんでした：" + (e.message || e)); }
+}
+// 🤔 要確認（SQL 162）を決める
+async function castNgOk(id){
+  try{ q(await sb.from("kb_cust_cast_ng").update({ ask: false, ask_done: true }).eq("id", id)); toast("🙅 キャストNGにしました"); openCustomer(cur.id); }catch(e){ toast("できませんでした：" + (e.message || e)); }
+}
+async function custNgDecide(isNg){
+  const u = isNg ? { ng_ask: false, ng_ask_done: true } : { ng: false, ng_ask: false, ng_ask_done: true };
+  try{ q(await sb.from("kb_customers").update(u).eq("id", cur.id)); toast(isNg ? "⚠️ NG客にしました" : "NGではない、にしました"); openCustomer(cur.id); search(); }catch(e){ toast("できませんでした：" + (e.message || e)); }
 }
 async function newCustomer(){
   const phone = (prompt("電話番号（数字だけ）") || "").replace(/\D/g, ""); if(!phone) return;
