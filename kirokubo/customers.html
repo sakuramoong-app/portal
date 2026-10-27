@@ -193,7 +193,7 @@ function paintDetail(){
         <div class="f"><label>NGの理由</label><input id="c_ngr" value="${esc(c.ng_reason)}" maxlength="200" ${ed}></div>
       </div>
       <div class="f" style="margin-top:6px"><label>メモ（好み・注意など）</label><textarea id="c_note" ${ed}>${esc(c.note)}</textarea></div>
-      ${KB.CAN_EDIT ? `<div style="text-align:right;margin-top:6px"><button class="btn btn-primary btn-sm" onclick="saveCustomer()">💾 保存</button></div>` : ""}
+      ${KB.CAN_EDIT ? `<div style="display:flex;justify-content:space-between;margin-top:6px"><button class="btn btn-danger btn-sm" onclick="delCustomer()">🗑 このお客さんを消す（テストなど）</button><button class="btn btn-primary btn-sm" onclick="saveCustomer()">💾 保存</button></div>` : ""}
     </div>
 
     <div class="csec"><h3>🙅 キャストごとのNG（このキャストには付けない）</h3>
@@ -286,6 +286,17 @@ async function delCastNg(id){
 async function histNgOff(hid){
   if(!confirm("この回の「🙅 キャストNG」の印を外しますか？")) return;
   try{ q(await sb.from("kb_cust_history").update({ cast_ng: false }).eq("id", hid)); toast("印を外しました"); openCustomer(cur.id); }catch(e){ toast("できませんでした：" + (e.message || e)); }
+}
+// 🗑 お客さんを消す（テストで入れたものなど）。記録簿の予約は「削除」にして、お客さんとのつながりを外してから消す
+async function delCustomer(){
+  if(!cur) return;
+  const live = (cur._res || []).length;
+  if(!confirm(`「${cur.name || "名前なし"}」（📞${fmtPhone(cur.phone)}）を顧客台帳から消しますか？\n${live ? `記録簿の予約 ${live}件も「削除」になります。\n` : ""}過去の利用（エクセル）・キャストNG・よく使う場所もいっしょに消えます。もとに戻せません。`)) return;
+  try{
+    q(await sb.from("kb_reservations").update({ deleted: true, customer_id: null, updated_by: KB.operatorName() }).eq("customer_id", cur.id));
+    q(await sb.from("kb_customers").delete().eq("id", cur.id));
+    toast("🗑 消しました"); cur = null; $("detail").innerHTML = `<div class="empty">消しました。左の一覧からお客さんを選んでください</div>`; search();
+  }catch(e){ toast("消せませんでした：" + (e.message || e)); }
 }
 // 自動で入れたものはまちがいがあるので、理由を直せる
 async function editCastNg(id){
