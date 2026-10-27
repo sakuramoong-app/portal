@@ -2453,7 +2453,8 @@ function cardHtml(id, c){
             ${c.deposited != null ? `<div class="s2 ${c.diff < 0 ? "ng" : "ok"}">投函した額 ${yen(c.deposited)}${c.diff === 0 ? "　ぴったり ✅" : c.diff < 0 ? "　未精算 −" + yen(-c.diff) : "　お釣り ＋" + yen(c.diff)}</div>` : ""}</div>`
         : `<div class="sb give"><div class="k">💴 お店からキャストに渡す<small>（カード決済で現金がないため）</small></div><div class="v">${yen(-c.drop)}</div><div class="s">投函はなし</div></div>`}
       <div class="sb take"><div class="k">👛 手取り（本日のお給料）</div><div class="v">${yen(c.takeHome)}</div><div class="s">報酬 ${yen(c.reward)}${c.option ? "＋OP " + yen(c.option) : ""}${c.transportBack + c.plus ? "＋プラス " + yen(c.transportBack + c.plus) : ""} − 雑費 ${yen(c.zappi)}${c.minus ? "−マイナス " + yen(c.minus) : ""}</div></div>
-    </div>    <table class="res"><tr><th>時間</th><th>店舗</th><th>コース</th><th class="money">総額</th><th class="money">報酬</th></tr>${res}</table>
+    </div>    ${typeof unsBoxHtml === "function" ? unsBoxHtml(id, c) : ""}
+    <table class="res"><tr><th>時間</th><th>店舗</th><th>コース</th><th class="money">総額</th><th class="money">報酬</th></tr>${res}</table>
     ${c.why.length ? `<div class="note2">🧮 ${c.why.map(esc).join("<br>")}</div>` : ""}
     ${c.cardUnconfirmed ? `<div class="warn" style="margin:6px 0">⚠️ お支払いが「カード」のままの予約が ${c.cardUnconfirmed}件あります。カード決済の完了を確認して、本日のキャスト一覧のカードのプルダウンで「✅ 決済済み」にしてください。</div>` : ""}
     <div class="scalc">
@@ -5329,5 +5330,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
+<script src="unsettled.js?v=1"></script>
 </body>
 </html>
