@@ -1124,7 +1124,7 @@ function paintParty(){
   if(party.kind !== "cast"){ $("partyCasts").innerHTML = party.kind === "guest" ? `<div style="font-size:12px;color:#1f5d99">（基本料金＋指名料）×2＋3P料金 ${yen(PARTY_FEE * 2)}（バック ${yen(PARTY_BACK * 2)}）。コースのバックも×2</div>` : ""; return; }
   if(editing){ $("partyCasts").innerHTML = `<div style="font-size:12px;color:#1f5d99">${esc(party.note || "一緒に行ったキャストの予約は、それぞれの枠にあります")}（直すときは、その子の予約も開いて直してください）</div>`; return; }
   const opts = $("f_cast").innerHTML;
-  $("partyCasts").innerHTML = `<div style="font-size:12px;color:#1f5d99;margin-bottom:4px">上の「キャスト」＋一緒に行くキャスト。保存すると、<b>キャストごとの予約</b>（その子の料金・バック・3P料金 ${yen(PARTY_FEE)}）を自動で作ります</div>`
+  $("partyCasts").innerHTML = `<div style="font-size:12px;color:#1f5d99;margin-bottom:4px">上の「キャスト」＋一緒に行くキャスト。保存すると、<b>キャストごとの予約</b>（その子の料金・バック・AF・逆AF・3P料金 ${yen(PARTY_FEE)}）を自動で作ります。ほかの有料オプションは上の子の予約だけに入るので、ほかの子につけるときは保存したあとその子の枠で</div>`
     + Array.from({ length: party.n - 1 }, (_, i) => { const w = party.af[i] || {}, yn = (k, v) => `<label class="ynb"><input type="radio" name="p${k}_${i}" value="${v}" ${w[k] === v ? "checked" : ""} onchange="party.af[${i}]=Object.assign(party.af[${i}]||{},{${k}:'${v}'});recalc()"><span>${v === "yes" ? "〇" : "✕"}</span></label>`;
       return `<div class="f" style="margin-top:4px"><label>👤 一緒に行くキャスト${party.n > 2 ? " " + (i + 1) : ""}</label><select class="pcast" data-i="${i}" onchange="party.casts[${i}]=this.value;paintParty();recalc()">${opts}</select>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px;font-size:13px;font-weight:700">この子へのご希望　<span>AF：${yn("af", "yes")}${yn("af", "no")}</span><span>逆AF：${yn("raf", "yes")}${yn("raf", "no")}</span></div></div>`; }).join("")
@@ -1140,8 +1140,16 @@ function partyRepPaint(){
   el.innerHTML = ms.map(id => `<option value="${id}">${esc(castName(id))}</option>`).join("") || `<option value="">（キャストを選ぶ）</option>`;
   el.value = party.rep || "";
 }
-// 一緒に行く子のAF・逆AFのご希望で、いったん計算する（終わったら上の子のご希望にもどす）
+// 一緒に行く子は、AF・逆AF（と3P料金）だけ。ほかの有料オプションは、その子の枠を開いてつける
 function withAf(w, fn){
+  const boxes = [...document.querySelectorAll("#f_opts input[type=checkbox]")].filter(b => !["o_af", "o_gyakuaf"].includes(b.id)), keepB = boxes.map(b => b.checked);
+  const keepX = $("f_xop_label").value, keepU = typeof underSel !== "undefined" ? underSel : "";
+  boxes.forEach(b => { b.checked = false; }); $("f_xop_label").value = ""; if(typeof underSel !== "undefined") underSel = "";
+  try{ return withAf0(w, fn); }
+  finally{ boxes.forEach((b, i) => { b.checked = keepB[i]; }); $("f_xop_label").value = keepX; if(typeof underSel !== "undefined") underSel = keepU; }
+}
+// 一緒に行く子のAF・逆AFのご希望で、いったん計算する（終わったら上の子のご希望にもどす）
+function withAf0(w, fn){
   const keep = { af: radioVal("f_afw"), raf: radioVal("f_rafw"), o1: $("o_af") ? $("o_af").checked : null, o2: $("o_gyakuaf") ? $("o_gyakuaf").checked : null };
   if(w){
     setRadio("f_afw", w.af || ""); setRadio("f_rafw", w.raf || "");
