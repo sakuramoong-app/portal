@@ -2556,7 +2556,7 @@ function settleCanvas(id){
   L.push(["本日のお給料", yen(c.takeHome), "big"]);
  const S = 2, W = 560, PAD = 28, FONT = '"Hiragino Maru Gothic ProN","M PLUS Rounded 1c","Yu Gothic","Meiryo",sans-serif';
   const hOf = k => k === "line" ? 18 : k === "big" || k === "big2" ? 44 : 34;
-  const BOX = 112, H = 96 + BOX + L.reduce((a, x)=>a + hOf(x[2]), 0) + 64;
+  const BOX = 112, H = 96 + BOX + L.reduce((a, x)=>a + hOf(x[2]), 0) + 64 + 142;
   const cv = document.createElement("canvas"); cv.width = W * S; cv.height = H * S;
   const g = cv.getContext("2d"); g.scale(S, S);
   g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, W, H);
@@ -2583,7 +2583,16 @@ function settleCanvas(id){
     g.fillStyle = k === "big" ? "#e5638c" : k === "big2" ? "#2f7fd0" : k === "off" ? "#B9A9AD" : "#5C4B4F"; g.textAlign = "right"; g.fillText(v, W - PAD, y + h / 2 + 7);
     y += h;
   });
-  g.textAlign = "center"; g.fillStyle = "#e5638c"; g.font = `bold 15px ${FONT}`; g.fillText("お疲れさまでした🌸", W / 2, y + 34);
+  // 📝 精算メモのお手本（営業日・名前・実際に入れた投函金額）
+  y += 14; g.textAlign = "left"; g.fillStyle = "#5C4B4F"; g.font = `bold 15px ${FONT}`; g.fillText("📝 精算メモに書くこと（お手本）", PAD, y + 16);
+  { const tx = PAD, ty = y + 28, cw = [120, 170, W - PAD * 2 - 290], rh = 36, hd = ["営業日", "名前", "金額"];
+    const md = (d.getUTCMonth() + 1) + "/" + d.getUTCDate(), val = [md, castName(id), c.drop >= 0 ? "¥" + c.drop.toLocaleString("ja-JP") : "（投函なし）"];
+    g.strokeStyle = "#333"; g.lineWidth = 1.5; let x = tx;
+    cw.forEach((w, i) => { g.strokeRect(x, ty, w, rh); g.strokeRect(x, ty + rh, w, rh);
+      g.textAlign = "center"; g.fillStyle = "#333"; g.font = `15px ${FONT}`; g.fillText(hd[i], x + w / 2, ty + 24);
+      g.fillStyle = "#1a3a8a"; g.font = `bold 18px ${FONT}`; g.fillText(val[i], x + w / 2, ty + rh + 25); x += w; });
+    g.textAlign = "left"; g.fillStyle = "#8a7f99"; g.font = `12px ${FONT}`; g.fillText("1枚に1営業日分・表向きで、いちばん上に文字が見えるように入れてください", tx, ty + rh * 2 + 20); }
+  y += 128;  g.textAlign = "center"; g.fillStyle = "#e5638c"; g.font = `bold 15px ${FONT}`; g.fillText("お疲れさまでした🌸", W / 2, y + 34);
   return cv;
 }
 function copyDetailImg(id){
@@ -2617,7 +2626,7 @@ function copyDetail(id){
   lines.push("", `本日のお給料　${yen(c.takeHome)}`);
   if(c.drop >= 0) lines.push(`投函額　${yen(c.drop)}`);
   else lines.push(`（カード決済のため、お店から ${yen(-c.drop)} お渡しします）`);
-  lines.push("", "お疲れさまでした🌸");
+  lines.push("", `📝 精算メモ（お手本）：営業日 ${d.getUTCMonth() + 1}/${d.getUTCDate()}／名前 ${castName(id)}／金額 ${c.drop >= 0 ? yen(c.drop) : "（投函なし）"}`, "📖 投函のしかた：https://sakuramoong-app.github.io/portal/kirokubo/posting.html");
   navigator.clipboard.writeText(lines.join("\n")).then(()=>toast("📋 精算明細をコピーしました"), ()=>alert(lines.join("\n")));
 }
 
