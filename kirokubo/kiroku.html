@@ -608,6 +608,11 @@
         <label id="nhWrap"><input type="checkbox" id="f_nh" onchange="recalc()"> キューティ：NH料金で取った</label>
         <label id="admWrap"><input type="checkbox" id="f_adm" onchange="recalc()"> 入会金あり（極門の新規）</label>
       </div>
+      <!-- 👥 3P・4P：キャスト複数（保存すると、キャストごとの予約を自動で作る）／お客2名 -->
+      <div id="partyWrap" style="background:#F2F8FF;border:1.5px solid #9cc6ee;border-radius:12px;padding:6px 10px;margin-bottom:8px">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b style="font-size:13px;color:#1f5d99">👥 3P・4P</b><div class="chips" id="partyChips"></div></div>
+        <div id="partyCasts" style="margin-top:6px"></div>
+      </div>
       <!-- 👗 キューティー：お客さんの女装（身長・体重・ウィッグ・洋服） -->
       <div id="dressWrap" style="display:none;background:#FFF0F7;border:1.5px solid #F7C3DA;border-radius:12px;padding:8px 10px;margin-bottom:8px">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-weight:800;font-size:13.5px;color:#b0306a">👗 お客さんの女装
@@ -889,6 +894,10 @@ function openForm(id){
   $("f_ext").value = r.extension_count || 0; $("f_date").value = r.date_count || 0;
   $("f_nh").checked = !!r.nh_rate; $("f_adm").checked = (r.admission || 0) > 0;
   setDress(r.dress);
+  // 👥 3P・4P：保存してある予約は、OP（3p_cast／3p_guest）から
+  { const po = (r.options || []).find(o => o.code === "3p_cast" || o.code === "3p_guest");
+    party = { kind: po ? (po.code === "3p_guest" ? "guest" : "cast") : "", n: po && /4P/.test(po.label) ? 3 : 2, casts: [],
+      note: ((r.memo_log || []).find(m => /^👥/.test(m.text || "")) || {}).text || "" }; }
   fillAreaSel(r.area || ""); $("f_address").value = r.address || "";
   setRadio("f_afw", r.af_wish || ""); setRadio("f_rafw", r.rev_af_wish || "");
   $("optDetails").open = false;
@@ -1098,6 +1107,47 @@ function storeOnlyFields(){
   $("admWrap").style.display = adm ? "" : "none"; if(!adm) $("f_adm").checked = false;
   $("dressWrap").style.display = nh ? "" : "none";   // 👗 キューティーは、お客さんの女装の欄
 }
+/* ---------- 👥 3P・4P ----------
+   キャスト複数：1つの受付画面で、一緒に行くキャストも選ぶ → 保存すると、キャストごとの予約（その子の料金・バック）を自動で作る
+   お客2名：基本料金×2＋3,000円（1つの予約）。どちらも 3P料金は 1人 3,000円（バック 2,000円） */
+const PARTY_FEE = 3000, PARTY_BACK = 2000;
+let party = { kind: "", n: 2, casts: [] };   // kind：""／"cast"／"guest"
+function paintParty(){
+  const opt = [["", "なし"], ["cast2", "キャスト2名（3P）"], ["cast3", "キャスト3名（4P）"], ["guest", "お客2名（3P）"]];
+  const cur = party.kind === "cast" ? "cast" + party.n : party.kind;
+  $("partyChips").innerHTML = opt.map(([k, l]) => `<button type="button" class="chip ${cur === k ? "on" : ""}" ${editing && party.kind === "cast" && k !== cur ? "disabled" : ""} onclick="setParty('${k}')">${l}</button>`).join("");
+  if(party.kind !== "cast"){ $("partyCasts").innerHTML = party.kind === "guest" ? `<div style="font-size:12px;color:#1f5d99">基本料金×2＋3P料金 ${yen(PARTY_FEE)}（バック ${yen(PARTY_BACK)}）</div>` : ""; return; }
+  if(editing){ $("partyCasts").innerHTML = `<div style="font-size:12px;color:#1f5d99">${esc(party.note || "一緒に行ったキャストの予約は、それぞれの枠にあります")}（直すときは、その子の予約も開いて直してください）</div>`; return; }
+  const opts = $("f_cast").innerHTML;
+  $("partyCasts").innerHTML = `<div style="font-size:12px;color:#1f5d99;margin-bottom:4px">上の「キャスト」＋一緒に行くキャスト。保存すると、<b>キャストごとの予約</b>（その子の料金・バック・3P料金 ${yen(PARTY_FEE)}）を自動で作ります</div>`
+    + Array.from({ length: party.n - 1 }, (_, i) => `<div class="f" style="margin-top:4px"><label>👤 一緒に行くキャスト${party.n > 2 ? " " + (i + 1) : ""}</label><select class="pcast" data-i="${i}" onchange="party.casts[${i}]=this.value;recalc()">${opts}</select></div>`).join("");
+  document.querySelectorAll("#partyCasts .pcast").forEach(s => { s.value = party.casts[Number(s.dataset.i)] || ""; });
+}
+function setParty(k){
+  party.kind = k === "guest" ? "guest" : k ? "cast" : ""; party.n = k === "cast3" ? 3 : 2;
+  party.casts = party.casts.slice(0, party.n - 1);
+  paintParty(); recalc();
+}
+// 保存するとき：一緒に行くキャストの予約（その子で計算しなおす）
+function partyExtraRows(row){
+  if(editing || party.kind !== "cast") return [];
+  const main = $("f_cast").value, others = party.casts.filter(Boolean);
+  if(others.length < party.n - 1) throw new Error("👥 一緒に行くキャストを選んでください");
+  if(new Set([main, ...others]).size !== others.length + 1) throw new Error("👥 同じキャストが2回選ばれています");
+  const names = [main, ...others].map(castName).join("・"), by = KB.operatorName(), at = new Date().toISOString();
+  const note = { at, by, text: `👥 ${party.n === 3 ? "4P" : "3P"}：${names}（いっしょに受付）` };
+  row.memo_log = [...(row.memo_log || []), note];
+  const out = others.map(cid => {
+    $("f_cast").value = cid; const c2 = calc();
+    return Object.assign({}, row, { cast_id: cid, nomination_fee: c2.nomination, options: c2.opts, option_total: c2.optionTotal, total: c2.total,
+      card_total: c2.pay === "cash" ? 0 : c2.total, course_back: c2.courseBack, option_back: c2.optionBack, extra_back: c2.extra, back_override: null,
+      cast_notified_at: null, cast_notified_by: "", ...("todos" in row ? { todos: [] } : {}), checks: [] });
+  });
+  $("f_cast").value = main; calc();
+  return out;
+}
+const __openFormParty = openForm;
+openForm = function(){ const r = __openFormParty.apply(this, arguments); paintParty(); return r; };
 /* ---------- 👗 キューティー：お客さんの女装（kb_reservations.dress：{ h, w, wig:"黒ショート", cloth, book }。SQL 164） ---------- */
 let HAS_DRESS = false;
 Promise.resolve(sb.from("kb_reservations").select("dress").limit(1)).then(res=>{ HAS_DRESS = !!res && !res.error; }).catch(()=>{});
@@ -1531,7 +1581,7 @@ function calc(){
   const cast = M.casts.find(x=>x.id===$("f_cast").value);
   const free = $("f_free").value, ext = Math.max(0, +$("f_ext").value||0), date = Math.max(0, +$("f_date").value||0);
   const why = [];
-  const price = (M.prices.find(p=>p.store_key===store && p.course===course) || {}).price || 0;
+  let price = (M.prices.find(p=>p.store_key===store && p.course===course) || {}).price || 0;
   // 指名料：フリーは0。キャストの特例があればその額。キューティの NH 料金は＋3,000円
   let nomination = 0;
   if(!free){
@@ -1560,6 +1610,11 @@ function calc(){
     if(o.code === "af" && !$("o_gyakuaf")){ const a = radioVal("f_afw") === "yes", ra = radioVal("f_rafw") === "yes"; label = a && !ra ? "AF" : ra && !a ? "逆AF" : o.label; }
     opts.push({ group:g, code:o.code, label, qty, price:p, back:b, manual:o.manual });
   });
+  // 👥 3P・4P：1人につき 3,000円（バック 2,000円）。キャスト複数はキャストごとの予約に1つずつ／お客2名は1つ
+  if(typeof party !== "undefined" && party.kind){
+    const lab = party.kind === "guest" ? "3P（お客2名）" : party.n >= 3 ? "4P（キャスト" + party.n + "名）" : "3P（キャスト2名）";
+    opts.push({ group:g, code: party.kind === "guest" ? "3p_guest" : "3p_cast", label: lab, qty:1, price:PARTY_FEE, back:PARTY_BACK, manual:true });
+  }
   // 👙 キューティーの下着（バック無OP）
   if(store === "cutie" && typeof underSel !== "undefined" && underSel){ const u = UNDER.find(x => x[0] === underSel); if(u) opts.push({ group:g, code:"underwear", label:"下着（" + u[1] + "）", qty:1, price:u[2], back:0, manual:true }); }
   if($("f_xop_label").value.trim()){
@@ -1568,6 +1623,8 @@ function calc(){
   const optionTotal = opts.reduce((a,o)=>a + o.price*o.qty, 0);
   const optionBack = opts.reduce((a,o)=>a + o.back*o.qty, 0);
   const transport = Math.max(0, +$("f_transport").value||0), discount = Math.max(0, +$("f_discount").value||0);
+  // 👥 お客2名の3P：基本料金はお客さんの人数ぶん
+  if(typeof party !== "undefined" && party.kind === "guest"){ why.push(`お客2名の3P：基本料金 ${yen(price)}×2`); price = price * 2; }
   let total = price + admission + nomination + ext*extSet.price + date*dateSet.price + transport + optionTotal - discount;
   const pay = $("f_pay").value;
   const cardRate = (M.set.card || {}).rate || 1.15;
@@ -1762,7 +1819,7 @@ async function saveRes(){
       ...(() => { const lg = statusLog(editing ? (rows.find(x => x.id === editing.id) || editing) : null, $("f_status").value, by); return lg ? { memo_log: lg } : {}; })(),   // 備考に状態の経緯
     };
     if(editing) q(await sb.from("kb_reservations").update(row).eq("id", editing.id));
-    else { row.created_by = by; q(await sb.from("kb_reservations").insert(row)); }
+    else { row.created_by = by; const extra = partyExtraRows(row); q(await sb.from("kb_reservations").insert([row, ...extra])); if(extra.length) toast(`👥 ${extra.length + 1}人のキャストの予約を作りました`); }
     { const bd = $("f_day") && $("f_day").value; closeForm();
       // 日付を変えて保存したら、その日の画面にうつる
       if(bd && bd !== day){ $("day").value = bd; toast("保存しました🌸（" + Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) + " の画面にうつりました）"); } else toast("保存しました🌸"); }
@@ -1853,6 +1910,12 @@ recalc = function(){
   // 希望プレイを予約連絡に入れる
   const pw = $("f_play").value.trim();
   if(pw) $("msg").value = $("msg").value.replace(/(【バック無OP】[^\n]*)/, "$1\n【希望プレイ】" + pw);
+  // 👥 3P・4P：一緒に行くキャストを予約連絡に
+  if(party.kind === "cast"){
+    const all = editing ? [] : [$("f_cast").value, ...party.casts].filter(Boolean);
+    const line = editing ? (party.note || "👥 3P").replace(/^👥\s*/, "") : `キャスト${party.n}名${all.length > 1 ? "：" + all.map(castName).join("・") : ""}`;
+    $("msg").value = $("msg").value.replace(/(【コース】[^\n]*)/, "$1\n【" + (party.n === 3 ? "4P" : "3P") + "】" + line);
+  } else if(party.kind === "guest") $("msg").value = $("msg").value.replace(/(【コース】[^\n]*)/, "$1\n【3P】お客様2名");
   // 🧳 キューティー：女レ道具セットを持ち物として
   const kit = $("f_store").value === "cutie" ? dressKit(getDress()) : "";
   if(kit) $("msg").value = $("msg").value.replace(/(【バック無OP】[^\n]*(\n【希望プレイ】[^\n]*)?)/, "$1\n【持ち物：女レ道具セット】" + kit);
