@@ -290,6 +290,8 @@
   .rc-k{font-size:14px;white-space:nowrap;} .rc-k small{font-size:12px;color:var(--sub);} .rc-yen{color:#e5638c;font-size:15.5px;} .rc-top select{font-family:inherit;font-size:13px;padding:2px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;}
   .rc-more > summary{cursor:pointer;font-size:12.5px;font-weight:800;color:var(--sub);padding:4px 10px;list-style:none;} .rc-more > summary::before{content:"▶ ";font-size:10px;} .rc-more[open] > summary::before{content:"▼ ";}
   .rc-more[open] > summary{border-bottom:1.5px solid #F1E3E7;}
+  .rc-todo{font-size:12.5px !important;background:#FFF4E5 !important;border-color:#FFB547 !important;color:#8a5a00 !important;}
+  ul.bkl{list-style:none;margin:3px 0 0;padding:0;text-align:left;font-size:11.5px;font-weight:700;line-height:1.45;} ul.bkl li::before{content:"・";} ul.bkl li.dn{opacity:.5;text-decoration:line-through;}
   .rc-box{padding:8px 10px;border-right:1.5px solid #F1E3E7;font-size:14px;} .rc-box:last-child{border-right:none;}
   .rc-h{font-size:12px;font-weight:800;color:var(--sub);margin-bottom:4px;} .rc-row{margin:3px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
   .rc-row select,.rc-num{font-family:inherit;font-size:14px;padding:3px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;} .rc-num{width:56px;}
@@ -2791,7 +2793,10 @@ renderBoard = function(){
       seat = `<div class="seatbtns">🪑${[1, 2, 3, 4, 5].map(n=>{ const u = used.find(l=>l.seat === n); return `<button type="button" class="${mine && mine.seat === n ? "on" : ""}" ${u && u.cast_id !== cid ? "disabled" : ""} onclick="sitDown(${n},'${cid}')">${n}</button>`; }).join("")}
         ${mine ? `<button type="button" class="out" onclick="leaveSeat(${mine.id})">退席</button><small>${hm(mine.start_at)}〜</small>` : ""}</div>`;
     }
-    return `<div class="chipc ${cls}" data-cid="${cid}" data-st="${st}">【${esc(castLabel(x))}】${esc(sh)}${st === "gone" && gk ? `<small>（${gk}）</small>` : ""}${x.cd && x.cd.settled ? "<small>（精算済）</small>" : ""}${pill}${movingHtml(x)}${seat}</div>`;
+    // その子の今日の予約（何時から・場所・コース・お客さん）を箇条書きで
+    const bl = x.bks.filter(b=>!["cancel", "tobi"].includes(b.r.status)).sort((a, b)=>a.s - b.s)
+      .map(b=>`<li class="${b.r.status === "done" ? "dn" : ""}">${esc(hm(b.r.start_at))} ${esc(b.r.area || "")} ${esc(b.r.course || "")}${/^\d+$/.test(b.r.course || "") ? "分" : ""} ${esc((b.r.kb_customers || {}).name || "")}</li>`).join("");
+    return `<div class="chipc ${cls}" data-cid="${cid}" data-st="${st}">【${esc(castLabel(x))}】${esc(sh)}${st === "gone" && gk ? `<small>（${gk}）</small>` : ""}${x.cd && x.cd.settled ? "<small>（精算済）</small>" : ""}${pill}${bl ? `<ul class="bkl">${bl}</ul>` : ""}${movingHtml(x)}${seat}</div>`;
   };
   const th = c=>`<th class="${AREA_CLASS[c] || ""}">${esc(c)}${c === "鶯谷" ? ` <button type="button" class="logbtn" onclick="openSeatLog()">📜 ログ</button>` : ""}</th>`;
   el.innerHTML = `<table class="board"><tr><th class="corner"></th>${cols.map(th).join("")}</tr>`
@@ -3752,14 +3757,15 @@ function resCard(r){
   const nLog = logOf(r).length;
   return `<div class="rescard ${cx ? "cx" : ""}">
     <div class="rc-top">
-      ${ed ? `<input type="time" class="rc-time" value="${hm(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>
-      ${r.phone_draft ? `<span class="rc-draft" title="スマホで仮入力。PCで開いて確かめると取り入れます">📱仮入力</span>` : ""}<span class="rc-store">${r.dummy_name ? "🎭" + esc(r.dummy_name) + "・" : ""}${esc(storeLabel(r.store_key) || "")}</span>
       ${stSel}
+      ${ed ? `<input type="time" class="rc-time" value="${hm(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>
+      ${r.phone_draft ? `<span class="rc-draft" title="スマホで仮入力。PCで開いて確かめると取り入れます">📱仮入力</span>` : ""}${r.dummy_name ? `<span class="rc-store">🎭${esc(r.dummy_name)}</span>` : ""}
       <span class="rc-k">📍<b>${esc(r.area || "エリアなし")}</b></span>
       <span class="rc-k">${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""}${r.extension_count ? "＋延長" + r.extension_count : ""}</span>
       <span class="rc-k">総額 <b class="rc-yen">${yen(r.total)}</b><small>（${esc(PAY_LABEL[r.payment] || "")}）</small></span>
-      ${c.phone ? `<span class="rc-k tel">📞${esc(c.phone)}</span>` : ""}${c.ng ? `<span class="rc-k" style="color:#C62828;font-weight:800">⚠️NG客</span>` : ""}
+      <span class="rc-k">👤<b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${c.phone ? ` <span class="tel">📞${esc(c.phone)}</span>` : ""}</span>
       ${cardStep}${payUrl}${told}
+      ${(r.todos || []).filter(x => !x.done_at).map(x => `<button type="button" class="told rc-todo" onclick="event.stopPropagation();toggleTodo(${r.id},${(r.todos || []).indexOf(x)})">⏳ ${esc(x.text)}</button>`).join("")}
       <span style="flex:1"></span>
       <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ 開く</button>
     </div>
