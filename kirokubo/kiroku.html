@@ -295,6 +295,10 @@
   .rescard .rc-top select.stsel{padding:0 8px;font-size:14px;line-height:28px;border-radius:8px;}
   .rescard .rc-top .rc-time{padding:0 4px;line-height:28px;}
   .rc-2 select{font-family:inherit;font-size:13px;padding:2px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;}
+  .rc-dress{padding:4px 10px;background:#FFF0F7;border-bottom:1.5px solid #EAD7DD;font-size:13px;font-weight:700;color:#8a2a55;}
+  .wiggrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;max-width:420px}
+  .wigb{display:flex;gap:6px;align-items:center;font-family:inherit;font-size:13px;font-weight:800;padding:5px 8px;border:1.5px solid #F7C3DA;border-radius:10px;background:#fff;color:#5c4b4f;cursor:pointer}
+  .wigb .sw{width:12px;border-radius:3px;flex:none} .wigb.on{background:#e5638c;border-color:#e5638c;color:#fff}
   .rc-todo{font-size:12.5px !important;background:#FFF4E5 !important;border-color:#FFB547 !important;color:#8a5a00 !important;}
   ul.bkl{list-style:none;margin:3px 0 0;padding:0;text-align:left;font-size:11.5px;font-weight:700;line-height:1.45;} ul.bkl li::before{content:"・";} ul.bkl li.dn{opacity:.5;text-decoration:line-through;}
   .rc-box{padding:8px 10px;border-right:1.5px solid #F1E3E7;font-size:14px;} .rc-box:last-child{border-right:none;}
@@ -604,6 +608,20 @@
         <label id="nhWrap"><input type="checkbox" id="f_nh" onchange="recalc()"> キューティ：NH料金で取った</label>
         <label id="admWrap"><input type="checkbox" id="f_adm" onchange="recalc()"> 入会金あり（極門の新規）</label>
       </div>
+      <!-- 👗 キューティー：お客さんの女装（身長・体重・ウィッグ・洋服） -->
+      <div id="dressWrap" style="display:none;background:#FFF0F7;border:1.5px solid #F7C3DA;border-radius:12px;padding:8px 10px;margin-bottom:8px">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-weight:800;font-size:13.5px;color:#b0306a">👗 お客さんの女装
+          <a href="https://www.cutie-josou.com/system13.html" target="_blank" rel="noopener" style="font-size:12.5px">📖 スタイルブックを見る</a></div>
+        <div class="row2" style="margin-top:6px">
+          <div class="f"><label>身長（cm）</label><input type="number" id="f_dH" min="100" max="230" placeholder="例：172"></div>
+          <div class="f"><label>体重（kg）</label><input type="number" id="f_dW" min="30" max="200" placeholder="例：65"></div>
+        </div>
+        <div class="f" style="margin-top:6px"><label>ウィッグ（明るさ×長さ）</label><div id="f_wig" class="wiggrid"></div></div>
+        <div class="row2" style="margin-top:6px">
+          <div class="f"><label>洋服の希望（あれば）</label><input id="f_dCloth" maxlength="200" placeholder="例：セーラー服・ミニスカ"></div>
+          <div class="f"><label>スタイルブックの番号</label><input id="f_dBook" maxlength="100" placeholder="例：12、60"></div>
+        </div>
+      </div>
       <div id="courseInfo"></div>
       <div id="placePick"></div>
       <div class="row2" style="margin-top:10px">
@@ -867,6 +885,7 @@ function openForm(id){
   $("f_free").value = r.free_kind || "";
   $("f_ext").value = r.extension_count || 0; $("f_date").value = r.date_count || 0;
   $("f_nh").checked = !!r.nh_rate; $("f_adm").checked = (r.admission || 0) > 0;
+  setDress(r.dress);
   fillAreaSel(r.area || ""); $("f_address").value = r.address || "";
   setRadio("f_afw", r.af_wish || ""); setRadio("f_rafw", r.rev_af_wish || "");
   $("optDetails").open = false;
@@ -1074,7 +1093,26 @@ function storeOnlyFields(){
   const nh = store === "cutie", adm = store === "gokumon";
   $("nhWrap").style.display = nh ? "" : "none"; if(!nh) $("f_nh").checked = false;
   $("admWrap").style.display = adm ? "" : "none"; if(!adm) $("f_adm").checked = false;
+  $("dressWrap").style.display = nh ? "" : "none";   // 👗 キューティーは、お客さんの女装の欄
 }
+/* ---------- 👗 キューティー：お客さんの女装（kb_reservations.dress：{ h, w, wig:"黒ショート", cloth, book }。SQL 164） ---------- */
+let HAS_DRESS = false;
+Promise.resolve(sb.from("kb_reservations").select("dress").limit(1)).then(res=>{ HAS_DRESS = !!res && !res.error; }).catch(()=>{});
+const WIG_COL = [["黒", "#1d1a1a"], ["茶", "#7b4a2a"], ["金", "#c9a06a"]], WIG_LEN = ["ショート", "ミディアム", "ロング"];
+let wigSel = "";
+function paintWig(){
+  $("f_wig").innerHTML = WIG_COL.map(([c, col]) => WIG_LEN.map(l => { const v = c + l;
+    return `<button type="button" class="wigb ${wigSel === v ? "on" : ""}" onclick="wigSel=wigSel==='${v}'?'':'${v}';paintWig()"><span class="sw" style="background:${col};height:${l === "ショート" ? 10 : l === "ミディアム" ? 16 : 22}px"></span>${v}</button>`; }).join("")).join("");
+}
+function getDress(){
+  const n = id => { const v = $(id).value; return v === "" ? null : Number(v); };
+  const d = { h: n("f_dH"), w: n("f_dW"), wig: wigSel, cloth: $("f_dCloth").value.trim(), book: $("f_dBook").value.trim() };
+  return Object.values(d).some(v => v !== null && v !== "") ? d : null;
+}
+function setDress(d){
+  d = d || {}; $("f_dH").value = d.h ?? ""; $("f_dW").value = d.w ?? ""; wigSel = d.wig || ""; $("f_dCloth").value = d.cloth || ""; $("f_dBook").value = d.book || ""; paintWig();
+}
+function dressText(d){ if(!d) return ""; return [d.h ? d.h + "cm" : "", d.w ? d.w + "kg" : "", d.wig ? "ウィッグ" + d.wig : "", d.cloth ? "服：" + d.cloth : "", d.book ? "📖" + d.book : ""].filter(Boolean).join("・"); }
 
 /* ---------- AF・逆AF の希望（必ず聞く） ---------- */
 function radioVal(name){ const el = document.querySelector('input[name="' + name + '"]:checked'); return el ? el.value : ""; }
@@ -1688,6 +1726,7 @@ async function saveRes(){
       cast_notified_at: $("f_notified").checked ? ((editing && editing.cast_notified_at) || new Date().toISOString()) : null,
       cast_notified_by: $("f_notified").checked ? ((editing && editing.cast_notified_at && editing.cast_notified_by) || by) : "",
       visit_kind: visit, free_kind: c.free, nh_rate: $("f_nh").checked,
+      ...(HAS_DRESS ? { dress: c.store === "cutie" ? getDress() : null } : {}),
       start_at: s ? s.toISOString() : null, end_at: s ? new Date(s.getTime() + mins*60000).toISOString() : null,
       area: $("f_area").value.trim(), address: $("f_address").value.trim(), course: c.course,
       ...(("place_kind" in (rows[0] || editing || {})) || ($("f_place") && $("f_place").value) ? { place_kind: $("f_place") ? $("f_place").value : "" } : {}),
@@ -3775,6 +3814,7 @@ function resCard(r){
       <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ 開く</button>
     </div>
     ${cardStep || payUrl ? `<div class="rc-2">${cardStep}${payUrl}</div>` : ""}
+    ${r.dress && dressText(r.dress) ? `<div class="rc-dress">👗 ${esc(dressText(r.dress))}</div>` : ""}
     <details class="rc-more" ${rcOpen.has(r.id) ? "open" : ""} ontoggle="rcToggle(${r.id},this.open)"><summary>くわしく（お客さん・場所・OP・備考${nLog ? " " + nLog + "件" : ""}）</summary>
     <div class="rc-grid">
       <div class="rc-box"><div class="rc-h">💴 コース・料金</div>
