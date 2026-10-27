@@ -157,7 +157,7 @@ function rowsOf(c){
     status: ["cancel", "tobi"].includes(r.status) ? r.status : r.status === "done" ? "done" : "yet", card: r.payment !== "cash",
     memo: (r.memo_log || []).map(m=>m.text).join("\n"), castng: false, marks: null }));
   const b = c._hist.map(h=>({ src: "excel", row: h.src_row, date: h.biz_date, store: h.store_key ? storeLabel(h.store_key) : h.store_raw, cast: h.cast_id ? castLabel(h.cast_id) : h.cast_raw, cast_id: h.cast_id,
-    course: h.course, place: [h.area, h.place].filter(Boolean).join(" "), total: h.total, status: h.status, card: h.card, memo: h.memo, castng: h.cast_ng, marks: h.marks }));
+    course: h.course, place: [h.area, h.place].filter(Boolean).join(" "), total: h.total, status: h.status, card: h.card, memo: h.memo, castng: h.cast_ng, marks: h.marks, hid: h.id }));
   return a.concat(b).sort((x, y)=>String(y.date || "").localeCompare(String(x.date || "")));
 }
 function paintDetail(){
@@ -228,7 +228,7 @@ function histCard(r){
   const memoRed = r.marks && Object.keys(r.marks).some(k => /^font:#FF0000/i.test(k) && (r.marks[k] || []).includes("AB"));
   return `<div class="hc ${r.status} ${r.castng ? "castng" : ""}">
     <div class="hh"><b>${md(r.date) || "日付なし"}</b>${r.src === "excel" ? `<span class="tag">台帳${r.row ? " " + r.row + "行目" : ""}</span>` : ""}
-      ${st ? `<span class="badge ${r.status}">${esc(st)}</span>` : ""}${r.castng ? '<span class="badge tobi">🙅 キャストNG</span>' : ""}${r.card ? '<span class="tag">💳 カード</span>' : ""}${colorDots(r.marks)}</div>
+      ${st ? `<span class="badge ${r.status}">${esc(st)}</span>` : ""}${r.castng ? `<span class="badge tobi">🙅 キャストNG</span>${KB.CAN_EDIT && r.hid ? `<button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11.5px" onclick="histNgOff(${r.hid})">NGではない</button>` : ""}` : ""}${r.card ? '<span class="tag">💳 カード</span>' : ""}${colorDots(r.marks)}</div>
     <div class="hm">${[r.store, r.cast, r.course, r.place].filter(Boolean).map(esc).join("　・　")}${r.total ? "　・　" + yen(r.total) : ""}</div>
     ${r.memo ? `<div class="hmemo ${memoRed ? "red" : ""}">${hl(r.memo)}</div>` : ""}</div>`;
 }
@@ -273,8 +273,19 @@ async function addCastNg(){
   catch(e){ toast("足せませんでした（SQL 124 は実行ずみ？）：" + (e.message || e)); }
 }
 async function delCastNg(id){
-  if(!confirm("このキャストNGを消しますか？")) return;
-  try{ q(await sb.from("kb_cust_cast_ng").delete().eq("id", id)); openCustomer(cur.id); }catch(e){ toast("消せませんでした：" + (e.message || e)); }
+  if(!confirm("このキャストNGを外しますか？")) return;
+  const n = (cur._ngs || []).find(x => x.id === id);
+  try{
+    q(await sb.from("kb_cust_cast_ng").delete().eq("id", id));
+    // 過去の利用（エクセル）の「🙅 キャストNG」の印も外す（同じキャストの行）
+    if(n && n.cast_id) await sb.from("kb_cust_history").update({ cast_ng: false }).eq("customer_id", cur.id).eq("cast_id", n.cast_id).eq("cast_ng", true);
+    openCustomer(cur.id);
+  }catch(e){ toast("消せませんでした：" + (e.message || e)); }
+}
+// 過去の利用の1行だけ「キャストNGではない」に
+async function histNgOff(hid){
+  if(!confirm("この回の「🙅 キャストNG」の印を外しますか？")) return;
+  try{ q(await sb.from("kb_cust_history").update({ cast_ng: false }).eq("id", hid)); toast("印を外しました"); openCustomer(cur.id); }catch(e){ toast("できませんでした：" + (e.message || e)); }
 }
 // 自動で入れたものはまちがいがあるので、理由を直せる
 async function editCastNg(id){

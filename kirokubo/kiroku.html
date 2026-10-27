@@ -4201,7 +4201,12 @@ async function castNgDecide(id, isNg){
   const by = KB.operatorName();
   try{
     if(isNg) q(await sb.from("kb_cust_cast_ng").update({ ask: false, ask_done: true }).eq("id", id));
-    else q(await sb.from("kb_cust_cast_ng").delete().eq("id", id));
+    else {
+      q(await sb.from("kb_cust_cast_ng").delete().eq("id", id));
+      // 顧客台帳の過去の利用（エクセル）の「🙅 キャストNG」の印も外す
+      const custId = (curCustomer && curCustomer.id) || (editing && editing.customer_id), cid = $("f_cast").value;
+      if(custId && cid) await sb.from("kb_cust_history").update({ cast_ng: false }).eq("customer_id", custId).eq("cast_id", cid).eq("cast_ng", true);
+    }
     toast(isNg ? `🙅 キャストNGにしました（${by}）` : `キャストNGではない、にしました（${by}）`);
     custCastNg = null; await checkOldNomi(); renderCastChecks(M.casts.find(x => x.id === $("f_cast").value));
   }catch(e){ toast("できませんでした：" + (e.message || e)); }
@@ -4235,6 +4240,11 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .ngask{background:#FFF8E1;border:2px solid #F5B400;border-radius:12px;padding:8px 10px;margin:6px 0;font-size:13.5px;color:#6b4e00}
   .ngask .q{background:#fff;border-radius:8px;padding:6px 8px;margin:6px 0;white-space:pre-wrap;font-size:13px}
   .ngask .btn{margin:2px 4px 0 0}
+  .tobibox{background:#FFEBEE;border:2.5px solid #D32F2F;border-radius:12px;padding:8px 10px;margin:6px 0;color:#7f1d1d}
+  .tobibox .th{font-size:16px;font-weight:900;color:#C62828;margin-bottom:2px}
+  .tobibox .ti{border-top:1px dashed #F1A9AF;padding:5px 0;font-size:13.5px} .tobibox .ti:first-of-type{border-top:none}
+  .tobibox .tm{white-space:pre-wrap;background:#fff;border-radius:8px;padding:5px 8px;margin-top:3px;font-size:14px;font-weight:700;color:#3d1010}
+  .tobibox mark{background:#FFD54F;color:#5c3a00;border-radius:3px;padding:0 2px}
 </style>`);
 const __lookupCustomerON = lookupCustomer;
 lookupCustomer = async function(){
@@ -4247,23 +4257,30 @@ lookupCustomer = async function(){
 // ⚠️ 要注意：台帳エクセルの過去の利用（トビ・キャンセルの回数）と、キャストNGの一覧
 async function custCaution(custId){
   try{
-    const [h, n] = await Promise.all([
+    const [h, n, rt] = await Promise.all([
       sb.from("kb_cust_history").select("biz_date,status,cast_raw,memo,marks,cast_ng,src_row").eq("customer_id", custId).order("biz_date", { ascending: false }).limit(2000),
       sb.from("kb_cust_cast_ng").select("cast_id,cast_name,reason").eq("customer_id", custId),
+      sb.from("kb_reservations").select("biz_date,store_key,cast_id,memo_log,note").eq("customer_id", custId).eq("status", "tobi").eq("deleted", false).order("biz_date", { ascending: false }).limit(50),
     ]);
     if(!curCustomer || curCustomer.id !== custId || !$("custInfo")) return;
     const hs = (h.data || []), ngs = (n.data || []);
-    const cnt = s => hs.filter(x => x.status === s).length, lastOf = s => (hs.find(x => x.status === s && x.biz_date) || {}).biz_date;
+    const cnt = s => hs.filter(x => x.status === s).length;
     const fmt = d => d ? d.replace(/-/g, "/") : "";
-    const tobi = cnt("tobi"), cancel = cnt("cancel"), done = cnt("done");
+    const cancel = cnt("cancel"), done = cnt("done");
     const lines = [];
-    if(tobi) lines.push(`<div class="warn">⚠️ トビ ${tobi}回（最後 ${fmt(lastOf("tobi")) || "日付なし"}）</div>`);
+    // 🚨 トビ：記録簿とエクセルの全部を、備考（今後どうするか）つきで大きく出す
+    const tobis = [...(rt.data || []).map(r => ({ d: r.biz_date, who: storeLabel(r.store_key) + " " + castName(r.cast_id), memo: [r.note, ...(r.memo_log || []).map(m => m.text)].filter(Boolean).join("\n") })),
+                   ...hs.filter(x => x.status === "tobi").map(x => ({ d: x.biz_date, who: x.cast_raw || "", memo: x.memo || "", row: x.src_row }))]
+      .sort((a, b) => String(b.d || "").localeCompare(String(a.d || "")));
+    const NEXT = /(今後|次回|次から|次は|前払い|先払い|カード|出禁|要注意|注意|本人確認|確認してから|受けない|NG|ＮＧ|保留|様子見|ブラック)/g;
+    if(tobis.length) lines.push(`<div class="tobibox"><div class="th">🚨 トビ ${tobis.length}回</div>${tobis.map(t => `<div class="ti"><b>${fmt(t.d) || "日付なし"}</b> ${esc(t.who)}${t.row ? ` <small>（エクセル ${t.row}行目）</small>` : ""}
+        ${t.memo ? `<div class="tm">${esc(t.memo).replace(NEXT, '<mark>$1</mark>')}</div>` : `<div class="tm" style="color:#9C8B8F">（備考なし）</div>`}</div>`).join("")}</div>`);
     if(ngs.length) lines.push(`<div class="warn">🙅 キャストNG：${ngs.map(x => esc(x.cast_id ? castName(x.cast_id) : x.cast_name)).join("・")}（このキャストでは保存できません）</div>`);
     if(cancel >= 2) lines.push(`<div class="warn" style="background:#FFF6E5;border-color:#F3C77A;color:#8a5a00">⚠️ キャンセル ${cancel}回</div>`);
     // 何かあった回（キャンセル・トビ・流れた・キャストNG・色つき・NGや出禁などの言葉・長い備考）は、備考を全文で見せる（見落とさないように）
     const WORDS = /NG|ＮＧ|出禁|トビ|ﾄﾋﾞ|飛ん|飛ば|とんだ|クレーム|トラブル|警察|盗撮|暴力|薬|要注意|注意|しつこ|強要|キャンセル/;
     const colored = m => !!m && Object.keys(m).some(k => /^fill:#|^font:#/i.test(k) || k === "other_fill" || k === "red_cols");
-    const trouble = hs.filter(x => ["cancel", "tobi", "flowed"].includes(x.status) || x.cast_ng || colored(x.marks) || WORDS.test(x.memo || "") || (x.memo || "").length >= 40);
+    const trouble = hs.filter(x => x.status !== "tobi" && (["cancel", "flowed"].includes(x.status) || x.cast_ng || colored(x.marks) || WORDS.test(x.memo || "") || (x.memo || "").length >= 40));   // トビは上の🚨に出す
     const STL = { cancel: "キャンセル", tobi: "トビ", flowed: "流れた", done: "" };
     const hlw = s => esc(s).replace(/(NG|ＮＧ|出禁|トビ|飛んだ|飛ばれ|クレーム|盗撮|暴力|薬|警察|要注意)/g, '<b style="background:#E5484D;color:#fff;border-radius:4px;padding:0 3px">$1</b>');
     const tItem = x => `<div style="border-top:1px dashed #F1C9CF;padding:4px 0"><b>${fmt(x.biz_date) || "日付なし"}</b> ${esc(x.cast_raw || "")} ${STL[x.status] ? `<b style="color:#C62828">【${STL[x.status]}】</b>` : ""}${x.cast_ng ? " 🙅" : ""}${colored(x.marks) ? " 🎨" : ""}${x.src_row ? ` <small style="color:#8a6d3b">（エクセル ${x.src_row}行目）</small>` : ""}
