@@ -1642,8 +1642,8 @@ function calc(){
   const optionTotal = opts.reduce((a,o)=>a + o.price*o.qty, 0);
   const optionBack = opts.reduce((a,o)=>a + o.back*o.qty, 0);
   const transport = Math.max(0, +$("f_transport").value||0), discount = Math.max(0, +$("f_discount").value||0);
-  // 👥 お客2名の3P：基本料金はお客さんの人数ぶん
-  if(typeof party !== "undefined" && party.kind === "guest"){ why.push(`お客2名の3P：基本料金 ${yen(price)}×2`); price = price * 2; }
+  // 👥 お客2名の3P：指名料こみの基本額をお客さんの人数ぶん（例 90分：40,000＋4,000＋3P 3,000）
+  if(typeof party !== "undefined" && party.kind === "guest"){ why.push(`お客2名の3P：基本料金 ${yen(price)}・指名料 ${yen(nomination)} を×2`); price = price * 2; nomination = nomination * 2; }
   let total = price + admission + nomination + ext*extSet.price + date*dateSet.price + transport + optionTotal - discount;
   const pay = $("f_pay").value;
   const cardRate = (M.set.card || {}).rate || 1.15;
