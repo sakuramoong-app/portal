@@ -930,7 +930,7 @@ function onStore(r){
   if(keep && list.some(p=>p.course===keep)) $("f_course").value = keep;
   // オプション
   const sel = (r && r.options) || [];
-  $("f_opts").innerHTML = M.options.filter(o=>o.store_group===g).map(o=>{
+  $("f_opts").innerHTML = M.options.filter(o=>o.store_group===g && !/^[34]P/.test(o.label || "")).map(o=>{   // 3P・4Pは上の「👥 3P・4P」で選ぶ
     const s = sel.find(x=>x.code===o.code && x.group===g);
     const qty = s ? s.qty : 1;
     // AF・逆AF は上の「必ず聞く」で選ぶので、ここには出さない（チェックだけ自動）
@@ -1668,6 +1668,7 @@ function calc(){
         else { courseBack = 0; why.push(`⚠️ バック表に「${r2}・${key}」がありません → 「💗 キャストの報酬」でこのコースのバックを入れてください`); }
       }
       else why.push(`コースのバック：${rank}・${key} → ${yen(courseBack)}`);
+      if(courseBack && typeof party !== "undefined" && party.kind === "guest"){ courseBack = courseBack * 2; why.push(`お客2名の3P：コースのバックも×2 → ${yen(courseBack)}`); }
     }else why.push("⚠️ このお店用のランクが台帳にありません → 報酬を手で入れてください");
   }
   let extra = ext*extSet.back + date*dateSet.back;
