@@ -608,11 +608,6 @@
         <label id="nhWrap"><input type="checkbox" id="f_nh" onchange="recalc()"> キューティ：NH料金で取った</label>
         <label id="admWrap"><input type="checkbox" id="f_adm" onchange="recalc()"> 入会金あり（極門の新規）</label>
       </div>
-      <!-- 👥 3P・4P：キャスト複数（保存すると、キャストごとの予約を自動で作る）／お客2名 -->
-      <div id="partyWrap" style="background:#F2F8FF;border:1.5px solid #9cc6ee;border-radius:12px;padding:6px 10px;margin-bottom:8px">
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b style="font-size:13px;color:#1f5d99">👥 3P・4P</b><div class="chips" id="partyChips"></div></div>
-        <div id="partyCasts" style="margin-top:6px"></div>
-      </div>
       <!-- 👗 キューティー：お客さんの女装（身長・体重・ウィッグ・洋服） -->
       <div id="dressWrap" style="display:none;background:#FFF0F7;border:1.5px solid #F7C3DA;border-radius:12px;padding:8px 10px;margin-bottom:8px">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-weight:800;font-size:13.5px;color:#b0306a">👗 お客さんの女装
@@ -664,6 +659,12 @@
       <div class="row1"><div class="f"><label>希望プレイ（無料の範囲）</label><input id="f_play" maxlength="200" placeholder="例：潮吹き・言葉責め など" oninput="recalc()"></div></div>
       <details id="optDetails" style="margin-bottom:10px">
         <summary style="cursor:pointer;font-weight:800;font-size:14px;padding:4px 0">有料オプション・延長・デート<span id="optCount"></span></summary>
+        <!-- 👥 3P・4P：キャスト複数（保存すると、キャストごとの予約を自動で作る）／お客2名。ふだんはたたんでおく -->
+        <details id="partyWrap" style="background:#F2F8FF;border:1.5px solid #9cc6ee;border-radius:12px;padding:6px 10px;margin:6px 0 10px">
+          <summary style="cursor:pointer;font-weight:800;font-size:13.5px;color:#1f5d99">👥 3P・4P（キャスト複数・お客2名）<span id="partyNow"></span></summary>
+          <div class="chips" id="partyChips" style="margin-top:6px"></div>
+          <div id="partyCasts" style="margin-top:6px"></div>
+        </details>
         <!-- 延長・デート：注文ごとに足していく（経緯が残る） -->
         <div style="background:#F3F7FF;border:1.5px solid #B9CDF2;border-radius:12px;padding:8px 10px;margin:6px 0 10px">
           <div style="font-weight:800;font-size:13.5px;color:#2b5aa8;margin-bottom:6px">⏱ 延長・デート（追加の注文ごとに足す）</div>
@@ -1115,13 +1116,31 @@ let party = { kind: "", n: 2, casts: [] };   // kind：""／"cast"／"guest"
 function paintParty(){
   const opt = [["", "なし"], ["cast2", "キャスト2名（3P）"], ["cast3", "キャスト3名（4P）"], ["guest", "お客2名（3P）"]];
   const cur = party.kind === "cast" ? "cast" + party.n : party.kind;
+  $("partyNow").textContent = party.kind ? "：" + (opt.find(o => o[0] === cur) || [])[1] : "";
+  if(party.kind){ $("partyWrap").open = true; $("optDetails").open = true; }
   $("partyChips").innerHTML = opt.map(([k, l]) => `<button type="button" class="chip ${cur === k ? "on" : ""}" ${editing && party.kind === "cast" && k !== cur ? "disabled" : ""} onclick="setParty('${k}')">${l}</button>`).join("");
   if(party.kind !== "cast"){ $("partyCasts").innerHTML = party.kind === "guest" ? `<div style="font-size:12px;color:#1f5d99">基本料金×2＋3P料金 ${yen(PARTY_FEE)}（バック ${yen(PARTY_BACK)}）</div>` : ""; return; }
   if(editing){ $("partyCasts").innerHTML = `<div style="font-size:12px;color:#1f5d99">${esc(party.note || "一緒に行ったキャストの予約は、それぞれの枠にあります")}（直すときは、その子の予約も開いて直してください）</div>`; return; }
   const opts = $("f_cast").innerHTML;
   $("partyCasts").innerHTML = `<div style="font-size:12px;color:#1f5d99;margin-bottom:4px">上の「キャスト」＋一緒に行くキャスト。保存すると、<b>キャストごとの予約</b>（その子の料金・バック・3P料金 ${yen(PARTY_FEE)}）を自動で作ります</div>`
-    + Array.from({ length: party.n - 1 }, (_, i) => `<div class="f" style="margin-top:4px"><label>👤 一緒に行くキャスト${party.n > 2 ? " " + (i + 1) : ""}</label><select class="pcast" data-i="${i}" onchange="party.casts[${i}]=this.value;recalc()">${opts}</select></div>`).join("");
+    + Array.from({ length: party.n - 1 }, (_, i) => `<div class="f" style="margin-top:4px"><label>👤 一緒に行くキャスト${party.n > 2 ? " " + (i + 1) : ""}</label><select class="pcast" data-i="${i}" onchange="party.casts[${i}]=this.value;paintParty();recalc()">${opts}</select></div>`).join("")
+    + `<div class="f" style="margin-top:6px"><label>💴 代表してお金をもらう子</label><select id="partyRep" onchange="party.rep=this.value;recalc()"></select></div>`;
   document.querySelectorAll("#partyCasts .pcast").forEach(s => { s.value = party.casts[Number(s.dataset.i)] || ""; });
+  partyRepPaint();
+}
+function partyMembers(){ return [$("f_cast").value, ...party.casts].filter(Boolean); }
+function partyRepPaint(){
+  const el = $("partyRep"); if(!el) return;
+  const ms = partyMembers();
+  if(!ms.includes(party.rep)) party.rep = ms[0] || "";
+  el.innerHTML = ms.map(id => `<option value="${id}">${esc(castName(id))}</option>`).join("") || `<option value="">（キャストを選ぶ）</option>`;
+  el.value = party.rep || "";
+}
+// 1人ずつの料金（その子で計算しなおす）
+function partyShares(){
+  const main = $("f_cast").value, ms = partyMembers(), out = ms.map(cid => { $("f_cast").value = cid; return { cid, total: calc().total }; });
+  $("f_cast").value = main;
+  return out;
 }
 function setParty(k){
   party.kind = k === "guest" ? "guest" : k ? "cast" : ""; party.n = k === "cast3" ? 3 : 2;
@@ -1915,6 +1934,15 @@ recalc = function(){
     const all = editing ? [] : [$("f_cast").value, ...party.casts].filter(Boolean);
     const line = editing ? (party.note || "👥 3P").replace(/^👥\s*/, "") : `キャスト${party.n}名${all.length > 1 ? "：" + all.map(castName).join("・") : ""}`;
     $("msg").value = $("msg").value.replace(/(【コース】[^\n]*)/, "$1\n【" + (party.n === 3 ? "4P" : "3P") + "】" + line);
+    // 💴 1人あたりと総額・代表してもらう子 → ほかの子に渡す額
+    if(!editing && all.length > 1 && last.pay === "cash"){
+      partyRepPaint();
+      const sh = partyShares(), sum = sh.reduce((a, x) => a + x.total, 0), rep = party.rep || all[0];
+      const give = sh.filter(x => x.cid !== rep).map(x => `${castName(x.cid)}さんへ ${x.total.toLocaleString("ja-JP")}円`).join("、");
+      $("msg").value = $("msg").value.replace(/【料金総額】[^\n]*\n※[^\n]*/,
+        `【料金（1人あたり）】${sh.map(x => castName(x.cid) + " " + x.total.toLocaleString("ja-JP") + "円").join("／")}\n【料金総額】${sum.toLocaleString("ja-JP")}円\n` +
+        `※${castName(rep)}さんが総額${sum.toLocaleString("ja-JP")}円を代表して受け取り、プレイ終了後に ${give} を渡してください。盗難・貰い忘れに注意！`);
+    }
   } else if(party.kind === "guest") $("msg").value = $("msg").value.replace(/(【コース】[^\n]*)/, "$1\n【3P】お客様2名");
   // 🧳 キューティー：女レ道具セットを持ち物として
   const kit = $("f_store").value === "cutie" ? dressKit(getDress()) : "";
