@@ -295,6 +295,8 @@
   .rescard .rc-top select.stsel{padding:0 8px;font-size:14px;line-height:28px;border-radius:8px;}
   .rescard .rc-top .rc-time{padding:0 4px;line-height:28px;}
   .rc-2 select{font-family:inherit;font-size:13px;padding:2px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;}
+  .rc-mate{font-family:inherit;font-size:12.5px;font-weight:800;border:1.5px solid #9cc6ee;background:#F2F8FF;color:#1f5d99;border-radius:99px;padding:3px 10px;cursor:pointer;}
+  @keyframes rcflash{0%,100%{box-shadow:none}30%,70%{box-shadow:0 0 0 4px #6AA8E8}} .rescard.rcflash{animation:rcflash 1.6s ease-in-out 2;}
   .rc-dress{padding:4px 10px;background:#FFF0F7;border-bottom:1.5px solid #EAD7DD;font-size:13px;font-weight:700;color:#8a2a55;}
   .wiggrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;max-width:420px}
   .wigb{display:flex;gap:6px;align-items:center;font-family:inherit;font-size:13px;font-weight:800;padding:5px 8px;border:1.5px solid #F7C3DA;border-radius:10px;background:#fff;color:#5c4b4f;cursor:pointer}
@@ -897,7 +899,7 @@ function openForm(id){
   setDress(r.dress);
   // 👥 3P・4P：保存してある予約は、OP（3p_cast／3p_guest）から
   { const po = (r.options || []).find(o => o.code === "3p_cast" || o.code === "3p_guest");
-    party = { kind: po ? (po.code === "3p_guest" ? "guest" : "cast") : "", n: po && /4P/.test(po.label) ? 3 : 2, casts: [], af: [],
+    party = { kind: po ? (po.code === "3p_guest" ? "guest" : "cast") : "", n: po && /4P/.test(po.label) ? 3 : 2, casts: [], af: [], grp: (po && po.grp) || "",
       note: ((r.memo_log || []).find(m => /^👥/.test(m.text || "")) || {}).text || "" }; }
   fillAreaSel(r.area || ""); $("f_address").value = r.address || "";
   setRadio("f_afw", r.af_wish || ""); setRadio("f_rafw", r.rev_af_wish || "");
@@ -1179,7 +1181,21 @@ function partyExtraRows(row){
       cast_notified_at: null, cast_notified_by: "", ...("todos" in row ? { todos: [] } : {}), checks: [] });
   });
   $("f_cast").value = main; calc();
+  // いっしょの予約の印（3p_cast のOPに grp）。一覧で「👥 ○○の予約へ」で行き来する
+  const grp = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  [row, ...out].forEach(x => { x.options = (x.options || []).map(o => o.code === "3p_cast" ? Object.assign({}, o, { grp }) : o); });
   return out;
+}
+// この予約といっしょの3P・4Pの予約（grp が同じ。前に作ったものは、同じお客さん・同じ開始時刻）
+function partyMates(r){
+  const op = (r.options || []).find(o => o.code === "3p_cast"); if(!op) return [];
+  return rows.filter(x => x.id !== r.id && !x.deleted && (x.options || []).some(o => o.code === "3p_cast" && (op.grp ? o.grp === op.grp : x.customer_id === r.customer_id && x.start_at === r.start_at)));
+}
+function rcJump(id){
+  if($("viewList") && $("viewList").style.display === "none") showView("list");
+  const el = document.getElementById("rc-" + id); if(!el) { toast("その予約が一覧に見つかりません（並び・絞りを外してください）"); return; }
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
+  el.classList.remove("rcflash"); void el.offsetWidth; el.classList.add("rcflash");
 }
 const __openFormParty = openForm;
 openForm = function(){ const r = __openFormParty.apply(this, arguments); paintParty(); return r; };
@@ -1649,7 +1665,7 @@ function calc(){
   if(typeof party !== "undefined" && party.kind){
     const lab = party.kind === "guest" ? "3P（お客2名）" : party.n >= 3 ? "4P（キャスト" + party.n + "名）" : "3P（キャスト2名）";
     const gx = party.kind === "guest" ? 2 : 1;   // お客2名は 3P料金も×2（6,000円・バック 4,000円）
-    opts.push({ group:g, code: party.kind === "guest" ? "3p_guest" : "3p_cast", label: lab, qty:1, price:PARTY_FEE * gx, back:PARTY_BACK * gx, manual:true });
+    opts.push({ group:g, code: party.kind === "guest" ? "3p_guest" : "3p_cast", label: lab, qty:1, price:PARTY_FEE * gx, back:PARTY_BACK * gx, manual:true, ...(party.grp ? { grp: party.grp } : {}) });
   }
   // 👙 キューティーの下着（バック無OP）
   if(store === "cutie" && typeof underSel !== "undefined" && underSel){ const u = UNDER.find(x => x[0] === underSel); if(u) opts.push({ group:g, code:"underwear", label:"下着（" + u[1] + "）", qty:1, price:u[2], back:0, manual:true }); }
@@ -3936,7 +3952,8 @@ function resCard(r){
   const payUrl = r.payment === "card" && (r.card_step || "unsent") === "unsent" ? `<a class="payurl" href="${PAY_ADMIN_URL}" target="_blank" rel="noopener" title="${esc(PAY_ADMIN_URL)}">💳 決済URL</a>` : "";
   // 1〜2行に：時間・お店・状態・場所・コース・総額（支払い）・電話・カードの状態・伝えた。ほかは「くわしく」にたたむ
   const nLog = logOf(r).length;
-  return `<div class="rescard ${cx ? "cx" : ""}">
+  const mates = partyMates(r);
+  return `<div class="rescard ${cx ? "cx" : ""}" id="rc-${r.id}">
     <div class="rc-top">
       ${stSel}
       ${ed ? `<input type="time" class="rc-time" value="${hm(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>
@@ -3946,6 +3963,7 @@ function resCard(r){
       <span class="rc-k">総額 <b class="rc-yen">${yen(r.total)}</b><small>（${esc(PAY_LABEL[r.payment] || "")}）</small></span>
       <span class="rc-k">👤<b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${c.phone ? ` <span class="tel">📞${esc(c.phone)}</span>` : ""}</span>
       ${told}
+      ${mates.map(m => `<button type="button" class="rc-mate" onclick="rcJump(${m.id})">👥 ${esc(castName(m.cast_id))}の予約へ</button>`).join("")}
       ${(r.todos || []).filter(x => !x.done_at).map(x => `<button type="button" class="told rc-todo" onclick="event.stopPropagation();toggleTodo(${r.id},${(r.todos || []).indexOf(x)})">⏳ ${esc(x.text)}</button>`).join("")}
       <span style="flex:1"></span>
       <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ 開く</button>
