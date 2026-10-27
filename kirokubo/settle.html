@@ -243,6 +243,7 @@ function cardHtml(id, c){
     </details>`}
     <div class="acts">
       <button class="btn btn-ghost btn-sm" onclick="copyDetail('${id}')">📋 精算明細をコピー（LINE用）</button>
+      <button class="btn btn-ghost btn-sm" onclick="copyDetailImg('${id}')">🖼 画像でコピー</button>
       ${KB.CAN_EDIT ? (done
         ? `<button class="btn btn-ghost btn-sm" onclick="unsettle('${id}')">↩ 精算済をもどす</button>`
         : `<select id="pl-${id}">${PLACES.map(p=>`<option ${cd.settle_place === p ? "selected" : ""}>${p}</option>`).join("")}</select>
@@ -278,6 +279,62 @@ function unsettle(id){
   saveDay(id, { settled: false, settled_at: null, settle_snapshot: null });
 }
 
+/* ---------- 🖼 精算明細を画像でコピー（LINE に貼りつけ）。コピーできないブラウザは画像を保存 ---------- */
+function settleCanvas(id){
+  const c = calcCast(id), d = new Date(day + "T12:00:00Z");
+  const L = [];   // [左, 右, 種類]
+  c.all.forEach(r=>{
+    const off = r.status === "cancel" || r.status === "tobi";
+    L.push([`${hm(r.start_at)} ${storeLabel(r.store_key)} ${r.course}${/^\d+$/.test(r.course) ? "分" : ""}${r.extension_count ? " 延長" + r.extension_count : ""}`, off ? (r.status === "cancel" ? "キャンセル" : "トビ") : yen(backOf(r)), off ? "off" : "res"]);
+  });
+  L.push(["", "", "line"]);
+  L.push(["報酬", yen(c.reward)]);
+  if(c.option) L.push(["OP", yen(c.option)]);
+  if(c.transportBack) L.push(["交通費バック", "＋" + yen(c.transportBack)]);
+  c.plusItems.forEach(x=>{ if(Number(x.amount)) L.push([x.label || "プラス", "＋" + yen(x.amount)]); });
+  L.push(["雑費", "−" + yen(c.zappi)]);
+  c.minusItems.forEach(x=>{ if(Number(x.amount)) L.push([x.label || "マイナス", "−" + yen(x.amount)]); });
+  L.push(["", "", "line"]);
+  L.push(["本日のお給料", yen(c.takeHome), "big"]);
+  if(c.drop >= 0) L.push(["投函額", yen(c.drop), "big2"]); else L.push(["お店からお渡し（カード決済のため）", yen(-c.drop), "big2"]);
+  const S = 2, W = 560, PAD = 28, FONT = '"Hiragino Maru Gothic ProN","M PLUS Rounded 1c","Yu Gothic","Meiryo",sans-serif';
+  const hOf = k => k === "line" ? 18 : k === "big" || k === "big2" ? 44 : 34;
+  const H = 96 + L.reduce((a, x)=>a + hOf(x[2]), 0) + 64;
+  const cv = document.createElement("canvas"); cv.width = W * S; cv.height = H * S;
+  const g = cv.getContext("2d"); g.scale(S, S);
+  g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, W, H);
+  const grd = g.createLinearGradient(0, 0, W, 0); grd.addColorStop(0, "#ff9fb8"); grd.addColorStop(1, "#e5638c");
+  g.fillStyle = grd; g.fillRect(0, 0, W, 72);
+  g.fillStyle = "#fff"; g.font = `bold 15px ${FONT}`; g.fillText(`精算　${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]})`, PAD, 28);
+  g.font = `bold 24px ${FONT}`; g.fillText(`${castName(id)}さん`, PAD, 58);
+  let y = 96;
+  L.forEach(([l, v, k])=>{
+    const h = hOf(k);
+    if(k === "line"){ g.strokeStyle = "#F1C9D5"; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(PAD, y + 6); g.lineTo(W - PAD, y + 6); g.stroke(); g.setLineDash([]); y += h; return; }
+    const big = k === "big" || k === "big2";
+    g.font = `${big ? "bold 19px" : k === "res" || k === "off" ? "15px" : "bold 16px"} ${FONT}`;
+    g.fillStyle = k === "off" ? "#B9A9AD" : "#5C4B4F"; g.textAlign = "left"; g.fillText(l, PAD, y + h / 2 + 6);
+    g.font = `${big ? "bold 24px" : "bold 16px"} ${FONT}`;
+    g.fillStyle = k === "big" ? "#e5638c" : k === "big2" ? "#2f7fd0" : k === "off" ? "#B9A9AD" : "#5C4B4F"; g.textAlign = "right"; g.fillText(v, W - PAD, y + h / 2 + 7);
+    y += h;
+  });
+  g.textAlign = "center"; g.fillStyle = "#e5638c"; g.font = `bold 15px ${FONT}`; g.fillText("お疲れさまでした🌸", W / 2, y + 34);
+  return cv;
+}
+function copyDetailImg(id){
+  const cv = settleCanvas(id);
+  cv.toBlob(async b=>{
+    try{
+      if(!navigator.clipboard || !window.ClipboardItem) throw new Error("no");
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": b })]);
+      toast("🖼 精算を画像でコピーしました（LINEに貼りつけできます）");
+    }catch(e){
+      const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `精算_${day}_${castName(id)}.png`; a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+      toast("🖼 コピーできないので、画像を保存しました");
+    }
+  }, "image/png");
+}
 /* ---------- 精算明細（LINE に送る文） ---------- */
 function copyDetail(id){
   const c = calcCast(id), d = new Date(day + "T12:00:00Z");
