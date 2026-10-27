@@ -290,6 +290,8 @@
   .rc-k{font-size:14px;white-space:nowrap;} .rc-k small{font-size:12px;color:var(--sub);} .rc-yen{color:#e5638c;font-size:15.5px;} .rc-top select{font-family:inherit;font-size:13px;padding:2px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;}
   .rc-more > summary{cursor:pointer;font-size:12.5px;font-weight:800;color:var(--sub);padding:4px 10px;list-style:none;} .rc-more > summary::before{content:"▶ ";font-size:10px;} .rc-more[open] > summary::before{content:"▼ ";}
   .rc-more[open] > summary{border-bottom:1.5px solid #F1E3E7;}
+  .rc-2{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:4px 10px;background:#F7F0FF;border-bottom:1.5px solid #EAD7DD;font-size:13px;} .rc-2::before{content:"💳 カード";font-size:12px;font-weight:800;color:#6b4fa0;}
+  .rc-2 select{font-family:inherit;font-size:13px;padding:2px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;}
   .rc-todo{font-size:12.5px !important;background:#FFF4E5 !important;border-color:#FFB547 !important;color:#8a5a00 !important;}
   ul.bkl{list-style:none;margin:3px 0 0;padding:0;text-align:left;font-size:11.5px;font-weight:700;line-height:1.45;} ul.bkl li::before{content:"・";} ul.bkl li.dn{opacity:.5;text-decoration:line-through;}
   .rc-box{padding:8px 10px;border-right:1.5px solid #F1E3E7;font-size:14px;} .rc-box:last-child{border-right:none;}
@@ -3746,13 +3748,13 @@ function resCard(r){
   const stSel = ed
     ? `<select class="stsel st ${r.status}" onchange="quickStatus(${r.id},this.value)">${statusKeys(r.status).map(k=>`<option value="${k}" ${k === r.status ? "selected" : ""}>${STATUS[k]}</option>`).join("")}</select>`
     : `<span class="st ${r.status}">${STATUS[r.status] || r.status}</span>`;
-  const told = r.cast_notified_at
-    ? `<button class="told on" onclick="toggleNotified(${r.id})" title="押すと取り消し">✅ キャストに伝えた<small>${esc(r.cast_notified_by || "")} ${whenShort(r.cast_notified_at)}</small></button>`
-    : `<button class="told" onclick="toggleNotified(${r.id})">⚠️ キャストにまだ<small>押すと「伝えた」</small></button>`;
+  const told = r.cast_notified_at   // 押すと「キャストまだ」⇔「キャストOK」（伝えたか）
+    ? `<button class="told on" onclick="toggleNotified(${r.id})" title="${esc(r.cast_notified_by || "")} ${whenShort(r.cast_notified_at)}に伝えた。押すと取り消し">✅ キャストOK</button>`
+    : `<button class="told" onclick="toggleNotified(${r.id})" title="キャストに伝えたら押す">⚠️ キャストまだ</button>`;
   const ops = (r.options || []).filter(o=>!["af", "gyakuaf"].includes(o.code)).map(o=>o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・");
   const afw = [r.af_wish === "yes" ? "AF" : "", r.rev_af_wish === "yes" ? "逆AF" : ""].filter(Boolean).join("・");
   const cardStep = r.payment !== "cash" ? cardSel(r).replace(/^<br>/, "") : "";
-  const payUrl = r.payment === "card" && (r.card_step || "unsent") === "unsent" ? `<a class="payurl" href="${PAY_ADMIN_URL}" target="_blank" rel="noopener">💳 決済URLを作る（${esc(PAY_ADMIN_URL)}）</a>` : "";
+  const payUrl = r.payment === "card" && (r.card_step || "unsent") === "unsent" ? `<a class="payurl" href="${PAY_ADMIN_URL}" target="_blank" rel="noopener" title="${esc(PAY_ADMIN_URL)}">💳 決済URL</a>` : "";
   // 1〜2行に：時間・お店・状態・場所・コース・総額（支払い）・電話・カードの状態・伝えた。ほかは「くわしく」にたたむ
   const nLog = logOf(r).length;
   return `<div class="rescard ${cx ? "cx" : ""}">
@@ -3764,11 +3766,12 @@ function resCard(r){
       <span class="rc-k">${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""}${r.extension_count ? "＋延長" + r.extension_count : ""}</span>
       <span class="rc-k">総額 <b class="rc-yen">${yen(r.total)}</b><small>（${esc(PAY_LABEL[r.payment] || "")}）</small></span>
       <span class="rc-k">👤<b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${c.phone ? ` <span class="tel">📞${esc(c.phone)}</span>` : ""}</span>
-      ${cardStep}${payUrl}${told}
+      ${told}
       ${(r.todos || []).filter(x => !x.done_at).map(x => `<button type="button" class="told rc-todo" onclick="event.stopPropagation();toggleTodo(${r.id},${(r.todos || []).indexOf(x)})">⏳ ${esc(x.text)}</button>`).join("")}
       <span style="flex:1"></span>
       <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ 開く</button>
     </div>
+    ${cardStep || payUrl ? `<div class="rc-2">${cardStep}${payUrl}</div>` : ""}
     <details class="rc-more" ${rcOpen.has(r.id) ? "open" : ""} ontoggle="rcToggle(${r.id},this.open)"><summary>くわしく（お客さん・場所・OP・備考${nLog ? " " + nLog + "件" : ""}）</summary>
     <div class="rc-grid">
       <div class="rc-box"><div class="rc-h">💴 コース・料金</div>
