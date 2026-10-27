@@ -691,7 +691,7 @@
     <div class="step">
       <h3><span class="n">4</span>総額のご案内</h3>
       <div class="row1"><div class="f"><label>支払い方法<span class="req">必須</span></label><div id="f_payChips" style="display:none"></div>
-        <select id="f_pay" style="max-width:220px" onchange="recalc()"><option value="">（選ぶ）</option><option value="cash">現金</option><option value="card">カード（×1.15）</option><option value="card_paid">カード精算済</option></select></div></div>
+        <select id="f_pay" style="max-width:220px" onchange="recalc()"><option value="">（選ぶ）</option><option value="cash">現金</option><option value="card">カード（×1.15）</option></select></div></div>
       <div class="calc" id="calc"></div>
       <div class="row1" style="margin-top:8px"><div class="f"><label>割引（円）・割引の名前</label>
         <div style="display:flex;gap:6px"><input type="number" id="f_discount" min="0" value="0" oninput="recalc()" style="max-width:140px"><input id="f_discnote" placeholder="例：口コミ割" maxlength="60"></div></div></div>
@@ -905,7 +905,7 @@ function openForm(id){
   setRadio("f_afw", r.af_wish || ""); setRadio("f_rafw", r.rev_af_wish || "");
   $("optDetails").open = false;
   $("f_transport").value = r.transport || 0; $("f_discount").value = r.discount || 0; $("f_discnote").value = r.discount_note || "";
-  $("f_pay").value = id ? (r.payment || "cash") : ""; $("f_confirm").value = r.confirm_call || ""; $("f_note").value = r.note || "";
+  $("f_pay").value = id ? (r.payment === "card_paid" ? "card" : (r.payment || "cash")) : ""; $("f_confirm").value = r.confirm_call || ""; $("f_note").value = r.note || "";
   visit = id ? (r.visit_kind || "new") : ""; mediaSel = (r.media || []).slice();
   document.querySelectorAll("#formBg .miss").forEach(el=>el.classList.remove("miss"));
   const c = r.kb_customers || {};
@@ -1870,7 +1870,7 @@ async function saveRes(){
       ...(HAS_EXT_ORDERS ? { ext_orders: extOrders } : {}),
       base_price: c.price, admission: c.admission, nomination_fee: c.nomination, extension_fee: c.extFee + c.dateFee,
       transport: c.transport, option_total: c.optionTotal, discount: c.discount, discount_note: $("f_discnote").value.trim(),
-      total: c.total, payment: c.pay, card_total: c.pay === "cash" ? 0 : c.total,
+      total: c.total, payment: c.pay === "card" && editing && (editing.card_step === "paid" || editing.payment === "card_paid") ? "card_paid" : c.pay, card_total: c.pay === "cash" ? 0 : c.total,
       course_back: c.courseBack, option_back: c.optionBack, extra_back: c.extra,
       back_override: ovRaw === "" ? null : Number(ovRaw),
       ...(("back_override_note" in (rows[0] || editing || {})) || ovRaw !== "" ? { back_override_note: ovRaw === "" ? "" : backOvNote.trim() } : {}),
@@ -1937,7 +1937,7 @@ renderList = function(){
 };
 
 /* ---------- 支払い方法のボタン ---------- */
-const PAYS = [["cash", "現金"], ["card", "カード（×1.15）"], ["card_paid", "カード済み"]];
+const PAYS = [["cash", "現金"], ["card", "カード（×1.15）"]];   // 決済したかは、本日のキャスト一覧のカードのプルダウンで
 function renderPayChips(){
   const v = $("f_pay").value;   // 新しい受付は「まだ選んでいない」（必須）
   $("f_payChips").innerHTML = PAYS.map(([k, l])=>`<button type="button" class="chip ${v === k ? "on" : ""}" onclick="setPay('${k}')">${l}</button>`).join("");
@@ -2449,7 +2449,7 @@ function cardHtml(id, c){
       ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
     <table class="res"><tr><th>時間</th><th>店舗</th><th>コース</th><th class="money">総額</th><th class="money">報酬</th></tr>${res}</table>
     ${c.why.length ? `<div class="note2">🧮 ${c.why.map(esc).join("<br>")}</div>` : ""}
-    ${c.cardUnconfirmed ? `<div class="warn" style="margin:6px 0">⚠️ お支払いが「カード」のままの予約が ${c.cardUnconfirmed}件あります。カード決済の完了を確認して、受付で「カード精算済」にしてください。</div>` : ""}
+    ${c.cardUnconfirmed ? `<div class="warn" style="margin:6px 0">⚠️ お支払いが「カード」のままの予約が ${c.cardUnconfirmed}件あります。カード決済の完了を確認して、本日のキャスト一覧のカードのプルダウンで「✅ 決済済み」にしてください。</div>` : ""}
     <div class="scalc">
       <span class="k">① 報酬</span><span class="v">${yen(c.reward)}</span>
       <span class="k">OP（バック有）</span><span class="v">${yen(c.option)}</span>
@@ -3364,7 +3364,8 @@ function cardSel(r){
 }
 async function setCardStep(id, v){
   const l = (CARD_STEP.find(x=>x[0] === v) || [])[1] || v;
-  if(await pushLog(id, "カード：" + l, { card_step: v })){ toast("カード：" + l); renderList(); }
+  const rr = rows.find(x=>x.id === id), pay = v === "paid" ? "card_paid" : (rr && rr.payment === "card_paid" ? "card" : null);   // 決済済み＝カード精算済（精算で使う）
+  if(await pushLog(id, "カード：" + l, Object.assign({ card_step: v }, pay ? { payment: pay } : {}))){ toast("カード：" + l); renderList(); }
 }
 
 /* ---------- 🚫 キャンセル・トビ（売上には入れない。あったことは見えるように） ---------- */
@@ -4042,7 +4043,7 @@ function resCard(r){
           延長 ${ed ? `<input type="number" min="0" class="rc-num" value="${r.extension_count || 0}" onchange="qExt(${r.id},this.value)">` : (r.extension_count || 0)}回
           ${r.free_kind ? `<small>${esc(FREE_SUFFIX[r.free_kind] || "")}</small>` : ""}</div>
         <div class="rc-row"><small>OP：${esc(ops || "なし")}${afw ? "　希望：" + esc(afw) : ""}</small> ${ed ? `<button type="button" class="mini" onclick="openForm(${r.id})">OPを直す</button>` : ""}</div>
-        <div class="rc-row">支払い ${ed ? `<select onchange="qPay(${r.id},this.value)">${Object.keys(PAY_LABEL).map(k=>`<option value="${k}" ${k === r.payment ? "selected" : ""}>${PAY_LABEL[k]}</option>`).join("")}</select>` : esc(PAY_LABEL[r.payment] || "")}</div>
+        <div class="rc-row">支払い ${ed ? `<select onchange="qPay(${r.id},this.value)">${["cash", "card"].map(k=>`<option value="${k}" ${k === (r.payment === "card_paid" ? "card" : r.payment) ? "selected" : ""}>${PAY_LABEL[k]}</option>`).join("")}</select>` : esc(PAY_LABEL[r.payment] || "")}</div>
       </div>
       <div class="rc-box"><div class="rc-h">👤 お客さん</div>
         <div class="rc-row"><b>${c.ng ? "⚠️" : ""}${esc(c.name || "（名前なし）")}</b> <small>${(VISIT.find(v=>v[0] === r.visit_kind) || [])[1] || ""}</small></div>
