@@ -1332,7 +1332,13 @@ function renderCastChecks(c){
       <div class="q">${esc(custNg.reason || "")}</div>
       <button type="button" class="btn btn-danger btn-sm" onclick="castNgDecide(${custNg.id},true)">🙅 ${esc(castName(c.id))}はNG（受けない）</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="castNgDecide(${custNg.id},false)">関係ない（NGではない）</button></div>`;
-  } else if(custNg){ longNg = true; warn.unshift(`🙅 このお客さんは、このキャストNGです${custNg.reason ? "（" + custNg.reason + "）" : ""}。別のキャストにしてください`); }
+  } else if(custNg){   // たしかなNGでも、自動で入れたものはまちがいがあるので、外す・理由を直すができる
+    longNg = true;
+    askHtml = `<div class="ngask" style="background:#FFE8EC;border-color:#E5486C;color:#B0213F">🙅 <b>このお客さんは、${esc(castName(c.id))}NGです。別のキャストにしてください</b>
+      ${custNg.reason ? `<div class="q">${esc(custNg.reason)}</div>` : ""}
+      ${custNg.id ? `<button type="button" class="btn btn-ghost btn-sm" onclick="castNgEdit(${custNg.id})">✏️ 理由を直す</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="castNgUndo(${custNg.id})">NGを外す（まちがいだった）</button>` : ""}</div>`;
+  }
   // 🎭 ダミー：このお客さんが前にこのダミー名で会った子（実際に行ったキャスト）以外では行けない（「あの時の子じゃない」になるので）
   const dmNow = isDummyStore($("f_store").value) && $("f_dummy") ? $("f_dummy").value : "";
   if(dmNow && Array.isArray(custPast)){
@@ -1408,7 +1414,9 @@ async function lookupCustomer(keepName){
     $("custInfo").innerHTML = (c.ng && c.ng_ask ? `<div class="ngask">🤔 <b>出禁・店NG？</b>（台帳エクセルの備考から見分けました。条件つきの書き方なので、内勤が決めてください）<div class="q">${esc(c.ng_reason || "")}</div>
         <button type="button" class="btn btn-danger btn-sm" onclick="custNgDecide(${c.id},true)">⚠️ NG客（受けない）</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="custNgDecide(${c.id},false)">NGではない（受けてOK）</button></div>`
-      : c.ng ? `<div class="warn">⚠️ NG客です：${esc(c.ng_reason||"理由なし")}</div>` : "") +
+      : c.ng ? `<div class="warn">⚠️ NG客です：${esc(c.ng_reason||"理由なし")}
+          <div style="margin-top:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="custNgReason(${c.id})">✏️ 理由を直す</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="if(confirm('NG客を外しますか？（まちがいだったとき）'))custNgDecide(${c.id},false)">NGを外す（まちがいだった）</button></div></div>` : "") +
       // 履歴は1回ずつ1行で、大きめ・濃いめに（受付でいちばん大事なので）
       `<div class="custhist"><div class="ch-head">📋 これまで ${pastAll.length}件${pastAll.length > 10 ? "（新しい10件）" : ""}</div>
         ${past.map(p => { const x = p.status === "cancel" ? "キャンセル" : p.status === "tobi" ? "トビ" : "";
@@ -4207,6 +4215,21 @@ async function custNgDecide(id, isNg){
     toast(isNg ? `⚠️ NG客にしました（${by}）` : `NGではない、にしました（${by}）`);
     lookupCustomer(true);
   }catch(e){ toast("できませんでした：" + (e.message || e)); }
+}
+async function castNgEdit(id){
+  const cur = (custCastNg && custCastNg.id === id && custCastNg.reason) || "";
+  const v = prompt("キャストNGの理由（直して OK）", cur); if(v === null) return;
+  try{ q(await sb.from("kb_cust_cast_ng").update({ reason: v.trim(), by_name: KB.operatorName() }).eq("id", id)); toast("理由を直しました"); custCastNg = null; await checkOldNomi(); renderCastChecks(M.casts.find(x => x.id === $("f_cast").value)); }
+  catch(e){ toast("できませんでした：" + (e.message || e)); }
+}
+async function castNgUndo(id){
+  if(!confirm("このキャストNGを外しますか？（まちがいだったとき。顧客台帳からも消えます）")) return;
+  castNgDecide(id, false);
+}
+async function custNgReason(id){
+  const v = prompt("NG客の理由（直して OK）", (curCustomer && curCustomer.ng_reason) || ""); if(v === null) return;
+  try{ q(await sb.from("kb_customers").update({ ng_reason: v.trim() }).eq("id", id)); if(curCustomer) curCustomer.ng_reason = v.trim(); toast("理由を直しました"); lookupCustomer(true); }
+  catch(e){ toast("できませんでした：" + (e.message || e)); }
 }
 document.head.insertAdjacentHTML("beforeend", `<style>
   .ngask{background:#FFF8E1;border:2px solid #F5B400;border-radius:12px;padding:8px 10px;margin:6px 0;font-size:13.5px;color:#6b4e00}

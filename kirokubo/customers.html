@@ -198,7 +198,7 @@ function paintDetail(){
 
     <div class="csec"><h3>🙅 キャストごとのNG（このキャストには付けない）</h3>
       ${c._ngs.length ? c._ngs.map(n=>`<div class="pl" ${n.ask ? 'style="background:#FFF8E1;border-radius:8px"' : ""}><b>${n.ask ? "🤔 " : ""}${esc(n.cast_id ? castLabel(n.cast_id) : n.cast_name)}</b><span>${esc(n.reason || "")}</span><span class="src">${n.source === "excel" ? "台帳エクセルより" : esc(n.by_name || "")}${n.ask ? "・<b>要確認</b>（NG？関係ない？）" : ""}</span>
-        ${KB.CAN_EDIT ? (n.ask ? `<button class="btn btn-danger btn-sm" onclick="castNgOk(${n.id})">🙅 NG</button><button class="btn btn-ghost btn-sm" onclick="delCastNg(${n.id})">関係ない（消す）</button>` : `<button class="btn btn-danger btn-sm" onclick="delCastNg(${n.id})">消す</button>`) : ""}</div>`).join("") : `<div class="src">なし</div>`}
+        ${KB.CAN_EDIT ? (n.ask ? `<button class="btn btn-danger btn-sm" onclick="castNgOk(${n.id})">🙅 NG</button><button class="btn btn-ghost btn-sm" onclick="delCastNg(${n.id})">関係ない（消す）</button>` : `<button class="btn btn-ghost btn-sm" onclick="editCastNg(${n.id})">✏️ 直す</button><button class="btn btn-danger btn-sm" onclick="delCastNg(${n.id})">外す</button>`) : ""}</div>`).join("") : `<div class="src">なし</div>`}
       ${KB.CAN_EDIT ? `<div class="row" style="margin-top:6px"><select id="ng_cast" style="font-family:inherit;padding:6px;border-radius:8px;border:1.5px solid var(--line)"><option value="">キャストを選ぶ</option>${M.casts.filter(x=>x.status !== "left").map(x=>`<option value="${x.id}">${esc(x.official_name || x.temp_name)}</option>`).join("")}</select>
         <input id="ng_reason" placeholder="理由" maxlength="300" style="flex:1;min-width:140px;font-family:inherit;padding:6px 8px;border-radius:8px;border:1.5px solid var(--line)">
         <button class="btn btn-ghost btn-sm" onclick="addCastNg()">＋ 足す</button></div>` : ""}
@@ -275,6 +275,12 @@ async function addCastNg(){
 async function delCastNg(id){
   if(!confirm("このキャストNGを消しますか？")) return;
   try{ q(await sb.from("kb_cust_cast_ng").delete().eq("id", id)); openCustomer(cur.id); }catch(e){ toast("消せませんでした：" + (e.message || e)); }
+}
+// 自動で入れたものはまちがいがあるので、理由を直せる
+async function editCastNg(id){
+  const n = (cur._ngs || []).find(x => x.id === id); if(!n) return;
+  const v = prompt("キャストNGの理由（直して OK）", n.reason || ""); if(v === null) return;
+  try{ q(await sb.from("kb_cust_cast_ng").update({ reason: v.trim(), by_name: KB.operatorName() }).eq("id", id)); toast("理由を直しました"); openCustomer(cur.id); }catch(e){ toast("できませんでした：" + (e.message || e)); }
 }
 // 🤔 要確認（SQL 162）を決める
 async function castNgOk(id){
