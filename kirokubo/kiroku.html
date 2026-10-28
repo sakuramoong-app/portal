@@ -440,15 +440,10 @@
     <div class="sum" id="sum"></div>
     <!-- ＋ 新規予約のタブ：🔍 時間で探す・👥 キャストで絞る・🎯 希望プレイで絞る のどれか1つ（結果は下の一覧に） -->
     <div id="sharedFilter" style="display:none">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:4px 0 8px">
-        <b style="font-size:13px;color:var(--sub)">どれで探す？</b>
-        <div class="chips" id="nfModes">
-          <button type="button" class="chip" data-m="time" onclick="nfMode('time')">🔍 時間で探す</button>
-          <button type="button" class="chip" data-m="cast" onclick="nfMode('cast')">👥 キャストで絞る</button>
-          <button type="button" class="chip" data-m="play" onclick="nfMode('play')">🎯 希望プレイで絞る</button></div>
-        <span style="flex:1"></span>
-        <button type="button" class="btn btn-primary btn-sm" onclick="openForm(null)">＋ 受付を開く（キャスト未定）</button>
-      </div>
+      <div style="display:flex;justify-content:flex-end;margin:4px 0 8px"><button type="button" class="btn btn-primary btn-sm" onclick="openForm(null)">＋ 受付を開く（キャスト未定）</button></div>
+      <details class="fltbig" id="fltAll" open><summary>🔎 フィルター</summary>
+      <details class="fltsub" id="fltToday" open><summary>📅 当日フィルター（時間・キャスト・希望プレイ）</summary>
+      <div id="nfModes" style="display:none"></div>
       <div class="search" id="nf_time">
         <span class="lbl">🔍 探す</span>
         <label>何時から <input type="time" id="s_time" step="300" oninput="renderList()"></label>
@@ -461,6 +456,9 @@
         <div class="chips" id="s_playChips"></div>
         <label style="display:block;margin-top:8px;font-size:13px;font-weight:800;color:var(--sub)"><input type="checkbox" id="s_playTri" onchange="renderList()"> △（条件つきOK）の子も入れる</label>
         <div class="hist" style="margin:4px 0 0">選んだプレイが全部「◎か○」のキャストだけになります。名前の下に可否が出ます。プロフとつながっていないキャストは出ません。</div></details>
+      </details>
+      <details class="fltsub" id="fltFuture" ontoggle="if(this.open){ $('castFind').open = true; cfPaint(); }"><summary>🗓 未来フィルター（キャスト名＋シフト予定日）</summary><div id="fltFutureBody"></div></details>
+      </details>
       <div id="tlResult"></div>
     </div>
 
@@ -634,7 +632,7 @@
           <select id="f_areaSel" onchange="onAreaSel()"></select>
           <input id="f_area" maxlength="60" placeholder="場所（駅・地名など。例：川崎）" style="display:none;margin-top:6px" oninput="showAreaFee();recalc()"><div id="castArea"></div></div>
         <div class="f"><label>ホテル・自宅（部屋番号）<span class="req">種類は必須</span></label>
-          <div style="display:flex;gap:6px"><select id="f_place" style="max-width:110px" onchange="checkNewHotel()"><option value="">（種類）</option><option value="love">ラブホ</option><option value="biz">ビジホ</option><option value="home">自宅</option></select>
+          <div style="display:flex;gap:6px"><select id="f_place" style="max-width:110px" onchange="checkNewHotel();recalc()"><option value="">（種類）</option><option value="love">ラブホ</option><option value="biz">ビジホ</option><option value="home">自宅</option></select>
           <input id="f_address" maxlength="200" list="hotelList" oninput="recalc();checkNewHotel()" style="flex:1"></div><datalist id="hotelList"></datalist><div id="castHotel"></div></div>
       </div>
       <div id="bizBox"></div>
@@ -660,7 +658,7 @@
       </div>
       <div class="row1"><div class="f"><label>希望プレイ（無料の範囲）</label><input id="f_play" maxlength="200" placeholder="例：潮吹き・言葉責め など" oninput="recalc()"></div></div>
       <details id="optDetails" style="margin-bottom:10px">
-        <summary style="cursor:pointer;font-weight:800;font-size:14px;padding:4px 0">有料オプション・延長・デート<span id="optCount"></span></summary>
+        <summary style="cursor:pointer;font-weight:800;font-size:16.5px;padding:4px 0">OP・延長・デート<span id="optCount"></span></summary>
         <!-- 👥 3P・4P：キャスト複数（保存すると、キャストごとの予約を自動で作る）／お客2名。ふだんはたたんでおく -->
         <details id="partyWrap" style="background:#F2F8FF;border:1.5px solid #9cc6ee;border-radius:12px;padding:6px 10px;margin:6px 0 10px">
           <summary style="cursor:pointer;font-weight:800;font-size:13.5px;color:#1f5d99">👥 3P・4P（キャスト複数・お客2名）<span id="partyNow"></span></summary>
@@ -722,6 +720,12 @@
           <input type="checkbox" id="f_notified"> ✅ キャストに伝えた</label>
         <span class="hist" id="notifiedInfo" style="margin:0"></span>
       </div>
+      <!-- 📩 ネット予約（ヘブン・ぴゅあ・風じゃ・公式メール）：お客さまへの返信の文 -->
+      <div id="netReplyWrap" style="display:none;margin-top:10px">
+        <div class="f"><label>📩 お客さまへの返信（ネット予約・コピーして返信）</label></div>
+        <textarea class="msg" id="netReply" readonly style="min-height:240px"></textarea>
+        <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="navigator.clipboard.writeText($('netReply').value).then(()=>toast('📋 返信の文をコピーしました'))">📋 返信の文をコピー</button>
+      </div>
       <div class="f" style="margin:12px 0 8px"><label class="bikoh">📝 備考（だれが・いつ・どんな対応／いちばん大事なメモ）</label><div id="formLog"></div></div>
     </div>
 
@@ -742,6 +746,7 @@
   <div class="foot"><div class="in">
     <div class="tot">総額<b id="footTotal">0円</b><span id="footWarn" style="margin-left:8px;color:#d9534f"></span></div>
     <button class="btn btn-ghost" onclick="closeForm()">キャンセル</button>
+    <button class="btn btn-ghost edit-only" onclick="draftSave(true)" title="入れたところまでとっておいて閉じる（あとで続きから）">⏸ 一時保存</button>
     <button class="btn btn-primary edit-only" onclick="saveRes()">💾 登録する</button>
   </div></div>
 </div>
@@ -765,6 +770,7 @@ let M = {};              // マスタ一式
 let day = "", rows = [], editing = null, curCustomer = null, visit = "new", mediaSel = [];
 let backOv = "", backOvFor = -1, backOvNote = "";   // 報酬を手で直した値と、その理由（予約ごと）
 let cbackOv = "", cbackFor = -1;   // バック表にないランク×コースのとき、受付で入れたコースのバック（予約ごと）
+var custSeen = null;   // custPast＋台帳エクセルの過去の利用（新規・店リピ・本指名を決めるのに使う）
 let custPast = null;   // 電話番号で見つけたお客さんの、これまでの予約（キャストを変えたら本指名・店リピを決めなおす）
 let showMoney = false;
 
@@ -877,7 +883,7 @@ function openForm(id){
   // 新しい受付は、店舗・指名・種別・支払い方法を「まだ選んでいない」から（必須）
   $("f_store").innerHTML = `<option value="">（店舗を選ぶ）</option>` + M.stores.map(s=>`<option value="${s.key}">${esc(s.label)}</option>`).join("");
   $("f_store").value = id ? (r.store_key || "sakuramoon") : "";
-  nomiChosen = !!id;
+  nomiChosen = true;   // 新しい受付も「指名あり」を選んだところから（フリーのときだけ押しかえる）
   const grp = { active:"在籍", break:"お休み中", new:"入店前", interview:"面接中" };
   $("f_cast").innerHTML = `<option value="">（キャストを選ぶ）</option>` + Object.keys(grp).map(st=>{
     const list = M.casts.filter(c=>c.status===st); if(!list.length) return "";
@@ -1380,7 +1386,7 @@ async function removeDummy(id){
   }catch(e){ toast("外せませんでした：" + (e.message || e)); }
 }
 function toggleMedia(code){ mediaSel = mediaSel.includes(code) ? mediaSel.filter(x=>x!==code) : [...mediaSel, code];
-  document.querySelectorAll("#f_media .chip").forEach((b,i)=>b.classList.toggle("on", mediaSel.includes(M.media[i].code))); }
+  document.querySelectorAll("#f_media .chip").forEach((b,i)=>b.classList.toggle("on", mediaSel.includes(M.media[i].code))); if(typeof netReply === "function") netReply(); }
 
 /* ---------- その日に効いているランク・条件（台帳の「適用開始日つき」の履歴から） ---------- */
 function rankRowsOn(cast){
@@ -1568,18 +1574,24 @@ const digits = s => String(s||"").replace(/[^\d]/g, "");
 async function lookupCustomer(keepName){
   const phone = digits($("f_phone").value);
   $("f_phone").value = phone;
-  if(phone.length < 6){ curCustomer = null; custPast = null; $("custInfo").innerHTML = ""; return; }
+  if(phone.length < 6){ curCustomer = null; custPast = null; custSeen = null; $("custInfo").innerHTML = ""; return; }
   try{
     const c = q(await sb.from("kb_customers").select("*").eq("phone", phone).order("id").limit(1).maybeSingle());
     curCustomer = c || null;
-    if(!c){ custPast = []; $("custInfo").innerHTML = `<div class="info">🆕 はじめての電話番号です（保存すると新しいお客さんとして登録します）</div>`; if(!editing) setVisit("new"); return; }
+    if(!c){ custPast = []; custSeen = []; $("custInfo").innerHTML = `<div class="info">🆕 はじめての電話番号です（保存すると新しいお客さんとして登録します）</div>`; if(!editing) setVisit("new"); return; }
     if(!keepName || !$("f_name").value) $("f_name").value = c.name || "";
     $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = c.ng_reason || c.note || "";
     // ダミーで行った子の確認（renderCastChecks）のため、多めに読む。履歴に出すのは新しい10件
     const pastAll = q(await sb.from("kb_reservations").select("id,biz_date,store_key,cast_id,dummy_name,course,status").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(200)) || [];
     custPast = pastAll;
-    const past = pastAll.slice(0, 10);
-    const casts = [...new Set(pastAll.filter(p => !["cancel", "tobi"].includes(p.status)).map(p=>castName(p.cast_id)))];
+    // 台帳エクセルの過去の利用もいっしょに（これまで・指名したことのあるキャスト・新規／店リピ／本指名の自動）
+    let xl = [];
+    try{ const h = await sb.from("kb_cust_history").select("biz_date,store_key,store_raw,cast_id,cast_raw,course,status").eq("customer_id", c.id).order("biz_date", { ascending: false }).limit(300);
+      xl = (h.data || []).map(x => ({ biz_date: x.biz_date || "", store_key: x.store_key, store_raw: x.store_raw, cast_id: x.cast_id, cast_raw: x.cast_raw, dummy_name: "", course: x.course, status: x.status, excel: true })); }catch(e){}
+    custSeen = pastAll.concat(xl).sort((a, b) => String(b.biz_date).localeCompare(String(a.biz_date)));
+    const seenAll = custSeen;
+    const past = seenAll.slice(0, 10);
+    const casts = [...new Set(seenAll.filter(p => !["cancel", "tobi"].includes(p.status)).map(p => p.cast_id ? castName(p.cast_id) : p.cast_raw).filter(Boolean))];
     $("custInfo").innerHTML = (c.ng && c.ng_ask ? `<div class="ngask">🤔 <b>出禁・店NG？</b>（台帳エクセルの備考から見分けました。条件つきの書き方なので、内勤が決めてください）<div class="q">${esc(c.ng_reason || "")}</div>
         <button type="button" class="btn btn-danger btn-sm" onclick="custNgDecide(${c.id},true)">⚠️ NG客（受けない）</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="custNgDecide(${c.id},false)">NGではない（受けてOK）</button></div>`
@@ -1587,14 +1599,14 @@ async function lookupCustomer(keepName){
           <div style="margin-top:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="custNgReason(${c.id})">✏️ 理由を直す</button>
           <button type="button" class="btn btn-ghost btn-sm" onclick="if(confirm('NG客を外しますか？（まちがいだったとき）'))custNgDecide(${c.id},false)">NGを外す（まちがいだった）</button></div></div>` : "") +
       // 履歴は1回ずつ1行で、大きめ・濃いめに（受付でいちばん大事なので）
-      `<div class="custhist"><div class="ch-head">📋 これまで ${pastAll.length}件${pastAll.length > 10 ? "（新しい10件）" : ""}</div>
+      `<div class="custhist"><div class="ch-head">📋 これまで ${seenAll.length}件${xl.length ? `（うち台帳エクセル ${xl.length}件）` : ""}${seenAll.length > 10 ? "（新しい10件）" : ""}</div>
         ${past.map(p => { const x = p.status === "cancel" ? "キャンセル" : p.status === "tobi" ? "トビ" : "";
-          return `<div class="ch-row ${x ? "x" : ""} ${M.stores.some(s => s.dummy && s.key === p.store_key) ? "dm" : ""}"><span class="d">${p.biz_date.slice(5).replace("-","/")}</span><span class="s">${esc(storeLabel(p.store_key))}</span>
-            <span class="c">${p.dummy_name ? `<span class="dn">🎭${esc(p.dummy_name)}</span> → ` : ""}<b>${esc(castName(p.cast_id))}</b></span><span class="k">${esc(p.course)}</span>${x ? `<span class="xx">${x}</span>` : ""}</div>`; }).join("") || `<div class="ch-row">なし</div>`}
+          return `<div class="ch-row ${x ? "x" : ""} ${M.stores.some(s => s.dummy && s.key === p.store_key) ? "dm" : ""}"><span class="d">${p.biz_date ? (p.biz_date.slice(2, 4) !== new Date().toISOString().slice(2, 4) ? p.biz_date.slice(2, 4) + "/" : "") + p.biz_date.slice(5).replace("-","/") : "日付なし"}</span><span class="s">${esc(p.store_key ? storeLabel(p.store_key) : p.store_raw || "")}${p.excel ? " 📚" : ""}</span>
+            <span class="c">${p.dummy_name ? `<span class="dn">🎭${esc(p.dummy_name)}</span> → ` : ""}<b>${esc(p.cast_id ? castName(p.cast_id) : p.cast_raw || "")}</b></span><span class="k">${esc(p.course)}</span>${x ? `<span class="xx">${x}</span>` : ""}</div>`; }).join("") || `<div class="ch-row">なし</div>`}
         <div class="ch-foot">指名したことのあるキャスト：<b>${casts.map(esc).join("、") || "なし"}</b></div></div>`;
     if(!editing){
       const cid = $("f_cast").value;
-      setVisit(visitFrom(pastAll, cid));
+      setVisit(visitFrom(seenAll, cid));
     }
   }catch(e){ $("custInfo").innerHTML = `<div class="warn">お客さんを探せませんでした：${esc(e.message||e)}</div>`; }
 }
@@ -1791,7 +1803,7 @@ ${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st||"--:--"}〜$
 【店名】${storeLabel(c.store)}
 【名前】${$("f_name").value || "お客"}様 ${(VISIT.find(v=>v[0]===visit) || [])[1] || ""}
 【コース】${c.course}${/^\d+$/.test(c.course)?"分":""}${c.free?"（"+FREE_SUFFIX[c.free]+"）":""}${c.ext?"＋延長"+c.ext*30+"分":""}
-【ホテル・自宅】${$("f_area").value} ${$("f_address").value}${hotelMapUrl() ? "\n【地図】" + hotelMapUrl() : ""}
+【${{ love: "ホテル", biz: "ホテル", home: "自宅" }[$("f_place").value] || "ホテル・自宅"}】${$("f_area").value} ${$("f_address").value}${hotelMapUrl() ? "\n【地図】" + hotelMapUrl() : ""}
 【バック有OP】${backOps}
 【バック無OP】${noBackOps}
 ${c.pay === "cash"
@@ -1800,6 +1812,38 @@ ${c.pay === "cash"
   : `【お支払い】カード決済の為、お金はいただかずスタートしてください`}`;
 }
 function copyMsg(){ navigator.clipboard.writeText($("msg").value).then(()=>toast("📋 文面をコピーしました")); }
+// 📩 ネット予約の返信（店名・お店の電話番号・予約の内容）。お店の電話番号は公式HPのもの（2026/10/28）
+const STORE_TEL = { sakuramoon: "03-5944-9075", lana_uguisu: "03-5944-9288", lana_kinshi: "03-5944-9288", dressgarden: "03-5944-9075", peachmoon: "03-5944-9075",
+  gyakuanal: "03-6277-1964", cutie: "03-6384-4261", eighteen: "03-6802-4755", gokumon: "03-6802-4530" };
+const NET_MEDIA = ["heaven_net", "pure_net", "fuja_net", "official_mail"];
+function netReply(){
+  const wrap = $("netReplyWrap"); if(!wrap) return;
+  const on = mediaSel.some(m => NET_MEDIA.includes(m) || /_net$/.test(m));
+  wrap.style.display = on ? "" : "none"; if(!on || !last) return;
+  const c = last, store = c.store, cast = M.casts.find(x => x.id === $("f_cast").value);
+  const bd = ($("f_day") && $("f_day").value) || day, d = new Date(bd + "T12:00:00Z"), st = $("f_start").value;
+  let en = ""; if(st){ const [h, m] = st.split(":").map(Number), t = h * 60 + m + minutesOf(c.course) + c.ext * 30 + c.date * 30; en = String(Math.floor(t / 60) % 24).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"); }
+  const who = isDummyStore(store) && $("f_dummy").value ? $("f_dummy").value : cast ? ((cast.stores && cast.stores[store] && cast.stores[store].name) || cast.official_name || cast.temp_name) : "（キャスト）";
+  const ops = c.opts.map(o => o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・");
+  const place = [$("f_area").value, $("f_address").value].filter(Boolean).join(" ");
+  $("netReply").value =
+`${$("f_name").value || "お客"}様
+
+この度は${storeLabel(store)}をご利用いただき、誠にありがとうございます。
+下記の内容でご予約を承りました。
+
+■ご予約日時：${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st || "--:--"}〜${en || "--:--"}
+■キャスト：${who}
+■コース：${c.course}${/^\d+$/.test(c.course) ? "分" : ""}${c.ext ? "（延長" + c.ext * 30 + "分）" : ""}
+■ご利用場所：${place || "（未定）"}${ops ? "\n■オプション：" + ops : ""}
+■料金総額：${c.total.toLocaleString("ja-JP")}円（${c.pay === "cash" ? "現金" : "カード"}）
+
+ご不明な点やご変更がございましたら、お気軽にお電話ください。
+当日はどうぞよろしくお願いいたします。
+
+${storeLabel(store)}
+TEL：${STORE_TEL[store] || ""}`;
+}
 
 /* ---------- 保存・削除 ---------- */
 function startAt(){
@@ -1971,6 +2015,7 @@ recalc = function(){
   // 希望プレイを予約連絡に入れる
   const pw = $("f_play").value.trim();
   if(pw) $("msg").value = $("msg").value.replace(/(【バック無OP】[^\n]*)/, "$1\n【希望プレイ】" + pw);
+  netReply();
   // 👥 3P・4P：一緒に行くキャストを予約連絡に
   if(party.kind === "cast"){
     const all = editing ? [] : [$("f_cast").value, ...party.casts].filter(Boolean);
@@ -2164,17 +2209,20 @@ function toggleSelCast(k){ if(selCasts.has(k)) selCasts.delete(k); else selCasts
 function clearSearch(){ $("s_time").value = ""; $("s_free").checked = false; selCasts.clear(); playSel.clear(); renderTL(); }
 // ＋ 新規予約：3つのうちどれか1つで探す（ほかの2つの絞りは外す）
 var nfCur = "time";
+// 当日フィルター：時間・キャスト・希望プレイの3つとも開いておく（どれを使ってもいい）。未来フィルター：🔎 キャストから行ける日を探す
 function nfMode(m){
-  nfCur = m;
-  document.querySelectorAll("#nfModes .chip").forEach(b => b.classList.toggle("on", b.dataset.m === m));
-  $("nf_time").style.display = m === "time" ? "" : "none";
-  [["cast", "nf_cast"], ["play", "nf_play"]].forEach(([k, id]) => { $(id).style.display = m === k ? "" : "none"; if(m === k) $(id).open = true; });
-  let changed = false;
-  if(m !== "time" && ($("s_time").value || $("s_free").checked)){ $("s_time").value = ""; $("s_free").checked = false; changed = true; }
-  if(m !== "cast" && selCasts.size){ selCasts.clear(); changed = true; }
-  if(m !== "play" && typeof playSel !== "undefined" && playSel.size){ playSel.clear(); changed = true; }
-  if(changed) renderTL();
+  nfCur = m || "time";
+  $("nf_time").style.display = ""; ["nf_cast", "nf_play"].forEach(id => { $(id).style.display = ""; $(id).open = true; });
+  const cf = $("castFind"), fb = $("fltFutureBody");
+  if(cf && fb && cf.parentNode !== fb){ fb.appendChild(cf); cf.classList.add("infilter"); }
 }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  details.fltbig{background:#fff;border:2px solid #E4D3F5;border-radius:14px;padding:6px 10px;margin-bottom:8px}
+  details.fltbig > summary{cursor:pointer;font-weight:900;font-size:15px;color:#6b4fa0;padding:4px 2px}
+  details.fltsub{background:#FBF8FF;border:1.5px solid #EBE2F7;border-radius:12px;padding:4px 10px;margin:6px 0}
+  details.fltsub > summary{cursor:pointer;font-weight:800;font-size:13.5px;color:#5c4b7a;padding:4px 2px}
+  #castFind.infilter{border:none;padding:0;margin:0;background:transparent} #castFind.infilter > summary{display:none}
+</style>`);
 
 function renderTL(){
   const grid = $("tlGrid"); if(!grid || !M.casts) return;
@@ -2388,7 +2436,7 @@ renderTL = function(){ __renderTL(); renderBoard(); };
 /* ============================================================
    💴 精算（キャストの枠の中）… settle.html と同じ計算。精算のページはこちらに合体
    ============================================================ */
-const PLACES = ["池袋", "鶯谷", "五反田", "錦糸町", "事務所", "そのほか"];
+const PLACES = ["池袋", "鶯谷", "五反田", "錦糸町", "回収"];
 function calcCast(castId){
   const all = rows.filter(r=>r.cast_id === castId);
   const live = all.filter(r=>r.status !== "cancel" && r.status !== "tobi");
@@ -2534,7 +2582,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .sbig{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin:8px 0}
   .sb{border-radius:14px;padding:10px 14px} .sb .k{font-size:13px;font-weight:800} .sb .k small{font-weight:600;margin-left:4px;font-size:11.5px}
   .sb .v{font-size:34px;font-weight:900;line-height:1.2;margin:2px 0} .sb .s{font-size:12px;opacity:.85} .sb .s2{font-size:13px;font-weight:800;margin-top:4px}
-  .sb.drop{background:#FFF59D;border:3px solid #F2C200;color:#5c4b00} .sb.drop .v{color:#E0001B;text-decoration:underline double;text-underline-offset:6px}
+  .sb.drop{background:#00B0F0;border:3px solid #0A84C6;color:#08304d} .sb.drop .v{color:#E0001B;text-shadow:0 0 6px #fff,0 0 2px #fff;text-decoration:underline double;text-underline-offset:6px}
   .sb.give{background:#E3F1FF;border:3px solid #2f7fd0;color:#1f4f80} .sb.give .v{color:#2f7fd0}
   .sb.take{background:#FFE3F0;border:2px solid #F7B6CF;color:#6b3550} .sb.take .v{color:#5C4B4F}
   .sb .s2.ng{color:#d9534f} .sb .s2.ok{color:#2f9e6e}
@@ -2567,9 +2615,9 @@ function settleCanvas(id){
   g.font = `bold 24px ${FONT}`; g.fillText(`${castName(id)}さん`, PAD, 58);
   // 💰 投函額（いちばん大きく。黄色の箱に赤い字）／カードで現金がないときは「お店から渡す」
   const give = c.drop < 0;
-  g.fillStyle = give ? "#E3F1FF" : "#FFF59D"; g.strokeStyle = give ? "#2f7fd0" : "#F2C200"; g.lineWidth = 3;
+  g.fillStyle = give ? "#E3F1FF" : "#00B0F0"; g.strokeStyle = give ? "#2f7fd0" : "#0A84C6"; g.lineWidth = 3;
   g.beginPath(); g.roundRect ? g.roundRect(PAD, 88, W - PAD * 2, BOX - 8, 14) : g.rect(PAD, 88, W - PAD * 2, BOX - 8); g.fill(); g.stroke();
-  g.textAlign = "left"; g.fillStyle = give ? "#1f4f80" : "#5c4b00"; g.font = `bold 17px ${FONT}`;
+  g.textAlign = "left"; g.fillStyle = give ? "#1f4f80" : "#08304d"; g.font = `bold 17px ${FONT}`;
   g.fillText(give ? "💴 お店からキャストに渡す" : "💰 投函額（封筒に入れて投函）", PAD + 16, 118);
   g.textAlign = "right"; g.fillStyle = give ? "#2f7fd0" : "#E0001B"; g.font = `900 42px ${FONT}`;
   g.fillText(yen(Math.abs(c.drop)), W - PAD - 16, 178);
@@ -2597,20 +2645,33 @@ function settleCanvas(id){
   return cv;
 }
 function copyDetailImg(id){
-  const cv = settleCanvas(id);
+  const cv = settleCanvas(id), name = `精算_${day}_${castName(id)}.png`;
   cv.toBlob(async b=>{
+    // スマホ：画像の共有（LINE を選べる）→ だめなら、画像を大きく出して長押しで保存・コピー
+    const phone = /iPhone|iPad|Android/i.test(navigator.userAgent);
     try{
+      if(phone){
+        const f = new File([b], name, { type: "image/png" });
+        if(navigator.canShare && navigator.canShare({ files: [f] })){ await navigator.share({ files: [f] }); return; }
+        throw new Error("no share");
+      }
       if(!navigator.clipboard || !window.ClipboardItem) throw new Error("no");
       await navigator.clipboard.write([new ClipboardItem({ "image/png": b })]);
       toast("🖼 精算を画像でコピーしました（LINEに貼りつけできます）");
     }catch(e){
-      const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `精算_${day}_${castName(id)}.png`; a.click();
-      setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
-      toast("🖼 コピーできないので、画像を保存しました");
+      if(e && e.name === "AbortError") return;   // 共有をやめた
+      const u = URL.createObjectURL(b);
+      const bg = document.createElement("div");
+      bg.style.cssText = "position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.75);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:10px";
+      bg.innerHTML = `<div style="color:#fff;font-weight:800;font-size:14px;text-align:center">画像を<b>長押し</b>して「コピー」か「保存」→ LINEに貼りつけ・送信してください</div>
+        <img src="${u}" style="max-width:100%;max-height:75vh;border-radius:10px;background:#fff">
+        <div style="display:flex;gap:8px"><a href="${u}" download="${name}" style="background:#fff;border-radius:99px;padding:8px 16px;font-weight:800;color:#e5638c;text-decoration:none">⬇ 保存</a>
+        <button type="button" style="border:none;background:#fff;border-radius:99px;padding:8px 16px;font-weight:800;font-family:inherit">とじる</button></div>`;
+      bg.querySelector("button").onclick = () => { bg.remove(); URL.revokeObjectURL(u); };
+      document.body.appendChild(bg);
     }
   }, "image/png");
-}
-/* ---------- 精算明細（LINE に送る文） ---------- */
+}/* ---------- 精算明細（LINE に送る文） ---------- */
 function copyDetail(id){
   const c = calcCast(id), d = new Date(day + "T12:00:00Z");
   const lines = [`【精算】${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${castName(id)}さん`, ""];
@@ -3454,7 +3515,7 @@ onCast = function(){
   __onCastV.apply(this, arguments);
   if(!custPast) return;
   const cid = $("f_cast").value;
-  setVisit(visitFrom(custPast, cid));
+  setVisit(visitFrom(custSeen || custPast, cid));
 };
 
 /* ============================================================
@@ -3606,7 +3667,65 @@ saveRes = async function(){
   const st = $("f_status").value, cid = $("f_cast").value, was = editing ? editing.status : "";
   await __saveResM();
   if(cid && st === "moving" && was !== "moving") markMoving(cid);
+  if(!$("formBg").classList.contains("show")){ try{ localStorage.removeItem(DRAFT_KEY); }catch(e){} draftPaint(); }   // 登録できたら、一時保存は消す
 };
+
+/* ---------- ⏸ 一時保存（編集中）：受付の外を押す・「⏸ 一時保存」で、入れたところまでとっておく → 右下の点滅ボタンで続きから ---------- */
+const DRAFT_KEY = "kbResDraft";
+function draftGet(){ try{ return JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); }catch(e){ return null; } }
+function draftSave(close){
+  if(!KB.CAN_EDIT || !$("formBg").classList.contains("show")) return;
+  const vals = {}, radios = {};
+  document.querySelectorAll("#formBg input[id], #formBg select[id], #formBg textarea[id]").forEach(el => {
+    if(["msg", "netReply"].includes(el.id) || el.type === "file") return;
+    vals[el.id] = el.type === "checkbox" ? el.checked : el.value;
+  });
+  document.querySelectorAll("#formBg input[type=radio][name]:checked").forEach(el => { radios[el.name] = el.value; });
+  const d = { id: editing ? editing.id : null, day, at: new Date().toISOString(), by: KB.operatorName(), vals, radios,
+    st: { visit, mediaSel, free: $("f_free").value, wig: typeof wigSel !== "undefined" ? wigSel : "", under: typeof underSel !== "undefined" ? underSel : "", party: JSON.parse(JSON.stringify(party)) },
+    label: [$("f_start").value, $("f_cast").value ? castName($("f_cast").value) : "", $("f_name").value].filter(Boolean).join(" ") || "（まだ何も入っていない）" };
+  try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); }catch(e){}
+  if(close){ closeForm(); toast("⏸ 編集中として一時保存しました（右下のボタンで続きから）"); }
+  draftPaint();
+}
+async function draftResume(){
+  const d = draftGet(); if(!d) return;
+  if(d.day && d.day !== day && $("day")){ $("day").value = d.day; await loadDay(); }
+  openForm(d.id);
+  const v = d.vals || {}, set = id => { const el = $(id); if(!el || !(id in v)) return; if(el.type === "checkbox") el.checked = !!v[id]; else el.value = v[id]; };
+  set("f_store"); onStore(); set("f_cast"); onCast();
+  Object.keys(v).forEach(id => { if(!["f_store", "f_cast"].includes(id)) set(id); });
+  Object.entries(d.radios || {}).forEach(([n, val]) => setRadio(n, val));
+  const s = d.st || {};
+  if(s.visit) setVisit(s.visit);
+  mediaSel = s.mediaSel || []; document.querySelectorAll("#f_media .chip").forEach((b, i) => b.classList.toggle("on", mediaSel.includes(M.media[i].code)));
+  if("free" in s){ $("f_free").value = s.free; renderNomiChips(); }
+  if(typeof wigSel !== "undefined"){ wigSel = s.wig || ""; underSel = s.under || ""; paintWig(); }
+  if(s.party){ party = s.party; paintParty(); }
+  if(v.f_phone && digits(v.f_phone).length >= 6) lookupCustomer(true);
+  recalc(); draftPaint();
+  toast("✏️ 一時保存したところから続けます");
+}
+function draftDrop(){ if(!confirm("一時保存した受付を消しますか？")) return; try{ localStorage.removeItem(DRAFT_KEY); }catch(e){} draftPaint(); }
+function draftPaint(){
+  let el = $("draftBtn");
+  const d = draftGet(), open = $("formBg").classList.contains("show");
+  if(!d || open){ if(el) el.remove(); return; }
+  if(!el){ el = document.createElement("div"); el.id = "draftBtn"; document.body.appendChild(el); }
+  el.innerHTML = `<button type="button" class="dr-go" onclick="draftResume()">✏️ 編集中の受付：${esc(d.label)}<small>（${esc(d.by || "")} ${whenShort(d.at)}・押すと続きから）</small></button><button type="button" class="dr-x" onclick="draftDrop()" title="消す">✕</button>`;
+}
+// 受付の外（暗いところ）を押したら、一時保存して閉じる
+$("formBg").addEventListener("click", e => { if(e.target === $("formBg") && KB.CAN_EDIT) draftSave(true); });
+{ const __closeFormD = closeForm; closeForm = function(){ const r = __closeFormD.apply(this, arguments); setTimeout(draftPaint, 0); return r; }; }
+{ const __openFormD = openForm; openForm = function(){ const r = __openFormD.apply(this, arguments); draftPaint(); return r; }; }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  #draftBtn{position:fixed;right:14px;bottom:70px;z-index:960;display:flex;gap:4px;align-items:stretch}
+  #draftBtn .dr-go{font-family:inherit;font-size:14px;font-weight:800;border:2.5px solid #F2A900;background:#FFF3C4;color:#7a5200;border-radius:14px;padding:8px 14px;cursor:pointer;text-align:left;display:flex;flex-direction:column;animation:draftblink 1.2s ease-in-out infinite;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+  #draftBtn .dr-go small{font-size:11px;font-weight:700;opacity:.8}
+  #draftBtn .dr-x{font-family:inherit;border:1.5px solid #ddd;background:#fff;border-radius:10px;padding:0 10px;cursor:pointer;color:#999}
+  @keyframes draftblink{0%,100%{box-shadow:0 0 0 0 rgba(242,169,0,.0)}50%{box-shadow:0 0 0 6px rgba(242,169,0,.45)}}
+</style>`);
+setTimeout(draftPaint, 1500);
 
 /* ---------- 受付の指名キャスト：その日の出勤のキャストだけ（出勤が早い順）。「シフトにない人も出す」で全員 ---------- */
 function fillCastSel(){

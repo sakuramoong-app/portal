@@ -79,7 +79,7 @@ $("navArea").innerHTML = KB.nav("settle.html");
 $("wipArea").innerHTML = KB.wipBanner();
 if(!KB.CAN_EDIT) document.body.classList.add("readonly");
 
-const PLACES = ["池袋", "鶯谷", "五反田", "錦糸町", "事務所", "そのほか"];
+const PLACES = ["池袋", "鶯谷", "五反田", "錦糸町", "回収"];
 const DOW = ["日","月","火","水","木","金","土"];
 let day = "", M = {}, rows = [], days = {}, showMoney = false;
 
@@ -292,7 +292,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .sbig{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin:8px 0}
   .sb{border-radius:14px;padding:10px 14px} .sb .k{font-size:13px;font-weight:800} .sb .k small{font-weight:600;margin-left:4px;font-size:11.5px}
   .sb .v{font-size:34px;font-weight:900;line-height:1.2;margin:2px 0} .sb .s{font-size:12px;opacity:.85} .sb .s2{font-size:13px;font-weight:800;margin-top:4px}
-  .sb.drop{background:#FFF59D;border:3px solid #F2C200;color:#5c4b00} .sb.drop .v{color:#E0001B;text-decoration:underline double;text-underline-offset:6px}
+  .sb.drop{background:#00B0F0;border:3px solid #0A84C6;color:#08304d} .sb.drop .v{color:#E0001B;text-shadow:0 0 6px #fff,0 0 2px #fff;text-decoration:underline double;text-underline-offset:6px}
   .sb.give{background:#E3F1FF;border:3px solid #2f7fd0;color:#1f4f80} .sb.give .v{color:#2f7fd0}
   .sb.take{background:#FFE3F0;border:2px solid #F7B6CF;color:#6b3550} .sb.take .v{color:#5C4B4F}
   .sb .s2.ng{color:#d9534f} .sb .s2.ok{color:#2f9e6e}
@@ -325,9 +325,9 @@ function settleCanvas(id){
   g.font = `bold 24px ${FONT}`; g.fillText(`${castName(id)}さん`, PAD, 58);
   // 💰 投函額（いちばん大きく。黄色の箱に赤い字）／カードで現金がないときは「お店から渡す」
   const give = c.drop < 0;
-  g.fillStyle = give ? "#E3F1FF" : "#FFF59D"; g.strokeStyle = give ? "#2f7fd0" : "#F2C200"; g.lineWidth = 3;
+  g.fillStyle = give ? "#E3F1FF" : "#00B0F0"; g.strokeStyle = give ? "#2f7fd0" : "#0A84C6"; g.lineWidth = 3;
   g.beginPath(); g.roundRect ? g.roundRect(PAD, 88, W - PAD * 2, BOX - 8, 14) : g.rect(PAD, 88, W - PAD * 2, BOX - 8); g.fill(); g.stroke();
-  g.textAlign = "left"; g.fillStyle = give ? "#1f4f80" : "#5c4b00"; g.font = `bold 17px ${FONT}`;
+  g.textAlign = "left"; g.fillStyle = give ? "#1f4f80" : "#08304d"; g.font = `bold 17px ${FONT}`;
   g.fillText(give ? "💴 お店からキャストに渡す" : "💰 投函額（封筒に入れて投函）", PAD + 16, 118);
   g.textAlign = "right"; g.fillStyle = give ? "#2f7fd0" : "#E0001B"; g.font = `900 42px ${FONT}`;
   g.fillText(yen(Math.abs(c.drop)), W - PAD - 16, 178);
@@ -355,20 +355,33 @@ function settleCanvas(id){
   return cv;
 }
 function copyDetailImg(id){
-  const cv = settleCanvas(id);
+  const cv = settleCanvas(id), name = `精算_${day}_${castName(id)}.png`;
   cv.toBlob(async b=>{
+    // スマホ：画像の共有（LINE を選べる）→ だめなら、画像を大きく出して長押しで保存・コピー
+    const phone = /iPhone|iPad|Android/i.test(navigator.userAgent);
     try{
+      if(phone){
+        const f = new File([b], name, { type: "image/png" });
+        if(navigator.canShare && navigator.canShare({ files: [f] })){ await navigator.share({ files: [f] }); return; }
+        throw new Error("no share");
+      }
       if(!navigator.clipboard || !window.ClipboardItem) throw new Error("no");
       await navigator.clipboard.write([new ClipboardItem({ "image/png": b })]);
       toast("🖼 精算を画像でコピーしました（LINEに貼りつけできます）");
     }catch(e){
-      const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `精算_${day}_${castName(id)}.png`; a.click();
-      setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
-      toast("🖼 コピーできないので、画像を保存しました");
+      if(e && e.name === "AbortError") return;   // 共有をやめた
+      const u = URL.createObjectURL(b);
+      const bg = document.createElement("div");
+      bg.style.cssText = "position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.75);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:10px";
+      bg.innerHTML = `<div style="color:#fff;font-weight:800;font-size:14px;text-align:center">画像を<b>長押し</b>して「コピー」か「保存」→ LINEに貼りつけ・送信してください</div>
+        <img src="${u}" style="max-width:100%;max-height:75vh;border-radius:10px;background:#fff">
+        <div style="display:flex;gap:8px"><a href="${u}" download="${name}" style="background:#fff;border-radius:99px;padding:8px 16px;font-weight:800;color:#e5638c;text-decoration:none">⬇ 保存</a>
+        <button type="button" style="border:none;background:#fff;border-radius:99px;padding:8px 16px;font-weight:800;font-family:inherit">とじる</button></div>`;
+      bg.querySelector("button").onclick = () => { bg.remove(); URL.revokeObjectURL(u); };
+      document.body.appendChild(bg);
     }
   }, "image/png");
-}
-/* ---------- 精算明細（LINE に送る文） ---------- */
+}/* ---------- 精算明細（LINE に送る文） ---------- */
 function copyDetail(id){
   const c = calcCast(id), d = new Date(day + "T12:00:00Z");
   const lines = [`【精算】${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${castName(id)}さん`, ""];
