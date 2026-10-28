@@ -341,7 +341,7 @@ function settleParts(id){
   const res = c.all.map((r, i) => {
     const off = r.status === "cancel" || r.status === "tobi";
     const bo = off ? [] : (r.options || []).filter(o => (o.back || 0) > 0);
-    const ops = bo.map(o => `${o.label}${o.qty > 1 ? "×" + o.qty : ""}（バック ${yen(o.back * (o.qty || 1))}）`);
+    const ops = bo.map(o => [`${o.label}${o.qty > 1 ? "×" + o.qty : ""}`, o.back * (o.qty || 1)]);
     const opSum = bo.reduce((a, o) => a + o.back * (o.qty || 1), 0);
     const head = `${hm(r.start_at)} ${storeLabel(r.store_key)} ${r.course}${/^\d+$/.test(r.course) ? "分" : ""}${r.extension_count ? " 延長" + r.extension_count : ""}`;
     const courseBack = off ? 0 : r.back_override != null ? r.back_override : (r.course_back || 0) + (r.extra_back || 0);
@@ -355,6 +355,14 @@ const sumFx = P => {
   const sg = (x, i) => i ? (x.amount >= 0 ? "＋" : "−") : x.amount < 0 ? "−" : "";
   return [P.sum.map((x, i) => sg(x, i) + x.abc).join("") + "＝", P.sum.map((x, i) => sg(x, i) + Math.abs(x.amount).toLocaleString("ja-JP")).join("") + "＝"];
 };
+// 投函額のひっ算：総額 − カード払い − 手取り ＝ 投函額（マイナスならお店から渡す）
+const dropCalc = c => {
+  const a = [["本日の総額（お客さんが払った額）", yen(c.total)]];
+  if(c.cardPaid) a.push(["カード払い（お店に入るので手元にない）", "−" + yen(c.cardPaid)]);
+  a.push(["本日の手取り額", "−" + yen(c.takeHome)]);
+  return { rows: a, res: c.drop >= 0 ? ["本日の投函額", yen(c.drop)] : ["お店から渡す（足りない分）", yen(-c.drop)],
+    why: c.drop < 0 ? `カード払いの分はお店に入るため、手元の現金が手取り額より ${yen(-c.drop)} 足りません。その分をお店から渡します` : "" };
+};
 copyDetail = function(id){
   const P = settleParts(id), c = P.c, d = P.d;
   const lines = [`【精算】${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${castName(id)}さん`];
@@ -362,13 +370,14 @@ copyDetail = function(id){
     lines.push("", `■ ${r.no}本目　${r.head}`);
     if(r.off){ lines.push(`　${r.st === "cancel" ? "キャンセル" : "トビ"}（報酬なし）`); return; }
     lines.push(`　コース報酬　${yen(r.courseBack)}`);
-    r.ops.forEach(o => lines.push(`　OP：${o}`));
+    r.ops.forEach(o => lines.push(`　OP：${o[0]}　＋${yen(o[1])}`));
     lines.push(`　▶ この仕事の報酬（OP込み）　${yen(r.total)}`);
   });
   lines.push("", "――――――――――", `本日の報酬総額　${yen(c.reward)}`, `本日のOP総額　${yen(c.option)}`, `雑費　−${yen(c.zappi)}`);
   P.pm.forEach(([l, v]) => lines.push(`${l}　${pmYen(v)}`));
   lines.push("――――――――――", `▶ 本日の報酬／本日の手取り額　${yen(P.pay)}／${yen(c.takeHome)}`);
-  lines.push(c.drop >= 0 ? `💰 本日の投函額　${yen(c.drop)}` : `💴 カード決済のため、お店から ${yen(-c.drop)} お渡しします`);
+  { const dc = dropCalc(c); lines.push("", "【投函額の計算】"); dc.rows.forEach(x => lines.push(`${x[0]}　${x[1]}`)); lines.push(`＝ ${dc.res[0]}　${dc.res[1]}`); if(dc.why) lines.push(dc.why); }
+  lines.push(c.drop >= 0 ? `💰 本日の投函額　${yen(c.drop)}` : `💴 お店からキャストに渡す　${yen(-c.drop)}`);
   if(P.uns.length){
     lines.push("――――――――――", "【本日＋未精算（合算）】");
     P.sum.forEach(x => lines.push(`${x.abc}　${unsMd(x.date)}　${x.kind}　${x.amount < 0 ? "−" : ""}${yen(Math.abs(x.amount))}`));
@@ -390,12 +399,13 @@ settleCanvas = function(id){
     ops.push(["job", `${r.no}本目`, r.head, r.off ? (r.st === "cancel" ? "キャンセル" : "トビ") : "", r.off]);
     if(r.off) return;
     ops.push(["jrow", "コース報酬", yen(r.courseBack)]);
-    r.ops.forEach(o => ops.push(["sub", "OP：" + o]));
+    r.ops.forEach(o => ops.push(["jrow", "OP：" + o[0], "＋" + yen(o[1]), "op"]));
     ops.push(["jsum", "この仕事の報酬（OP込み）", yen(r.total)]);
   });
   ops.push(["line"], ["row", "本日の報酬総額", yen(c.reward)], ["row", "本日のOP総額", yen(c.option)], ["row", "雑費", "−" + yen(c.zappi)]);
   P.pm.forEach(([l, v]) => ops.push(["row", l, pmYen(v)]));
   ops.push(["line"], ["pbox", "本日の報酬 ／ 本日の手取り額", yen(P.pay) + " ／ " + yen(c.takeHome)]);
+  { const dc = dropCalc(c); ops.push(["head3", "🧮 投函額の計算"]); dc.rows.forEach(x => ops.push(["jrow", x[0], x[1], x[1][0] === "−" ? "minus" : ""])); ops.push(["jsum", "＝ " + dc.res[0], dc.res[1], c.drop < 0 ? "give" : ""]); if(dc.why) ops.push(["why", dc.why]); }
   ops.push(["box", c.drop, "💰 本日の投函額（封筒に入れて投函）", "💴 お店からキャストに渡す"]);
   if(P.uns.length){
     ops.push(["line"], ["head", "📒 本日＋未精算（合算）"]);
@@ -405,7 +415,7 @@ settleCanvas = function(id){
   }
   if(P.rest.length){ ops.push(["head2", "📒 のこりの未精算（今日は精算しない）"]); P.rest.forEach(x => ops.push(["sub2", x])); }
   ops.push(["memo"]);
-  const hOf = o => ({ job: 40, jrow: 24, jsum: 30, abc: 32, pbox: 92, fx: 58, box: 112, row: 30, sub: 22, sub2: 24, line: 20, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 })[o[0]] || 30;
+  const hOf = o => ({ head3: 34, why: 46, job: 40, jrow: 26, jsum: 30, abc: 32, pbox: 92, fx: 58, box: 112, row: 30, sub: 22, sub2: 24, line: 20, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 })[o[0]] || 30;
   const H = 88 + ops.reduce((a, o) => a + hOf(o), 0) + 56;
   const cv = document.createElement("canvas"); cv.width = W * S; cv.height = H * S;
   const g = cv.getContext("2d"); g.scale(S, S);
@@ -430,11 +440,19 @@ settleCanvas = function(id){
       txt(o[1], PAD + 32, y + 27, "bold 14px", o[4] ? "#9C8B8F" : "#fff", "center");
       txt(fit(o[2], W - PAD * 2 - 170, "bold 15px"), PAD + 74, y + 27, "bold 15px", o[4] ? "#B9A9AD" : "#5C4B4F");
       if(o[3]) txt(o[3], W - PAD, y + 27, "bold 15px", "#B9A9AD", "right");
-    } else if(k === "jrow"){
-      txt(o[1], PAD + 18, y + 17, "14px", "#5C4B4F"); txt(o[2], W - PAD, y + 17, "14px", "#5C4B4F", "right");
-    } else if(k === "jsum"){
-      g.strokeStyle = "#F1C9D5"; g.lineWidth = 1; g.beginPath(); g.moveTo(PAD + 18, y + 4); g.lineTo(W - PAD, y + 4); g.stroke();
-      txt("▶ " + o[1], PAD + 18, y + 22, "bold 14.5px", "#6b3550"); txt(o[2], W - PAD, y + 22, "bold 16px", "#e5638c", "right");
+    } else if(k === "jrow"){   // ひっ算の行：金額は右にそろえる
+      const col = o[3] === "op" ? "#8a6d00" : "#5C4B4F";
+      txt(fit(o[1], W - PAD * 2 - 150, "14px"), PAD + 18, y + 18, "14px", col); txt(o[2], W - PAD, y + 18, "bold 15px", col, "right");
+    } else if(k === "jsum"){   // ひっ算の線と答え
+      g.strokeStyle = "#5C4B4F"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(W - PAD - 150, y + 4); g.lineTo(W - PAD, y + 4); g.stroke();
+      txt((o[1][0] === "＝" ? "" : "▶ ") + o[1], PAD + 18, y + 22, "bold 14.5px", o[3] === "give" ? "#1f4f80" : "#6b3550"); txt(o[2], W - PAD, y + 22, "bold 16px", o[3] === "give" ? "#2f7fd0" : "#e5638c", "right");
+    } else if(k === "head3"){
+      txt(o[1], PAD, y + 24, "bold 15px", "#5C4B4F");
+    } else if(k === "why"){   // 2行まで折り返し
+      g.font = `bold 13px ${FONT}`; const mx = W - PAD * 2 - 24; let s = o[1], l1 = s;
+      while(g.measureText(l1).width > mx) l1 = l1.slice(0, -1);
+      rbox(PAD + 6, y + 4, W - PAD * 2 - 6, h - 8, 8, "#E3F1FF", "#E3F1FF", 1);
+      txt(l1, PAD + 16, y + 21, "bold 13px", "#1f4f80"); txt(fit(s.slice(l1.length), mx, "bold 13px"), PAD + 16, y + 37, "bold 13px", "#1f4f80");
     } else if(k === "row"){
       txt(fit(o[1], W - PAD * 2 - 130, "bold 16px"), PAD, y + 21, "bold 16px", "#5C4B4F");
       txt(o[2], W - PAD, y + 21, "bold 16px", "#5C4B4F", "right");
