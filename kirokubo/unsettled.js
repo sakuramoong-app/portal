@@ -245,7 +245,54 @@ async function unsDel(uid){
 }
 function unsListPaint(){ const el = document.getElementById("unsList"); if(el) el.innerHTML = unsListHtml(); }
 function unsListToggle(){ const el = document.getElementById("unsList"); if(!el) return; el.style.display = el.style.display === "none" ? "" : "none"; unsListPaint(); }
-// 日付が変わったら読みなおす（どちらのページも day を使う）
+/* ---------- 📜 精算・未精算のログ（月ごと）：処理した日時・内勤（ログイン名）・キャスト・営業日・種類・内容。フィルターつき ---------- */
+let SLOG = { ym: "", rows: [], f: { cast: "", day: "", kind: "", by: "", at: "" } };
+function slogToggle(){ const el = document.getElementById("slogPanel"); if(!el) return; const on = el.style.display === "none"; el.style.display = on ? "" : "none"; if(on){ if(!SLOG.ym) SLOG.ym = day.slice(0, 7); slogLoad(); } }
+async function slogLoad(){
+  const el = document.getElementById("slogPanel"); el.innerHTML = `<div class="hint2">読みこみ中…</div>`;
+  const ym = SLOG.ym, from = ym + "-01", to = new Date(Date.UTC(+ym.slice(0, 4), +ym.slice(5, 7), 1)).toISOString().slice(0, 10);
+  const rows = [];
+  try{
+    const cd = q(await sb.from("kb_cast_days").select("*").gte("biz_date", from).lt("biz_date", to)) || [];
+    cd.forEach(d => {
+      const l = Array.isArray(d.settle_log) ? d.settle_log : [];
+      l.forEach(x => rows.push({ at: x.at, by: x.by || "", cid: d.cast_id, bd: d.biz_date, kind: /取り消/.test(x.text) ? "取消" : /^精算済/.test(x.text) ? "精算" : /未精算/.test(x.text) ? "未精算" : /精算/.test(x.text) ? "精算" : "備考", text: x.text }));
+      if(d.settled && !l.some(x => /精算済にしました|精算しました/.test(x.text))) rows.push({ at: d.settled_at, by: d.settled_by || "", cid: d.cast_id, bd: d.biz_date, kind: "精算",
+        text: `精算済（${d.settle_place || ""}）` + (d.settle_snapshot ? `　手取り ${yen(d.settle_snapshot.takeHome || 0)}／投函額 ${yen(d.settle_snapshot.drop || 0)}${d.settle_snapshot.paidOn ? "（" + unsMd(d.settle_snapshot.paidOn) + "にまとめて精算）" : ""}` : "") });
+    });
+    if(UNS !== null){
+      const un = q(await sb.from("kb_unsettled").select("*").gte("biz_date", from).lt("biz_date", to)) || [];
+      un.forEach(x => rows.push({ at: x.created_at, by: x.created_by || "", cid: x.cast_id, bd: x.biz_date, kind: "未精算",
+        text: `未精算が入った：${x.note || ""}（${x.amount >= 0 ? "未精算 " + yen(x.amount) : "お釣り " + yen(-x.amount)}）${x.source === "manual" ? "・手で入れた" : ""}${x.done_on ? `\n→ ${unsMd(x.done_on)} に精算（${x.done_by || ""}）` : ""}` }));
+    }
+  }catch(e){ el.innerHTML = `<div class="warn">読めませんでした：${esc(e.message || e)}</div>`; return; }
+  SLOG.rows = rows.filter(r => r.at).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  slogPaint();
+}
+function slogPaint(){
+  const el = document.getElementById("slogPanel"), f = SLOG.f, R = SLOG.rows;
+  const atDay = a => { const d = new Date(a); return isNaN(d) ? "" : new Date(d.getTime() + 9 * 3600e3).toISOString().slice(0, 10); };
+  const list = R.filter(r => (!f.cast || r.cid === f.cast) && (!f.day || r.bd === f.day) && (!f.kind || r.kind === f.kind) && (!f.by || r.by === f.by) && (!f.at || atDay(r.at) === f.at));
+  const casts = [...new Set(R.map(r => r.cid))].sort((a, b) => castName(a).localeCompare(castName(b), "ja")), bys = [...new Set(R.map(r => r.by).filter(Boolean))];
+  const sel = (k, opts, lbl) => `<select onchange="SLOG.f.${k}=this.value;slogPaint()"><option value="">${lbl}</option>${opts.map(([v, l]) => `<option value="${esc(v)}" ${f[k] === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  el.innerHTML = `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <b style="font-size:14px">📜 ログ</b><input type="month" value="${SLOG.ym}" onchange="SLOG.ym=this.value;slogLoad()">
+      ${sel("cast", casts.map(c => [c, castName(c)]), "キャスト（全員）")}
+      <label style="font-size:12px">営業日 <input type="date" value="${f.day}" onchange="SLOG.f.day=this.value;slogPaint()"></label>
+      ${sel("kind", [["精算", "精算"], ["未精算", "未精算"], ["備考", "備考"], ["取消", "取り消し"]], "種類（全部）")}
+      ${sel("by", bys.map(b => [b, b]), "内勤（全員）")}
+      <label style="font-size:12px">処理した日 <input type="date" value="${f.at}" onchange="SLOG.f.at=this.value;slogPaint()"></label>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="SLOG.f={cast:'',day:'',kind:'',by:'',at:''};slogPaint()">クリア</button>
+      <small style="color:#9C8B8F">${list.length}件</small></div>
+    ${list.length ? `<div style="overflow-x:auto"><table class="slogt"><tr><th>処理した日時</th><th>内勤</th><th>キャスト</th><th>営業日</th><th>種類</th><th>内容</th></tr>
+      ${list.map(r => `<tr><td>${logWhen(r.at)}</td><td>${esc(r.by)}</td><td><b>${esc(castName(r.cid))}</b></td><td>${unsMd(r.bd)}</td><td><span class="sk ${r.kind}">${r.kind}</span></td><td style="white-space:pre-wrap">${esc(r.text)}</td></tr>`).join("")}</table></div>`
+      : `<div class="hint2">この月のログはありません</div>`}`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  table.slogt{width:100%;border-collapse:collapse;font-size:13px} table.slogt th{background:#FBF3F6;text-align:left;padding:5px 8px;font-size:12px;color:#9C8B8F;white-space:nowrap}
+  table.slogt td{border-top:1px solid #F1E3E7;padding:5px 8px;vertical-align:top} table.slogt td:first-child{white-space:nowrap}
+  .sk{display:inline-block;border-radius:99px;padding:1px 8px;font-size:11.5px;font-weight:800;white-space:nowrap} .sk.精算{background:#E6F6EE;color:#1a7f4b} .sk.未精算{background:#F1EAFA;color:#6030aa} .sk.備考{background:#FFF6D6;color:#8a6d00} .sk.取消{background:#FFE8EC;color:#B0213F}
+</style>`);// 日付が変わったら読みなおす（どちらのページも day を使う）
 let unsDay = "";
 setInterval(() => { if(typeof day !== "undefined" && day && day !== unsDay){ unsDay = day; unsLoad(); } }, 800);
 document.head.insertAdjacentHTML("beforeend", `<style>
