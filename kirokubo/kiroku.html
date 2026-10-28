@@ -2436,7 +2436,7 @@ renderTL = function(){ __renderTL(); renderBoard(); };
 /* ============================================================
    💴 精算（キャストの枠の中）… settle.html と同じ計算。精算のページはこちらに合体
    ============================================================ */
-const PLACES = ["池袋", "鶯谷", "五反田", "錦糸町", "回収"];
+const PLACES = ["池袋", "鶯谷", "五反田", "回収"];
 function calcCast(castId){
   const all = rows.filter(r=>r.cast_id === castId);
   const live = all.filter(r=>r.status !== "cancel" && r.status !== "tobi");
@@ -2523,6 +2523,15 @@ function cardHtml(id, c){
       ${c.diff != null && c.diff !== 0 ? `<span class="k">${c.diff < 0 ? "<b style='color:#d9534f'>未精算（マイナス）</b>" : "<b style='color:#2f9e6e'>お釣り（プラス）</b>"}</span><span class="v" style="color:${c.diff < 0 ? "#d9534f" : "#2f9e6e"}">${c.diff < 0 ? "−" : "＋"}${yen(Math.abs(c.diff))}</span>` : ""}
       ${c.diff === 0 ? `<span class="k">投函した額</span><span class="v" style="color:#2f9e6e">ぴったり ✅</span>` : ""}
     </div>
+    ${dis ? "" : `<div class="pmz"><div class="pmzh">✏️ プラス・マイナス・雑費を直す</div>
+      <div class="hint2" style="margin-top:6px">② プラス（交通費・ボーナスなど）</div><div class="items">${items(c.plusItems, "plus")}</div>
+      <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','plus')">＋ プラスを足す</button>
+      <div class="hint2" style="margin-top:8px">マイナス（雑費以外）</div><div class="items">${items(c.minusItems, "minus")}</div>
+      <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','minus')">＋ マイナスを足す</button>
+      <div class="hint2" style="margin-top:8px">雑費（自動：${yen(c.zappiAuto)}）</div>
+      <div class="it" style="display:flex;gap:6px;align-items:center"><input type="number" id="zo-${id}" value="${cd.zappi_override != null ? cd.zappi_override : ""}" placeholder="空なら自動" style="width:120px">
+        <button class="btn btn-ghost btn-sm" onclick="setZappi('${id}')">雑費を直す</button></div>
+    </div>`}
     <details style="margin-top:6px"><summary style="cursor:pointer;font-size:12.5px;font-weight:800;color:var(--sub)">🏪 店落ち・税務用</summary>
       <div class="scalc" style="margin-top:4px">
         <span class="k">暫定的な残額（総額 − 報酬）</span><span class="v">${yen(c.provisional)}</span>
@@ -2531,15 +2540,7 @@ function cardHtml(id, c){
         <span class="k">実質的な店落ち（暫定的な残額 − 源泉）</span><span class="v">${yen(c.realDrop)}</span>
       </div>
     </details>
-    ${dis ? "" : `<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:800;font-size:13px">✏️ プラス・マイナス・雑費を直す</summary>
-      <div class="hint2" style="margin-top:6px">② プラス（交通費・ボーナスなど）</div><div class="items">${items(c.plusItems, "plus")}</div>
-      <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','plus')">＋ プラスを足す</button>
-      <div class="hint2" style="margin-top:8px">マイナス（雑費以外）</div><div class="items">${items(c.minusItems, "minus")}</div>
-      <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','minus')">＋ マイナスを足す</button>
-      <div class="hint2" style="margin-top:8px">雑費（自動：${yen(c.zappiAuto)}）</div>
-      <div class="it" style="display:flex;gap:6px;align-items:center"><input type="number" id="zo-${id}" value="${cd.zappi_override != null ? cd.zappi_override : ""}" placeholder="空なら自動" style="width:120px">
-        <button class="btn btn-ghost btn-sm" onclick="setZappi('${id}')">雑費を直す</button></div>
-    </details>`}
+    ${typeof settleLogHtml === "function" ? settleLogHtml(id) : ""}
     <div class="acts">
       <button class="btn btn-ghost btn-sm" onclick="copyDetail('${id}')">📋 精算明細をコピー（LINE用）</button>
       <button class="btn btn-ghost btn-sm" onclick="copyDetailImg('${id}')">🖼 画像でコピー</button>
@@ -5449,6 +5450,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=1"></script>
+<script src="unsettled.js?v=2"></script>
 </body>
 </html>
