@@ -3760,6 +3760,7 @@ let lastFDay = "";
 { const __recalcDay = recalc; recalc = function(){ const r = __recalcDay.apply(this, arguments);
     const v = ($("f_day") && $("f_day").value) || "";
     if($("formBg").classList.contains("show") && v !== lastFDay){ lastFDay = v; fillCastSel(); if(isDummyStore($("f_store").value)) renderDummy(); }
+    if(typeof dmAutoPick === "function" && $("formBg").classList.contains("show")) try{ dmAutoPick(); }catch(e){}
     return r; }; }
 { const __ofDay = openForm; openForm = function(){ lastFDay = ""; return __ofDay.apply(this, arguments); }; }
 { const __lodDay = loadOtherDay; loadOtherDay = function(bd){ const r = __lodDay.apply(this, arguments); return r; }; }
@@ -5517,31 +5518,44 @@ openForm = function(id){ dmMode = "dummy"; tmPick = ""; $("f_namedEx").checked =
 /* 🎭 18・極門：電話番号で調べたら、前にこのお店で会った名前（記録簿・台帳エクセル）を自動で選ぶ → 本指名
    専用の名前（みさ→美咲 など）なら「個人または複数人専用在籍指名」、ダミー名（茜 など）なら「ダミー在籍指名」＋前に行った実際の子 */
 let dmAutoKey = "";
+// 自動では選ばない（その子が休み・ちがう子を指名、もあるので）。「前回と同じにする」のボタンを出すだけ
+let dmSuggest = null;   // { p, md, owner, off }
 function dmAutoPick(){
-  const store = $("f_store").value;
-  if(editing || !isDummyStore(store) || !Array.isArray(custSeen) || !curCustomer) return;
-  const key = curCustomer.id + "|" + store; if(dmAutoKey === key) return;
-  if($("f_dummy").value || $("f_cast").value) return;
+  const store = $("f_store").value, box = dmSuggestBox();
+  if(editing || !isDummyStore(store) || !Array.isArray(custSeen) || !curCustomer){ box.innerHTML = ""; dmSuggest = null; return; }
   const p = seenNorm().filter(x => x.store_key === store && x.dummy_name && !["cancel", "tobi"].includes(x.status)).sort((a, b) => String(b.biz_date).localeCompare(String(a.biz_date)))[0];
-  if(!p) return;
-  dmAutoKey = key;
+  if(!p){ box.innerHTML = ""; dmSuggest = null; return; }
   const md = (p.biz_date || "").replace(/^\d\d(\d\d)-(\d\d)-(\d\d)$/, "$1/$2/$3");
-  const owners = ownersOf(store, p.dummy_name);
-  if(owners.length){
-    const c = owners.find(o => o.id === p.cast_id) || owners[0];
-    setDmMode("named"); $("f_named").value = c.id; onNamedPick(); setVisit(visitFrom(custSeen, c.id));
-    toast(`👤 前回（${md}）と同じ「${p.dummy_name}」（${castName(c.id)}）にしました`);
+  const owners = ownersOf(store, p.dummy_name), owner = owners.find(o => o.id === p.cast_id) || owners[0] || null;
+  const cid = owner ? owner.id : p.cast_id, off = cid ? !dmWorking(cid) : false;
+  dmSuggest = { p, md, owner, cid, off };
+  const now = owner ? (dmMode === "named" && $("f_named").value === owner.id) : ($("f_dummy").value === p.dummy_name);
+  box.innerHTML = `<div class="dmsug ${off ? "off" : ""}">🕘 前回（${md}）は「<b>${esc(p.dummy_name)}</b>」${cid ? `（${esc(castName(cid))}）` : ""}${owner ? "＝専用在籍指名" : "＝ダミー在籍指名"}
+    ${off ? `<b class="offb">… ${esc(cid ? castName(cid) : "")} はこの日お休み</b>` : now ? `<b style="color:#2f9e6e">✅ 前回と同じにしています</b>` : `<button type="button" class="btn btn-ghost btn-sm" onclick="dmAutoApply()">前回と同じにする</button>`}</div>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>.dmsug{background:#fff;border:1.5px dashed #A98BE6;border-radius:10px;padding:6px 10px;margin-bottom:6px;font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap} .dmsug.off{border-color:#E5486C;background:#FFF5F7} .dmsug .offb{color:#C62828}</style>`);
+function dmSuggestBox(){
+  let el = $("dmSuggest");
+  if(!el){ el = document.createElement("div"); el.id = "dmSuggest"; const w = $("dummyWrap"), chips = $("dmModeChips"); w.insertBefore(el, chips); }
+  return el;
+}
+function dmAutoApply(){
+  const s = dmSuggest, store = $("f_store").value; if(!s || s.off) return;
+  const { p, md, owner } = s;
+  if(owner){
+    setDmMode("named"); $("f_named").value = owner.id; onNamedPick(); setVisit(visitFrom(custSeen, owner.id));
+    toast(`👤 前回（${md}）と同じ「${p.dummy_name}」（${castName(owner.id)}）にしました`);
   } else if(dmBlocked(store)[p.dummy_name]){
-    toast(`🚫 前回（${md}）の「${p.dummy_name}」は、${dmBlocked(store)[p.dummy_name]}なので選べません`);
+    toast(`🚫 「${p.dummy_name}」は、${dmBlocked(store)[p.dummy_name]}なので選べません`);
   } else {
     setDmMode("dummy");
     if(![...$("f_dummy").options].some(o => o.value === p.dummy_name)) $("f_dummy").insertAdjacentHTML("beforeend", `<option>${esc(p.dummy_name)}</option>`);
     $("f_dummy").value = p.dummy_name;
-    if(p.cast_id){ $("f_cast").value = p.cast_id; if($("f_cast").value !== p.cast_id && $("f_castAll")){ $("f_castAll").checked = true; fillCastSel(); $("f_cast").value = p.cast_id; } onCast(); }
+    if(p.cast_id){ $("f_cast").value = p.cast_id; if($("f_cast").value !== p.cast_id && $("f_castAll")){ $("f_castAll").checked = true; fillCastSel(); $("f_cast").value = p.cast_id; } onCast(); setVisit(visitFrom(custSeen, p.cast_id)); }
     recalc(); renderDummyMatch();
     toast(`🎭 前回（${md}）と同じ「${p.dummy_name}」${p.cast_id ? "（" + castName(p.cast_id) + "）" : ""}にしました`);
   }
-  if(p.cast_id) setVisit(visitFrom(custSeen, $("f_cast").value));
+  dmAutoPick();
 }
 { const __lcAuto = lookupCustomer; lookupCustomer = async function(){ const r = await __lcAuto.apply(this, arguments); try{ if(isDummyStore($("f_store").value)) renderDummy(); dmAutoPick(); }catch(e){} return r; }; }
 { const __rdAuto = renderDummy; renderDummy = function(){ const r = __rdAuto.apply(this, arguments); setTimeout(() => { try{ dmAutoPick(); }catch(e){} }, 0); return r; }; }
