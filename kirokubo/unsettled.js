@@ -359,6 +359,8 @@ copyDetail = function(id){
   if(P.uns.length){
     lines.push("", "【本日＋未精算（合算）】", `本日の投函額　${yen(c.drop)}`);
     P.uns.forEach(x => lines.push(`${x.label}`));
+    { const parts = P.uns.map(x => [unsMd(x.date) + "（未精算）", x.amount]).concat([[unsMd(day) + "（本日）", c.drop]]);
+      lines.push("", parts.map(p => p[0]).join("＋"), parts.map((p, i) => (i && p[1] >= 0 ? "＋" : i ? "−" : p[1] < 0 ? "−" : "") + Math.abs(p[1]).toLocaleString("ja-JP")).join("") + "＝"); }
     lines.push(P.due >= 0 ? `💰 合計で投函　${yen(P.due)}` : `💴 お店から渡す　${yen(-P.due)}`);
   }
   if(P.rest.length){ lines.push("", "【のこりの未精算（今日は精算しない）】"); P.rest.forEach(x => lines.push(x)); }
@@ -376,17 +378,20 @@ settleCanvas = function(id){
   P.res.forEach(r => { ops.push(["row", r.head, r.off ? (r.st === "cancel" ? "キャンセル" : "トビ") : yen(r.courseBack), r.off ? "off" : "res"]); r.ops.forEach(o => ops.push(["sub", "OP：" + o])); });
   ops.push(["line"], ["row", "報酬", yen(c.reward)]);
   if(c.option) ops.push(["row", "OP（バック）", yen(c.option)]);
-  ops.push(["row", "雑費", "−" + yen(c.zappi)], ["big", "本日の報酬", yen(P.pay), "#e5638c"]);
+  ops.push(["row", "雑費", "−" + yen(c.zappi)], ["pbox", "本日の報酬", yen(P.pay)]);
   if(P.pm.length){ ops.push(["line"]); P.pm.forEach(([l, v]) => ops.push(["row", l, (v >= 0 ? "＋" : "−") + yen(Math.abs(v))])); }
   ops.push(["big", "手取り（今日お渡し）", yen(c.takeHome), "#5C4B4F"]);
   if(P.uns.length){
     ops.push(["head", "📒 本日＋未精算（合算）"], ["row", "本日の投函額", yen(c.drop)]);
     P.uns.forEach(x => ops.push(["sub2", x.label]));
+    // 計算式：10/27（未精算）＋10/30（本日）／15,000＋13,000＝
+    const parts = P.uns.map(x => [unsMd(x.date) + "（未精算）", x.amount]).concat([[unsMd(day) + "（本日）", c.drop]]);
+    ops.push(["fx", parts.map(p => p[0]).join("＋"), parts.map((p, i) => (i && p[1] >= 0 ? "＋" : i ? "−" : p[1] < 0 ? "−" : "") + Math.abs(p[1]).toLocaleString("ja-JP")).join("") + "＝"]);
     ops.push(["box", P.due, "💰 合計で投函", "💴 お店から渡す（合計）"]);
   }
   if(P.rest.length){ ops.push(["head2", "📒 のこりの未精算（今日は精算しない）"]); P.rest.forEach(x => ops.push(["sub2", x])); }
   ops.push(["memo"]);
-  const hOf = o => ({ box: 112, row: 32, sub: 22, sub2: 24, line: 18, big: 44, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 })[o[0]] || 30;
+  const hOf = o => ({ pbox: 64, fx: 54, box: 112, row: 32, sub: 22, sub2: 24, line: 18, big: 44, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 })[o[0]] || 30;
   const H = 88 + ops.reduce((a, o) => a + hOf(o), 0) + 56;
   const cv = document.createElement("canvas"); cv.width = W * S; cv.height = H * S;
   const g = cv.getContext("2d"); g.scale(S, S);
@@ -415,6 +420,13 @@ settleCanvas = function(id){
       g.strokeStyle = "#F1C9D5"; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(PAD, y + 9); g.lineTo(W - PAD, y + 9); g.stroke(); g.setLineDash([]);
     } else if(k === "big"){
       txt(o[1], PAD, y + 30, "bold 19px", "#5C4B4F"); txt(o[2], W - PAD, y + 31, "bold 24px", o[3], "right");
+    } else if(k === "pbox"){   // 本日の報酬：ピンクの枠
+      g.fillStyle = "#FFE3F0"; g.strokeStyle = "#F7B6CF"; g.lineWidth = 2.5;
+      g.beginPath(); g.roundRect ? g.roundRect(PAD, y + 6, W - PAD * 2, h - 12, 12) : g.rect(PAD, y + 6, W - PAD * 2, h - 12); g.fill(); g.stroke();
+      txt(o[1], PAD + 14, y + 40, "bold 19px", "#6b3550"); txt(o[2], W - PAD - 14, y + 42, "bold 26px", "#e5638c", "right");
+    } else if(k === "fx"){
+      txt(fit(o[1], W - PAD * 2, "bold 14px"), PAD, y + 20, "bold 14px", "#5C4B4F");
+      txt(o[2], W - PAD, y + 44, "bold 18px", "#5C4B4F", "right");
     } else if(k === "head2"){
       g.fillStyle = "#F4F1F6"; g.fillRect(PAD - 6, y + 8, W - PAD * 2 + 12, 28); txt(o[1], PAD, y + 28, "bold 15px", "#8a7f99");
     } else if(k === "head"){
