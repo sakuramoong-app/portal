@@ -2139,7 +2139,7 @@ const __recalc2 = recalc;
 recalc = function(){
   __recalc2();
   const el = $("finalSummary"); if(!el || !last) return;
-  const d = new Date(day + "T12:00:00Z");
+  const d = new Date((($("f_day") && $("f_day").value) || day) + "T12:00:00Z");   // 受付の日付
   const c = M.casts.find(x=>x.id === $("f_cast").value);
   const cname = c ? (c.official_name || c.temp_name) : "（キャスト未定）";
   const dummy = isDummyStore(last.store) && $("f_dummy").value ? $("f_dummy").value : "";
@@ -2148,6 +2148,7 @@ recalc = function(){
   const pay = { cash: "現金", card: "カード", card_paid: "カード済み" }[last.pay] || "";
   el.innerHTML = `<div class="l1">${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${$("f_start").value || "--:--"}〜${$("endView").textContent}　${esc(place)}</div>
     <div class="l2">${dummy ? `🎭 ${esc(dummy)}（実際：${esc(cname)}）` : esc(cname)}　${esc(course)}</div>
+    ${last.opts.length ? `<div class="l2" style="font-size:16px">OP：${esc(last.opts.map(o => o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・"))}</div>` : ""}
     <div class="l3">総額 <b>${yen(last.total)}</b>（${pay}）</div>`;
 };
 
@@ -2530,7 +2531,7 @@ function cardHtml(id, c){
         ? `<div class="sb drop"><div class="k">💰 投函額<small>（封筒に入れて投函する額）</small></div><div class="v">${yen(c.drop)}</div><div class="s">総額 ${yen(c.total)} − 手取り ${yen(c.takeHome)}${c.cardPaid ? " − カード払分 " + yen(c.cardPaid) : ""}</div>
             ${c.deposited != null ? `<div class="s2 ${c.diff < 0 ? "ng" : "ok"}">投函した額 ${yen(c.deposited)}${c.diff === 0 ? "　ぴったり ✅" : c.diff < 0 ? "　未精算 −" + yen(-c.diff) : "　お釣り ＋" + yen(c.diff)}</div>` : ""}</div>`
         : `<div class="sb give"><div class="k">💴 お店からキャストに渡す<small>（カード決済で現金がないため）</small></div><div class="v">${yen(-c.drop)}</div><div class="s">投函はなし</div></div>`}
-      <div class="sb take"><div class="k">👛 手取り（本日のお給料）</div><div class="v">${yen(c.takeHome)}</div><div class="s">報酬 ${yen(c.reward)}${c.option ? "＋OP " + yen(c.option) : ""}${c.transportBack + c.plus ? "＋プラス " + yen(c.transportBack + c.plus) : ""} − 雑費 ${yen(c.zappi)}${c.minus ? "−マイナス " + yen(c.minus) : ""}</div></div>
+      <div class="sb take"><div class="k">👛 手取り（今日お渡し）</div><div class="v">${yen(c.takeHome)}</div><div class="s">本日の報酬 ${yen(c.reward + c.option - c.zappi)}（報酬${c.option ? "＋OP" : ""}−雑費）${c.transportBack + c.plus ? "＋交通費・プラス " + yen(c.transportBack + c.plus) : ""}${c.minus ? "−マイナス " + yen(c.minus) : ""}</div></div>
     </div>    ${typeof unsBoxHtml === "function" ? unsBoxHtml(id, c) : ""}
     <table class="res"><tr><th>時間</th><th>店舗</th><th>コース</th><th class="money">総額</th><th class="money">報酬</th></tr>${res}</table>
     ${c.why.length ? `<div class="note2">🧮 ${c.why.map(esc).join("<br>")}</div>` : ""}
@@ -3181,7 +3182,7 @@ renderBoard = function(){
     // その子の今日の予約（何時から・場所・コース・お客さん）を箇条書きで
     const bl = x.bks.filter(b=>!["cancel", "tobi"].includes(b.r.status)).sort((a, b)=>a.s - b.s)
       .map(b=>`<li class="${b.r.status === "done" ? "dn" : ""}">${esc(hm(b.r.start_at))} ${esc(b.r.area || "")} ${esc(b.r.course || "")}${/^\d+$/.test(b.r.course || "") ? "分" : ""} ${esc((b.r.kb_customers || {}).name || "")}</li>`).join("");
-    return `<div class="chipc ${cls}" data-cid="${cid}" data-st="${st}">【${esc(castLabel(x))}】${esc(sh)}${st === "gone" && gk ? `<small>（${gk}）</small>` : ""}${x.cd && x.cd.settled ? "<small>（精算済）</small>" : ""}${pill}${bl ? `<ul class="bkl">${bl}</ul>` : ""}${movingHtml(x)}${seat}</div>`;
+    return `<div class="chipc ${cls}" data-cid="${cid}" data-st="${st}">【${esc(castLabel(x))}】${esc(sh)}${st === "gone" && gk ? `<small>（${gk}）</small>` : x.cd && x.cd.status ? `<small class="cdst">（${esc(x.cd.status)}）</small>` : ""}${x.cd && x.cd.settled ? "<small>（精算済）</small>" : ""}${pill}${bl ? `<ul class="bkl">${bl}</ul>` : ""}${movingHtml(x)}${seat}</div>`;
   };
   const th = c=>`<th class="${AREA_CLASS[c] || ""}">${esc(c)}${c === "鶯谷" ? ` <button type="button" class="logbtn" onclick="openSeatLog()">📜 ログ</button>` : ""}</th>`;
   el.innerHTML = `<table class="board"><tr><th class="corner"></th>${cols.map(th).join("")}</tr>`
@@ -5699,6 +5700,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=4"></script>
+<script src="unsettled.js?v=5"></script>
 </body>
 </html>

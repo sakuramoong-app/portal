@@ -311,3 +311,117 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .uonly{background:#FFFBEA;border:2px solid #F2C200;border-radius:10px;padding:8px 10px;margin-top:6px;font-size:13px}
   .pmz{background:#F7FBF4;border:1.5px solid #CFE6C2;border-radius:12px;padding:8px 10px;margin:8px 0} .pmzh{font-weight:800;font-size:13px}
 </style>`);
+
+/* ---------- 🧾 精算明細（画像・LINE の文）：精算ページ・記録簿の💴精算 共通（ページの関数を上書き）
+   ・予約ごとにコースの報酬と、バック有OPのくわしいところ
+   ・「本日の報酬」（報酬＋OP−雑費）と「手取り（今日お渡し）」（＋交通費・プラス−マイナス）を分ける
+   ・未精算をいっしょに精算するときは、1枚の中に「本日の精算」と「本日＋未精算（合算）」の2段
+   ・精算メモは1営業日に1枚：本日＋未精算の日の数だけお手本を出す ---------- */
+function settleParts(id){
+  const c = calcCast(id), d = new Date(day + "T12:00:00Z");
+  const pay = c.reward + c.option - c.zappi;   // 本日の報酬
+  const pm = [];
+  if(c.transportBack) pm.push(["交通費バック", c.transportBack]);
+  c.plusItems.forEach(x => { if(Number(x.amount)) pm.push([x.label || "プラス", Number(x.amount)]); });
+  c.minusItems.forEach(x => { if(Number(x.amount)) pm.push([x.label || "マイナス", -Number(x.amount)]); });
+  // いっしょに精算する未精算（精算済なら、そのときのもの）
+  const cd = unsCD()[id] || {}, snap = cd.settle_snapshot || {};
+  let uns = [];
+  if(cd.settled && Array.isArray(snap.uns)) uns = snap.uns.map(x => ({ date: x.date, amount: x.amount || 0, label: x.label || "" }));
+  else { const sel = unsSel[id] || new Set(), open = unsOpen(id); uns = open.filter(x => sel.has(x.key)).map(x => ({ date: x.date, amount: x.amount, label: unsLine(x, open.indexOf(x), id) })); }
+  const due = c.drop + uns.reduce((a, x) => a + x.amount, 0);
+  // 精算メモ（1営業日に1枚）
+  const memo = [[day, c.drop]]; uns.forEach(x => { const m = memo.find(y => y[0] === x.date); if(m) m[1] += x.amount; else memo.push([x.date, x.amount]); });
+  const res = c.all.map(r => {
+    const off = r.status === "cancel" || r.status === "tobi";
+    const ops = off ? [] : (r.options || []).filter(o => (o.back || 0) > 0).map(o => `${o.label}${o.qty > 1 ? "×" + o.qty : ""}（バック ${yen(o.back * (o.qty || 1))}）`);
+    const head = `${hm(r.start_at)} ${storeLabel(r.store_key)} ${r.course}${/^\d+$/.test(r.course) ? "分" : ""}${r.extension_count ? " 延長" + r.extension_count : ""}`;
+    const courseBack = r.back_override != null ? r.back_override : (r.course_back || 0) + (r.extra_back || 0);
+    return { head, off, st: r.status, courseBack, ops };
+  });
+  return { c, d, pay, pm, uns, due, memo, res };
+}
+copyDetail = function(id){
+  const P = settleParts(id), c = P.c, d = P.d;
+  const lines = [`【精算】${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${castName(id)}さん`, ""];
+  P.res.forEach(r => {
+    lines.push(`・${r.head}　${r.off ? (r.st === "cancel" ? "キャンセル" : "トビ") : "報酬 " + yen(r.courseBack)}`);
+    r.ops.forEach(o => lines.push(`　　OP：${o}`));
+  });
+  lines.push("", `報酬　${yen(c.reward)}`);
+  if(c.option) lines.push(`OP　${yen(c.option)}`);
+  lines.push(`雑費　−${yen(c.zappi)}`, `▶ 本日の報酬　${yen(P.pay)}`);
+  if(P.pm.length){ lines.push(""); P.pm.forEach(([l, v]) => lines.push(`${l}　${v >= 0 ? "＋" : "−"}${yen(Math.abs(v))}`)); }
+  lines.push(`▶ 手取り（今日お渡し）　${yen(c.takeHome)}`, "");
+  lines.push(c.drop >= 0 ? `💰 本日の投函額　${yen(c.drop)}` : `💴 カード決済のため、お店から ${yen(-c.drop)} お渡しします`);
+  if(P.uns.length){
+    lines.push("", "【本日＋未精算（合算）】", `本日の投函額　${yen(c.drop)}`);
+    P.uns.forEach(x => lines.push(`${x.label}`));
+    lines.push(P.due >= 0 ? `💰 合計で投函　${yen(P.due)}` : `💴 お店から渡す　${yen(-P.due)}`);
+  }
+  lines.push("", `📝 精算メモ（1営業日に1枚・${P.memo.length}枚）`);
+  P.memo.forEach(([bd, v]) => lines.push(`　営業日 ${unsMd(bd)}／名前 ${castName(id)}／金額 ${v >= 0 ? yen(v) : "（お店から渡す " + yen(-v) + "）"}`));
+  lines.push("📖 投函のしかた：https://sakuramoong-app.github.io/portal/kirokubo/posting.html", "", "お疲れさまでした🌸");
+  navigator.clipboard.writeText(lines.join("\n")).then(() => toast("📋 精算明細をコピーしました"), () => alert(lines.join("\n")));
+};
+settleCanvas = function(id){
+  const P = settleParts(id), c = P.c, d = P.d;
+  const S = 2, W = 560, PAD = 28, FONT = '"Hiragino Maru Gothic ProN","M PLUS Rounded 1c","Yu Gothic","Meiryo",sans-serif';
+  // 描くもの： [種類, ...]。高さを先に数える
+  const ops = [];
+  ops.push(["box", c.drop, "💰 本日の投函額（封筒に入れて投函）", "💴 お店からキャストに渡す"]);
+  P.res.forEach(r => { ops.push(["row", r.head, r.off ? (r.st === "cancel" ? "キャンセル" : "トビ") : yen(r.courseBack), r.off ? "off" : "res"]); r.ops.forEach(o => ops.push(["sub", "OP：" + o])); });
+  ops.push(["line"], ["row", "報酬", yen(c.reward)]);
+  if(c.option) ops.push(["row", "OP（バック）", yen(c.option)]);
+  ops.push(["row", "雑費", "−" + yen(c.zappi)], ["big", "本日の報酬", yen(P.pay), "#e5638c"]);
+  if(P.pm.length){ ops.push(["line"]); P.pm.forEach(([l, v]) => ops.push(["row", l, (v >= 0 ? "＋" : "−") + yen(Math.abs(v))])); }
+  ops.push(["big", "手取り（今日お渡し）", yen(c.takeHome), "#5C4B4F"]);
+  if(P.uns.length){
+    ops.push(["head", "📒 本日＋未精算（合算）"], ["row", "本日の投函額", yen(c.drop)]);
+    P.uns.forEach(x => ops.push(["sub2", x.label]));
+    ops.push(["box", P.due, "💰 合計で投函", "💴 お店から渡す（合計）"]);
+  }
+  ops.push(["memo"]);
+  const hOf = o => ({ box: 112, row: 32, sub: 22, sub2: 24, line: 18, big: 44, head: 40, memo: 46 + (1 + P.memo.length) * 30 })[o[0]] || 30;
+  const H = 88 + ops.reduce((a, o) => a + hOf(o), 0) + 56;
+  const cv = document.createElement("canvas"); cv.width = W * S; cv.height = H * S;
+  const g = cv.getContext("2d"); g.scale(S, S);
+  g.fillStyle = "#fff"; g.fillRect(0, 0, W, H);
+  const grd = g.createLinearGradient(0, 0, W, 0); grd.addColorStop(0, "#ff9fb8"); grd.addColorStop(1, "#e5638c");
+  g.fillStyle = grd; g.fillRect(0, 0, W, 72);
+  g.fillStyle = "#fff"; g.textAlign = "left"; g.font = `bold 15px ${FONT}`; g.fillText(`精算　${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]})`, PAD, 28);
+  g.font = `bold 24px ${FONT}`; g.fillText(`${castName(id)}さん`, PAD, 58);
+  let y = 84;
+  const txt = (s, x, yy, font, color, align) => { g.font = `${font} ${FONT}`; g.fillStyle = color; g.textAlign = align || "left"; g.fillText(s, x, yy); };
+  const fit = (s, max, font) => { g.font = `${font} ${FONT}`; if(g.measureText(s).width <= max) return s; while(s.length > 1 && g.measureText(s + "…").width > max) s = s.slice(0, -1); return s + "…"; };
+  ops.forEach(o => {
+    const h = hOf(o), k = o[0];
+    if(k === "box"){
+      const give = o[1] < 0;
+      g.fillStyle = give ? "#E3F1FF" : "#00B0F0"; g.strokeStyle = give ? "#2f7fd0" : "#0A84C6"; g.lineWidth = 3;
+      g.beginPath(); g.roundRect ? g.roundRect(PAD, y + 4, W - PAD * 2, h - 12, 14) : g.rect(PAD, y + 4, W - PAD * 2, h - 12); g.fill(); g.stroke();
+      txt(give ? o[3] : o[2], PAD + 16, y + 34, "bold 17px", give ? "#1f4f80" : "#08304d");
+      txt(yen(Math.abs(o[1])), W - PAD - 16, y + 92, "900 42px", give ? "#2f7fd0" : "#E0001B", "right");
+    } else if(k === "row"){
+      txt(fit(o[1], W - PAD * 2 - 130, o[3] === "res" || o[3] === "off" ? "15px" : "bold 16px"), PAD, y + 22, o[3] === "res" || o[3] === "off" ? "15px" : "bold 16px", o[3] === "off" ? "#B9A9AD" : "#5C4B4F");
+      txt(o[2], W - PAD, y + 22, "bold 16px", o[3] === "off" ? "#B9A9AD" : "#5C4B4F", "right");
+    } else if(k === "sub" || k === "sub2"){
+      txt(fit(o[1], W - PAD * 2 - 20, k === "sub" ? "13px" : "bold 13.5px"), PAD + 18, y + 16, k === "sub" ? "13px" : "bold 13.5px", k === "sub" ? "#8a6d00" : "#5b3fa6");
+    } else if(k === "line"){
+      g.strokeStyle = "#F1C9D5"; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(PAD, y + 9); g.lineTo(W - PAD, y + 9); g.stroke(); g.setLineDash([]);
+    } else if(k === "big"){
+      txt(o[1], PAD, y + 30, "bold 19px", "#5C4B4F"); txt(o[2], W - PAD, y + 31, "bold 24px", o[3], "right");
+    } else if(k === "head"){
+      g.fillStyle = "#F1EAFA"; g.fillRect(PAD - 6, y + 8, W - PAD * 2 + 12, 28); txt(o[1], PAD, y + 28, "bold 16px", "#5b3fa6");
+    } else if(k === "memo"){
+      txt(`📝 精算メモに書くこと（1営業日に1枚・${P.memo.length}枚）`, PAD, y + 22, "bold 15px", "#5C4B4F");
+      const tx = PAD, ty = y + 32, cw = [120, 170, W - PAD * 2 - 290], rh = 30, hd = ["営業日", "名前", "金額"];
+      g.strokeStyle = "#333"; g.lineWidth = 1.5;
+      const rowsM = [hd].concat(P.memo.map(([bd, v]) => [unsMd(bd), castName(id), v >= 0 ? "¥" + v.toLocaleString("ja-JP") : "（渡す " + yen(-v) + "）"]));
+      rowsM.forEach((rw, ri) => { let x = tx; cw.forEach((w, i) => { g.strokeRect(x, ty + ri * rh, w, rh); txt(rw[i], x + w / 2, ty + ri * rh + 21, ri ? "bold 16px" : "14px", ri ? "#1a3a8a" : "#333", "center"); x += w; }); });
+    }
+    y += h;
+  });
+  txt("お疲れさまでした🌸", W / 2, y + 30, "bold 15px", "#e5638c", "center");
+  return cv;
+};
