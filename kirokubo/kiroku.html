@@ -2549,7 +2549,7 @@ function cardHtml(id, c){
         ? `<span class="k"><b>投函額</b>（総額 ${yen(c.total)} − 手取り − カード払分）</span><span class="v big">${yen(c.drop)}</span>`
         : `<span class="k"><b>お店からキャストに渡す</b>（カードで現金がないため）</span><span class="v big" style="color:#2f7fd0">${yen(-c.drop)}</span>`}
       <span class="k">投函した額（お金を確認したあと手入力）</span><span class="v">
-        <input type="number" id="dep-${id}" value="${c.deposited != null ? c.deposited : ""}" placeholder="${c.drop >= 0 ? c.drop : ""}" ${KB.CAN_EDIT ? "" : "disabled"}
+        <input type="number" id="dep-${id}" value="${c.deposited != null ? c.deposited : ""}" placeholder="投函した額" ${KB.CAN_EDIT ? "" : "disabled"}
           style="width:110px;text-align:right;font-family:inherit;font-size:13px;padding:4px 6px;border:1.5px solid var(--line);border-radius:8px" onchange="setDeposit('${id}',this.value)"></span>
       ${c.diff != null && c.diff !== 0 ? `<span class="k">${c.diff < 0 ? "<b style='color:#d9534f'>未精算（マイナス）</b>" : "<b style='color:#2f9e6e'>お釣り（プラス）</b>"}</span><span class="v" style="color:${c.diff < 0 ? "#d9534f" : "#2f9e6e"}">${c.diff < 0 ? "−" : "＋"}${yen(Math.abs(c.diff))}</span>` : ""}
       ${c.diff === 0 ? `<span class="k">投函した額</span><span class="v" style="color:#2f9e6e">ぴったり ✅</span>` : ""}
@@ -5700,6 +5700,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=7"></script>
+<script src="unsettled.js?v=8"></script>
 </body>
 </html>

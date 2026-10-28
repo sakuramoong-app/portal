@@ -60,7 +60,7 @@ async function unsLoad(){
 // キャストの未精算（古い順）：{ key, kind:"day"|"entry", date, amount（＋＝キャストがお店に払う）, what（なんの未精算か）, raw }
 function unsOpen(id){
   const a = UNSD.filter(x => x.cid === id).map(x => ({ key: "d" + x.date, kind: "day", date: x.date, amount: x.c.drop, raw: x,
-    what: x.c.drop >= 0 ? `当日の精算をしていない（投函額 ${yen(x.c.drop)}）` : `当日の精算をしていない（お店から渡す ${yen(-x.c.drop)}）` }));
+    what: x.c.drop >= 0 ? `未精算 ${yen(x.c.drop)}` : `お店から渡す ${yen(-x.c.drop)}` }));
   const b = (UNS || []).filter(x => x.cast_id === id && !x.done_on).map(x => ({ key: "u" + x.id, kind: "entry", date: x.biz_date, amount: x.amount, raw: x,
     what: (x.note || (x.amount >= 0 ? "投函が足りなかった" : "多く投函した")) + (x.amount >= 0 ? `（未精算 ${yen(x.amount)}）` : `（お釣り ${yen(-x.amount)}）`) }));
   return a.concat(b).sort((p, q) => String(p.date).localeCompare(String(q.date)) || (p.kind === "day" ? -1 : 1));
@@ -204,7 +204,7 @@ function unsOnlyFoot(cid, l){
   return `<div class="uonly"><b>💴 未精算だけ精算する</b>（${picked.map(x => UNS_ABC[l.indexOf(x)] || "").join("・")}）　${sum >= 0 ? `<span class="due">💰 投函 ${yen(sum)}</span>` : `<span class="due give">💴 お店から渡す ${yen(-sum)}</span>`}
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px">
       <select id="uo_pl_${cid}">${(typeof PLACES !== "undefined" ? PLACES : ["池袋", "鶯谷", "五反田", "回収"]).map(p => `<option>${p}</option>`).join("")}</select>
-      <input type="number" id="uo_dep_${cid}" placeholder="投函した額（${sum >= 0 ? sum : 0}）" style="width:150px">
+      <input type="number" id="uo_dep_${cid}" placeholder="投函した額" style="width:150px">
       <button type="button" class="btn btn-primary btn-sm" onclick="unsOnlySettle('${cid}')">✅ 未精算だけ精算済にする</button></div></div>`;
 }
 async function unsOnlySettle(cid){
@@ -313,10 +313,10 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 
 /* ---------- 🧾 精算明細（画像・LINE の文）：精算ページ・記録簿の💴精算 共通（ページの関数を上書き）
-   ・予約ごとにコースの報酬と、バック有OPのくわしいところ
-   ・「本日の報酬」（報酬＋OP−雑費）と「手取り（今日お渡し）」（＋交通費・プラス−マイナス）を分ける
-   ・未精算をいっしょに精算するときは、1枚の中に「本日の精算」と「本日＋未精算（合算）」の2段
-   ・精算メモは1営業日に1枚：本日＋未精算の日の数だけお手本を出す ---------- */
+   並び：1本目・2本目…（くわしいところ・OP・その仕事の報酬） → 本日の報酬総額・OP総額・雑費・プラマイ
+         → 本日の報酬／本日の手取り額 → 本日の投函額
+         → 本日＋未精算（合算）A・B・C…（いちばん下が本日精算）→ A＋B＋…＝ → 合計で投函
+         → 精算メモ（1営業日に1枚） ---------- */
 function settleParts(id){
   const c = calcCast(id), d = new Date(day + "T12:00:00Z");
   const pay = c.reward + c.option - c.zappi;   // 本日の報酬
@@ -330,41 +330,53 @@ function settleParts(id){
   if(cd.settled && Array.isArray(snap.uns)) uns = snap.uns.map(x => ({ date: x.date, amount: x.amount || 0, label: x.label || "" }));
   else { const sel = unsSel[id] || new Set(), open = unsOpen(id); uns = open.filter(x => sel.has(x.key)).map(x => ({ date: x.date, amount: x.amount, label: unsLine(x, open.indexOf(x), id) })); }
   const due = c.drop + uns.reduce((a, x) => a + x.amount, 0);
+  // 合算の行：A・B・C…（未精算・お釣り）、いちばん下が本日精算
+  const sum = uns.map(x => ({ date: x.date, kind: x.amount >= 0 ? "未精算" : "お釣り", amount: x.amount }))
+    .concat([{ date: day, kind: "本日精算", amount: c.drop }]).map((x, i) => Object.assign(x, { abc: UNS_ABC[i] || String(i + 1) }));
   // 今日はいっしょに精算しない未精算（お知らせとして画像・文に出す）
   const rest = cd.settled ? [] : (() => { const sel = unsSel[id] || new Set(), open = unsOpen(id); return open.filter(x => !sel.has(x.key)).map(x => unsLine(x, open.indexOf(x), id)); })();
   // 精算メモ（1営業日に1枚）
   const memo = [[day, c.drop]]; uns.forEach(x => { const m = memo.find(y => y[0] === x.date); if(m) m[1] += x.amount; else memo.push([x.date, x.amount]); });
-  const res = c.all.map(r => {
+  memo.sort((p, q) => String(p[0]).localeCompare(String(q[0])));
+  const res = c.all.map((r, i) => {
     const off = r.status === "cancel" || r.status === "tobi";
-    const ops = off ? [] : (r.options || []).filter(o => (o.back || 0) > 0).map(o => `${o.label}${o.qty > 1 ? "×" + o.qty : ""}（バック ${yen(o.back * (o.qty || 1))}）`);
+    const bo = off ? [] : (r.options || []).filter(o => (o.back || 0) > 0);
+    const ops = bo.map(o => `${o.label}${o.qty > 1 ? "×" + o.qty : ""}（バック ${yen(o.back * (o.qty || 1))}）`);
+    const opSum = bo.reduce((a, o) => a + o.back * (o.qty || 1), 0);
     const head = `${hm(r.start_at)} ${storeLabel(r.store_key)} ${r.course}${/^\d+$/.test(r.course) ? "分" : ""}${r.extension_count ? " 延長" + r.extension_count : ""}`;
-    const courseBack = r.back_override != null ? r.back_override : (r.course_back || 0) + (r.extra_back || 0);
-    return { head, off, st: r.status, courseBack, ops };
+    const courseBack = off ? 0 : r.back_override != null ? r.back_override : (r.course_back || 0) + (r.extra_back || 0);
+    return { no: i + 1, head, off, st: r.status, courseBack, ops, opSum, total: courseBack + opSum };
   });
-  return { c, d, pay, pm, uns, due, memo, res, rest };
+  return { c, d, pay, pm, uns, sum, due, memo, res, rest };
 }
+const pmYen = v => (v >= 0 ? "＋" : "−") + yen(Math.abs(v));
+// A＋B−C＋D＝ と 15,000＋13,000−2,000＋…＝
+const sumFx = P => {
+  const sg = (x, i) => i ? (x.amount >= 0 ? "＋" : "−") : x.amount < 0 ? "−" : "";
+  return [P.sum.map((x, i) => sg(x, i) + x.abc).join("") + "＝", P.sum.map((x, i) => sg(x, i) + Math.abs(x.amount).toLocaleString("ja-JP")).join("") + "＝"];
+};
 copyDetail = function(id){
   const P = settleParts(id), c = P.c, d = P.d;
-  const lines = [`【精算】${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${castName(id)}さん`, ""];
+  const lines = [`【精算】${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${castName(id)}さん`];
   P.res.forEach(r => {
-    lines.push(`・${r.head}　${r.off ? (r.st === "cancel" ? "キャンセル" : "トビ") : "報酬 " + yen(r.courseBack)}`);
-    r.ops.forEach(o => lines.push(`　　OP：${o}`));
+    lines.push("", `■ ${r.no}本目　${r.head}`);
+    if(r.off){ lines.push(`　${r.st === "cancel" ? "キャンセル" : "トビ"}（報酬なし）`); return; }
+    lines.push(`　コース報酬　${yen(r.courseBack)}`);
+    r.ops.forEach(o => lines.push(`　OP：${o}`));
+    lines.push(`　▶ この仕事の報酬（OP込み）　${yen(r.total)}`);
   });
-  lines.push("", `報酬　${yen(c.reward)}`);
-  if(c.option) lines.push(`OP　${yen(c.option)}`);
-  lines.push(`雑費　−${yen(c.zappi)}`, `▶ 本日の報酬　${yen(P.pay)}`);
-  if(P.pm.length){ lines.push(""); P.pm.forEach(([l, v]) => lines.push(`${l}　${v >= 0 ? "＋" : "−"}${yen(Math.abs(v))}`)); }
-  lines.push(`▶ 手取り（今日お渡し）　${yen(c.takeHome)}`, "");
+  lines.push("", "――――――――――", `本日の報酬総額　${yen(c.reward)}`, `本日のOP総額　${yen(c.option)}`, `雑費　−${yen(c.zappi)}`);
+  P.pm.forEach(([l, v]) => lines.push(`${l}　${pmYen(v)}`));
+  lines.push("――――――――――", `▶ 本日の報酬／本日の手取り額　${yen(P.pay)}／${yen(c.takeHome)}`);
   lines.push(c.drop >= 0 ? `💰 本日の投函額　${yen(c.drop)}` : `💴 カード決済のため、お店から ${yen(-c.drop)} お渡しします`);
   if(P.uns.length){
-    lines.push("", "【本日＋未精算（合算）】", `本日の投函額　${yen(c.drop)}`);
-    P.uns.forEach(x => lines.push(`${x.label}`));
-    { const parts = P.uns.map(x => [unsMd(x.date) + "（未精算）", x.amount]).concat([[unsMd(day) + "（本日）", c.drop]]);
-      lines.push("", parts.map(p => p[0]).join("＋"), parts.map((p, i) => (i && p[1] >= 0 ? "＋" : i ? "−" : p[1] < 0 ? "−" : "") + Math.abs(p[1]).toLocaleString("ja-JP")).join("") + "＝"); }
+    lines.push("――――――――――", "【本日＋未精算（合算）】");
+    P.sum.forEach(x => lines.push(`${x.abc}　${unsMd(x.date)}　${x.kind}　${x.amount < 0 ? "−" : ""}${yen(Math.abs(x.amount))}`));
+    const fx = sumFx(P); lines.push(fx[0], fx[1]);
     lines.push(P.due >= 0 ? `💰 合計で投函　${yen(P.due)}` : `💴 お店から渡す　${yen(-P.due)}`);
   }
   if(P.rest.length){ lines.push("", "【のこりの未精算（今日は精算しない）】"); P.rest.forEach(x => lines.push(x)); }
-  lines.push("", `📝 精算メモ（1営業日に1枚・${P.memo.length}枚）`);
+  lines.push("", `📝 精算メモに書くこと（1営業日に1枚・${P.memo.length}枚）`);
   P.memo.forEach(([bd, v]) => lines.push(`　営業日 ${unsMd(bd)}／名前 ${castName(id)}／金額 ${v >= 0 ? yen(v) : "（お店から渡す " + yen(-v) + "）"}`));
   lines.push("📖 投函のしかた：https://sakuramoong-app.github.io/portal/kirokubo/posting.html", "", "お疲れさまでした🌸");
   navigator.clipboard.writeText(lines.join("\n")).then(() => toast("📋 精算明細をコピーしました"), () => alert(lines.join("\n")));
@@ -374,24 +386,26 @@ settleCanvas = function(id){
   const S = 2, W = 560, PAD = 28, FONT = '"Hiragino Maru Gothic ProN","M PLUS Rounded 1c","Yu Gothic","Meiryo",sans-serif';
   // 描くもの： [種類, ...]。高さを先に数える
   const ops = [];
+  P.res.forEach(r => {
+    ops.push(["job", `${r.no}本目`, r.head, r.off ? (r.st === "cancel" ? "キャンセル" : "トビ") : "", r.off]);
+    if(r.off) return;
+    ops.push(["jrow", "コース報酬", yen(r.courseBack)]);
+    r.ops.forEach(o => ops.push(["sub", "OP：" + o]));
+    ops.push(["jsum", "この仕事の報酬（OP込み）", yen(r.total)]);
+  });
+  ops.push(["line"], ["row", "本日の報酬総額", yen(c.reward)], ["row", "本日のOP総額", yen(c.option)], ["row", "雑費", "−" + yen(c.zappi)]);
+  P.pm.forEach(([l, v]) => ops.push(["row", l, pmYen(v)]));
+  ops.push(["line"], ["pbox", "本日の報酬 ／ 本日の手取り額", yen(P.pay) + " ／ " + yen(c.takeHome)]);
   ops.push(["box", c.drop, "💰 本日の投函額（封筒に入れて投函）", "💴 お店からキャストに渡す"]);
-  P.res.forEach(r => { ops.push(["row", r.head, r.off ? (r.st === "cancel" ? "キャンセル" : "トビ") : yen(r.courseBack), r.off ? "off" : "res"]); r.ops.forEach(o => ops.push(["sub", "OP：" + o])); });
-  ops.push(["line"], ["row", "報酬", yen(c.reward)]);
-  if(c.option) ops.push(["row", "OP（バック）", yen(c.option)]);
-  ops.push(["row", "雑費", "−" + yen(c.zappi)], ["pbox", "本日の報酬", yen(P.pay)]);
-  if(P.pm.length){ ops.push(["line"]); P.pm.forEach(([l, v]) => ops.push(["row", l, (v >= 0 ? "＋" : "−") + yen(Math.abs(v))])); }
-  ops.push(["big", "手取り（今日お渡し）", yen(c.takeHome), "#5C4B4F"]);
   if(P.uns.length){
-    ops.push(["head", "📒 本日＋未精算（合算）"], ["row", "本日の投函額", yen(c.drop)]);
-    P.uns.forEach(x => ops.push(["sub2", x.label]));
-    // 計算式：10/27（未精算）＋10/30（本日）／15,000＋13,000＝
-    const parts = P.uns.map(x => [unsMd(x.date) + "（未精算）", x.amount]).concat([[unsMd(day) + "（本日）", c.drop]]);
-    ops.push(["fx", parts.map(p => p[0]).join("＋"), parts.map((p, i) => (i && p[1] >= 0 ? "＋" : i ? "−" : p[1] < 0 ? "−" : "") + Math.abs(p[1]).toLocaleString("ja-JP")).join("") + "＝"]);
+    ops.push(["line"], ["head", "📒 本日＋未精算（合算）"]);
+    P.sum.forEach(x => ops.push(["abc", x.abc, unsMd(x.date), x.kind, (x.amount < 0 ? "−" : "") + yen(Math.abs(x.amount))]));
+    const fx = sumFx(P); ops.push(["fx", fx[0], fx[1]]);
     ops.push(["box", P.due, "💰 合計で投函", "💴 お店から渡す（合計）"]);
   }
   if(P.rest.length){ ops.push(["head2", "📒 のこりの未精算（今日は精算しない）"]); P.rest.forEach(x => ops.push(["sub2", x])); }
   ops.push(["memo"]);
-  const hOf = o => ({ pbox: 64, fx: 54, box: 112, row: 32, sub: 22, sub2: 24, line: 18, big: 44, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 })[o[0]] || 30;
+  const hOf = o => ({ job: 40, jrow: 24, jsum: 30, abc: 32, pbox: 92, fx: 58, box: 112, row: 30, sub: 22, sub2: 24, line: 20, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 })[o[0]] || 30;
   const H = 88 + ops.reduce((a, o) => a + hOf(o), 0) + 56;
   const cv = document.createElement("canvas"); cv.width = W * S; cv.height = H * S;
   const g = cv.getContext("2d"); g.scale(S, S);
@@ -403,30 +417,43 @@ settleCanvas = function(id){
   let y = 84;
   const txt = (s, x, yy, font, color, align) => { g.font = `${font} ${FONT}`; g.fillStyle = color; g.textAlign = align || "left"; g.fillText(s, x, yy); };
   const fit = (s, max, font) => { g.font = `${font} ${FONT}`; if(g.measureText(s).width <= max) return s; while(s.length > 1 && g.measureText(s + "…").width > max) s = s.slice(0, -1); return s + "…"; };
+  const rbox = (x, yy, w, h, r, fill, stroke, lw) => { g.fillStyle = fill; g.strokeStyle = stroke; g.lineWidth = lw; g.beginPath(); g.roundRect ? g.roundRect(x, yy, w, h, r) : g.rect(x, yy, w, h); g.fill(); g.stroke(); };
   ops.forEach(o => {
     const h = hOf(o), k = o[0];
     if(k === "box"){
       const give = o[1] < 0;
-      g.fillStyle = give ? "#E3F1FF" : "#00B0F0"; g.strokeStyle = give ? "#2f7fd0" : "#0A84C6"; g.lineWidth = 3;
-      g.beginPath(); g.roundRect ? g.roundRect(PAD, y + 4, W - PAD * 2, h - 12, 14) : g.rect(PAD, y + 4, W - PAD * 2, h - 12); g.fill(); g.stroke();
+      rbox(PAD, y + 4, W - PAD * 2, h - 12, 14, give ? "#E3F1FF" : "#00B0F0", give ? "#2f7fd0" : "#0A84C6", 3);
       txt(give ? o[3] : o[2], PAD + 16, y + 34, "bold 17px", give ? "#1f4f80" : "#08304d");
       txt(yen(Math.abs(o[1])), W - PAD - 16, y + 92, "900 42px", give ? "#2f7fd0" : "#E0001B", "right");
+    } else if(k === "job"){   // 1本目：ラベル＋くわしいところ
+      rbox(PAD, y + 8, 64, 26, 8, o[4] ? "#EEE8EA" : "#e5638c", o[4] ? "#EEE8EA" : "#e5638c", 1);
+      txt(o[1], PAD + 32, y + 27, "bold 14px", o[4] ? "#9C8B8F" : "#fff", "center");
+      txt(fit(o[2], W - PAD * 2 - 170, "bold 15px"), PAD + 74, y + 27, "bold 15px", o[4] ? "#B9A9AD" : "#5C4B4F");
+      if(o[3]) txt(o[3], W - PAD, y + 27, "bold 15px", "#B9A9AD", "right");
+    } else if(k === "jrow"){
+      txt(o[1], PAD + 18, y + 17, "14px", "#5C4B4F"); txt(o[2], W - PAD, y + 17, "14px", "#5C4B4F", "right");
+    } else if(k === "jsum"){
+      g.strokeStyle = "#F1C9D5"; g.lineWidth = 1; g.beginPath(); g.moveTo(PAD + 18, y + 4); g.lineTo(W - PAD, y + 4); g.stroke();
+      txt("▶ " + o[1], PAD + 18, y + 22, "bold 14.5px", "#6b3550"); txt(o[2], W - PAD, y + 22, "bold 16px", "#e5638c", "right");
     } else if(k === "row"){
-      txt(fit(o[1], W - PAD * 2 - 130, o[3] === "res" || o[3] === "off" ? "15px" : "bold 16px"), PAD, y + 22, o[3] === "res" || o[3] === "off" ? "15px" : "bold 16px", o[3] === "off" ? "#B9A9AD" : "#5C4B4F");
-      txt(o[2], W - PAD, y + 22, "bold 16px", o[3] === "off" ? "#B9A9AD" : "#5C4B4F", "right");
+      txt(fit(o[1], W - PAD * 2 - 130, "bold 16px"), PAD, y + 21, "bold 16px", "#5C4B4F");
+      txt(o[2], W - PAD, y + 21, "bold 16px", "#5C4B4F", "right");
     } else if(k === "sub" || k === "sub2"){
       txt(fit(o[1], W - PAD * 2 - 20, k === "sub" ? "13px" : "bold 13.5px"), PAD + 18, y + 16, k === "sub" ? "13px" : "bold 13.5px", k === "sub" ? "#8a6d00" : "#5b3fa6");
     } else if(k === "line"){
-      g.strokeStyle = "#F1C9D5"; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(PAD, y + 9); g.lineTo(W - PAD, y + 9); g.stroke(); g.setLineDash([]);
-    } else if(k === "big"){
-      txt(o[1], PAD, y + 30, "bold 19px", "#5C4B4F"); txt(o[2], W - PAD, y + 31, "bold 24px", o[3], "right");
-    } else if(k === "pbox"){   // 本日の報酬：ピンクの枠
-      g.fillStyle = "#FFE3F0"; g.strokeStyle = "#F7B6CF"; g.lineWidth = 2.5;
-      g.beginPath(); g.roundRect ? g.roundRect(PAD, y + 6, W - PAD * 2, h - 12, 12) : g.rect(PAD, y + 6, W - PAD * 2, h - 12); g.fill(); g.stroke();
-      txt(o[1], PAD + 14, y + 40, "bold 19px", "#6b3550"); txt(o[2], W - PAD - 14, y + 42, "bold 26px", "#e5638c", "right");
+      g.strokeStyle = "#C9A9B5"; g.lineWidth = 1.5; g.setLineDash([6, 4]); g.beginPath(); g.moveTo(PAD, y + 10); g.lineTo(W - PAD, y + 10); g.stroke(); g.setLineDash([]);
+    } else if(k === "pbox"){   // 本日の報酬／手取り：ピンクの枠
+      rbox(PAD, y + 6, W - PAD * 2, h - 12, 12, "#FFE3F0", "#F7B6CF", 2.5);
+      txt(o[1], PAD + 14, y + 34, "bold 16px", "#6b3550"); txt(o[2], W - PAD - 14, y + 70, "bold 26px", "#e5638c", "right");
+    } else if(k === "abc"){   // A　10/27　未精算　¥15,000
+      const today = o[3] === "本日精算";
+      rbox(PAD, y + 5, 28, 24, 6, today ? "#5b3fa6" : "#F1EAFA", today ? "#5b3fa6" : "#C9B6EA", 1.2);
+      txt(o[1], PAD + 14, y + 23, "bold 15px", today ? "#fff" : "#5b3fa6", "center");
+      txt(o[2], PAD + 42, y + 23, "bold 15px", "#5C4B4F"); txt(o[3], PAD + 110, y + 23, "bold 15px", today ? "#5b3fa6" : o[3] === "お釣り" ? "#2f7fd0" : "#c0392b");
+      txt(o[4], W - PAD, y + 23, "bold 16px", "#5C4B4F", "right");
     } else if(k === "fx"){
-      txt(fit(o[1], W - PAD * 2, "bold 14px"), PAD, y + 20, "bold 14px", "#5C4B4F");
-      txt(o[2], W - PAD, y + 44, "bold 18px", "#5C4B4F", "right");
+      txt(o[1], PAD, y + 22, "bold 16px", "#5b3fa6");
+      txt(fit(o[2], W - PAD * 2, "bold 18px"), W - PAD, y + 48, "bold 18px", "#5C4B4F", "right");
     } else if(k === "head2"){
       g.fillStyle = "#F4F1F6"; g.fillRect(PAD - 6, y + 8, W - PAD * 2 + 12, 28); txt(o[1], PAD, y + 28, "bold 15px", "#8a7f99");
     } else if(k === "head"){
