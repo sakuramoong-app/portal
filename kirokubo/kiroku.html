@@ -5241,10 +5241,16 @@ renderDummyMatch = async function(){
     : Array.isArray(custPast) ? `<div style="font-size:12px;margin:6px 0 2px;color:#2f9e6e;font-weight:800">✅ 行ける子：18・極門でこのお客さんに行ったことがない子（うすい子は行けません）</div>`
     : `<div class="warn" style="margin:6px 0 2px;font-size:12.5px">先に電話番号で「🔍 調べる」と、このお客さんに行ける子だけにしぼれます</div>`;
   const list = el.querySelector("div[style*='font-weight:800;margin:6px 0 2px']");
-  if(list) list.insertAdjacentHTML("beforebegin", head);
+  // ⚠️ 同じダミー名で、前に2人以上の子が行っている（お客さんから見ると同じ名前なのに顔がちがう）
+  const multi = same.length >= 2 ? `<div class="warn" style="margin:6px 0 2px;font-size:13.5px;font-weight:800;background:#FFF1E0;border:2px solid #F0A040;color:#8a4a00">⚠️ 注意：このお客さんは前に「${esc(name)}」で <b>${same.length}人</b> の子が行っています<br>
+      ${same.map(id => { const ds = seenNorm().filter(p => p.cast_id === id && p.store_key === store && p.dummy_name === name && !["cancel", "tobi"].includes(p.status)).map(p => (p.biz_date || "").replace(/^\d\d(\d\d)-(\d\d)-(\d\d)$/, "$1/$2/$3")).sort().reverse();
+        return `・<b>${esc(castName(id))}</b>（${ds.slice(0, 3).join("、")}${ds.length > 3 ? " ほか" + (ds.length - 3) + "回" : ""}）${dmWorking(id) ? "" : "　…この日はお休み"}`; }).join("<br>")}
+      <br><span style="font-weight:600">いちばん最近に行った子にするか、お客さんの記憶に近い子にするか、確かめてから受けてください</span></div>` : "";
+  if(list) list.insertAdjacentHTML("beforebegin", multi + head);
   ng.forEach(r => r.parentNode.appendChild(r));   // 行けない子は下へ
   // 前にこのダミー名で行った子が1人なら、その子を自動で選んで本指名（新しい受付で、まだキャストを選んでいないとき）
-  const sameOn = same.filter(id => dmWorking(id));
+  const lastOf = id => seenNorm().filter(p => p.cast_id === id && p.store_key === store && p.dummy_name === name).map(p => p.biz_date || "").sort().pop() || "";
+  const sameOn = same.filter(id => dmWorking(id)).sort((a, b) => lastOf(b).localeCompare(lastOf(a)));   // 2人以上なら、いちばん最近に行った子から
   if(!editing && sameOn.length && !sameOn.includes($("f_cast").value)){
     const cid = sameOn[0]; $("f_cast").value = cid;
     if($("f_cast").value !== cid && $("f_castAll")){ $("f_castAll").checked = true; fillCastSel(); $("f_cast").value = cid; }
