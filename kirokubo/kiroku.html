@@ -3742,7 +3742,7 @@ $("f_address").addEventListener("change", () => {
     if(d.length <= 2){ h = +d; m = 0; } else if(d.length === 3){ h = +d.slice(0, 1); m = +d.slice(1); } else { h = +d.slice(0, 2); m = +d.slice(2, 4); }
     if(m > 59) m = 59; if(h > 29) return String(v); return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0"); };
   const conv = root => (root || document).querySelectorAll('input[type="time"]').forEach(el => {
-    const v = el.value; el.type = "text"; el.value = v; el.dataset.tm = "1"; el.placeholder = el.placeholder || "1240"; el.inputMode = "numeric"; el.autocomplete = "off";
+    const v = el.value; el.type = "text"; el.value = v; el.dataset.tm = "1"; el.placeholder = "--:--"; el.title = "数字だけで入れられます（1240 → 12:40）"; el.style.textAlign = "center"; el.inputMode = "numeric"; el.autocomplete = "off";
     if(!el.style.width) el.style.width = "84px"; });
   conv();
   new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if(n.nodeType === 1){ if(n.matches && n.matches('input[type="time"]')) conv(n.parentNode); else if(n.querySelector && n.querySelector('input[type="time"]')) conv(n); } }))).observe(document.body, { childList: true, subtree: true });
@@ -3794,6 +3794,35 @@ document.addEventListener("change", e => {
   if(id === "f_cast") $("f_cast").value = dmPrev.cast; else $("f_dummy").value = dmPrev.dummy;
   try{ onCast(); recalc(); renderDummyMatch(); }catch(err){}
 }, true);
+/* ---------- 🎭 ダミー在籍指名のときは、キャスト専用の名前（美沙など）をダミー名の一覧に出さない（どこから入っても消す） ---------- */
+function dmCleanSelect(){
+  const store = $("f_store").value; if(!isDummyStore(store) || dmMode === "named") return;
+  const sel = $("f_dummy"), own = new Set(namedCasts(store).map(c => c.stores[store].name));
+  if(editing && editing.dummy_name && editing.store_key === store) own.delete(editing.dummy_name);   // 保存してある予約の名前はそのまま
+  [...sel.options].forEach(o => { if(o.value && own.has(o.value)){ if(sel.value === o.value) sel.value = ""; o.remove(); } });
+}
+{ const __rdClean = renderDummy; renderDummy = function(){ const r = __rdClean.apply(this, arguments); dmCleanSelect(); return r; }; }
+{ const __smClean = setDmMode; setDmMode = function(m){ const r = __smClean.apply(this, arguments); if(m !== "named") dmCleanSelect(); return r; }; }
+document.addEventListener("focusin", e => { if(e.target && e.target.id === "f_dummy") dmCleanSelect(); }, true);
+document.addEventListener("pointerdown", e => { if(e.target && e.target.id === "f_dummy") dmCleanSelect(); }, true);
+
+/* ---------- 💗 本指名：前回その子を指名したのはいつか（記録簿＋台帳エクセル）。種別のボタンの横と、予約連絡の【名前】の行に ---------- */
+function lastNomiOf(cid){
+  if(!cid || (!Array.isArray(custSeen) && !Array.isArray(custPast))) return "";
+  const l = seenNorm().filter(p => p.cast_id === cid && !["cancel", "tobi"].includes(p.status) && !(editing && p.id === editing.id) && p.biz_date)
+    .map(p => p.biz_date).sort();
+  const d = l.pop(); return d ? d.replace(/^(\d{4})-(\d\d)-(\d\d)$/, (m, y, mo, da) => `${y}/${Number(mo)}/${Number(da)}`) : "";
+}
+function lastNomiPaint(){
+  let el = $("lastNomi");
+  if(!el){ el = document.createElement("span"); el.id = "lastNomi"; el.style.cssText = "font-size:13px;font-weight:800;color:#b0306a;margin-left:8px;align-self:center"; $("f_visit").appendChild(el); }
+  const d = visit === "honshi" ? lastNomiOf($("f_cast").value) : "";
+  el.textContent = d ? `💗 前回 ${d}` : "";
+}
+{ const __rcNomi = recalc; recalc = function(){ const r = __rcNomi.apply(this, arguments);
+    try{ lastNomiPaint(); const d = visit === "honshi" ? lastNomiOf($("f_cast").value) : "";
+      if(d) $("msg").value = $("msg").value.replace(/^(【名前】[^\n]*本指名)(?!（前回)/m, `$1（前回 ${d}）`); }catch(e){}
+    return r; }; }
 /* ---------- ⏸ 一時保存（編集中）：受付の外を押す・「⏸ 一時保存」で、入れたところまでとっておく → 右下の点滅ボタンで続きから ---------- */
 const DRAFT_KEY = "kbResDraft";
 function draftGet(){ try{ return JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); }catch(e){ return null; } }
