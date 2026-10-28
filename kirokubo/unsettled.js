@@ -386,7 +386,7 @@ copyDetail = function(id){
   }
   if(P.rest.length){ lines.push("", "【のこりの未精算（今日は精算しない）】"); P.rest.forEach(x => lines.push(x)); }
   lines.push("", `📝 精算メモに書くこと（1営業日に1枚・${P.memo.length}枚）`);
-  P.memo.forEach(([bd, v]) => lines.push(`　営業日 ${unsMd(bd)}／名前 ${castName(id)}／金額 ${v >= 0 ? yen(v) : "（お店から渡す " + yen(-v) + "）"}`));
+  P.memo.forEach(([bd, v]) => lines.push(`　営業日 ${unsMd(bd)}／名前 ${castName(id)}／金額 ${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}`));
   lines.push("📖 投函のしかた：https://sakuramoong-app.github.io/portal/kirokubo/posting.html", "", "お疲れさまでした🌸");
   navigator.clipboard.writeText(lines.join("\n")).then(() => toast("📋 精算明細をコピーしました"), () => alert(lines.join("\n")));
 };
@@ -480,7 +480,7 @@ settleCanvas = function(id){
       txt(`📝 精算メモに書くこと（1営業日に1枚・${P.memo.length}枚）`, PAD, y + 22, "bold 15px", "#5C4B4F");
       const tx = PAD, ty = y + 32, cw = [120, 170, W - PAD * 2 - 290], rh = 30, hd = ["営業日", "名前", "金額"];
       g.strokeStyle = "#333"; g.lineWidth = 1.5;
-      const rowsM = [hd].concat(P.memo.map(([bd, v]) => [unsMd(bd), castName(id), v >= 0 ? "¥" + v.toLocaleString("ja-JP") : "（渡す " + yen(-v) + "）"]));
+      const rowsM = [hd].concat(P.memo.map(([bd, v]) => [unsMd(bd), castName(id), (v < 0 ? "¥-" : "¥") + Math.abs(v).toLocaleString("ja-JP")]));
       rowsM.forEach((rw, ri) => { let x = tx; cw.forEach((w, i) => { g.strokeRect(x, ty + ri * rh, w, rh); txt(rw[i], x + w / 2, ty + ri * rh + 21, ri ? "bold 16px" : "14px", ri ? "#1a3a8a" : "#333", "center"); x += w; }); });
     }
     y += h;
