@@ -599,7 +599,7 @@
       <div id="castTimeline"></div>
       <div id="neighborBox"></div>
       <div class="row2" style="margin-top:8px">
-        <div class="f"><label>日付・開始時刻<span class="req">必須</span></label><div style="display:flex;gap:6px"><input type="date" id="f_day" style="max-width:160px" onchange="recalc()"><input type="time" id="f_start" step="300" oninput="recalc()" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="toggleCastCal()" title="キャストの出勤日をカレンダーで見る" style="flex:none;white-space:nowrap">🗓 出勤日</button></div><div id="dayMoved" style="font-size:12px;color:#c77700;font-weight:800"></div></div>
+        <div class="f"><label>日付・開始時刻<span class="req">必須</span></label><div style="display:flex;gap:6px"><input type="date" id="f_day" style="max-width:160px" onchange="recalc();fillCastSel()"><input type="time" id="f_start" step="300" oninput="recalc()" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="toggleCastCal()" title="キャストの出勤日をカレンダーで見る" style="flex:none;white-space:nowrap">🗓 出勤日</button></div><div id="dayMoved" style="font-size:12px;color:#c77700;font-weight:800"></div></div>
         <div class="f"><label>終了時刻（自動・延長こみ）</label><div class="endview" id="endView">--:--</div></div>
       </div>
       <div id="castCal" style="display:none"></div>
@@ -1048,7 +1048,7 @@ async function renderDummyMatch(){
   el.innerHTML = `<div style="font-size:12.5px;margin-top:6px;display:flex;gap:8px;align-items:flex-start">${dmPhoto(dm, 90)}<div><b>🎭 ${esc(name)}</b>：${esc(spec || "データなし")} ${esc(ops)}${lookText(dm.look) ? `<br><small>👀 ${esc(lookText(dm.look))}</small>` : ""}${dm.note ? `<br><small>${esc(dm.note)}</small>` : ""}</div></div>
     <div style="font-size:12px;color:var(--sub);margin-top:4px">近いキャストを探しています…</div>`;
   try{
-    const [profs, shifts] = await Promise.all([loadProfs(), loadShifts(day)]);
+    const [profs, shifts] = await Promise.all([loadProfs(), loadShifts(($("f_day") && $("f_day").value) || day)]);   // 受付の日付のシフト
     if($("f_dummy").value !== name) return;   // 選びなおされた
     const rows = M.casts.map(c=>{
       const sh = shifts[c.shift_name] || shifts[c.official_name];
@@ -3816,12 +3816,16 @@ setTimeout(draftPaint, 1500);
 function fillCastSel(){
   const sel = $("f_cast"); if(!sel) return;
   const cur = sel.value || (editing && editing.cast_id) || "";
-  const sh = shiftCache[day] || {};
+  // 受付の日付を変えたときは、その日のシフトで（まだ読んでいなければ読んでから、もう一度）
+  const bd = ($("f_day") && $("f_day").value) || day;
+  let sh = shiftCache[day] || {};
+  if(bd !== day){ if(typeof otherDay !== "undefined" && otherDay[bd]) sh = otherDay[bd].sh || {}; else { sh = {}; if(typeof loadOtherDay === "function") loadOtherDay(bd); } }
+  const dayLbl = bd === day ? "今日" : Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8));
   const onShift = M.casts.map(c=>{ const nm = Object.keys(sh).find(n=>n === c.shift_name || n === c.official_name); return nm ? { c, s: sh[nm] } : null; })
     .filter(Boolean).sort((a, b)=>a.s.start - b.s.start);
   const ids = new Set(onShift.map(x=>x.c.id));
   let h = `<option value="">（キャストを選ぶ）</option>`;
-  h += onShift.length ? `<optgroup label="今日の出勤">${onShift.map(x=>`<option value="${x.c.id}">${esc(x.c.official_name || x.c.temp_name)}　${tlLabel(x.s.start)}〜${tlLabel(x.s.end)}${x.s.confirmed ? "" : "（未確定）"}</option>`).join("")}</optgroup>`
+  h += onShift.length ? `<optgroup label="${dayLbl}の出勤">${onShift.map(x=>`<option value="${x.c.id}">${esc(x.c.official_name || x.c.temp_name)}　${tlLabel(x.s.start)}〜${tlLabel(x.s.end)}${x.s.confirmed ? "" : "（未確定）"}</option>`).join("")}</optgroup>`
                       : `<optgroup label="この日のシフトがありません"></optgroup>`;
   const others = M.casts.filter(c=>!ids.has(c.id) && (c.id === cur || ($("f_castAll") && $("f_castAll").checked && c.status !== "left")));
   if(others.length) h += `<optgroup label="シフトにない人">${others.map(c=>`<option value="${c.id}">${esc(c.official_name || c.temp_name)}</option>`).join("")}</optgroup>`;
@@ -4895,7 +4899,7 @@ function loadOtherDay(bd){
   Promise.all([sb.from("kb_reservations").select("*").eq("biz_date", bd).eq("deleted", false).order("start_at"), loadShifts(bd)])
     .then(([res, sh])=>{ otherDay[bd] = { rows: q(res) || [], sh: sh || {} }; })
     .catch(()=>{ otherDay[bd] = { rows: [], sh: {}, err: true }; })
-    .finally(()=>{ otherDayLoading[bd] = false; renderNeighbors(); drawTimeline(); });
+    .finally(()=>{ otherDayLoading[bd] = false; renderNeighbors(); drawTimeline(); if($("f_day") && $("f_day").value === bd) fillCastSel(); });
 }
 const fmtHour = h => { h = Number(h); const hh = Math.floor(h), mm = Math.round((h - hh) * 60); return (hh >= 24 ? "翌" + (hh - 24) : hh) + ":" + String(mm).padStart(2, "0"); };
 function renderNeighbors(){
