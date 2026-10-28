@@ -1540,16 +1540,21 @@ function renderCastChecks(c){
   // 🎭 ダミー：このお客さんが前にこのダミー名で会った子（実際に行ったキャスト）以外では行けない（「あの時の子じゃない」になるので）
   const dmNow = isDummyStore($("f_store").value) && $("f_dummy") ? $("f_dummy").value : "";
   if(dmNow && Array.isArray(custPast)){
-    const been = custPast.filter(p => p.store_key === $("f_store").value && p.dummy_name === dmNow && !["cancel", "tobi"].includes(p.status) && (!editing || p.id !== editing.id));
-    const who = [...new Set(been.map(p => p.cast_id))];
+    // 記録簿の予約＋台帳エクセル（「雪（A」なども読む）の両方で見る
+    const seenX = typeof seenNorm === "function" ? seenNorm() : custPast;
+    const been = seenX.filter(p => p.store_key === $("f_store").value && p.dummy_name === dmNow && !["cancel", "tobi"].includes(p.status) && (!editing || p.id !== editing.id))
+      .sort((a, b) => String(b.biz_date).localeCompare(String(a.biz_date)));
+    const who = [...new Set(been.map(p => p.cast_id).filter(Boolean))];
+    const rawWho = [...new Set(been.filter(p => !p.cast_id).map(p => p.cast_raw).filter(Boolean))];
+    if(!who.length && rawWho.length) warn.unshift(`🎭 台帳エクセルでは、前に「${dmNow}」で「${rawWho.join("・")}」が行っています（台帳のキャストとつながっていないので、同じ子か確かめてください）`);
     if(who.length && !who.includes(c.id)){
       longNg = true;
-      warn.unshift(`🎭 このお客さんは前に「${dmNow}」で ${who.map(castName).join("・")} が行っています（${been[0].biz_date.slice(5).replace("-", "/")}）。${who.map(castName).join("・")} 以外では行けません`);
+      warn.unshift(`🎭 このお客さんは前に「${dmNow}」で ${who.map(castName).join("・")} が行っています（${String(been[0].biz_date || "").slice(2).replace(/-/g, "/") || "日付なし"}${been[0].excel ? "・台帳エクセル" : ""}）。${who.map(castName).join("・")} 以外では行けません`);
     }
     // 前に18・極門でこの子が（ちがう名前で）行っていたら、ダミー指名では行けない（顔でばれる）
     if(!who.length){
       const dsx = M.stores.filter(s => s.dummy).map(s => s.key);
-      const met = custPast.filter(p => dsx.includes(p.store_key) && p.cast_id === c.id && !["cancel", "tobi"].includes(p.status) && (!editing || p.id !== editing.id));
+      const met = seenX.filter(p => dsx.includes(p.store_key) && p.cast_id === c.id && !["cancel", "tobi"].includes(p.status) && (!editing || p.id !== editing.id));
       if(met.length){ longNg = true; warn.unshift(`🎭 ${castName(c.id)} は、このお客さんに18・極門で行ったことがあります（${met[0].biz_date.slice(5).replace("-", "/")} ${storeLabel(met[0].store_key)}${met[0].dummy_name ? "🎭" + met[0].dummy_name : ""}）。ダミー「${dmNow}」では行けません`); }
     }
   }
