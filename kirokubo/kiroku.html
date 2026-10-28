@@ -1342,14 +1342,36 @@ async function saveAreaFee(){
   }catch(e){ toast("記録できませんでした：" + (e.message || e)); }
 }
 
-function isDummyStore(store){ const s = M.stores.find(x=>x.key===store); return !!(s && s.dummy); }
+// その日（受付の日付）に出勤しているか。シフトを読んでいなければ「わからない」＝出勤あつかい
+function dmWorking(cid){
+  const c = M.casts.find(x => x.id === cid); if(!c) return false;
+  const bd = ($("f_day") && $("f_day").value) || day;
+  const sh = bd === day ? shiftCache[day] : (typeof otherDay !== "undefined" && otherDay[bd] ? otherDay[bd].sh : null);
+  if(!sh) return true;
+  return !!(sh[c.shift_name] || sh[c.official_name]);
+}
+// このお客さんが前にこのダミー名で会った子が、この日は出勤していない → { ダミー名: "あや お休み" }
+function dmBlocked(store){
+  const out = {};
+  if(!Array.isArray(custSeen) && !Array.isArray(custPast)) return out;
+  const by = {};
+  seenNorm().filter(p => p.store_key === store && p.dummy_name && p.cast_id && !["cancel", "tobi"].includes(p.status) && !(editing && p.id === editing.id))
+    .forEach(p => { (by[p.dummy_name] = by[p.dummy_name] || new Set()).add(p.cast_id); });
+  Object.entries(by).forEach(([n, ids]) => { const l = [...ids]; if(!l.some(dmWorking)) out[n] = l.map(castName).join("・") + " お休み"; });
+  return out;
+}function isDummyStore(store){ const s = M.stores.find(x=>x.key===store); return !!(s && s.dummy); }
 function renderDummy(keep){
   const store = $("f_store").value, on = isDummyStore(store);
   $("dummyWrap").style.display = on ? "" : "none";
   if(!on) return;
-  const cur = keep !== undefined && keep !== null ? keep : $("f_dummy").value;
+  let cur = keep !== undefined && keep !== null ? keep : $("f_dummy").value;
   const list = M.dummies.filter(d=>d.store_key===store && !(typeof ownersOf === "function" && ownersOf(store, d.name).length));   // キャスト専用の名前は、ダミーの一覧に出さない
-  $("f_dummy").innerHTML = `<option value="">（ダミー名を選ぶ）</option>` + list.map(d=>`<option>${esc(d.name)}</option>`).join("")
+  // 前のお店（や前の受付）で選んでいた名前は残さない。残すのは、このお店の名前・専用の名前・この予約に保存してある名前だけ
+  if(cur && !list.some(d=>d.name===cur) && !(typeof ownersOf === "function" && ownersOf(store, cur).length) && !(editing && editing.store_key === store && editing.dummy_name === cur)) cur = "";
+  // 前にこの名前で行った子が、この日は出勤していない → 選べない
+  const blocked = typeof dmBlocked === "function" ? dmBlocked(store) : {};
+  if(cur && blocked[cur] && !(editing && editing.dummy_name === cur)) cur = "";
+  $("f_dummy").innerHTML = `<option value="">（ダミー名を選ぶ）</option>` + list.map(d=>`<option value="${esc(d.name)}" ${blocked[d.name] ? "disabled" : ""}>${esc(d.name)}${blocked[d.name] ? "（" + esc(blocked[d.name]) + "）" : ""}</option>`).join("")
     + (cur && !list.some(d=>d.name===cur) ? `<option>${esc(cur)}</option>` : "");
   $("f_dummy").value = cur || "";
   if($("dummyEdit").style.display !== "none") renderDummyEdit();
@@ -5214,15 +5236,17 @@ renderDummyMatch = async function(){
     if(bad){ r.style.opacity = ".45"; r.querySelector("button").disabled = true; ng.push(r); }
     else if(same.includes(id)) r.style.boxShadow = "0 0 0 2px #2f9e6e inset";
   });
-  const head = same.length ? `<div class="info" style="margin:6px 0 2px;font-size:12.5px">🎭 このお客さんは前に「${esc(name)}」で <b>${same.map(castName).map(esc).join("・")}</b> が行っています → この子だけが行けます</div>`
+  const head = same.length && !same.some(dmWorking) ? `<div class="warn" style="margin:6px 0 2px;font-size:13px">🚫 このお客さんは前に「${esc(name)}」で <b>${same.map(castName).map(esc).join("・")}</b> が行っています。<b>この日は出勤していない</b>ので、「${esc(name)}」では受けられません</div>`
+    : same.length ? `<div class="info" style="margin:6px 0 2px;font-size:12.5px">🎭 このお客さんは前に「${esc(name)}」で <b>${same.map(castName).map(esc).join("・")}</b> が行っています → この子だけが行けます（キャストは自動でこの子に）</div>`
     : Array.isArray(custPast) ? `<div style="font-size:12px;margin:6px 0 2px;color:#2f9e6e;font-weight:800">✅ 行ける子：18・極門でこのお客さんに行ったことがない子（うすい子は行けません）</div>`
     : `<div class="warn" style="margin:6px 0 2px;font-size:12.5px">先に電話番号で「🔍 調べる」と、このお客さんに行ける子だけにしぼれます</div>`;
   const list = el.querySelector("div[style*='font-weight:800;margin:6px 0 2px']");
   if(list) list.insertAdjacentHTML("beforebegin", head);
   ng.forEach(r => r.parentNode.appendChild(r));   // 行けない子は下へ
   // 前にこのダミー名で行った子が1人なら、その子を自動で選んで本指名（新しい受付で、まだキャストを選んでいないとき）
-  if(!editing && same.length === 1 && !$("f_cast").value){
-    const cid = same[0]; $("f_cast").value = cid;
+  const sameOn = same.filter(id => dmWorking(id));
+  if(!editing && sameOn.length && !sameOn.includes($("f_cast").value)){
+    const cid = sameOn[0]; $("f_cast").value = cid;
     if($("f_cast").value !== cid && $("f_castAll")){ $("f_castAll").checked = true; fillCastSel(); $("f_cast").value = cid; }
     if($("f_cast").value === cid){ onCast(); setVisit(visitFrom(custSeen || custPast, cid)); toast(`🎭 前に「${name}」で行った ${castName(cid)} にしました（${visit === "honshi" ? "本指名" : "キャストを確かめてください"}）`); }
   }
@@ -5423,6 +5447,8 @@ function dmAutoPick(){
     const c = owners.find(o => o.id === p.cast_id) || owners[0];
     setDmMode("named"); $("f_named").value = c.id; onNamedPick(); setVisit(visitFrom(custSeen, c.id));
     toast(`👤 前回（${md}）と同じ「${p.dummy_name}」（${castName(c.id)}）にしました`);
+  } else if(dmBlocked(store)[p.dummy_name]){
+    toast(`🚫 前回（${md}）の「${p.dummy_name}」は、${dmBlocked(store)[p.dummy_name]}なので選べません`);
   } else {
     setDmMode("dummy");
     if(![...$("f_dummy").options].some(o => o.value === p.dummy_name)) $("f_dummy").insertAdjacentHTML("beforeend", `<option>${esc(p.dummy_name)}</option>`);
@@ -5433,7 +5459,7 @@ function dmAutoPick(){
   }
   if(p.cast_id) setVisit(visitFrom(custSeen, $("f_cast").value));
 }
-{ const __lcAuto = lookupCustomer; lookupCustomer = async function(){ const r = await __lcAuto.apply(this, arguments); try{ dmAutoPick(); }catch(e){} return r; }; }
+{ const __lcAuto = lookupCustomer; lookupCustomer = async function(){ const r = await __lcAuto.apply(this, arguments); try{ if(isDummyStore($("f_store").value)) renderDummy(); dmAutoPick(); }catch(e){} return r; }; }
 { const __rdAuto = renderDummy; renderDummy = function(){ const r = __rdAuto.apply(this, arguments); setTimeout(() => { try{ dmAutoPick(); }catch(e){} }, 0); return r; }; }
 { const __ofAuto = openForm; openForm = function(){ dmAutoKey = ""; return __ofAuto.apply(this, arguments); }; }/* 🔒 18・極門は、先に電話番号で調べないと選べない（履歴で行ける子が決まるので）。電話番号と売上店舗のほかはロック */
 function dmLock(){
