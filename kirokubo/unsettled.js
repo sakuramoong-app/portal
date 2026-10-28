@@ -330,6 +330,8 @@ function settleParts(id){
   if(cd.settled && Array.isArray(snap.uns)) uns = snap.uns.map(x => ({ date: x.date, amount: x.amount || 0, label: x.label || "" }));
   else { const sel = unsSel[id] || new Set(), open = unsOpen(id); uns = open.filter(x => sel.has(x.key)).map(x => ({ date: x.date, amount: x.amount, label: unsLine(x, open.indexOf(x), id) })); }
   const due = c.drop + uns.reduce((a, x) => a + x.amount, 0);
+  // 今日はいっしょに精算しない未精算（お知らせとして画像・文に出す）
+  const rest = cd.settled ? [] : (() => { const sel = unsSel[id] || new Set(), open = unsOpen(id); return open.filter(x => !sel.has(x.key)).map(x => unsLine(x, open.indexOf(x), id)); })();
   // 精算メモ（1営業日に1枚）
   const memo = [[day, c.drop]]; uns.forEach(x => { const m = memo.find(y => y[0] === x.date); if(m) m[1] += x.amount; else memo.push([x.date, x.amount]); });
   const res = c.all.map(r => {
@@ -339,7 +341,7 @@ function settleParts(id){
     const courseBack = r.back_override != null ? r.back_override : (r.course_back || 0) + (r.extra_back || 0);
     return { head, off, st: r.status, courseBack, ops };
   });
-  return { c, d, pay, pm, uns, due, memo, res };
+  return { c, d, pay, pm, uns, due, memo, res, rest };
 }
 copyDetail = function(id){
   const P = settleParts(id), c = P.c, d = P.d;
@@ -359,6 +361,7 @@ copyDetail = function(id){
     P.uns.forEach(x => lines.push(`${x.label}`));
     lines.push(P.due >= 0 ? `💰 合計で投函　${yen(P.due)}` : `💴 お店から渡す　${yen(-P.due)}`);
   }
+  if(P.rest.length){ lines.push("", "【のこりの未精算（今日は精算しない）】"); P.rest.forEach(x => lines.push(x)); }
   lines.push("", `📝 精算メモ（1営業日に1枚・${P.memo.length}枚）`);
   P.memo.forEach(([bd, v]) => lines.push(`　営業日 ${unsMd(bd)}／名前 ${castName(id)}／金額 ${v >= 0 ? yen(v) : "（お店から渡す " + yen(-v) + "）"}`));
   lines.push("📖 投函のしかた：https://sakuramoong-app.github.io/portal/kirokubo/posting.html", "", "お疲れさまでした🌸");
@@ -381,8 +384,9 @@ settleCanvas = function(id){
     P.uns.forEach(x => ops.push(["sub2", x.label]));
     ops.push(["box", P.due, "💰 合計で投函", "💴 お店から渡す（合計）"]);
   }
+  if(P.rest.length){ ops.push(["head2", "📒 のこりの未精算（今日は精算しない）"]); P.rest.forEach(x => ops.push(["sub2", x])); }
   ops.push(["memo"]);
-  const hOf = o => ({ box: 112, row: 32, sub: 22, sub2: 24, line: 18, big: 44, head: 40, memo: 46 + (1 + P.memo.length) * 30 })[o[0]] || 30;
+  const hOf = o => ({ box: 112, row: 32, sub: 22, sub2: 24, line: 18, big: 44, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 })[o[0]] || 30;
   const H = 88 + ops.reduce((a, o) => a + hOf(o), 0) + 56;
   const cv = document.createElement("canvas"); cv.width = W * S; cv.height = H * S;
   const g = cv.getContext("2d"); g.scale(S, S);
@@ -411,6 +415,8 @@ settleCanvas = function(id){
       g.strokeStyle = "#F1C9D5"; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(PAD, y + 9); g.lineTo(W - PAD, y + 9); g.stroke(); g.setLineDash([]);
     } else if(k === "big"){
       txt(o[1], PAD, y + 30, "bold 19px", "#5C4B4F"); txt(o[2], W - PAD, y + 31, "bold 24px", o[3], "right");
+    } else if(k === "head2"){
+      g.fillStyle = "#F4F1F6"; g.fillRect(PAD - 6, y + 8, W - PAD * 2 + 12, 28); txt(o[1], PAD, y + 28, "bold 15px", "#8a7f99");
     } else if(k === "head"){
       g.fillStyle = "#F1EAFA"; g.fillRect(PAD - 6, y + 8, W - PAD * 2 + 12, 28); txt(o[1], PAD, y + 28, "bold 16px", "#5b3fa6");
     } else if(k === "memo"){
