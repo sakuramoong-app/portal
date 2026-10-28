@@ -181,9 +181,10 @@ function unsListHtml(){
   return `<div class="uhd">📒 未精算のキャスト（${ids.length}人）<small>前の${UNS_DAYS}日の、精算していない日と、投函が合わなかった分</small></div>
     ${ids.length ? ids.map(cid => { const l = unsOpen(cid), sum = l.reduce((a, x) => a + x.amount, 0);
       return `<div class="unsc"><div class="uh">★ <b>${esc(castName(cid))}</b>　のこり <b class="${sum >= 0 ? "neg" : "pos"}">${sum >= 0 ? "未精算 " + yen(sum) : "お店から渡す " + yen(-sum)}</b>（${l.length}件）</div>
-        ${l.map((x, i) => `<div class="ur"><b class="ab">${UNS_ABC[i] || i + 1}</b> <b>${unsMd(x.date)}</b>（${esc(castName(cid))}）<span class="${x.amount >= 0 ? "neg" : "pos"}">${esc(x.what)}</span>
+        ${l.map((x, i) => `<div class="ur">${KB.CAN_EDIT ? `<input type="checkbox" ${(unsOnly[cid] || new Set()).has(x.key) ? "checked" : ""} onchange="unsOnlyToggle('${cid}','${x.key}',this.checked)" title="未精算だけを、今日精算する">` : ""}<b class="ab">${UNS_ABC[i] || i + 1}</b> <b>${unsMd(x.date)}</b>（${esc(castName(cid))}）<span class="${x.amount >= 0 ? "neg" : "pos"}">${esc(x.what)}</span>
           ${x.kind === "entry" && x.raw.source === "manual" ? `<small>手で入れた・${esc(x.raw.created_by || "")}</small>` : ""}
-          ${KB.CAN_EDIT && x.kind === "entry" ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="unsDel(${x.raw.id})">🗑</button>` : ""}</div>`).join("")}</div>`; }).join("")
+          ${KB.CAN_EDIT && x.kind === "entry" ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="unsDel(${x.raw.id})">🗑</button>` : ""}</div>`).join("")}
+        ${unsOnlyFoot(cid, l)}</div>`; }).join("")
     : `<div class="hint2">未精算はありません 🎉</div>`}
     ${KB.CAN_EDIT && UNS !== null ? `<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:800;font-size:13px">＋ 未精算を手で足す（エクセルの頃の分など）</summary>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px">
@@ -194,7 +195,44 @@ function unsListHtml(){
         <input id="un_note" maxlength="300" placeholder="なんの未精算か（例：エクセルの頃の分）" style="flex:1;min-width:160px">
         <button type="button" class="btn btn-primary btn-sm" onclick="unsAdd()">足す</button></div></details>` : ""}`;
 }
-async function unsAdd(){
+// 💴 未精算だけを精算（当日お茶・未精算だけ先に精算する子）。一覧でチェック → 精算場所・投函した額 → 精算済
+const unsOnly = {};
+function unsOnlyToggle(cid, key, on){ const s = unsOnly[cid] = unsOnly[cid] || new Set(); if(on) s.add(key); else s.delete(key); unsListPaint(); }
+function unsOnlyFoot(cid, l){
+  const s = unsOnly[cid]; if(!KB.CAN_EDIT || !s || !s.size) return KB.CAN_EDIT ? `<div class="hint2" style="font-size:11.5px;margin-top:2px">☑ をつけると、未精算だけを今日精算できます（当日お茶・未精算だけ先に精算する子）</div>` : "";
+  const picked = l.filter(x => s.has(x.key)), sum = picked.reduce((a, x) => a + x.amount, 0);
+  return `<div class="uonly"><b>💴 未精算だけ精算する</b>（${picked.map(x => UNS_ABC[l.indexOf(x)] || "").join("・")}）　${sum >= 0 ? `<span class="due">💰 投函 ${yen(sum)}</span>` : `<span class="due give">💴 お店から渡す ${yen(-sum)}</span>`}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px">
+      <select id="uo_pl_${cid}">${(typeof PLACES !== "undefined" ? PLACES : ["池袋", "鶯谷", "五反田", "回収"]).map(p => `<option>${p}</option>`).join("")}</select>
+      <input type="number" id="uo_dep_${cid}" placeholder="投函した額（${sum >= 0 ? sum : 0}）" style="width:150px">
+      <button type="button" class="btn btn-primary btn-sm" onclick="unsOnlySettle('${cid}')">✅ 未精算だけ精算済にする</button></div></div>`;
+}
+async function unsOnlySettle(cid){
+  const l = unsOpen(cid), s = unsOnly[cid] || new Set(), picked = l.filter(x => s.has(x.key)); if(!picked.length) return;
+  const sum = picked.reduce((a, x) => a + x.amount, 0), place = $("uo_pl_" + cid).value, dv = $("uo_dep_" + cid).value;
+  const dep = dv === "" ? null : Number(dv) || 0, diff = dep != null ? dep - sum : null;
+  const labels = picked.map(x => unsLine(x, l.indexOf(x), cid));
+  if(!confirm(`${castName(cid)} の未精算だけを精算済にしますか？（${unsMd(day)}・${place}）\n${labels.join("\n")}\n→ 合計 ${sum >= 0 ? "投函 " + yen(sum) : "お店から渡す " + yen(-sum)}` + (diff ? `\n投函した額 ${yen(dep)} → ${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}` : ""))) return;
+  const by = KB.operatorName(), at = new Date().toISOString();
+  try{
+    for(const x of picked){
+      const txt = `${unsMd(day)}に、この日の${x.kind === "day" ? "精算" : "未精算（" + x.what + "）"}を精算しました（未精算だけの精算・合計 ${yen(sum)}・${place}）`;
+      if(x.kind === "day"){
+        const s2 = { reward: x.raw.c.reward, option: x.raw.c.option, takeHome: x.raw.c.takeHome, total: x.raw.c.total, cardPaid: x.raw.c.cardPaid, drop: x.raw.c.drop, zappi: x.raw.c.zappi, paidOn: day, by, at };
+        await unsLogOther(x.date, cid, txt, { settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: s2 });
+      } else {
+        q(await sb.from("kb_unsettled").update({ done_on: day, done_by: by, done_at: at }).eq("id", x.raw.id));
+        await unsLogOther(x.date, cid, txt);
+      }
+    }
+    if(diff && UNS !== null) q(await sb.from("kb_unsettled").insert({ cast_id: cid, biz_date: day, amount: -diff, source: "auto", created_by: by,
+      note: diff < 0 ? "未精算の精算で投函が足りなかった（投函 " + yen(dep) + "／" + yen(sum) + "）" : "未精算の精算で多く投函した（投函 " + yen(dep) + "／" + yen(sum) + "）" }));
+    // 今日のこの子の精算の備考にも残す（今日の精算は「精算済」にはしない）
+    await unsLogOther(day, cid, `💴 未精算だけ精算しました（${place}）\n${labels.join("／")}\n→ 合計 ${sum >= 0 ? "投函 " + yen(sum) : "お店から渡す " + yen(-sum)}` + (dep != null ? `／投函した額 ${yen(dep)}` : ""));
+  }catch(e){ toast("精算できませんでした：" + (e.message || e)); return; }
+  delete unsOnly[cid]; toast(`✅ ${castName(cid)} の未精算を精算しました`);
+  if(typeof loadDay === "function") await loadDay(); await unsLoad();
+}async function unsAdd(){
   const cid = $("un_cast").value, amt = Math.abs(Number($("un_amt").value) || 0), d = $("un_day").value;
   if(!cid || !amt || !d){ toast("キャスト・日付・金額を入れてください"); return; }
   try{ q(await sb.from("kb_unsettled").insert({ cast_id: cid, biz_date: d, amount: amt * Number($("un_kind").value), note: $("un_note").value.trim() || "手で入れた未精算", source: "manual", created_by: KB.operatorName() }));
@@ -223,5 +261,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .slog{background:#FFFCEB;border:1.5px solid #F2D27A;border-radius:12px;padding:8px 10px;margin:8px 0;font-size:13px}
   .slog > b{color:#8a6d00;margin-right:8px} .slog .sl{background:#fff;border:1px solid #F2D27A;border-radius:8px;padding:5px 8px;margin-top:5px}
   .slog .sl .t{white-space:pre-wrap} .slog .sl .s{font-size:11px;color:#9C8B8F;text-align:right}
+  .uonly{background:#FFFBEA;border:2px solid #F2C200;border-radius:10px;padding:8px 10px;margin-top:6px;font-size:13px}
   .pmz{background:#F7FBF4;border:1.5px solid #CFE6C2;border-radius:12px;padding:8px 10px;margin:8px 0} .pmzh{font-weight:800;font-size:13px}
 </style>`);
