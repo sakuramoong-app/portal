@@ -3688,14 +3688,18 @@ $("f_address").addEventListener("change", () => {
 { const __ofRoom = openForm; openForm = function(id){ const r = __ofRoom.apply(this, arguments); roomCheck = editing && (editing.todos || []).some(x => /在室確認/.test(x.text)) ? true : null; return r; }; }
 /* ---------- 📱 スマホの「全体を見たい」：マスをタップ＝「○○:○○から」を出す／長押し＝その時間で新しい受付 ---------- */
 (function(){
-  let tm = null, startEl = null, fired = false;
+  let tm = null, fired = false, sx = 0, sy = 0;
   const cellOf = e => e.target.closest && e.target.closest(".tlg .c[onclick]");
+  const fire = c => { fired = true; const m = (c.getAttribute("onclick") || "").match(/tlCell\('([^']*)',([\d.]+)\)/); if(m){ if(navigator.vibrate) navigator.vibrate(30); tlCell(m[1], Number(m[2])); } };
   document.addEventListener("pointerdown", e => {
     if(!IS_PHONE()) return; const c = cellOf(e); if(!c) return;
-    startEl = c; fired = false; clearTimeout(tm);
-    tm = setTimeout(() => { fired = true; const m = (c.getAttribute("onclick") || "").match(/tlCell\('([^']*)',([\d.]+)\)/); if(m){ if(navigator.vibrate) navigator.vibrate(30); tlCell(m[1], Number(m[2])); } }, 550);
+    fired = false; sx = e.clientX; sy = e.clientY; clearTimeout(tm);
+    tm = setTimeout(() => fire(c), 500);
   }, true);
-  ["pointerup", "pointercancel", "pointermove"].forEach(ev => document.addEventListener(ev, e => { if(ev === "pointermove" && e.pointerType !== "touch") return; if(ev !== "pointerup" || fired) clearTimeout(tm); if(ev === "pointerup") clearTimeout(tm); }, true));
+  // 指が少し動いただけでは、長押しをやめない（10px 以上動いたら＝スクロール）
+  document.addEventListener("pointermove", e => { if(tm && Math.hypot(e.clientX - sx, e.clientY - sy) > 10){ clearTimeout(tm); tm = null; } }, true);
+  ["pointerup", "pointercancel"].forEach(ev => document.addEventListener(ev, () => { clearTimeout(tm); tm = null; }, true));
+  document.addEventListener("contextmenu", e => { if(IS_PHONE() && cellOf(e)) e.preventDefault(); }, true);   // 長押しのメニューを出さない
   document.addEventListener("click", e => {
     if(!IS_PHONE()) return; const c = cellOf(e); if(!c) return;
     e.stopPropagation(); e.preventDefault();
@@ -3720,6 +3724,7 @@ $("f_address").addEventListener("change", () => {
   document.addEventListener("keydown", e => { const el = e.target; if(e.key === "Enter" && el && el.dataset && el.dataset.tm){ e.preventDefault(); el.blur(); } }, true);
 })();
 document.head.insertAdjacentHTML("beforeend", `<style>
+  @media (max-width:700px){ .tlg .c{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none} }
   .tlg .c.tap::after{content:attr(data-t) " から";position:absolute;top:3px;left:3px;font-size:11.5px;font-weight:800;color:#fff;background:#e5638c;border-radius:6px;padding:2px 6px;z-index:8;white-space:nowrap}
   @media (max-width:700px){ .stickybar .tabs#tabs{display:none !important} .tlg .c:hover::after{display:none} .tlg .c.tap::after{display:block} }
 </style>`);
@@ -4730,11 +4735,16 @@ lookupCustomer = async function(){
   if(curCustomer) custCaution(curCustomer.id);
   checkOldNomi(); return r;
 };
-// ⚠️ 要注意：台帳エクセルの過去の利用（トビ・キャンセルの回数）と、キャストNGの一覧
+// 受付で、台帳エクセルの回の「🙅キャストNGの印」を外す（顧客台帳の「NGではない」と同じ）
+async function histNgOffK(hid){
+  if(!confirm("この回の「🙅キャストNG」の印を外しますか？（キャストNGではなかったとき）")) return;
+  try{ q(await sb.from("kb_cust_history").update({ cast_ng: false }).eq("id", hid)); toast("印を外しました"); if(curCustomer) custCaution(curCustomer.id); }
+  catch(e){ toast("できませんでした：" + (e.message || e)); }
+}// ⚠️ 要注意：台帳エクセルの過去の利用（トビ・キャンセルの回数）と、キャストNGの一覧
 async function custCaution(custId){
   try{
     const [h, n, rt] = await Promise.all([
-      sb.from("kb_cust_history").select("biz_date,status,cast_raw,memo,marks,cast_ng,src_row").eq("customer_id", custId).order("biz_date", { ascending: false }).limit(2000),
+      sb.from("kb_cust_history").select("id,biz_date,status,cast_raw,memo,marks,cast_ng,src_row").eq("customer_id", custId).order("biz_date", { ascending: false }).limit(2000),
       sb.from("kb_cust_cast_ng").select("cast_id,cast_name,reason").eq("customer_id", custId),
       sb.from("kb_reservations").select("biz_date,store_key,cast_id,memo_log,note").eq("customer_id", custId).eq("status", "tobi").eq("deleted", false).order("biz_date", { ascending: false }).limit(50),
     ]);
@@ -4759,7 +4769,7 @@ async function custCaution(custId){
     const trouble = hs.filter(x => x.status !== "tobi" && (["cancel", "flowed"].includes(x.status) || x.cast_ng || colored(x.marks) || WORDS.test(x.memo || "") || (x.memo || "").length >= 40));   // トビは上の🚨に出す
     const STL = { cancel: "キャンセル", tobi: "トビ", flowed: "流れた", done: "" };
     const hlw = s => esc(s).replace(/(NG|ＮＧ|出禁|トビ|飛んだ|飛ばれ|クレーム|盗撮|暴力|薬|警察|要注意)/g, '<b style="background:#E5484D;color:#fff;border-radius:4px;padding:0 3px">$1</b>');
-    const tItem = x => `<div style="border-top:1px dashed #F1C9CF;padding:4px 0"><b>${fmt(x.biz_date) || "日付なし"}</b> ${esc(x.cast_raw || "")} ${STL[x.status] ? `<b style="color:#C62828">【${STL[x.status]}】</b>` : ""}${x.cast_ng ? " 🙅" : ""}${colored(x.marks) ? " 🎨" : ""}${x.src_row ? ` <small style="color:#8a6d3b">（エクセル ${x.src_row}行目）</small>` : ""}
+    const tItem = x => `<div style="border-top:1px dashed #F1C9CF;padding:4px 0"><b>${fmt(x.biz_date) || "日付なし"}</b> ${esc(x.cast_raw || "")} ${STL[x.status] ? `<b style="color:#C62828">【${STL[x.status]}】</b>` : ""}${x.cast_ng ? ` <span title="この回の行に「キャストNG」の印（エクセルの赤い字などから自動でつけた）">🙅キャストNGの印</span>${KB.CAN_EDIT && x.id ? ` <button type="button" class="btn btn-ghost btn-sm" style="padding:0 8px;font-size:11.5px" onclick="histNgOffK(${x.id})">NGではない</button>` : ""}` : ""}${colored(x.marks) ? " 🎨" : ""}${x.src_row ? ` <small style="color:#8a6d3b">（エクセル ${x.src_row}行目）</small>` : ""}
       ${x.memo ? `<div style="white-space:pre-wrap">${hlw(x.memo)}</div>` : ""}</div>`;
     if(trouble.length) lines.push(`<div class="warn" style="background:#FFF8F0;border-color:#F3B27A;color:#5c3a00;font-weight:400">
       <b>📝 台帳で何かあった回 ${trouble.length}件（備考は全文）</b>${trouble.slice(0, 3).map(tItem).join("")}
@@ -5210,6 +5220,12 @@ renderDummyMatch = async function(){
   const list = el.querySelector("div[style*='font-weight:800;margin:6px 0 2px']");
   if(list) list.insertAdjacentHTML("beforebegin", head);
   ng.forEach(r => r.parentNode.appendChild(r));   // 行けない子は下へ
+  // 前にこのダミー名で行った子が1人なら、その子を自動で選んで本指名（新しい受付で、まだキャストを選んでいないとき）
+  if(!editing && same.length === 1 && !$("f_cast").value){
+    const cid = same[0]; $("f_cast").value = cid;
+    if($("f_cast").value !== cid && $("f_castAll")){ $("f_castAll").checked = true; fillCastSel(); $("f_cast").value = cid; }
+    if($("f_cast").value === cid){ onCast(); setVisit(visitFrom(custSeen || custPast, cid)); toast(`🎭 前に「${name}」で行った ${castName(cid)} にしました（${visit === "honshi" ? "本指名" : "キャストを確かめてください"}）`); }
+  }
   const foot = [...el.children].find(x => /％は身長/.test(x.textContent || "")); if(foot) el.appendChild(foot);   // 説明はいちばん下に
 };
 // マッチ率：高いほど目立たせる（80%〜 緑の太字、60%〜 オレンジ、それより下はうすく）
