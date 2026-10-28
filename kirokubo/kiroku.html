@@ -3755,6 +3755,45 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .tlg .c.tap::after{content:attr(data-t) " から";position:absolute;top:3px;left:3px;font-size:11.5px;font-weight:800;color:#fff;background:#e5638c;border-radius:6px;padding:2px 6px;z-index:8;white-space:nowrap}
   @media (max-width:700px){ .stickybar .tabs#tabs{display:none !important} .tlg .c:hover::after{display:none} .tlg .c.tap::after{display:block} }
 </style>`);
+/* ---------- 📅 受付の日付が変わったら（どの方法で変えても）、キャストの一覧・18極門の一覧をその日のシフトで出しなおす ---------- */
+let lastFDay = "";
+{ const __recalcDay = recalc; recalc = function(){ const r = __recalcDay.apply(this, arguments);
+    const v = ($("f_day") && $("f_day").value) || "";
+    if($("formBg").classList.contains("show") && v !== lastFDay){ lastFDay = v; fillCastSel(); if(isDummyStore($("f_store").value)) renderDummy(); }
+    return r; }; }
+{ const __ofDay = openForm; openForm = function(){ lastFDay = ""; return __ofDay.apply(this, arguments); }; }
+{ const __lodDay = loadOtherDay; loadOtherDay = function(bd){ const r = __lodDay.apply(this, arguments); return r; }; }
+
+/* ---------- 🚫 18・極門：台帳の履歴と合わない「ダミー名×キャスト」は、選んだ時点で止める（窓で知らせて、もとにもどす） ---------- */
+function dmConflict(cid, name, store){
+  if(!cid || !name || !isDummyStore(store) || (!Array.isArray(custSeen) && !Array.isArray(custPast))) return "";
+  if(ownersOf(store, name).some(o => o.id === cid)) return "";   // 専用の名前は、その子なら OK
+  const seen = seenNorm().filter(p => p.cast_id && p.dummy_name && isDummyStore(p.store_key) && !["cancel", "tobi"].includes(p.status) && !(editing && p.id === editing.id));
+  const fmt = d => String(d || "").replace(/^\d\d(\d\d)-(\d\d)-(\d\d)$/, "$1/$2/$3") || "日付なし";
+  const byName = seen.filter(p => p.store_key === store && p.dummy_name === name), ids = [...new Set(byName.map(p => p.cast_id))];
+  if(ids.length && !ids.includes(cid)) return `このお客さんは前に「${name}」で ${ids.map(castName).join("・")} が行っています（${fmt(byName[0].biz_date)}）。\n${castName(cid)} を「${name}」で行かせることはできません。`;
+  const mine = seen.filter(p => p.cast_id === cid && !(p.store_key === store && p.dummy_name === name));
+  if(mine.length) return `${castName(cid)} は、このお客さんに前に「${mine[0].dummy_name}」（${storeLabel(mine[0].store_key)}・${fmt(mine[0].biz_date)}）で行っています。\n「${name}」では行けません（お客さんにばれます）。`;
+  return "";
+}
+let dmPrev = { cast: "", dummy: "" };
+document.addEventListener("focusin", e => { if(e.target && (e.target.id === "f_cast" || e.target.id === "f_dummy")) dmPrev = { cast: $("f_cast").value, dummy: $("f_dummy").value }; }, true);
+document.addEventListener("change", e => {
+  const id = e.target && e.target.id; if(id !== "f_cast" && id !== "f_dummy") return;
+  const store = $("f_store").value; if(!isDummyStore(store) || dmMode === "named") return;
+  // ダミー名を選んで、前にその名前で行った子がいるときは、キャストは自動でその子になる（下の一覧で）。ここではキャストを手で変えたときと、ダミー名×今のキャストを見る
+  const name = $("f_dummy").value, cid = $("f_cast").value;
+  if(id === "f_dummy"){
+    const hist = seenNorm().filter(p => p.store_key === store && p.dummy_name === name && p.cast_id && !["cancel", "tobi"].includes(p.status));
+    if(hist.length) return;   // 前にこの名前で行った子がいる → その子に自動で切りかわる
+  }
+  const msg = dmConflict(cid, name, store);
+  if(!msg) return;
+  e.stopImmediatePropagation();
+  alert("🚫 この組み合わせはダメです\n\n" + msg);
+  if(id === "f_cast") $("f_cast").value = dmPrev.cast; else $("f_dummy").value = dmPrev.dummy;
+  try{ onCast(); recalc(); renderDummyMatch(); }catch(err){}
+}, true);
 /* ---------- ⏸ 一時保存（編集中）：受付の外を押す・「⏸ 一時保存」で、入れたところまでとっておく → 右下の点滅ボタンで続きから ---------- */
 const DRAFT_KEY = "kbResDraft";
 function draftGet(){ try{ return JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); }catch(e){ return null; } }
@@ -5189,6 +5228,7 @@ function setDmMode(m){
   $("namedBox").style.display = m === "named" ? "" : "none";
   $("timeBox").style.display = m === "time" || m === "cast" ? "" : "none";
   $("dummyRow").style.display = m === "dummy" ? "" : "none";
+  if(m === "dummy" && $("f_dummy").value && ownersOf($("f_store").value, $("f_dummy").value).length){ $("f_dummy").value = ""; }   // 専用の名前はダミー在籍指名では使わない
   if(m === "time" || m === "cast"){ $("f_tStart").value = $("f_start").value; $("f_cast").disabled = false; recalc(); tmPaint(); if(m === "time") return; }
   if(m === "named"){
     const store = $("f_store").value, list = namedCasts(store), cur = $("f_cast").value;
