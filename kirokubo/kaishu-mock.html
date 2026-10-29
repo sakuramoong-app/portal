@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>回収明細イメージ</title><meta name="robots" content="noindex">
+<style>
+:root{--pink:#e5638c;--ink:#5C4B4F;--sub:#9C8B8F;--line:#F1D9E0;--bg:#FFF7FA}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:"Hiragino Maru Gothic ProN","M PLUS Rounded 1c","Yu Gothic","Meiryo",sans-serif;font-size:14px}
+.wrap{max-width:1180px;margin:0 auto;padding:16px}
+h1{color:var(--pink);font-size:20px;margin:4px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.lock{font-size:12px;font-weight:800;background:#333;color:#fff;border-radius:99px;padding:3px 12px}
+.note{background:#FFF8DB;border:1.5px solid #F2D675;border-radius:12px;padding:8px 12px;font-size:13px;margin:8px 0 12px}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.bar button,.bar .d{font-family:inherit;font-weight:800;border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:7px 14px;color:var(--ink)}
+.bar button.on{background:var(--pink);color:#fff;border-color:var(--pink)}
+.sum{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.sum .s{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:8px 14px;font-size:12px;color:var(--sub);font-weight:800}
+.sum .s b{display:block;font-size:18px;color:var(--ink)} .sum .s.ng b{color:#c0392b} .sum .s.ok b{color:#2e8b57}
+.card{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:12px}
+.card h2{font-size:16px;margin:0 0 8px}
+table{border-collapse:collapse;width:100%} th,td{border-bottom:1px solid #F0E3E8;padding:8px;text-align:right;font-size:13.5px;white-space:nowrap;vertical-align:middle}
+th{background:#FBEFF3;font-size:12px;color:#6b3550} td.l,th.l{text-align:left}
+td.in input{width:100px;text-align:right;font-family:inherit;font-size:15px;font-weight:900;color:#1a3a8a;padding:3px 6px;border:1.5px solid #ccc;border-radius:8px}
+.z{font-weight:900} .z.ok{color:#2e8b57} .z.ng{color:#c0392b} .z.pl{color:#2f7fd0}
+.st{display:inline-block;font-size:12px;font-weight:800;border-radius:99px;padding:2px 10px}
+.st.ok{background:#E5F6EC;color:#2e8b57} .st.wait{background:#FDE7E7;color:#c0392b} .st.mv{background:#F1EAFA;color:#5b3fa6} .st.no{background:#F4F4F4;color:#9C8B8F}
+a.j{font-size:12px;font-weight:800;color:#2f7fd0;text-decoration:none;margin-left:4px}
+tr.bad td{background:#FFF6F6} tr.tot td{background:#F7F7F7;font-weight:900;border-top:2px solid #ccc}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px} @media(max-width:900px){.grid{grid-template-columns:1fr}}
+.flow{display:grid;grid-template-columns:1fr auto;gap:5px 16px;font-size:14px}
+.flow .v{text-align:right;font-weight:800;font-variant-numeric:tabular-nums}
+.flow .eq{border-top:2px solid #333;padding-top:4px;font-weight:900}
+.ex{width:100%;margin-top:6px} .ex td{font-size:13px;padding:5px 6px} .ex input,.ex select{font-family:inherit;font-size:13px;padding:3px 6px;border:1.5px solid #ddd;border-radius:6px}
+.hand{background:#00B0F0;border:3px solid #0A84C6;border-radius:14px;padding:10px 16px;margin-top:10px}
+.hand .k{font-weight:800;color:#08304d} .hand .v{text-align:right;font-weight:900;font-size:32px;color:#E0001B}
+.chk{border:2.5px solid #2e8b57;background:#F0FBF4;border-radius:12px;padding:10px 14px;margin-top:10px;font-weight:900;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.chk input{width:22px;height:22px;accent-color:#2e8b57} .chk small{font-weight:700;color:var(--sub)}
+.leg{font-size:12px;color:var(--sub);margin-top:6px}
+</style></head><body><div class="wrap">
+<h1>📦 回収明細 <span class="lock">🔒 きゃ・社長だけ見られる</span></h1>
+<div class="note">※ イメージです（まだ作っていません）。名前・金額は見本。<b>精算画面は今のまま</b>。回収したかどうか・差額・処理したかどうかは、このページだけで見ます。</div>
+
+<div class="bar"><button>◀</button><span class="d">10/29(木)</span><button>▶</button>
+  <span style="width:12px"></span><button class="on">ぜんぶ</button><button>池袋</button><button>鶯谷</button><button>五反田</button></div>
+
+<div class="sum">
+  <div class="s">回収した<b>7 / 8人</b></div>
+  <div class="s">回収されるはずの現金<b>182,300円</b></div>
+  <div class="s">店長が回収した額<b>181,300円</b></div>
+  <div class="s ng">差額<b>−1,000円</b></div>
+  <div class="s ng">まだ処理していない<b>1件</b></div>
+</div>
+
+<div class="card">
+  <h2>👛 キャストごとの回収</h2>
+  <div style="overflow-x:auto"><table>
+    <tr><th class="l">キャスト</th><th class="l">回収場所</th><th>投函額（精算）</th><th>店長が回収した額</th><th>差額</th><th class="l">処理</th><th class="l">前の日の分（いっしょに精算）</th></tr>
+    <tr><td class="l">さくら</td><td class="l">鶯谷</td><td>14,000</td><td class="in"><input value="14000"></td><td class="z ok">0</td><td class="l"><span class="st ok">✅ ぴったり</span></td>
+      <td class="l"><span class="st mv">10/27 お釣り −1,000 を精算</span><a class="j" href="#">10/27 ↗</a></td></tr>
+    <tr class="bad"><td class="l">もも</td><td class="l">池袋</td><td>13,000</td><td class="in"><input value="12000"></td><td class="z ng">−1,000</td>
+      <td class="l"><span class="st wait">⏳ まだ処理していない</span> <select style="font-family:inherit;font-size:12px"><option>処理をえらぶ</option><option>未精算にする（次の精算で回収）</option><option>数えまちがい（直す）</option><option>お店がかぶる</option></select></td><td class="l"></td></tr>
+    <tr><td class="l">ゆず</td><td class="l">池袋</td><td>12,000</td><td class="in"><input value="12000"></td><td class="z ok">0</td><td class="l"><span class="st ok">✅ ぴったり</span></td><td class="l"></td></tr>
+    <tr><td class="l">りん</td><td class="l">五反田</td><td>11,500</td><td class="in"><input value="12500"></td><td class="z pl">＋1,000</td>
+      <td class="l"><span class="st mv">お釣りにした → 10/31 に精算済み ✅</span><a class="j" href="#">10/31 ↗</a></td><td class="l"></td></tr>
+    <tr><td class="l">なな</td><td class="l">鶯谷</td><td>−2,000</td><td class="in"><input value="0"></td><td class="z ok">0</td><td class="l"><span class="st no">お店から 2,000 渡した</span></td><td class="l"></td></tr>
+    <tr><td class="l">…</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+    <tr class="tot"><td class="l">合計</td><td class="l"></td><td>182,300</td><td>181,300</td><td class="z ng">−1,000</td><td class="l">処理まだ 1件</td><td class="l"></td></tr>
+  </table></div>
+  <div class="leg">・投函額は精算画面から自動で入る　・「店長が回収した額」だけ手で入れる　・差額が出たら「処理」をえらぶ（えらぶまで赤）　・↗ でその日の精算画面に飛ぶ</div>
+</div>
+
+<div class="grid">
+<div class="card">
+  <h2>🧮 照合（スプレッドシートの「過不足」のかわり）</h2>
+  <div class="flow">
+    <span>店落ち（暫定的な残額＋雑費）</span><span class="v">215,650円</span>
+    <span>− カード（お店の口座に入るので現金はない）</span><span class="v">−33,350円</span>
+    <span class="eq">＝ 回収されるはずの現金</span><span class="v eq">182,300円</span>
+    <span>店長が回収した額</span><span class="v">181,300円</span>
+    <span class="eq">過不足</span><span class="v eq" style="color:#c0392b">−1,000円（もも・処理まだ）</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>💴 社長に渡すまで（経費の処理）</h2>
+  <div class="flow">
+    <span>店長が回収した額</span><span class="v">181,300円</span>
+  </div>
+  <table class="ex">
+    <tr><td class="l"><select><option>待機場のお釣り補充</option></select></td><td class="l"><input value="池袋 千円札"></td><td><input value="−3,000" style="width:90px;text-align:right"></td><td class="l">🧾 あり</td></tr>
+    <tr><td class="l"><select><option>キャストの交通費（立て替え）</option></select></td><td class="l"><input value="ゆず タクシー"></td><td><input value="−2,000" style="width:90px;text-align:right"></td><td class="l">🧾 あり</td></tr>
+    <tr><td class="l" colspan="4"><button style="font-family:inherit;font-weight:800;border:1.5px dashed #ccc;background:#fff;border-radius:8px;padding:3px 10px">＋ 経費を足す</button></td></tr>
+  </table>
+  <div class="flow" style="margin-top:6px">
+    <span class="eq">＝ 社長に手渡しする額</span><span class="v eq">176,300円</span>
+  </div>
+  <div class="hand"><div class="k">🤝 社長に手渡し（現金）</div><div class="v">176,300円</div></div>
+  <div class="chk"><input type="checkbox"> 社長が受け取った <small>（社長のログインでだけ押せる・日時が残る）</small></div>
+</div>
+</div>
+
+</div></body></html>
