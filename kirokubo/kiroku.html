@@ -290,6 +290,7 @@
   .rc-k{font-size:14px;white-space:nowrap;} .rc-k small{font-size:12px;color:var(--sub);} .rc-yen{color:#e5638c;font-size:15.5px;} .rc-top select{font-family:inherit;font-size:13px;padding:2px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;}
   .rc-more > summary{cursor:pointer;font-size:12.5px;font-weight:800;color:var(--sub);padding:4px 10px;list-style:none;} .rc-more > summary::before{content:"▶ ";font-size:10px;} .rc-more[open] > summary::before{content:"▼ ";}
   .rc-more[open] > summary{border-bottom:1.5px solid #F1E3E7;}
+  .rc-last{margin:4px 0 2px;background:#FFFBEA;border:1.5px solid #F2D27A;border-radius:8px;padding:4px 10px;color:var(--ink);font-weight:700;font-size:13px;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden} .rc-last small{color:var(--sub);font-weight:600;font-size:11px;margin-left:8px} .rc-more[open] .rc-last{display:none}
   .rc-2{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:4px 10px;background:#F7F0FF;border-bottom:1.5px solid #EAD7DD;font-size:13px;} .rc-2::before{content:"💳 カード";font-size:12px;font-weight:800;color:#6b4fa0;}
   .rescard .rc-top .rc-time, .rescard .rc-top select.stsel{height:32px;box-sizing:border-box;margin:0;vertical-align:middle;}
   .rescard .rc-top select.stsel{padding:0 8px;font-size:14px;line-height:28px;border-radius:8px;}
@@ -4325,6 +4326,8 @@ function resCard(r){
   const payUrl = r.payment === "card" && (r.card_step || "unsent") === "unsent" ? `<a class="payurl" href="${PAY_ADMIN_URL}" target="_blank" rel="noopener" title="${esc(PAY_ADMIN_URL)}">💳 決済URL</a>` : "";
   // 1〜2行に：時間・お店・状態・場所・コース・総額（支払い）・電話・カードの状態・伝えた。ほかは「くわしく」にたたむ
   const nLog = logOf(r).length;
+  // 閉じていても、いちばん新しい備考を1つ見せる（状態を変えた自動のログはとばす）
+  const lastLog = logOf(r).slice().reverse().find(x => x.text && !/^(🔁|状態 →)/.test(String(x.text)));
   const mates = partyMates(r);
   return `<div class="rescard ${cx ? "cx" : ""}" id="rc-${r.id}">
     <div class="rc-top">
@@ -4343,7 +4346,7 @@ function resCard(r){
     </div>
     ${cardStep || payUrl ? `<div class="rc-2">${cardStep}${payUrl}</div>` : ""}
     ${r.dress && dressText(r.dress) ? `<div class="rc-dress">👗 ${esc(dressText(r.dress))}</div>` : ""}
-    <details class="rc-more" ${rcOpen.has(r.id) ? "open" : ""} ontoggle="rcToggle(${r.id},this.open)"><summary>くわしく（お客さん・場所・OP・備考${nLog ? " " + nLog + "件" : ""}）</summary>
+    <details class="rc-more" ${rcOpen.has(r.id) ? "open" : ""} ontoggle="rcToggle(${r.id},this.open)"><summary>くわしく（お客さん・場所・OP・備考${nLog ? " " + nLog + "件" : ""}）${lastLog ? `<div class="rc-last">📝 ${esc(lastLog.text)}<small>${esc(lastLog.by || "")} ${esc(whenShort(lastLog.at))}</small></div>` : ""}</summary>
     <div class="rc-grid">
       <div class="rc-box"><div class="rc-h">💴 コース・料金</div>
         <div class="rc-row">${ed ? `<select onchange="qCourse(${r.id},this.value)">${prices.map(p=>`<option value="${esc(p.course)}" ${p.course === r.course ? "selected" : ""}>${esc(p.course)}${/^\d+$/.test(p.course) ? "分" : ""}</option>`).join("")}${prices.some(p=>p.course === r.course) ? "" : `<option selected>${esc(r.course || "")}</option>`}</select>` : esc(r.course)}
