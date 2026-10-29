@@ -290,7 +290,7 @@
   .rc-k{font-size:14px;white-space:nowrap;} .rc-k small{font-size:12px;color:var(--sub);} .rc-yen{color:#e5638c;font-size:15.5px;} .rc-top select{font-family:inherit;font-size:13px;padding:2px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;}
   .rc-more > summary{cursor:pointer;font-size:12.5px;font-weight:800;color:var(--sub);padding:4px 10px;list-style:none;} .rc-more > summary::before{content:"▶ ";font-size:10px;} .rc-more[open] > summary::before{content:"▼ ";}
   .rc-more[open] > summary{border-bottom:1.5px solid #F1E3E7;}
-  .rc-last{margin:4px 0 2px;background:#FFFBEA;border:1.5px solid #F2D27A;border-radius:8px;padding:4px 10px;color:var(--ink);font-weight:700;font-size:13px;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden} .rc-last small{color:var(--sub);font-weight:600;font-size:11px;margin-left:8px} .rc-more[open] .rc-last{display:none}
+  .rc-last{margin:4px 0 2px;background:#FFFBEA;border:1.5px solid #F2D27A;border-radius:8px;padding:4px 10px;color:var(--ink);font-weight:700;font-size:13px;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden} .rc-last small{color:var(--sub);font-weight:600;font-size:11px;margin-left:8px} .rc-more[open] .rc-last{display:none}
   .rc-2{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:4px 10px;background:#F7F0FF;border-bottom:1.5px solid #EAD7DD;font-size:13px;} .rc-2::before{content:"💳 カード";font-size:12px;font-weight:800;color:#6b4fa0;}
   .rescard .rc-top .rc-time, .rescard .rc-top select.stsel{height:32px;box-sizing:border-box;margin:0;vertical-align:middle;}
   .rescard .rc-top select.stsel{padding:0 8px;font-size:14px;line-height:28px;border-radius:8px;}
@@ -382,7 +382,8 @@
 <body>
 <div class="wrap wide">
   <!-- いちばん上：記録簿の右に、ページの切りかえ（新しい記録簿・受付・精算・キャスト台帳） -->
-  <header class="kbh"><h1>📒 記録簿</h1><div id="navArea" class="navinhead"></div></header>
+  <header class="kbh"><h1>📒 記録簿</h1><div id="navArea" class="navinhead"></div>
+    <button class="btn btn-ghost btn-sm" id="shiftReloadBtn" onclick="reloadShifts()" title="サクラシフトで受理したシフトを、今すぐ読みこむ">🔄 シフトを読みなおす</button></header>
   <!-- 📱 スマホのときだけ：よく使う4つへすぐ行ける（上に固定） -->
   <nav class="spbar" id="spBar">
     <button type="button" onclick="spGo('add')">＋<b>予約</b></button>
@@ -428,12 +429,12 @@
         <button class="btn btn-ghost btn-sm" onclick="moveDay(1)">▶</button>
         <span class="bd" id="dayInfo" style="display:none"></span>
         <button class="btn btn-ghost btn-sm" onclick="goToday()">今日（営業日）</button>
-        <button class="btn btn-ghost btn-sm" id="shiftReloadBtn" onclick="reloadShifts()" title="サクラシフトで受理したシフトを、今すぐ読みこむ">🔄 シフトを読みなおす</button>
       </div>
       <label>並び・絞り <select id="s_sort" onchange="setSort(this.value)">
         <option value="kana">あいうえお順</option><option value="start">出勤が早い順</option><option value="endEarly">退勤が早い順</option><option value="endLate">退勤が遅い順</option>
         <option value="booked">予約があるキャストのみ</option><option value="freeNow">今すぐ行けるキャスト</option></select></label>
       <div class="kanabar" id="kanaBar"></div>
+      <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openForm(null)">＋ 受付を開く（キャスト未定）</button>
     </div>
     </div>
     <div class="sum" id="sum"></div>
@@ -457,7 +458,6 @@
       </details>
       <details class="fltsub" id="fltFuture" ontoggle="if(this.open){ $('castFind').open = true; cfPaint(); }"><summary>🗓 未来フィルター（キャスト名＋シフト予定日）</summary><div id="fltFutureBody"></div></details>
       </details>
-      <div style="display:flex;justify-content:flex-end;margin:0 0 8px"><button type="button" class="btn btn-primary btn-sm" onclick="openForm(null)">＋ 受付を開く（キャスト未定）</button></div>
       <div id="tlResult"></div>
     </div>
 
@@ -5700,6 +5700,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=16"></script>
+<script src="unsettled.js?v=17"></script>
 </body>
 </html>
