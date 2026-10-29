@@ -103,6 +103,7 @@ async function refresh(){
       ・ブラウザの「閉じるときにCookieとサイトのデータを消す」がON（Edge：設定 → プライバシー → 閉じるときに閲覧データをクリア）<br>
       ・登録したときと<b>ちがうブラウザ</b>で開いている（Edge と Chrome、ふつうの画面とシークレット／InPrivate）<br>
       ・スマホは、<b>LINEの中で開いた画面</b>・Safari・ホーム画面のアイコンが、それぞれ別あつかい（いつも同じものから開く）</div>`);
+  }catch(e){ $("list").innerHTML = `<span class="ng">一覧を読めませんでした：${esc(e.message || e)}</span>`; }
 }
 async function register(){
   const label = $("label").value.trim(), pass = $("pass1").value;

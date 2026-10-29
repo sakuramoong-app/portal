@@ -1063,7 +1063,7 @@ async function savePrivate(){
 
 /* ---------- 📨 プロフ確認フォーム（既存キャスト） ---------- */
 const CONFIRM_URL = "https://sakuramoong-app.github.io/cast-sakura-profile/confirm.html?t=";
-const CONFIRM_DUE = "10月31日（土）23:59まで";   // URLの期限（SQL 129 と同じ日にする）
+const CONFIRM_DUE = "11月15日（日）23:59まで";   // URLの期限（SQL 169 と同じ日にする）
 const fmtDT = s=>{ if(!s) return ""; const d = new Date(s); return (d.getMonth() + 1) + "/" + d.getDate() + " " + d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0"); };
 let rcSeq = 0;   // 前に読みはじめた分が、あとから上書きしないように
 async function renderConfirm(id){

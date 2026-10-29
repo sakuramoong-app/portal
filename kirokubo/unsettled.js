@@ -535,7 +535,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .plsel{font-family:inherit;font-size:16px;font-weight:900;color:#5C4B4F;padding:8px 36px 8px 18px;border:2px solid rgba(0,0,0,.15);border-radius:99px;cursor:pointer;
     appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%235C4B4F' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
   .plsel:disabled{opacity:.85;cursor:default}
-  @media(max-width:960px){ .svg2{grid-template-columns:1fr} }
+  .svc{container-type:inline-size}   /* 精算の窓（せまい）でも読めるように：カードの幅で1列にする */
+  @container (max-width:900px){ .svg2{grid-template-columns:1fr} .svg2 > .svr{align-self:start} }
   .sv .mmn{color:#c0392b;font-weight:800;font-size:12.5px;margin-top:6px;line-height:1.6}
   .svf > summary{cursor:pointer;font-weight:800;font-size:14px;padding:4px 0} .svf > summary small{font-weight:700;color:#9C8B8F;margin-left:8px}
   .sv .gb .k{font-weight:800} .sv .gb .v{text-align:right;font-weight:900;font-size:26px} .sv .gb .r{padding-left:0;color:#555;font-size:12.5px}
@@ -587,7 +588,7 @@ cardHtml = function(id, c){
       <input class="amt" type="number" value="${Number(x.amount) || 0}" ${dis} onchange="setItem('${id}','${kind}',${i},'amount',this.value)">
       ${dis ? "" : `<button class="btn btn-ghost btn-sm" onclick="delItem('${id}','${kind}',${i})">🗑</button>`}</div>`).join("");
   const V = settleViewHtml(id, c);
-  return `<div class="card ${done ? "done" : ""}" id="card-${id}">
+  return `<div class="card svc ${done ? "done" : ""}" id="card-${id}">
     <h2>${esc(castName(id))}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : "未精算"}</span>
       ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
     <div class="svg2"><div class="svl">
