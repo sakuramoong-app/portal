@@ -437,10 +437,9 @@
     </div>
     </div>
     <div class="sum" id="sum"></div>
-    <!-- ＋ 新規予約のタブ：🔍 時間で探す・👥 キャストで絞る・🎯 希望プレイで絞る のどれか1つ（結果は下の一覧に） -->
+    <!-- ＋ 新規予約・全体を見たい の両方：🔎 フィルター（ふだんは閉じる）→ その下に ＋ 受付を開く -->
     <div id="sharedFilter" style="display:none">
-      <div style="display:flex;justify-content:flex-end;margin:4px 0 8px"><button type="button" class="btn btn-primary btn-sm" onclick="openForm(null)">＋ 受付を開く（キャスト未定）</button></div>
-      <details class="fltbig" id="fltAll" open><summary>🔎 フィルター</summary>
+      <details class="fltbig" id="fltAll"><summary>🔎 フィルター</summary>
       <details class="fltsub" id="fltToday" open><summary>📅 当日フィルター（時間・キャスト・希望プレイ）</summary>
       <div id="nfModes" style="display:none"></div>
       <div class="search" id="nf_time">
@@ -458,6 +457,7 @@
       </details>
       <details class="fltsub" id="fltFuture" ontoggle="if(this.open){ $('castFind').open = true; cfPaint(); }"><summary>🗓 未来フィルター（キャスト名＋シフト予定日）</summary><div id="fltFutureBody"></div></details>
       </details>
+      <div style="display:flex;justify-content:flex-end;margin:0 0 8px"><button type="button" class="btn btn-primary btn-sm" onclick="openForm(null)">＋ 受付を開く（キャスト未定）</button></div>
       <div id="tlResult"></div>
     </div>
 
@@ -2168,9 +2168,8 @@ function showView(v){
   // 🗺 今どこに誰が は、いつも上に出しておく（タブではない）
   if(v !== "tl") v = "new";   // タブは「＋ 新規予約」「全体を見たい」の2つ（本日のキャスト一覧のタブはなくした・一覧は新規予約の下に出る）
   const box = { tl: "viewTL", list: "viewList", new: "viewList", slotsFree: "viewSlots", seats: "viewSeats" };   // 新規予約は、絞った一覧を出す
-  $("sharedFilter").style.display = v === "new" ? "" : "none";
-  if(v === "new") nfMode(nfCur);
-  else if($("s_time").value || $("s_free").checked || selCasts.size || (typeof playSel !== "undefined" && playSel.size)) clearSearch();   // ほかのタブは全員を出す
+  $("sharedFilter").style.display = "";   // フィルターは2つのタブで共通（絞りもそのまま引きつぐ）
+  nfMode(nfCur);
   ["viewTL", "viewList", "viewSlots", "viewSeats"].forEach(id=>{ const el = $(id); if(el) el.style.display = box[v] === id ? "" : "none"; });
   if(v === "slotsFree" && typeof renderSlots === "function") renderSlots();
   document.querySelectorAll("#tabs button[data-v]").forEach(b=>b.classList.toggle("on", b.dataset.v === v));
