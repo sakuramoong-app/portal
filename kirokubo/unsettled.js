@@ -603,6 +603,7 @@ cardHtml = function(id, c){
       <div class="it" style="display:flex;gap:6px;align-items:center"><input type="number" id="zo-${id}" value="${cd.zappi_override != null ? cd.zappi_override : ""}" placeholder="空なら自動" style="width:120px">
         <button class="btn btn-ghost btn-sm" onclick="setZappi('${id}')">雑費を直す</button></div>
     </div>`}
+    ${V.shop}
     ${V.dep}
     ${V.past}
     <div class="acts">
@@ -615,6 +616,5 @@ cardHtml = function(id, c){
     </div>
     </div></div>
     ${settleLogHtml(id)}
-    ${V.shop}
   </div>`;
 };
