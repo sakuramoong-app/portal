@@ -415,14 +415,26 @@ settleCanvas = function(id){
   }
   if(P.rest.length){ ops.push(["head2", "📒 のこりの未精算（今日は精算しない）"]); P.rest.forEach(x => ops.push(["sub2", x])); }
   ops.push(["memo"]);
-  const hOf = o => ({ head3: 34, why: 46, job: 40, jrow: 26, jsum: 30, abc: 32, pbox: 92, fx: 58, box: 112, row: 30, sub: 22, sub2: 24, line: 20, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 })[o[0]] || 30;
+  // 🏪 お店用：実際に投函した額・未精算/お釣りが出たか・過去の未精算・店落ち（いちばん下・グレー）
+  const shop = window.__shopImg;
+  if(shop){
+    const sel = unsSel[id] || new Set(), diff = c.deposited != null ? c.deposited - P.due : null;
+    const past = unsOpen(id).filter(x => x.date !== day && (c.cd.settled || !sel.has(x.key)));
+    ops.push(["line"], ["head", "🏪 お店用"]);
+    ops.push(["dep", "実際に投函した額", c.deposited != null ? yen(c.deposited) : "まだ入力されていません"]);
+    ops.push(["stat", diff == null ? ["投函した額が入っていません", "#9C8B8F"] : diff === 0 ? ["✅ 未精算・お釣りは出ていません", "#2e8b57"]
+      : diff < 0 ? [`⚠ 未精算が出ました（足りない ${yen(-diff)}）`, "#c0392b"] : [`⚠ お釣りが出ました（多い ${yen(diff)}）`, "#2f7fd0"]]);
+    ops.push(["stat", past.length ? [`📒 過去の未精算：のこり ${past.length}件（${past.map(x => unsMd(x.date) + " " + (x.amount < 0 ? "お釣り " : "") + yen(Math.abs(x.amount))).join("、")}）`, "#5b3fa6"] : ["📒 過去の未精算：なし", "#2e8b57"]]);
+    ops.push(["gbox"]);
+  }
+  const hOf = o => ({ dep: 76, stat: 28, gbox: 214, head3: 34, why: 46, job: 40, jrow: 26, jsum: 30, abc: 32, pbox: 92, fx: 58, box: 112, row: 30, sub: 22, sub2: 24, line: 20, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 })[o[0]] || 30;
   const H = 88 + ops.reduce((a, o) => a + hOf(o), 0) + 56;
   const cv = document.createElement("canvas"); cv.width = W * S; cv.height = H * S;
   const g = cv.getContext("2d"); g.scale(S, S);
   g.fillStyle = "#fff"; g.fillRect(0, 0, W, H);
   const grd = g.createLinearGradient(0, 0, W, 0); grd.addColorStop(0, "#ff9fb8"); grd.addColorStop(1, "#e5638c");
   g.fillStyle = grd; g.fillRect(0, 0, W, 72);
-  g.fillStyle = "#fff"; g.textAlign = "left"; g.font = `bold 15px ${FONT}`; g.fillText(`精算　${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]})`, PAD, 28);
+  g.fillStyle = "#fff"; g.textAlign = "left"; g.font = `bold 15px ${FONT}`; g.fillText(`精算${shop ? "（🏪 お店用）" : ""}　${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]})`, PAD, 28);
   g.font = `bold 24px ${FONT}`; g.fillText(`${castName(id)}さん`, PAD, 58);
   let y = 84;
   const txt = (s, x, yy, font, color, align) => { g.font = `${font} ${FONT}`; g.fillStyle = color; g.textAlign = align || "left"; g.fillText(s, x, yy); };
@@ -446,6 +458,16 @@ settleCanvas = function(id){
     } else if(k === "jsum"){   // ひっ算の線と答え
       g.strokeStyle = "#5C4B4F"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(W - PAD - 150, y + 4); g.lineTo(W - PAD, y + 4); g.stroke();
       txt((o[1][0] === "＝" ? "" : "▶ ") + o[1], PAD + 18, y + 22, "bold 14.5px", o[3] === "give" ? "#1f4f80" : "#6b3550"); txt(o[2], W - PAD, y + 22, "bold 16px", o[3] === "give" ? "#2f7fd0" : "#e5638c", "right");
+    } else if(k === "dep"){   // 実際に投函した額：四角い枠
+      g.fillStyle = "#fff"; g.strokeStyle = "#333"; g.lineWidth = 2.5; g.fillRect(PAD, y + 6, W - PAD * 2, h - 12); g.strokeRect(PAD, y + 6, W - PAD * 2, h - 12);
+      txt(o[1], PAD + 14, y + 44, "bold 16px", "#333"); txt(o[2], W - PAD - 14, y + 46, c.deposited != null ? "900 26px" : "bold 15px", c.deposited != null ? "#1a3a8a" : "#9C8B8F", "right");
+    } else if(k === "stat"){
+      txt(fit(o[1][0], W - PAD * 2, "bold 14px"), PAD, y + 19, "bold 14px", o[1][1]);
+    } else if(k === "gbox"){   // 店落ち：グレーの四角い枠（いちばん下）
+      g.fillStyle = "#EDEDED"; g.strokeStyle = "#8E8E8E"; g.lineWidth = 2.5; g.fillRect(PAD, y + 10, W - PAD * 2, h - 16); g.strokeRect(PAD, y + 10, W - PAD * 2, h - 16);
+      txt("🏪 店落ち（暫定的な残額＋雑費）", PAD + 14, y + 38, "bold 16px", "#333"); txt(yen(c.shopDrop), W - PAD - 14, y + 78, "900 32px", "#333", "right");
+      [["総額", yen(c.total)], ["キャスト報酬（報酬＋OP）", yen(c.reward + c.option)], ["暫定的な残額（総額−報酬）", yen(c.provisional)], ["【税務用】源泉徴収", yen(c.withholding)], ["実質的な店落ち（暫定的な残額−源泉）", yen(c.realDrop)]]
+        .forEach((x, i) => { txt(x[0], PAD + 14, y + 110 + i * 21, "13px", "#555"); txt(x[1], W - PAD - 14, y + 110 + i * 21, "bold 13.5px", "#555", "right"); });
     } else if(k === "head3"){
       txt(o[1], PAD, y + 24, "bold 15px", "#5C4B4F");
     } else if(k === "why"){   // 2行まで折り返し
@@ -485,6 +507,8 @@ settleCanvas = function(id){
     }
     y += h;
   });
-  txt("お疲れさまでした🌸", W / 2, y + 30, "bold 15px", "#e5638c", "center");
+  if(!shop) txt("お疲れさまでした🌸", W / 2, y + 30, "bold 15px", "#e5638c", "center");
   return cv;
 };
+// 🏪 お店用の精算表（キャストに送る中身＋投函した額・未精算/お釣り・過去の未精算・店落ち）。ページの画像コピーを借りる
+function copyShopImg(id){ window.__shopImg = true; try { copyDetailImg(id); } finally { window.__shopImg = false; } }

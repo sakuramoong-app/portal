@@ -2575,6 +2575,7 @@ function cardHtml(id, c){
     <div class="acts">
       <button class="btn btn-ghost btn-sm" onclick="copyDetail('${id}')">📋 精算明細をコピー（LINE用）</button>
       <button class="btn btn-ghost btn-sm" onclick="copyDetailImg('${id}')">🖼 画像でコピー</button>
+      <button class="btn btn-ghost btn-sm" onclick="copyShopImg('${id}')" title="投函した額・未精算・店落ちも入った、お店で残す用の画像">🏪 お店用の精算表</button>
       ${KB.CAN_EDIT ? (done
         ? `<button class="btn btn-ghost btn-sm" onclick="unsettle('${id}')">↩ 精算済をもどす</button>`
         : `<select id="pl-${id}">${PLACES.map(p=>`<option ${cd.settle_place === p ? "selected" : ""}>${p}</option>`).join("")}</select>
@@ -2677,7 +2678,7 @@ function settleCanvas(id){
   return cv;
 }
 function copyDetailImg(id){
-  const cv = settleCanvas(id), name = `精算_${day}_${castName(id)}.png`;
+  const cv = settleCanvas(id), name = `精算${window.__shopImg ? "_お店用" : ""}_${day}_${castName(id)}.png`;
   cv.toBlob(async b=>{
     // スマホ：画像の共有（LINE を選べる）→ だめなら、画像を大きく出して長押しで保存・コピー
     const phone = /iPhone|iPad|Android/i.test(navigator.userAgent);
@@ -5700,6 +5701,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=10"></script>
+<script src="unsettled.js?v=11"></script>
 </body>
 </html>

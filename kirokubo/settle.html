@@ -16,6 +16,9 @@
   .sum .s{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:8px 14px;font-size:12px;color:var(--sub);font-weight:800;}
   .sum .s b{display:block;font-size:17px;color:var(--ink);}
   .sum .s.hide b{filter:blur(7px);user-select:none;}
+  .sum .dayfig{flex-basis:100%;display:flex;gap:8px;flex-wrap:wrap;background:#F4F4F4;border:1.5px solid #D6D6D6;border-radius:14px;padding:8px 10px;}
+  .sum .dayfig .h{flex-basis:100%;font-size:12.5px;font-weight:800;color:#555;}
+  .sum .dayfig.hide b{filter:blur(7px);user-select:none;}
   .card{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:12px;}
   .card.done{border-color:#9ad9bd;background:#F6FCF9;}
   .card h2{font-size:16px;margin:0 0 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
@@ -172,7 +175,8 @@ function render(){
   const first = id => { const r = rows.find(x=>x.cast_id === id && x.start_at); return r ? r.start_at : "9999"; };
   ids.sort((a, b)=>String(first(a)).localeCompare(String(first(b))));
   const cs = ids.map(id=>({ id, c: calcCast(id) }));
-  const sum = cs.reduce((a, x)=>({ total: a.total + x.c.total, take: a.take + x.c.takeHome, drop: a.drop + x.c.drop, zappi: a.zappi + x.c.zappi, done: a.done + (x.c.cd.settled ? 1 : 0), shop: a.shop + x.c.shopDrop }), { total: 0, take: 0, drop: 0, zappi: 0, done: 0, shop: 0 });
+  const sum = cs.reduce((a, x)=>({ total: a.total + x.c.total, take: a.take + x.c.takeHome, drop: a.drop + x.c.drop, zappi: a.zappi + x.c.zappi, done: a.done + (x.c.cd.settled ? 1 : 0), shop: a.shop + x.c.shopDrop,
+    pay: a.pay + x.c.reward + x.c.option, prov: a.prov + x.c.provisional, wh: a.wh + x.c.withholding, real: a.real + x.c.realDrop }), { total: 0, take: 0, drop: 0, zappi: 0, done: 0, shop: 0, pay: 0, prov: 0, wh: 0, real: 0 });
   // 店落ち（暫定的な残額＋雑費）を22時まで／22時からに分ける（予約の始まりで。雑費は、その子の最初の予約の時間帯）。交通費バック・プラスマイナスは入れない
   const night = r => { if(!r.start_at) return false; const d = new Date(new Date(r.start_at).getTime() + 9 * 3600 * 1000); let h = d.getUTCHours(); if(h < 8) h += 24; return h >= 22; };
   const split = [0, 0];
@@ -188,7 +192,9 @@ function render(){
     <div class="s ${showMoney ? "" : "hide"}">店落ち<b>${yen(sum.shop)}</b></div>
     <div class="s ${showMoney ? "" : "hide"}">☀️ 22時まで（暫定＋雑費）<b>${yen(split[0])}</b></div>
     <div class="s ${showMoney ? "" : "hide"}">🌙 22時から（暫定＋雑費）<b>${yen(split[1])}</b></div>
-    <button class="btn btn-ghost btn-sm" onclick="showMoney=!showMoney;render()">${showMoney ? "🙈 金額をかくす" : "👁 金額を見る"}</button>`;
+    <button class="btn btn-ghost btn-sm" onclick="showMoney=!showMoney;render()">${showMoney ? "🙈 金額をかくす" : "👁 金額を見る"}</button>
+    <div class="dayfig ${showMoney ? "" : "hide"}"><div class="h">📊 この日の数字（キャスト分・社長用）</div>
+      ${[["総額", sum.total], ["キャスト報酬", sum.pay], ["暫定的な残額", sum.prov], ["【税務用】源泉徴収", sum.wh], ["実質的な店落ち", sum.real]].map(x=>`<div class="s">${x[0]}<b>${yen(x[1])}</b></div>`).join("")}</div>`;
   if(!cs.length){ $("list").innerHTML = `<div class="gate">この日（${esc(day)}）の受付はまだありません</div>`; return; }
   $("list").innerHTML = cs.map(({ id, c })=>cardHtml(id, c)).join("");
 }
@@ -256,6 +262,7 @@ function cardHtml(id, c){
     <div class="acts">
       <button class="btn btn-ghost btn-sm" onclick="copyDetail('${id}')">📋 精算明細をコピー（LINE用）</button>
       <button class="btn btn-ghost btn-sm" onclick="copyDetailImg('${id}')">🖼 画像でコピー</button>
+      <button class="btn btn-ghost btn-sm" onclick="copyShopImg('${id}')" title="投函した額・未精算・店落ちも入った、お店で残す用の画像">🏪 お店用の精算表</button>
       ${KB.CAN_EDIT ? (done
         ? `<button class="btn btn-ghost btn-sm" onclick="unsettle('${id}')">↩ 精算済をもどす</button>`
         : `<select id="pl-${id}">${PLACES.map(p=>`<option ${cd.settle_place === p ? "selected" : ""}>${p}</option>`).join("")}</select>
@@ -358,7 +365,7 @@ function settleCanvas(id){
   return cv;
 }
 function copyDetailImg(id){
-  const cv = settleCanvas(id), name = `精算_${day}_${castName(id)}.png`;
+  const cv = settleCanvas(id), name = `精算${window.__shopImg ? "_お店用" : ""}_${day}_${castName(id)}.png`;
   cv.toBlob(async b=>{
     // スマホ：画像の共有（LINE を選べる）→ だめなら、画像を大きく出して長押しで保存・コピー
     const phone = /iPhone|iPad|Android/i.test(navigator.userAgent);
@@ -408,6 +415,6 @@ function copyDetail(id){
 init();
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=10"></script>
+<script src="unsettled.js?v=11"></script>
 </body>
 </html>
