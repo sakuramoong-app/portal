@@ -415,26 +415,14 @@ settleCanvas = function(id){
   }
   if(P.rest.length){ ops.push(["head2", "📒 のこりの未精算（今日は精算しない）"]); P.rest.forEach(x => ops.push(["sub2", x])); }
   ops.push(["memo"]);
-  // 🏪 お店用：実際に投函した額・未精算/お釣りが出たか・過去の未精算・店落ち（いちばん下・グレー）
-  const shop = window.__shopImg;
-  if(shop){
-    const sel = unsSel[id] || new Set(), diff = c.deposited != null ? c.deposited - P.due : null;
-    const past = unsOpen(id).filter(x => x.date !== day && (c.cd.settled || !sel.has(x.key)));
-    ops.push(["line"], ["head", "🏪 お店用"]);
-    ops.push(["dep", "実際に投函した額", c.deposited != null ? yen(c.deposited) : "まだ入力されていません"]);
-    ops.push(["stat", diff == null ? ["投函した額が入っていません", "#9C8B8F"] : diff === 0 ? ["✅ 未精算・お釣りは出ていません", "#2e8b57"]
-      : diff < 0 ? [`⚠ 未精算が出ました（足りない ${yen(-diff)}）`, "#c0392b"] : [`⚠ お釣りが出ました（多い ${yen(diff)}）`, "#2f7fd0"]]);
-    ops.push(["stat", past.length ? [`📒 過去の未精算：のこり ${past.length}件（${past.map(x => unsMd(x.date) + " " + (x.amount < 0 ? "お釣り " : "") + yen(Math.abs(x.amount))).join("、")}）`, "#5b3fa6"] : ["📒 過去の未精算：なし", "#2e8b57"]]);
-    ops.push(["gbox"]);
-  }
-  const hOf = o => ({ dep: 76, stat: 28, gbox: 214, head3: 34, why: 46, job: 40, jrow: 26, jsum: 30, abc: 32, pbox: 92, fx: 58, box: 112, row: 30, sub: 22, sub2: 24, line: 20, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 })[o[0]] || 30;
+  const hOf = o => ({ head3: 34, why: 46, job: 40, jrow: 26, jsum: 30, abc: 32, pbox: 92, fx: 58, box: 112, row: 30, sub: 22, sub2: 24, line: 20, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 })[o[0]] || 30;
   const H = 88 + ops.reduce((a, o) => a + hOf(o), 0) + 56;
   const cv = document.createElement("canvas"); cv.width = W * S; cv.height = H * S;
   const g = cv.getContext("2d"); g.scale(S, S);
   g.fillStyle = "#fff"; g.fillRect(0, 0, W, H);
   const grd = g.createLinearGradient(0, 0, W, 0); grd.addColorStop(0, "#ff9fb8"); grd.addColorStop(1, "#e5638c");
   g.fillStyle = grd; g.fillRect(0, 0, W, 72);
-  g.fillStyle = "#fff"; g.textAlign = "left"; g.font = `bold 15px ${FONT}`; g.fillText(`精算${shop ? "（🏪 お店用）" : ""}　${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]})`, PAD, 28);
+  g.fillStyle = "#fff"; g.textAlign = "left"; g.font = `bold 15px ${FONT}`; g.fillText(`精算${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]})`, PAD, 28);
   g.font = `bold 24px ${FONT}`; g.fillText(`${castName(id)}さん`, PAD, 58);
   let y = 84;
   const txt = (s, x, yy, font, color, align) => { g.font = `${font} ${FONT}`; g.fillStyle = color; g.textAlign = align || "left"; g.fillText(s, x, yy); };
@@ -458,16 +446,6 @@ settleCanvas = function(id){
     } else if(k === "jsum"){   // ひっ算の線と答え
       g.strokeStyle = "#5C4B4F"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(W - PAD - 150, y + 4); g.lineTo(W - PAD, y + 4); g.stroke();
       txt((o[1][0] === "＝" ? "" : "▶ ") + o[1], PAD + 18, y + 22, "bold 14.5px", o[3] === "give" ? "#1f4f80" : "#6b3550"); txt(o[2], W - PAD, y + 22, "bold 16px", o[3] === "give" ? "#2f7fd0" : "#e5638c", "right");
-    } else if(k === "dep"){   // 実際に投函した額：四角い枠
-      g.fillStyle = "#fff"; g.strokeStyle = "#333"; g.lineWidth = 2.5; g.fillRect(PAD, y + 6, W - PAD * 2, h - 12); g.strokeRect(PAD, y + 6, W - PAD * 2, h - 12);
-      txt(o[1], PAD + 14, y + 44, "bold 16px", "#333"); txt(o[2], W - PAD - 14, y + 46, c.deposited != null ? "900 26px" : "bold 15px", c.deposited != null ? "#1a3a8a" : "#9C8B8F", "right");
-    } else if(k === "stat"){
-      txt(fit(o[1][0], W - PAD * 2, "bold 14px"), PAD, y + 19, "bold 14px", o[1][1]);
-    } else if(k === "gbox"){   // 店落ち：グレーの四角い枠（いちばん下）
-      g.fillStyle = "#EDEDED"; g.strokeStyle = "#8E8E8E"; g.lineWidth = 2.5; g.fillRect(PAD, y + 10, W - PAD * 2, h - 16); g.strokeRect(PAD, y + 10, W - PAD * 2, h - 16);
-      txt("🏪 店落ち（暫定的な残額＋雑費）", PAD + 14, y + 38, "bold 16px", "#333"); txt(yen(c.shopDrop), W - PAD - 14, y + 78, "900 32px", "#333", "right");
-      [["総額", yen(c.total)], ["キャスト報酬（報酬＋OP）", yen(c.reward + c.option)], ["暫定的な残額（総額−報酬）", yen(c.provisional)], ["【税務用】源泉徴収", yen(c.withholding)], ["実質的な店落ち（暫定的な残額−源泉）", yen(c.realDrop)]]
-        .forEach((x, i) => { txt(x[0], PAD + 14, y + 110 + i * 21, "13px", "#555"); txt(x[1], W - PAD - 14, y + 110 + i * 21, "bold 13.5px", "#555", "right"); });
     } else if(k === "head3"){
       txt(o[1], PAD, y + 24, "bold 15px", "#5C4B4F");
     } else if(k === "why"){   // 2行まで折り返し
@@ -507,8 +485,111 @@ settleCanvas = function(id){
     }
     y += h;
   });
-  if(!shop) txt("お疲れさまでした🌸", W / 2, y + 30, "bold 15px", "#e5638c", "center");
+  txt("お疲れさまでした🌸", W / 2, y + 30, "bold 15px", "#e5638c", "center");
   return cv;
 };
-// 🏪 お店用の精算表（キャストに送る中身＋投函した額・未精算/お釣り・過去の未精算・店落ち）。ページの画像コピーを借りる
-function copyShopImg(id){ window.__shopImg = true; try { copyDetailImg(id); } finally { window.__shopImg = false; } }
+
+/* ---------- 🧾 精算の画面（精算ページ・記録簿の💴精算 共通。ページの cardHtml を上書き）
+   キャストに送る画像と同じ並び ＋ 下に「お店用」（投函した額・未精算/お釣り・過去の未精算・店落ち） ---------- */
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .sv{max-width:620px;margin:8px 0;color:#5C4B4F}
+  .sv .job{display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:800;font-size:14px}
+  .sv .job .no{background:#e5638c;color:#fff;border-radius:8px;padding:2px 10px;font-size:12.5px}
+  .sv .job.off{color:#B9A9AD} .sv .job.off .no{background:#EEE8EA;color:#9C8B8F}
+  .sv .r{display:flex;justify-content:space-between;gap:10px;padding:2px 0 2px 18px;font-size:13.5px} .sv .r b{font-variant-numeric:tabular-nums}
+  .sv .r.op{color:#8a6d00} .sv .r.big{padding-left:0;font-size:15px;font-weight:800}
+  .sv .r.ans{font-weight:800;color:#6b3550;position:relative;padding-top:5px} .sv .r.ans b{color:#e5638c}
+  .sv .r.ans::before{content:"";position:absolute;right:0;top:1px;width:140px;border-top:1.5px solid #5C4B4F}
+  .sv .r.ans.give{color:#1f4f80} .sv .r.ans.give b{color:#2f7fd0}
+  .sv .dl{border-top:1.5px dashed #C9A9B5;margin:10px 0}
+  .sv .pb{background:#FFE3F0;border:2px solid #F7B6CF;border-radius:12px;padding:8px 14px;margin:8px 0}
+  .sv .pb .k{font-weight:800;font-size:13.5px;color:#6b3550} .sv .pb .v{text-align:right;font-weight:900;font-size:22px;color:#e5638c}
+  .sv .h3{font-weight:800;font-size:13.5px;margin-top:8px}
+  .sv .why{background:#E3F1FF;color:#1f4f80;border-radius:8px;padding:6px 10px;font-size:12.5px;font-weight:700;margin:6px 0}
+  .sv .bb{background:#00B0F0;border:3px solid #0A84C6;border-radius:14px;padding:8px 14px;margin:8px 0}
+  .sv .bb .k{font-weight:800;color:#08304d} .sv .bb .v{text-align:right;font-weight:900;font-size:32px;color:#E0001B}
+  .sv .bb.give{background:#E3F1FF;border-color:#2f7fd0} .sv .bb.give .k{color:#1f4f80} .sv .bb.give .v{color:#2f7fd0}
+  .sv .hd{background:#F1EAFA;color:#5b3fa6;font-weight:800;padding:4px 8px;margin-top:8px;border-radius:4px}
+  .sv .hd.gray{background:#F4F1F6;color:#8a7f99}
+  .sv .abc{display:flex;align-items:center;gap:10px;padding:3px 0;font-weight:800;font-size:13.5px}
+  .sv .abc .l{display:inline-block;width:24px;text-align:center;border:1.2px solid #C9B6EA;background:#F1EAFA;color:#5b3fa6;border-radius:6px}
+  .sv .abc.today .l{background:#5b3fa6;border-color:#5b3fa6;color:#fff} .sv .abc .a{margin-left:auto}
+  .sv .fx{font-weight:800} .sv .fx .n{text-align:right;font-size:16px}
+  .sv .sub2{color:#5b3fa6;font-weight:700;font-size:12.5px;padding-left:18px}
+  .sv table.mm{border-collapse:collapse;width:100%;margin-top:4px} .sv table.mm td,.sv table.mm th{border:1.5px solid #333;text-align:center;padding:4px;font-size:13.5px}
+  .sv table.mm td{color:#1a3a8a;font-weight:800}
+  .sv .shop{margin-top:12px;border-top:2px solid #ddd;padding-top:8px}
+  .sv .dep{display:flex;justify-content:space-between;align-items:center;border:2.5px solid #333;background:#fff;padding:10px 14px;margin:6px 0;font-weight:800}
+  .sv .dep input{width:150px;text-align:right;font-family:inherit;font-size:20px;font-weight:900;color:#1a3a8a;padding:4px 8px;border:1.5px solid var(--line);border-radius:8px}
+  .sv .stt{font-weight:800;font-size:13px;margin:4px 0}
+  .sv .gb{background:#EDEDED;border:2.5px solid #8E8E8E;padding:10px 14px;margin-top:10px;color:#333}
+  .sv .gb .k{font-weight:800} .sv .gb .v{text-align:right;font-weight:900;font-size:26px} .sv .gb .r{padding-left:0;color:#555;font-size:12.5px}
+</style>`);
+function settleViewHtml(id, c){
+  const P = settleParts(id), cd = c.cd, done = !!cd.settled;
+  const R = (k, v, cls) => `<div class="r ${cls || ""}"><span>${esc(k)}</span><b>${esc(v)}</b></div>`;
+  let h = "";
+  P.res.forEach(r => {
+    h += `<div class="job ${r.off ? "off" : ""}"><span class="no">${r.no}本目</span><span>${esc(r.head)}</span>${r.off ? `<span style="margin-left:auto">${r.st === "cancel" ? "キャンセル" : "トビ"}</span>` : ""}</div>`;
+    if(r.off) return;
+    h += R("コース報酬", yen(r.courseBack)) + r.ops.map(o => R("OP：" + o[0], "＋" + yen(o[1]), "op")).join("") + R("▶ この仕事の報酬（OP込み）", yen(r.total), "ans");
+  });
+  h += `<div class="dl"></div>` + R("本日の報酬総額", yen(c.reward), "big") + R("本日のOP総額", yen(c.option), "big") + R("雑費", "−" + yen(c.zappi), "big")
+    + P.pm.map(([l, v]) => R(l, pmYen(v), "big")).join("") + `<div class="dl"></div>`;
+  h += `<div class="pb"><div class="k">本日の報酬 ／ 本日の手取り額</div><div class="v">${yen(P.pay)} ／ ${yen(c.takeHome)}</div></div>`;
+  const dc = dropCalc(c);
+  h += `<div class="h3">🧮 投函額の計算</div>` + dc.rows.map(x => R(x[0], x[1])).join("") + R("＝ " + dc.res[0], dc.res[1], "ans" + (c.drop < 0 ? " give" : "")) + (dc.why ? `<div class="why">${esc(dc.why)}</div>` : "");
+  h += `<div class="bb ${c.drop < 0 ? "give" : ""}"><div class="k">${c.drop < 0 ? "💴 お店からキャストに渡す" : "💰 本日の投函額（封筒に入れて投函）"}</div><div class="v">${yen(Math.abs(c.drop))}</div></div>`;
+  if(P.uns.length){
+    h += `<div class="dl"></div><div class="hd">📒 本日＋未精算（合算）</div>` + P.sum.map(x => `<div class="abc ${x.kind === "本日精算" ? "today" : ""}"><span class="l">${x.abc}</span><span>${unsMd(x.date)}</span>
+      <span style="color:${x.kind === "本日精算" ? "#5b3fa6" : x.kind === "お釣り" ? "#2f7fd0" : "#c0392b"}">${x.kind}</span><span class="a">${x.amount < 0 ? "−" : ""}${yen(Math.abs(x.amount))}</span></div>`).join("");
+    const fx = sumFx(P); h += `<div class="fx"><div style="color:#5b3fa6">${fx[0]}</div><div class="n">${fx[1]}</div></div>`;
+    h += `<div class="bb ${P.due < 0 ? "give" : ""}"><div class="k">${P.due < 0 ? "💴 お店から渡す（合計）" : "💰 合計で投函"}</div><div class="v">${yen(Math.abs(P.due))}</div></div>`;
+  }
+  if(P.rest.length) h += `<div class="hd gray">📒 のこりの未精算（今日は精算しない）</div>` + P.rest.map(x => `<div class="sub2">${esc(x)}</div>`).join("");
+  h += `<div class="h3">📝 精算メモに書くこと（1営業日に1枚・${P.memo.length}枚）</div><table class="mm"><tr><th>営業日</th><th>名前</th><th>金額</th></tr>`
+    + P.memo.map(([bd, v]) => `<tr><td>${unsMd(bd)}</td><td>${esc(castName(id))}</td><td>${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}</td></tr>`).join("") + `</table>`;
+  // 🏪 お店用
+  const diff = c.deposited != null ? c.deposited - P.due : null, sel = unsSel[id] || new Set();
+  const past = unsOpen(id).filter(x => x.date !== day && (done || !sel.has(x.key)));
+  h += `<div class="shop"><div class="hd">🏪 お店用</div>
+    <div class="dep"><span>実際に投函した額</span><input type="number" id="dep-${id}" value="${c.deposited != null ? c.deposited : ""}" placeholder="投函した額" ${KB.CAN_EDIT ? "" : "disabled"} onchange="setDeposit('${id}',this.value)"></div>
+    <div class="stt" style="color:${diff == null ? "#9C8B8F" : diff === 0 ? "#2e8b57" : diff < 0 ? "#c0392b" : "#2f7fd0"}">${diff == null ? "投函した額をまだ入れていません（お金を確認してから入れる）"
+      : diff === 0 ? "✅ 未精算・お釣りは出ていません" : diff < 0 ? `⚠ 未精算が出ます（足りない ${yen(-diff)}）` : `⚠ お釣りが出ます（多い ${yen(diff)}）`}</div>
+    <div class="stt" style="color:${past.length ? "#5b3fa6" : "#2e8b57"}">${past.length ? `📒 過去の未精算：のこり ${past.length}件（${esc(past.map(x => unsMd(x.date) + " " + (x.amount < 0 ? "お釣り " : "") + yen(Math.abs(x.amount))).join("、"))}）` : "📒 過去の未精算：なし"}</div>
+    <div class="gb"><div class="k">🏪 店落ち（暫定的な残額＋雑費）</div><div class="v">${yen(c.shopDrop)}</div>
+      ${R("総額", yen(c.total))}${R("キャスト報酬（報酬＋OP）", yen(c.reward + c.option))}${R("暫定的な残額（総額−報酬）", yen(c.provisional))}${R("【税務用】源泉徴収（手取りからは引かない）", yen(c.withholding))}${R("実質的な店落ち（暫定的な残額−源泉）", yen(c.realDrop))}</div></div>`;
+  return `<div class="sv">${h}</div>`;
+}
+cardHtml = function(id, c){
+  const cd = c.cd, done = !!cd.settled, dis = (!KB.CAN_EDIT || done) ? "disabled" : "";
+  const items = (list, kind)=> list.map((x, i)=>`<div class="it"><input class="lbl" value="${esc(x.label)}" ${dis} onchange="setItem('${id}','${kind}',${i},'label',this.value)">
+      <input class="amt" type="number" value="${Number(x.amount) || 0}" ${dis} onchange="setItem('${id}','${kind}',${i},'amount',this.value)">
+      ${dis ? "" : `<button class="btn btn-ghost btn-sm" onclick="delItem('${id}','${kind}',${i})">🗑</button>`}</div>`).join("");
+  return `<div class="card ${done ? "done" : ""}" id="card-${id}">
+    <h2>${esc(castName(id))}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : "未精算"}</span>
+      ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
+    ${unsBoxHtml(id, c)}
+    ${c.why.length ? `<div class="note2">🧮 ${c.why.map(esc).join("<br>")}</div>` : ""}
+    ${c.cardUnconfirmed ? `<div class="warn" style="margin:6px 0">⚠️ お支払いが「カード」のままの予約が ${c.cardUnconfirmed}件あります。カード決済の完了を確認して、本日のキャスト一覧のカードのプルダウンで「✅ 決済済み」にしてください。</div>` : ""}
+    ${settleViewHtml(id, c)}
+    ${dis ? "" : `<div class="pmz"><div class="pmzh">✏️ プラス・マイナス・雑費を直す</div>
+      <div class="hint2" style="margin-top:6px">② プラス（交通費・ボーナスなど）</div><div class="items">${items(c.plusItems, "plus")}</div>
+      <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','plus')">＋ プラスを足す</button>
+      <div class="hint2" style="margin-top:8px">マイナス（立て替えなど・雑費以外）</div><div class="items">${items(c.minusItems, "minus")}</div>
+      <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','minus')">＋ マイナスを足す</button>
+      <div class="hint2" style="margin-top:8px">雑費（自動：${yen(c.zappiAuto)}）</div>
+      <div class="it" style="display:flex;gap:6px;align-items:center"><input type="number" id="zo-${id}" value="${cd.zappi_override != null ? cd.zappi_override : ""}" placeholder="空なら自動" style="width:120px">
+        <button class="btn btn-ghost btn-sm" onclick="setZappi('${id}')">雑費を直す</button></div>
+    </div>`}
+    ${settleLogHtml(id)}
+    <div class="acts">
+      <button class="btn btn-ghost btn-sm" onclick="copyDetail('${id}')">📋 精算明細をコピー（LINE用）</button>
+      <button class="btn btn-ghost btn-sm" onclick="copyDetailImg('${id}')">🖼 画像でコピー</button>
+      ${KB.CAN_EDIT ? (done
+        ? `<button class="btn btn-ghost btn-sm" onclick="unsettle('${id}')">↩ 精算済をもどす</button>`
+        : `<select id="pl-${id}">${PLACES.map(p=>`<option ${cd.settle_place === p ? "selected" : ""}>${p}</option>`).join("")}</select>
+           <button class="btn btn-primary btn-sm" onclick="settle('${id}')">✅ 精算済にする</button>`) : ""}
+    </div>
+  </div>`;
+};
