@@ -317,6 +317,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
          → 本日の報酬／本日の手取り額 → 本日の投函額
          → 本日＋未精算（合算）A・B・C…（いちばん下が本日精算）→ A＋B＋…＝ → 合計で投函
          → 精算メモ（1営業日に1枚） ---------- */
+// 精算メモの書きかた（画像・LINE の文・精算画面 共通）
+const MEMO_NOTE = ["※金額は、実際に投函する額をご記入ください", "※精算メモを一番上にして、表向きでお入れください"];
 function settleParts(id){
   const c = calcCast(id), d = new Date(day + "T12:00:00Z");
   const pay = c.reward + c.option - c.zappi;   // 本日の報酬
@@ -387,6 +389,7 @@ copyDetail = function(id){
   if(P.rest.length){ lines.push("", "【のこりの未精算（今日は精算しない）】"); P.rest.forEach(x => lines.push(x)); }
   lines.push("", `📝 精算メモに書くこと（1営業日に1枚・${P.memo.length}枚）`);
   P.memo.forEach(([bd, v]) => lines.push(`　営業日 ${unsMd(bd)}／名前 ${castName(id)}／金額 ${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}`));
+  MEMO_NOTE.forEach(t => lines.push("　" + t));
   lines.push("📖 投函のしかた：https://sakuramoong-app.github.io/portal/kirokubo/posting.html", "", "お疲れさまでした🌸");
   navigator.clipboard.writeText(lines.join("\n")).then(() => toast("📋 精算明細をコピーしました"), () => alert(lines.join("\n")));
 };
@@ -415,7 +418,7 @@ settleCanvas = function(id){
   }
   if(P.rest.length){ ops.push(["head2", "📒 のこりの未精算（今日は精算しない）"]); P.rest.forEach(x => ops.push(["sub2", x])); }
   ops.push(["memo"]);
-  const hOf = o => ({ head3: 34, why: 46, job: 40, jrow: 26, jsum: 30, abc: 32, pbox: 92, fx: 58, box: 112, row: 30, sub: 22, sub2: 24, line: 20, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 })[o[0]] || 30;
+  const hOf = o => ({ head3: 34, why: 46, job: 40, jrow: 26, jsum: 30, abc: 32, pbox: 92, fx: 58, box: 112, row: 30, sub: 22, sub2: 24, line: 20, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 + 50 })[o[0]] || 30;
   const H = 88 + ops.reduce((a, o) => a + hOf(o), 0) + 56;
   const cv = document.createElement("canvas"); cv.width = W * S; cv.height = H * S;
   const g = cv.getContext("2d"); g.scale(S, S);
@@ -482,6 +485,8 @@ settleCanvas = function(id){
       g.strokeStyle = "#333"; g.lineWidth = 1.5;
       const rowsM = [hd].concat(P.memo.map(([bd, v]) => [unsMd(bd), castName(id), (v < 0 ? "¥-" : "¥") + Math.abs(v).toLocaleString("ja-JP")]));
       rowsM.forEach((rw, ri) => { let x = tx; cw.forEach((w, i) => { g.strokeRect(x, ty + ri * rh, w, rh); txt(rw[i], x + w / 2, ty + ri * rh + 21, ri ? "bold 16px" : "14px", ri ? "#1a3a8a" : "#333", "center"); x += w; }); });
+      const ny = ty + rowsM.length * rh;
+      MEMO_NOTE.forEach((t, i) => txt(t, tx, ny + 20 + i * 20, "bold 13px", "#c0392b"));
     }
     y += h;
   });
@@ -523,7 +528,12 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .sv .dep input{width:150px;text-align:right;font-family:inherit;font-size:20px;font-weight:900;color:#1a3a8a;padding:4px 8px;border:1.5px solid var(--line);border-radius:8px}
   .sv .stt{font-weight:800;font-size:13px;margin:4px 0}
   .sv .gb{background:#EDEDED;border:2.5px solid #8E8E8E;padding:10px 14px;margin-top:10px;color:#333}
-  .svf{border:1.5px solid #F1D9E0;border-radius:12px;padding:6px 10px;margin:8px 0;max-width:640px}
+  .svf{border:1.5px solid #F1D9E0;border-radius:12px;padding:6px 10px;margin:8px 0}
+  .svg2{display:grid;grid-template-columns:minmax(0,640px) minmax(300px,440px);gap:16px}
+  .svg2 > .svl{align-self:start;min-width:0} .svg2 > .svr{align-self:end;min-width:0}
+  .svr .sv{margin:0} .svr .acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+  @media(max-width:960px){ .svg2{grid-template-columns:1fr} }
+  .sv .mmn{color:#c0392b;font-weight:800;font-size:12.5px;margin-top:6px;line-height:1.6}
   .svf > summary{cursor:pointer;font-weight:800;font-size:14px;padding:4px 0} .svf > summary small{font-weight:700;color:#9C8B8F;margin-left:8px}
   .sv .gb .k{font-weight:800} .sv .gb .v{text-align:right;font-weight:900;font-size:26px} .sv .gb .r{padding-left:0;color:#555;font-size:12.5px}
 </style>`);
@@ -550,7 +560,8 @@ function settleViewHtml(id, c){
   }
   if(P.rest.length) h += `<div class="hd gray">📒 のこりの未精算（今日は精算しない）</div>` + P.rest.map(x => `<div class="sub2">${esc(x)}</div>`).join("");
   h += `<div class="h3">📝 精算メモに書くこと（1営業日に1枚・${P.memo.length}枚）</div><table class="mm"><tr><th>営業日</th><th>名前</th><th>金額</th></tr>`
-    + P.memo.map(([bd, v]) => `<tr><td>${unsMd(bd)}</td><td>${esc(castName(id))}</td><td>${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}</td></tr>`).join("") + `</table>`;
+    + P.memo.map(([bd, v]) => `<tr><td>${unsMd(bd)}</td><td>${esc(castName(id))}</td><td>${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}</td></tr>`).join("") + `</table>`
+    + `<div class="mmn">${MEMO_NOTE.map(esc).join("<br>")}</div>`;
   // 🏪 お店用（投函した額まではアコーディオンの中・過去の未精算と店落ちは外）
   const diff = c.deposited != null ? c.deposited - P.due : null, sel = unsSel[id] || new Set();
   const past = unsOpen(id).filter(x => x.date !== day && (done || !sel.has(x.key)));
@@ -559,10 +570,10 @@ function settleViewHtml(id, c){
     <div class="stt" style="color:${diff == null ? "#9C8B8F" : diff === 0 ? "#2e8b57" : diff < 0 ? "#c0392b" : "#2f7fd0"}">${diff == null ? "投函した額をまだ入れていません（お金を確認してから入れる）"
       : diff === 0 ? "✅ 未精算・お釣りは出ていません" : diff < 0 ? `⚠ 未精算が出ます（足りない ${yen(-diff)}）` : `⚠ お釣りが出ます（多い ${yen(diff)}）`}</div></div></div>`;
   const stat = diff == null ? "投函した額 まだ" : diff === 0 ? "✅ ぴったり" : diff < 0 ? `⚠ 未精算 ${yen(-diff)}` : `⚠ お釣り ${yen(diff)}`;
-  const shop = `<div class="sv"><div class="stt" style="color:${past.length ? "#5b3fa6" : "#2e8b57"}">${past.length ? `📒 過去の未精算：のこり ${past.length}件（${esc(past.map(x => unsMd(x.date) + " " + (x.amount < 0 ? "お釣り " : "") + yen(Math.abs(x.amount))).join("、"))}）` : "📒 過去の未精算：なし"}</div>
-    <div class="gb"><div class="k">🏪 店落ち（暫定的な残額＋雑費）</div><div class="v">${yen(c.shopDrop)}</div>
+  const pastH = `<div class="sv"><div class="stt" style="color:${past.length ? "#5b3fa6" : "#2e8b57"}">${past.length ? `📒 過去の未精算：のこり ${past.length}件（${esc(past.map(x => unsMd(x.date) + " " + (x.amount < 0 ? "お釣り " : "") + yen(Math.abs(x.amount))).join("、"))}）` : "📒 過去の未精算：なし"}</div></div>`;
+  const shop = `<div class="sv"><div class="gb"><div class="k">🏪 店落ち（暫定的な残額＋雑費）</div><div class="v">${yen(c.shopDrop)}</div>
       ${R("総額", yen(c.total))}${R("キャスト報酬（報酬＋OP）", yen(c.reward + c.option))}${R("暫定的な残額（総額−報酬）", yen(c.provisional))}${R("【税務用】源泉徴収（手取りからは引かない）", yen(c.withholding))}${R("実質的な店落ち（暫定的な残額−源泉）", yen(c.realDrop))}</div></div>`;
-  return { view: `<div class="sv">${h}</div>`, dep, shop, stat, due: P.due };
+  return { view: `<div class="sv">${h}</div>`, dep, past: pastH, shop, stat, due: P.due };
 }
 const svOpen = new Set();   // 開いているアコーディオン（描きなおしても閉じない）
 cardHtml = function(id, c){
@@ -574,12 +585,15 @@ cardHtml = function(id, c){
   return `<div class="card ${done ? "done" : ""}" id="card-${id}">
     <h2>${esc(castName(id))}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : "未精算"}</span>
       ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
+    <div class="svg2"><div class="svl">
     <details class="svf" ${svOpen.has(id) ? "open" : ""} ontoggle="this.open ? svOpen.add('${id}') : svOpen.delete('${id}')">
-    <summary>🧾 精算の中身（1本目〜投函した額）<small>${V.due < 0 ? "お店から渡す" : "投函"} ${yen(Math.abs(V.due))}・${esc(V.stat)}</small></summary>
+    <summary>🧾 精算の中身（1本目〜精算メモに書くこと）<small>${V.due < 0 ? "お店から渡す" : "投函"} ${yen(Math.abs(V.due))}</small></summary>
     ${unsBoxHtml(id, c)}
     ${c.why.length ? `<div class="note2">🧮 ${c.why.map(esc).join("<br>")}</div>` : ""}
     ${c.cardUnconfirmed ? `<div class="warn" style="margin:6px 0">⚠️ お支払いが「カード」のままの予約が ${c.cardUnconfirmed}件あります。カード決済の完了を確認して、本日のキャスト一覧のカードのプルダウンで「✅ 決済済み」にしてください。</div>` : ""}
     ${V.view}
+    </details>
+    </div><div class="svr">
     ${dis ? "" : `<div class="pmz"><div class="pmzh">✏️ プラス・マイナス・雑費を直す</div>
       <div class="hint2" style="margin-top:6px">② プラス（交通費・ボーナスなど）</div><div class="items">${items(c.plusItems, "plus")}</div>
       <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','plus')">＋ プラスを足す</button>
@@ -590,9 +604,7 @@ cardHtml = function(id, c){
         <button class="btn btn-ghost btn-sm" onclick="setZappi('${id}')">雑費を直す</button></div>
     </div>`}
     ${V.dep}
-    ${settleLogHtml(id)}
-    </details>
-    ${V.shop}
+    ${V.past}
     <div class="acts">
       <button class="btn btn-ghost btn-sm" onclick="copyDetail('${id}')">📋 精算明細をコピー（LINE用）</button>
       <button class="btn btn-ghost btn-sm" onclick="copyDetailImg('${id}')">🖼 画像でコピー</button>
@@ -601,5 +613,8 @@ cardHtml = function(id, c){
         : `<select id="pl-${id}">${PLACES.map(p=>`<option ${cd.settle_place === p ? "selected" : ""}>${p}</option>`).join("")}</select>
            <button class="btn btn-primary btn-sm" onclick="settle('${id}')">✅ 精算済にする</button>`) : ""}
     </div>
+    </div></div>
+    ${settleLogHtml(id)}
+    ${V.shop}
   </div>`;
 };
