@@ -532,6 +532,9 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .svg2{display:grid;grid-template-columns:minmax(0,640px) minmax(300px,440px);gap:16px}
   .svg2 > .svl{align-self:start;min-width:0} .svg2 > .svr{align-self:end;min-width:0}
   .svr .sv{margin:0} .svr .acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+  .plsel{font-family:inherit;font-size:16px;font-weight:900;color:#5C4B4F;padding:8px 36px 8px 18px;border:2px solid rgba(0,0,0,.15);border-radius:99px;cursor:pointer;
+    appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%235C4B4F' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
+  .plsel:disabled{opacity:.85;cursor:default}
   @media(max-width:960px){ .svg2{grid-template-columns:1fr} }
   .sv .mmn{color:#c0392b;font-weight:800;font-size:12.5px;margin-top:6px;line-height:1.6}
   .svf > summary{cursor:pointer;font-weight:800;font-size:14px;padding:4px 0} .svf > summary small{font-weight:700;color:#9C8B8F;margin-left:8px}
@@ -575,6 +578,8 @@ function settleViewHtml(id, c){
       ${R("総額", yen(c.total))}${R("キャスト報酬（報酬＋OP）", yen(c.reward + c.option))}${R("暫定的な残額（総額−報酬）", yen(c.provisional))}${R("【税務用】源泉徴収（手取りからは引かない）", yen(c.withholding))}${R("実質的な店落ち（暫定的な残額−源泉）", yen(c.realDrop))}</div></div>`;
   return { view: `<div class="sv">${h}</div>`, dep, past: pastH, shop, stat, due: P.due };
 }
+// 精算場所の色（今どこに誰が のエリアの色と同じ。回収はピンク）
+const PLACE_COLOR = { "池袋": "#FFC966", "鶯谷": "#CCCCFF", "五反田": "#C6E0B4", "回収": "#FFC2D1" };
 const svOpen = new Set();   // 開いているアコーディオン（描きなおしても閉じない）
 cardHtml = function(id, c){
   const cd = c.cd, done = !!cd.settled, dis = (!KB.CAN_EDIT || done) ? "disabled" : "";
@@ -607,12 +612,12 @@ cardHtml = function(id, c){
     ${V.dep}
     ${V.past}
     <div class="acts">
-      <button class="btn btn-ghost btn-sm" onclick="copyDetail('${id}')">📋 精算明細をコピー（LINE用）</button>
+      ${KB.CAN_EDIT ? `<select id="pl-${id}" class="plsel" style="background-color:${PLACE_COLOR[cd.settle_place || PLACES[0]] || "#fff"}" ${done ? "disabled" : ""}
+          onchange="this.style.backgroundColor = PLACE_COLOR[this.value] || '#fff'">${PLACES.map(p=>`<option ${cd.settle_place === p ? "selected" : ""} style="background:${PLACE_COLOR[p] || "#fff"}">${p}</option>`).join("")}</select>` : ""}
       <button class="btn btn-ghost btn-sm" onclick="copyDetailImg('${id}')">🖼 画像でコピー</button>
       ${KB.CAN_EDIT ? (done
         ? `<button class="btn btn-ghost btn-sm" onclick="unsettle('${id}')">↩ 精算済をもどす</button>`
-        : `<select id="pl-${id}">${PLACES.map(p=>`<option ${cd.settle_place === p ? "selected" : ""}>${p}</option>`).join("")}</select>
-           <button class="btn btn-primary btn-sm" onclick="settle('${id}')">✅ 精算済にする</button>`) : ""}
+        : `<button class="btn btn-primary btn-sm" onclick="settle('${id}')">✅ 精算済にする</button>`) : ""}
     </div>
     </div></div>
     ${settleLogHtml(id)}
