@@ -523,6 +523,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .sv .dep input{width:150px;text-align:right;font-family:inherit;font-size:20px;font-weight:900;color:#1a3a8a;padding:4px 8px;border:1.5px solid var(--line);border-radius:8px}
   .sv .stt{font-weight:800;font-size:13px;margin:4px 0}
   .sv .gb{background:#EDEDED;border:2.5px solid #8E8E8E;padding:10px 14px;margin-top:10px;color:#333}
+  .svf{border:1.5px solid #F1D9E0;border-radius:12px;padding:6px 10px;margin:8px 0;max-width:640px}
+  .svf > summary{cursor:pointer;font-weight:800;font-size:14px;padding:4px 0} .svf > summary small{font-weight:700;color:#9C8B8F;margin-left:8px}
   .sv .gb .k{font-weight:800} .sv .gb .v{text-align:right;font-weight:900;font-size:26px} .sv .gb .r{padding-left:0;color:#555;font-size:12.5px}
 </style>`);
 function settleViewHtml(id, c){
@@ -549,30 +551,35 @@ function settleViewHtml(id, c){
   if(P.rest.length) h += `<div class="hd gray">📒 のこりの未精算（今日は精算しない）</div>` + P.rest.map(x => `<div class="sub2">${esc(x)}</div>`).join("");
   h += `<div class="h3">📝 精算メモに書くこと（1営業日に1枚・${P.memo.length}枚）</div><table class="mm"><tr><th>営業日</th><th>名前</th><th>金額</th></tr>`
     + P.memo.map(([bd, v]) => `<tr><td>${unsMd(bd)}</td><td>${esc(castName(id))}</td><td>${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}</td></tr>`).join("") + `</table>`;
-  // 🏪 お店用
+  // 🏪 お店用（投函した額まではアコーディオンの中・過去の未精算と店落ちは外）
   const diff = c.deposited != null ? c.deposited - P.due : null, sel = unsSel[id] || new Set();
   const past = unsOpen(id).filter(x => x.date !== day && (done || !sel.has(x.key)));
-  h += `<div class="shop"><div class="hd">🏪 お店用</div>
+  const dep = `<div class="sv"><div class="shop"><div class="hd">🏪 お店用</div>
     <div class="dep"><span>実際に投函した額</span><input type="number" id="dep-${id}" value="${c.deposited != null ? c.deposited : ""}" placeholder="投函した額" ${KB.CAN_EDIT ? "" : "disabled"} onchange="setDeposit('${id}',this.value)"></div>
     <div class="stt" style="color:${diff == null ? "#9C8B8F" : diff === 0 ? "#2e8b57" : diff < 0 ? "#c0392b" : "#2f7fd0"}">${diff == null ? "投函した額をまだ入れていません（お金を確認してから入れる）"
-      : diff === 0 ? "✅ 未精算・お釣りは出ていません" : diff < 0 ? `⚠ 未精算が出ます（足りない ${yen(-diff)}）` : `⚠ お釣りが出ます（多い ${yen(diff)}）`}</div>
-    <div class="stt" style="color:${past.length ? "#5b3fa6" : "#2e8b57"}">${past.length ? `📒 過去の未精算：のこり ${past.length}件（${esc(past.map(x => unsMd(x.date) + " " + (x.amount < 0 ? "お釣り " : "") + yen(Math.abs(x.amount))).join("、"))}）` : "📒 過去の未精算：なし"}</div>
+      : diff === 0 ? "✅ 未精算・お釣りは出ていません" : diff < 0 ? `⚠ 未精算が出ます（足りない ${yen(-diff)}）` : `⚠ お釣りが出ます（多い ${yen(diff)}）`}</div></div></div>`;
+  const stat = diff == null ? "投函した額 まだ" : diff === 0 ? "✅ ぴったり" : diff < 0 ? `⚠ 未精算 ${yen(-diff)}` : `⚠ お釣り ${yen(diff)}`;
+  const shop = `<div class="sv"><div class="stt" style="color:${past.length ? "#5b3fa6" : "#2e8b57"}">${past.length ? `📒 過去の未精算：のこり ${past.length}件（${esc(past.map(x => unsMd(x.date) + " " + (x.amount < 0 ? "お釣り " : "") + yen(Math.abs(x.amount))).join("、"))}）` : "📒 過去の未精算：なし"}</div>
     <div class="gb"><div class="k">🏪 店落ち（暫定的な残額＋雑費）</div><div class="v">${yen(c.shopDrop)}</div>
       ${R("総額", yen(c.total))}${R("キャスト報酬（報酬＋OP）", yen(c.reward + c.option))}${R("暫定的な残額（総額−報酬）", yen(c.provisional))}${R("【税務用】源泉徴収（手取りからは引かない）", yen(c.withholding))}${R("実質的な店落ち（暫定的な残額−源泉）", yen(c.realDrop))}</div></div>`;
-  return `<div class="sv">${h}</div>`;
+  return { view: `<div class="sv">${h}</div>`, dep, shop, stat, due: P.due };
 }
+const svOpen = new Set();   // 開いているアコーディオン（描きなおしても閉じない）
 cardHtml = function(id, c){
   const cd = c.cd, done = !!cd.settled, dis = (!KB.CAN_EDIT || done) ? "disabled" : "";
   const items = (list, kind)=> list.map((x, i)=>`<div class="it"><input class="lbl" value="${esc(x.label)}" ${dis} onchange="setItem('${id}','${kind}',${i},'label',this.value)">
       <input class="amt" type="number" value="${Number(x.amount) || 0}" ${dis} onchange="setItem('${id}','${kind}',${i},'amount',this.value)">
       ${dis ? "" : `<button class="btn btn-ghost btn-sm" onclick="delItem('${id}','${kind}',${i})">🗑</button>`}</div>`).join("");
+  const V = settleViewHtml(id, c);
   return `<div class="card ${done ? "done" : ""}" id="card-${id}">
     <h2>${esc(castName(id))}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : "未精算"}</span>
       ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
+    <details class="svf" ${svOpen.has(id) ? "open" : ""} ontoggle="this.open ? svOpen.add('${id}') : svOpen.delete('${id}')">
+    <summary>🧾 精算の中身（1本目〜投函した額）<small>${V.due < 0 ? "お店から渡す" : "投函"} ${yen(Math.abs(V.due))}・${esc(V.stat)}</small></summary>
     ${unsBoxHtml(id, c)}
     ${c.why.length ? `<div class="note2">🧮 ${c.why.map(esc).join("<br>")}</div>` : ""}
     ${c.cardUnconfirmed ? `<div class="warn" style="margin:6px 0">⚠️ お支払いが「カード」のままの予約が ${c.cardUnconfirmed}件あります。カード決済の完了を確認して、本日のキャスト一覧のカードのプルダウンで「✅ 決済済み」にしてください。</div>` : ""}
-    ${settleViewHtml(id, c)}
+    ${V.view}
     ${dis ? "" : `<div class="pmz"><div class="pmzh">✏️ プラス・マイナス・雑費を直す</div>
       <div class="hint2" style="margin-top:6px">② プラス（交通費・ボーナスなど）</div><div class="items">${items(c.plusItems, "plus")}</div>
       <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','plus')">＋ プラスを足す</button>
@@ -582,7 +589,10 @@ cardHtml = function(id, c){
       <div class="it" style="display:flex;gap:6px;align-items:center"><input type="number" id="zo-${id}" value="${cd.zappi_override != null ? cd.zappi_override : ""}" placeholder="空なら自動" style="width:120px">
         <button class="btn btn-ghost btn-sm" onclick="setZappi('${id}')">雑費を直す</button></div>
     </div>`}
+    ${V.dep}
     ${settleLogHtml(id)}
+    </details>
+    ${V.shop}
     <div class="acts">
       <button class="btn btn-ghost btn-sm" onclick="copyDetail('${id}')">📋 精算明細をコピー（LINE用）</button>
       <button class="btn btn-ghost btn-sm" onclick="copyDetailImg('${id}')">🖼 画像でコピー</button>

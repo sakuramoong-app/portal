@@ -385,7 +385,6 @@
   <!-- 📱 スマホのときだけ：よく使う4つへすぐ行ける（上に固定） -->
   <nav class="spbar" id="spBar">
     <button type="button" onclick="spGo('add')">＋<b>予約</b></button>
-    <button type="button" onclick="spGo('list')">📋<b>キャスト一覧</b></button>
     <button type="button" onclick="spGo('tl')">⏱<b>全体を見たい</b></button>
     <a href="customers.html">🔍<b>お客さん</b></a>
   </nav>
@@ -417,7 +416,6 @@
     <!-- ここ（タブ・日付・並び）は、下に読み進めても上に残る -->
     <div class="stickybar">
     <div class="tabs" id="tabs">
-      <button data-v="list" onclick="showView('list')" class="tabmain">📋 本日のキャスト一覧<small>1キャスト1枠・予約・状態・伝えた・やること</small></button>
       <button data-v="new" onclick="showView('new')" class="tabmain">＋ 新規予約<small>時間・キャスト・希望プレイのどれかで探す</small></button>
       <button data-v="tl" onclick="showView('tl')" class="tabmain">⏱ 全体を見たい<small>全時刻のタイムライン</small></button>
     </div>
@@ -2167,7 +2165,7 @@ function showView(v){
   try{ localStorage.setItem("kirokuView", v); }catch(e){}
   // 🙋 誰が行ける？：キャストを選べば「その人の空き時間」、選ばなければ「時刻ごとに行ける人」（💁 キャスト決まってる はここにまとめた）
   // 🗺 今どこに誰が は、いつも上に出しておく（タブではない）
-  if(v !== "tl" && v !== "new") v = "list";   // タブは「本日のキャスト一覧」「＋ 新規予約」「全体を見たい」の3つ
+  if(v !== "tl") v = "new";   // タブは「＋ 新規予約」「全体を見たい」の2つ（本日のキャスト一覧のタブはなくした・一覧は新規予約の下に出る）
   const box = { tl: "viewTL", list: "viewList", new: "viewList", slotsFree: "viewSlots", seats: "viewSeats" };   // 新規予約は、絞った一覧を出す
   $("sharedFilter").style.display = v === "new" ? "" : "none";
   if(v === "new") nfMode(nfCur);
@@ -5700,6 +5698,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=12"></script>
+<script src="unsettled.js?v=13"></script>
 </body>
 </html>
