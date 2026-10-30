@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>回収明細│サクラG</title>
+<link rel="icon" type="image/png" href="../favicon.png?v=3">
+<link rel="stylesheet" href="kb.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
+<script src="kb_common.js"></script>
+<style>
+  body{font-size:14.5px;}
+  .wrap{max-width:1100px;}
+  .lead{font-size:13px;color:var(--sub);line-height:1.7;margin:6px 0 10px;}
+  .egrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;}
+  .ec{background:#fff;border:2.5px solid;border-radius:16px;overflow:hidden;}
+  .ec .et{font-weight:900;font-size:17px;padding:8px 14px;display:flex;align-items:center;gap:8px;}
+  .ec .body{padding:10px 14px;}
+  .ec .now{font-size:13px;color:var(--sub);font-weight:700;}
+  .ec .num{font-size:40px;font-weight:900;text-align:right;line-height:1.1;margin:2px 0 4px;} .ec .num small{font-size:16px;margin-left:4px;}
+  .ec .who{font-size:12px;color:var(--sub);line-height:1.7;max-height:120px;overflow-y:auto;border-top:1px dashed var(--line);padding-top:6px;}
+  .ec .f{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px;font-weight:800;font-size:13.5px;}
+  .ec .f input{width:80px;font-family:inherit;font-size:18px;font-weight:900;text-align:right;padding:4px 8px;border:1.5px solid #ccc;border-radius:8px;}
+  .hist{margin-top:10px;font-size:12.5px;}
+  .hist div{display:flex;gap:6px;padding:3px 0;border-bottom:1px solid #F4EDF0;} .hist .ok{color:#2e8b57;font-weight:800;} .hist .ng{color:#c0392b;font-weight:800;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="kbh"><h1>📦 回収明細</h1><div id="navArea" class="navinhead"></div></header>
+  <div id="gate" class="gate">読み込み中…</div>
+  <div id="main" style="display:none">
+    <div id="wip"></div>
+    <h2 style="font-size:17px;margin:8px 0 2px">📮 待機場の封筒</h2>
+    <div class="lead">「精算済にする」で精算場所に池袋・鶯谷・五反田を選んだ分が、前回の回収から数えられていきます。<br>
+      封筒を回収したら、あった封筒の数を入れて「📮 回収した」を押してください（そこからまた 0 から数えます）。記録簿の数と同じなら ✅、ちがえば ⚠️ が残ります。</div>
+    <div class="egrid" id="egrid"></div>
+  </div>
+</div>
+<script>
+/* ============================================================
+   📦 回収明細（今は店長だけ。あとで社長も）
+   ・📮 待機場の封筒：kb_envelope_checks（SQL 170）の前回の回収から、settle_place がその待機場の精算済を数える
+   ============================================================ */
+const { sb, q, esc, toast } = KB;
+const $ = id => document.getElementById(id);
+const PLACES = ["池袋", "鶯谷", "五反田"];
+const PLACE_COLOR = { "池袋": "#FFC966", "鶯谷": "#CCCCFF", "五反田": "#C6E0B4" };
+const when = t => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+const md = s => { const p = String(s).split("-"); return `${Number(p[1])}/${Number(p[2])}`; };
+let names = {}, ENV = {};
+async function init(){
+  $("navArea").innerHTML = KB.nav("kaishu.html");
+  if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
+  $("wip").innerHTML = KB.wipBanner();
+  $("gate").style.display = "none"; $("main").style.display = "";
+  try{ (q(await sb.from("master_casts").select("id,official_name,temp_name")) || []).forEach(c => { names[c.id] = c.official_name || c.temp_name || c.id; }); }catch(e){}
+  load();
+}
+async function load(){
+  try{
+    const chk = q(await sb.from("kb_envelope_checks").select("*").order("checked_at", { ascending: false }).limit(100)) || [];
+    for(const p of PLACES){
+      const hist = chk.filter(x => x.place === p), last = hist[0] || null;
+      let qq = sb.from("kb_cast_days").select("biz_date,cast_id,settled_at").eq("settled", true).eq("settle_place", p).order("settled_at");
+      if(last) qq = qq.gt("settled_at", last.checked_at);
+      ENV[p] = { last, hist: hist.slice(0, 5), since: last ? (q(await qq) || []) : null };
+    }
+  }catch(e){ $("egrid").innerHTML = `<div class="warn">読めませんでした（SQL 170 は実行ずみ？）：${esc(e.message || e)}</div>`; return; }
+  paint();
+}
+function paint(){
+  $("egrid").innerHTML = PLACES.map(p => { const E = ENV[p], l = E.last;
+    return `<div class="ec" style="border-color:${PLACE_COLOR[p]}"><div class="et" style="background:${PLACE_COLOR[p]}">${p}</div><div class="body">
+      ${l ? `<div class="now">前回の回収 ${when(l.checked_at)}（${esc(l.checked_by)}）から、今あるはずの封筒</div>
+        <div class="num">${E.since.length}<small>通</small></div>
+        <div class="who">${E.since.length ? E.since.map(x => `${md(x.biz_date)} ${esc(names[x.cast_id] || x.cast_id)}`).join("　") : "まだ投函はありません"}</div>`
+      : `<div class="now">まだ回収の記録がありません。いちど回収して「📮 回収した」を押すと、そこから数えはじめます。</div>`}
+      ${KB.CAN_EDIT ? `<div class="f">あった封筒 <input type="number" min="0" id="env-${p}" placeholder="0"> 通 <button class="btn btn-primary btn-sm" onclick="save('${p}')">📮 回収した</button></div>` : ""}
+      ${E.hist.length ? `<div class="hist">${E.hist.map(h => `<div><span>${when(h.checked_at)} ${esc(h.checked_by)}</span><span style="flex:1"></span>
+        ${h.found === h.expected ? `<span class="ok">✅ ${h.found}通 一致</span>` : `<span class="ng">⚠️ ${h.found}通／記録 ${h.expected}件</span>`}</div>`).join("")}</div>` : ""}
+    </div></div>`; }).join("");
+}
+async function save(p){
+  const v = $("env-" + p).value; if(v === ""){ toast("あった封筒の数を入れてください"); return; }
+  const found = Math.max(0, Number(v) || 0), first = !ENV[p].last, expected = first ? found : ENV[p].since.length;
+  if(!confirm(first ? `${p} の封筒を回収しましたか？（はじめての記録なので、ここから数えはじめます）\nあった封筒 ${found}通`
+    : `${p} の封筒を回収しましたか？\nあった封筒 ${found}通／記録簿 ${expected}件 → ${found === expected ? "✅ 一致" : "⚠️ 合いません"}`)) return;
+  try{ q(await sb.from("kb_envelope_checks").insert({ place: p, found, expected, checked_by: KB.operatorName() })); }
+  catch(e){ toast("保存できませんでした：" + (e.message || e)); return; }
+  toast(found === expected ? `✅ ${p}：記録しました` : `⚠️ ${p}：${found}通／記録 ${expected}件。精算をたしかめてください`);
+  load();
+}
+init();
+</script>
+</body>
+</html>

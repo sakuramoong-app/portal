@@ -650,63 +650,12 @@ async function setCamera(id, v){
   await saveDay(id, { camera_check: v });
 }
 
-/* ---------- 📮 待機場の封筒（精算ページの上）
-   ・今日：待機場ごとにポスティングされた数・回収・直帰
-   ・店長が封筒を回収したら、前回の回収からいくつ封筒があったかを入れる → 記録簿の数と同じなら ✅ ---------- */
-const ENV_PLACES = ["池袋", "鶯谷", "五反田"];
-let ENV = null;
-async function envLoad(){
-  const el = document.getElementById("envBox"); if(!el) return;
-  await P170; if(!HAS_170){ el.innerHTML = ""; return; }
-  try{
-    const chk = q(await sb.from("kb_envelope_checks").select("*").order("checked_at", { ascending: false }).limit(60)) || [];
-    ENV = {};
-    for(const p of ENV_PLACES){
-      const last = chk.find(x => x.place === p) || null;
-      let qq = sb.from("kb_cast_days").select("biz_date,cast_id,settled_at").eq("settled", true).eq("settle_place", p).order("settled_at");
-      qq = last ? qq.gt("settled_at", last.checked_at) : qq.eq("biz_date", day);   // 回収の記録がまだない → 今日の分だけ
-      ENV[p] = { last, since: q(await qq) || [] };
-    }
-  }catch(e){ el.innerHTML = `<div class="warn">封筒の数を読めませんでした：${esc(e.message || e)}</div>`; return; }
-  envPaint();
-}
-function envPaint(){
-  const el = document.getElementById("envBox"); if(!el || !ENV) return;
-  const cds = Object.values(unsCD() || {}), n = p => cds.filter(x => x.settled && x.settle_place === p).length;
-  const md = t => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-  el.innerHTML = `<div class="envbox"><div class="eh">📮 封筒（ポスティング）</div>
-    <div class="etoday">今日：${ENV_PLACES.concat(["回収"]).map(p => `<span class="ep" style="background:${PLACE_COLOR[p] || "#eee"}">${p} <b>${n(p)}</b>件</span>`).join("")}
-      <span class="ep" style="background:#EDEDED">🏠 直帰 <b>${cds.filter(x => !x.settled && x.direct_home).length}</b>件</span></div>
-    <div class="egrid">${ENV_PLACES.map(p => { const E = ENV[p], l = E.last;
-      return `<div class="ec" style="border-color:${PLACE_COLOR[p]}"><div class="et" style="background:${PLACE_COLOR[p]}">${p}</div>
-        <div class="es">${l ? `前回の回収：${md(l.checked_at)}（${esc(l.checked_by)}）${l.found === l.expected ? "✅ 一致" : `⚠️ ${l.found}通／記録 ${l.expected}件`}` : "回収の記録はまだありません（今日の分を数えています）"}</div>
-        <div class="en">${l ? "前回の回収から" : "今日"}の投函：<b>${E.since.length}</b>件
-          ${E.since.length ? `<small>（${esc(E.since.map(x => unsMd(x.biz_date) + " " + castName(x.cast_id)).join("、"))}）</small>` : ""}</div>
-        ${KB.CAN_EDIT ? `<div class="ef">実際にあった封筒 <input type="number" min="0" id="env-${p}" placeholder="通"> <button class="btn btn-primary btn-sm" onclick="envSave('${p}')">📮 回収した</button></div>` : ""}</div>`; }).join("")}</div></div>`;
-}
-async function envSave(p){
-  const v = document.getElementById("env-" + p).value; if(v === ""){ toast("あった封筒の数を入れてください"); return; }
-  const found = Math.max(0, Number(v) || 0), expected = ENV[p].since.length;
-  if(!confirm(`${p} の封筒を回収しましたか？\nあった封筒 ${found}通／記録簿 ${expected}件 → ${found === expected ? "✅ 一致" : "⚠️ 合いません"}`)) return;
-  try{ q(await sb.from("kb_envelope_checks").insert({ place: p, found, expected, checked_by: KB.operatorName() })); }
-  catch(e){ toast("保存できませんでした：" + (e.message || e)); return; }
-  toast(found === expected ? `✅ ${p}：一致しました` : `⚠️ ${p}：${found}通／記録 ${expected}件。精算をたしかめてください`);
-  envLoad();
-}
-const __unsLoadEnv = unsLoad;
-unsLoad = async function(){ await __unsLoadEnv(); envLoad(); };
 document.head.insertAdjacentHTML("beforeend", `<style>
   .svr.need{border-radius:14px;padding:8px;animation:svrBlink 1.1s ease-in-out infinite;border:3px solid #FFD54A}
   @keyframes svrBlink{0%,100%{box-shadow:0 0 0 0 rgba(255,193,7,.0);background:#FFFDF3}50%{box-shadow:0 0 18px 4px rgba(255,193,7,.75);background:#FFF5C9}}
   .needmsg{font-weight:900;color:#B26A00;font-size:13.5px;margin:0 0 6px}
   .homebtn{background:#EDEDED !important;border-color:#bbb !important;font-weight:800}
-  .camchk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0}
+  .camchk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .camchk > span{flex-basis:100%}
   .camchk .cb{font-family:inherit;font-weight:800;font-size:13px;border:2px solid #ddd;background:#fff;border-radius:99px;padding:4px 12px;cursor:pointer;color:#5C4B4F}
   .camchk .cb.ok.on{background:#E5F6EC;border-color:#2e8b57;color:#2e8b57} .camchk .cb.ng.on{background:#FDE7E7;border-color:#c0392b;color:#c0392b}
-  .envbox{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:10px}
-  .envbox .eh{font-weight:900;font-size:15px;margin-bottom:6px} .envbox .etoday{display:flex;gap:6px;flex-wrap:wrap;font-size:13px;font-weight:700;margin-bottom:8px}
-  .envbox .ep{border-radius:99px;padding:3px 12px} .envbox .egrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
-  .envbox .ec{border:2px solid;border-radius:12px;overflow:hidden;font-size:13px} .envbox .et{font-weight:900;padding:4px 10px}
-  .envbox .es,.envbox .en,.envbox .ef{padding:4px 10px} .envbox .en small{color:#9C8B8F}
-  .envbox .ef input{width:70px;font-family:inherit;font-size:15px;font-weight:800;padding:3px 6px;border:1.5px solid #ccc;border-radius:8px}
 </style>`);
