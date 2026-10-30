@@ -88,7 +88,7 @@
 <script>
 /* ============================================================
    📦 回収明細（紙の回収明細のかわり。店長と社長だけ。社長は見る＋サイン＋「受け取った」）
-   ・キャストごと：店落ち（Z列＋雑費）／カード。回収サイン：✔黒＝当日回収／✔赤＝店長が回収／■赤＝未回収のまま社長に渡す（kb_collections・SQL 171）
+   ・キャストごと：店落ち（暫定的な残額＋雑費）／カード。回収サイン：✔黒＝当日回収／✔赤＝店長が回収／■赤＝未回収のまま社長に渡す（kb_collections・SQL 171）
        交通費・プラスはキャッシュフローから出して袋にそろえる → 袋には「店落ち − カード」が入る。精算ミス・前の日の分も出す。処理✓
        精算済にしていない日（直帰・まだ）は、予約から出した概算（雑費ぬき）
    ・社長に渡す ＝ 店落ち − カード − 経費（回収金からキャッシュフローに補充）− 未回収 − 内勤日払い（回収金から払った分）
@@ -237,7 +237,7 @@ function paintDay(){
   h += `<div class="card"><h2>👛 キャストごとの回収（${md(D.day)}(${DOW[dt.getUTCDay()]})${place ? "・" + esc(place) : ""}）</h2>`;
   if(!rows.length) h += `<div class="lead">この日に予約のあったキャストはいません。</div>`;
   else h += `<div class="tbl"><table>
-    <tr><th class="l">キャスト名</th><th class="l">回収場所</th><th>店落ち（Z列＋雑費）／カード</th><th class="l">回収サイン</th><th class="l">交通費・経費・精算ミス</th><th class="l">処理✓</th></tr>
+    <tr><th class="l">キャスト名</th><th class="l">回収場所</th><th>店落ち（暫定的な残額＋雑費）／カード</th><th class="l">回収サイン</th><th class="l">交通費・経費・精算ミス</th><th class="l">処理✓</th></tr>
     ${rows.map(r => { const x = extraItems(r);
       return `<tr class="${!r.state ? "" : r.state === "none" ? "bad" : ""}"><td class="l"><b>${esc(names[r.id] || r.id)}</b></td>
         <td class="l">${r.place ? `<span class="st" style="background:${PLACE_COLOR[r.place] || "#eee"};color:#333">${esc(r.place)}</span>` : ""}</td>
