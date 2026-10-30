@@ -24,6 +24,8 @@
   .card h2{font-size:16px;margin:0 0 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
   .card h2 .st{font-size:11px;font-weight:800;border-radius:99px;padding:3px 10px;background:var(--lemon-soft);color:#9a7000;}
   .card.done h2 .st{background:var(--mint-soft);color:#1a7a5e;}
+  .card h2 .st.tea{background:#E3F6E8;color:#1f7a3f;margin-right:4px;} .card h2 .st.absent{background:#FDE3E3;color:#c0392b;margin-right:4px;}
+  .grph{font-weight:900;font-size:14px;margin:18px 0 8px;padding:6px 14px;border-radius:12px;background:#F4F4F4;color:#777;} .grph.g2{background:#E3F6E8;color:#1f7a3f;} .grph.g3{background:#FDE3E3;color:#c0392b;}
   table.res{width:100%;border-collapse:collapse;font-size:12.5px;margin:4px 0 8px;}
   table.res th{font-size:11px;color:var(--sub);text-align:left;font-weight:800;padding:3px 4px;border-bottom:1px solid var(--line);}
   table.res td{padding:4px;border-bottom:1px dashed var(--line);}
@@ -101,8 +103,8 @@ async function init(){
     M = { casts, stores, rules };
   }catch(e){ $("gate").textContent = "読み込みに失敗しました：" + (e.message || e); return; }
   $("gate").style.display = "none"; $("main").style.display = "";
-  const d = new URLSearchParams(location.search).get("d");   // 回収明細の ↗ から：その日を開く
-  if(/^\d{4}-\d{2}-\d{2}$/.test(d || "")){ $("day").value = d; loadDay(); } else goToday();
+  $("day").value = KB.startDay(); loadDay();   // 回収明細の ↗（?d=）・前のページで見ていた日
+
 }
 function goToday(){ $("day").value = KB.bizDateOf(); loadDay(); }
 function moveDay(n){ const d = new Date($("day").value + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); $("day").value = d.toISOString().slice(0, 10); loadDay(); }
@@ -113,7 +115,7 @@ function backOf(r){ return r.back_override != null ? r.back_override : (r.course
 function rulesOn(castId){ return M.rules.filter(r=>r.cast_id === castId && (r.valid_from || "2000-01-01") <= day && (!r.valid_to || r.valid_to > day)); }
 
 async function loadDay(){
-  day = $("day").value;
+  day = $("day").value; KB.rememberDay(day);
   $("list").innerHTML = `<div class="gate">読み込み中…</div>`;
   try{
     const [rs, ds] = await Promise.all([
@@ -197,7 +199,16 @@ function render(){
     <div class="dayfig ${showMoney ? "" : "hide"}"><div class="h">📊 この日の数字（キャスト分・社長用）</div>
       ${[["総額", sum.total], ["キャスト報酬", sum.pay], ["暫定的な残額", sum.prov], ["【税務用】源泉徴収", sum.wh], ["実質的な店落ち", sum.real]].map(x=>`<div class="s">${x[0]}<b>${yen(x[1])}</b></div>`).join("")}</div>`;
   if(!cs.length){ $("list").innerHTML = `<div class="gate">この日（${esc(day)}）の受付はまだありません</div>`; return; }
-  $("list").innerHTML = cs.map(({ id, c })=>cardHtml(id, c)).join("");
+  // 売上がある子を上に。売上がない子は下に、お茶・欠勤はそれぞれまとめる
+  const grp = c => c.live.length ? 0 : c.cd.status === "お茶" ? 2 : c.cd.status === "欠勤" ? 3 : 1;
+  const GH = ["", "売上なし", "🟩 お茶", "🟥 欠勤"];
+  let h = "";
+  [0, 1, 2, 3].forEach(g => {
+    const l = cs.filter(x => grp(x.c) === g); if(!l.length) return;
+    if(g) h += `<div class="grph g${g}">${GH[g]}（${l.length}人）</div>`;
+    h += l.map(({ id, c })=>cardHtml(id, c)).join("");
+  });
+  $("list").innerHTML = h;
 }
 
 function cardHtml(id, c){
@@ -415,6 +426,6 @@ function copyDetail(id){
 init();
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=20"></script>
+<script src="unsettled.js?v=21"></script>
 </body>
 </html>

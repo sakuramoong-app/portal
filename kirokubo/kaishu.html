@@ -51,6 +51,9 @@
   .ec .who{font-size:12px;color:var(--sub);line-height:1.7;max-height:120px;overflow-y:auto;border-top:1px dashed var(--line);padding-top:6px;}
   .ec .f{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px;font-weight:800;font-size:13.5px;}
   .ec .f input{width:80px;font-family:inherit;font-size:18px;font-weight:900;text-align:right;padding:4px 8px;border:1.5px solid #ccc;border-radius:8px;}
+  .seg{display:inline-flex;border:1.5px solid var(--line);border-radius:99px;overflow:hidden;background:#fff;}
+  .seg button{border:none;background:none;font-family:inherit;font-weight:800;font-size:13px;padding:7px 14px;color:var(--sub);cursor:pointer;} .seg button.on{background:var(--pink);color:#fff;}
+  .ym{font-weight:900;font-size:15px;padding:0 6px;}
   .hist{margin-top:10px;font-size:12.5px;}
   .hist div{display:flex;gap:6px;padding:3px 0;border-bottom:1px solid #F4EDF0;} .hist .ok{color:#2e8b57;font-weight:800;} .hist .ng{color:#c0392b;font-weight:800;}
 </style>
@@ -62,8 +65,9 @@
   <div id="main" style="display:none">
     <div id="wip"></div>
     <div class="bar">
-      <button class="btn btn-ghost btn-sm" onclick="shift(-1)">◀</button><input type="date" id="day" onchange="loadDay()"><button class="btn btn-ghost btn-sm" onclick="shift(1)">▶</button>
-      <button class="btn btn-ghost btn-sm" onclick="$('day').value=KB.bizDateOf();loadDay()">今日</button>
+      <span class="seg"><button id="mDay" class="on" onclick="setMode('day')">1日ごと</button><button id="mMonth" onclick="setMode('month')">1か月ごと</button></span>
+      <button class="btn btn-ghost btn-sm" onclick="shift(-1)">◀</button><input type="date" id="day" onchange="reload()"><span id="ymLabel" class="ym" style="display:none"></span><button class="btn btn-ghost btn-sm" onclick="shift(1)">▶</button>
+      <button class="btn btn-ghost btn-sm" onclick="$('day').value=KB.bizDateOf();reload()" id="todayBtn">今日</button>
       <span style="width:12px"></span><span id="plBar"></span>
     </div>
     <div id="dayArea"></div>
@@ -104,17 +108,93 @@ async function init(){
   $("wip").innerHTML = KB.wipBanner();
   $("gate").style.display = "none"; $("main").style.display = "";
   try{ (q(await sb.from("master_casts").select("id,official_name,temp_name")) || []).forEach(c => { names[c.id] = c.official_name || c.temp_name || c.id; }); }catch(e){}
-  $("day").value = KB.bizDateOf();
+  $("day").value = KB.startDay();   // 記録簿・精算で見ていた日
   paintPlaces(); loadDay(); load();
 }
-function shift(n){ const d = new Date($("day").value + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); $("day").value = d.toISOString().slice(0, 10); loadDay(); }
+let mode = "day", MO = null;
+function setMode(m){
+  mode = m; $("mDay").classList.toggle("on", m === "day"); $("mMonth").classList.toggle("on", m === "month");
+  $("day").style.display = m === "day" ? "" : "none"; $("ymLabel").style.display = m === "month" ? "" : "none";
+  $("todayBtn").textContent = m === "day" ? "今日" : "今月";
+  reload();
+}
+function reload(){ if(mode === "day") loadDay(); else loadMonth(); }
+function shift(n){
+  const d = new Date($("day").value + "T12:00:00Z");
+  if(mode === "day") d.setUTCDate(d.getUTCDate() + n); else { d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + n); }
+  $("day").value = d.toISOString().slice(0, 10); reload();
+}
 function paintPlaces(){
-  $("plBar").innerHTML = [["", "ぜんぶ"]].concat(ALL_PLACES.map(p => [p, p])).map(([v, l]) => `<button class="chip ${place === v ? "on" : ""}" onclick="place='${v}';paintPlaces();paintDay()">${l}</button>`).join(" ");
+  $("plBar").innerHTML = [["", "ぜんぶ"]].concat(ALL_PLACES.map(p => [p, p])).map(([v, l]) => `<button class="chip ${place === v ? "on" : ""}" onclick="place='${v}';paintPlaces();mode === 'day' ? paintDay() : paintMonth()">${l}</button>`).join(" ");
+}
+// 日をえらぶ（1か月ごとの表から）
+function openDay(d){ $("day").value = d; setMode("day"); scrollTo(0, 0); }
+
+/* ---------- 1か月ごと ---------- */
+async function loadMonth(){
+  const ym = $("day").value.slice(0, 7), from = ym + "-01";
+  const e = new Date(from + "T12:00:00Z"); e.setUTCMonth(e.getUTCMonth() + 1); const to = e.toISOString().slice(0, 10);
+  $("ymLabel").textContent = `${Number(ym.slice(0, 4))}年${Number(ym.slice(5))}月`;
+  $("dayArea").innerHTML = `<div class="lead">読み込み中…</div>`;
+  try{
+    const cds = q(await sb.from("kb_cast_days").select("biz_date,cast_id,settled,settle_place,settle_snapshot,direct_home").gte("biz_date", from).lt("biz_date", to)) || [];
+    let col = [], ho = [], no171 = false;
+    try{
+      col = q(await sb.from("kb_collections").select("*").gte("biz_date", from).lt("biz_date", to)) || [];
+      ho = q(await sb.from("kb_handovers").select("*").gte("biz_date", from).lt("biz_date", to)) || [];
+    }catch(err){ no171 = true; }
+    if(mode !== "month" || $("day").value.slice(0, 7) !== ym) return;
+    MO = { ym, from, to, cds, col, ho, no171 };
+  }catch(err){ $("dayArea").innerHTML = `<div class="warn">読めませんでした：${esc(err.message || err)}</div>`; return; }
+  paintMonth();
+}
+function paintMonth(){
+  if(!MO) return;
+  const days = [...new Set(MO.cds.filter(c => c.settled || c.direct_home).map(c => c.biz_date).concat(MO.ho.map(h => h.biz_date)))].sort();
+  const T = { exp: 0, col: 0, diff: 0, todo: 0, got: 0, n: 0, ex: 0, hand: 0, rcv: 0, hdays: 0 };
+  const lines = days.map(d => {
+    const all = rowsOf({ cds: MO.cds.filter(c => c.biz_date === d), col: MO.col.filter(c => c.biz_date === d) });
+    const rows = all.filter(r => !place || r.place === place);
+    const cash = rows.filter(r => r.kind === "cash"), got = cash.filter(r => r.collected != null);
+    const exp = cash.reduce((a, r) => a + r.expected, 0), col = got.reduce((a, r) => a + r.collected, 0);
+    const diff = got.reduce((a, r) => a + (r.collected - r.expected), 0), todo = got.filter(r => r.collected !== r.expected && !r.cl.resolution).length;
+    // 経費・手渡しは、その日の全部（場所で絞っても全体）
+    const aCol = all.filter(r => r.kind === "cash" && r.collected != null).reduce((a, r) => a + r.collected, 0);
+    const h = MO.ho.find(x => x.biz_date === d) || null, ex = h && Array.isArray(h.expenses) ? h.expenses.reduce((a, x) => a + (Number(x.amount) || 0), 0) : 0;
+    Object.assign(T, { exp: T.exp + exp, col: T.col + col, diff: T.diff + diff, todo: T.todo + todo, got: T.got + got.length, n: T.n + cash.length,
+      ex: T.ex + ex, hand: T.hand + (aCol - ex), rcv: T.rcv + (h && h.received_at ? aCol - ex : 0), hdays: T.hdays + (h && h.received_at ? 1 : 0) });
+    const dt = new Date(d + "T12:00:00Z");
+    return `<tr class="${todo ? "bad" : ""}"><td class="l"><a class="j" style="font-size:13.5px;margin:0" href="javascript:void 0" onclick="openDay('${d}')">${md(d)}(${DOW[dt.getUTCDay()]})</a></td>
+      <td>${got.length} / ${cash.length}人</td><td>${num(exp)}</td><td>${num(col)}</td>
+      <td class="z ${!got.length ? "" : diff ? "ng" : "ok"}">${got.length ? sgn(diff) : ""}</td>
+      <td class="l">${todo ? `<span class="st wait">⏳ ${todo}件</span>` : got.length && got.length === cash.length ? `<span class="st ok">✅</span>` : ""}</td>
+      <td>${ex ? "−" + num(ex) : ""}</td><td><b>${num(aCol - ex)}</b></td>
+      <td class="l">${h && h.received_at ? `<span class="st ok">🤝 ${esc(h.received_by)} ${when(h.received_at)}</span>` : aCol ? `<span class="st no">まだ</span>` : ""}</td></tr>`;
+  });
+  let html = MO.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収した額を入れるには、SQL 171 の実行が必要です。</div>` : "";
+  html += `<div class="sum">
+    <div class="s">回収した<b>${T.got} / ${T.n}人</b></div>
+    <div class="s">回収されるはずの現金<b>${yen(T.exp)}</b></div>
+    <div class="s">店長が回収した額<b>${yen(T.col)}</b></div>
+    <div class="s ${T.diff ? "ng" : T.got ? "ok" : ""}">差額<b>${sgn(T.diff)}円</b></div>
+    <div class="s ${T.todo ? "ng" : ""}">まだ処理していない<b>${T.todo}件</b></div>
+    <div class="s">経費<b>${yen(T.ex)}</b></div>
+    <div class="s">社長に手渡し<b>${yen(T.hand)}</b></div>
+    <div class="s ${T.hand - T.rcv ? "ng" : T.hand ? "ok" : ""}">社長がまだ受け取っていない<b>${yen(T.hand - T.rcv)}</b></div></div>`;
+  html += `<div class="card"><h2>📅 ${esc($("ymLabel").textContent)}の回収${place ? "（" + esc(place) + "）" : ""}</h2>`
+    + (days.length ? `<div class="tbl"><table>
+      <tr><th class="l">日</th><th>回収した</th><th>投函額（精算）</th><th>店長が回収した額</th><th>差額</th><th class="l">処理</th><th>経費</th><th>社長に手渡し</th><th class="l">社長が受け取った</th></tr>
+      ${lines.join("")}
+      <tr class="tot"><td class="l">合計</td><td>${T.got} / ${T.n}人</td><td>${num(T.exp)}</td><td>${num(T.col)}</td><td class="z ${T.diff ? "ng" : "ok"}">${sgn(T.diff)}</td><td class="l">${T.todo ? `処理まだ ${T.todo}件` : ""}</td><td>${T.ex ? "−" + num(T.ex) : ""}</td><td>${num(T.hand)}</td><td class="l">${T.hdays}日分</td></tr>
+    </table></div>
+    <div class="leg">・日付を押すと、その日の「1日ごと」が開きます　・経費・社長に手渡し・受け取ったは、場所で絞ってもその日の全部です</div>` : `<div class="lead">この月に精算済にしたキャストはいません。</div>`) + `</div>`;
+  $("dayArea").innerHTML = html;
 }
 
 /* ---------- 日ごとの回収 ---------- */
 async function loadDay(){
   const day = $("day").value; if(!day) return;
+  KB.rememberDay(day);
   $("dayArea").innerHTML = `<div class="lead">読み込み中…</div>`;
   try{
     const cds = q(await sb.from("kb_cast_days").select("*").eq("biz_date", day)) || [];
@@ -126,18 +206,19 @@ async function loadDay(){
     const autoU = q(await sb.from("kb_unsettled").select("*").eq("biz_date", day)) || [];
     const ids = col.map(x => x.uns_id).filter(Boolean);
     const colU = ids.length ? (q(await sb.from("kb_unsettled").select("*").in("id", ids)) || []) : [];
-    if(day !== $("day").value) return;   // とちゅうで日を変えた
+    if(day !== $("day").value || mode !== "day") return;   // とちゅうで日を変えた
     D = { day, cds, col, ho, autoU, colU, no171 };
   }catch(e){ $("dayArea").innerHTML = `<div class="warn">読めませんでした：${esc(e.message || e)}</div>`; return; }
   paintDay();
 }
 // 1人ずつの行：expected（封筒に入っているはずの額）・collected（店長が回収した額）など
-function rowsOf(){
+function rowsOf(X){
+  X = X || D;
   const out = [];
-  D.cds.forEach(cd => {
-    const s = cd.settle_snapshot || {}, cl = D.col.find(x => x.cast_id === cd.cast_id) || {};
+  X.cds.forEach(cd => {
+    const s = cd.settle_snapshot || {}, cl = X.col.find(x => x.cast_id === cd.cast_id && x.biz_date === cd.biz_date) || {};
     if(cd.settled){
-      if(s.paidOn && s.paidOn !== D.day){ out.push({ cd, kind: "later", place: cd.settle_place || "", paidOn: s.paidOn }); return; }
+      if(s.paidOn && s.paidOn !== cd.biz_date){ out.push({ cd, kind: "later", place: cd.settle_place || "", paidOn: s.paidOn }); return; }
       const dep = s.deposited != null ? Number(s.deposited) : Number(s.due ?? s.drop ?? 0);
       out.push({ cd, kind: dep < 0 ? "give" : "cash", place: cd.settle_place || "", expected: dep, cl,
         collected: cl.collected != null ? Number(cl.collected) : null });

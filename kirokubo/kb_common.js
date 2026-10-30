@@ -86,6 +86,14 @@
     if(j.getUTCHours() < 6) j.setUTCDate(j.getUTCDate() - 1);
     return j.toISOString().slice(0,10);
   }
+  // 見ている日を、ページを行き来しても同じにする（記録簿・精算・回収明細）。同じタブの中だけ・6時間まで
+  function rememberDay(d){ try{ if(/^\d{4}-\d{2}-\d{2}$/.test(d || "")) sessionStorage.setItem("kbDay", JSON.stringify({ d, at: Date.now() })); }catch(e){} }
+  function startDay(){
+    const u = new URLSearchParams(location.search).get("d");
+    if(/^\d{4}-\d{2}-\d{2}$/.test(u || "")) return u;
+    try{ const s = JSON.parse(sessionStorage.getItem("kbDay") || "null"); if(s && s.d && Date.now() - s.at < 6 * 3600 * 1000) return s.d; }catch(e){}
+    return bizDateOf();
+  }
   // ページの上の切りかえ
   function nav(active){
     const all = [["kiroku.html","🆕 新しい記録簿（ためし中）"],["reception.html","🧾 受付"],["settle.html","💴 精算"],["kaishu.html","📦 回収明細"],["index.html","📒 キャスト台帳"],["customers.html","👥 顧客台帳"],["stats.html","📈 集計"]];
@@ -104,5 +112,5 @@
     bg.addEventListener("click", e=>{ if(e.target === bg && down) close(); });
   }
 
-  window.KB = { sb, staffSession, deviceStatus, operatorName, CAN_EDIT, MANAGER_NAME, IS_OWNER, OWNER_NAME, q, esc, yen, toast, bizDateOf, nav, wipBanner, closeOnBackdrop };
+  window.KB = { sb, staffSession, deviceStatus, operatorName, CAN_EDIT, MANAGER_NAME, IS_OWNER, OWNER_NAME, q, esc, yen, toast, bizDateOf, rememberDay, startDay, nav, wipBanner, closeOnBackdrop };
 })();

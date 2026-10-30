@@ -594,7 +594,7 @@ cardHtml = function(id, c){
   const need = KB.CAN_EDIT && !done && !home;
   const cam = cd.camera_check || "";
   return `<div class="card svc ${done ? "done" : ""}" id="card-${id}">
-    <h2>${esc(castName(id))}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : home ? "🏠 直帰" : "未精算"}</span>
+    <h2>${esc(castName(id))}${cd.status === "お茶" ? `<span class="st tea">🟩 お茶</span>` : cd.status === "欠勤" ? `<span class="st absent">🟥 欠勤</span>` : ""}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : home ? "🏠 直帰" : "未精算"}</span>
       ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
     <div class="svg2"><div class="svl">
     <details class="svf" ${svOpen.has(id) ? "open" : ""} ontoggle="this.open ? svOpen.add('${id}') : svOpen.delete('${id}')">
