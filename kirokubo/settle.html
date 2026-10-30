@@ -101,7 +101,8 @@ async function init(){
     M = { casts, stores, rules };
   }catch(e){ $("gate").textContent = "読み込みに失敗しました：" + (e.message || e); return; }
   $("gate").style.display = "none"; $("main").style.display = "";
-  goToday();
+  const d = new URLSearchParams(location.search).get("d");   // 回収明細の ↗ から：その日を開く
+  if(/^\d{4}-\d{2}-\d{2}$/.test(d || "")){ $("day").value = d; loadDay(); } else goToday();
 }
 function goToday(){ $("day").value = KB.bizDateOf(); loadDay(); }
 function moveDay(n){ const d = new Date($("day").value + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); $("day").value = d.toISOString().slice(0, 10); loadDay(); }

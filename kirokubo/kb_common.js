@@ -34,8 +34,8 @@
     const s = data && data.session;
     if(!s || String(s.user.email||"").toLowerCase() !== STAFF_EMAIL) return null;
     if(Date.now() >= (loginAt(s) + 20*3600) * 1000) return null;
-    // 作成中は、店長（きゃ）だけが開ける（キャスト台帳は別：ほかの内勤も見られる）。画面の上での分け方
-    if(!CAN_EDIT){ managerBlock(); return null; }
+    // 作成中は、店長（きゃ）だけが開ける（キャスト台帳は別：ほかの内勤も見られる）。回収明細は社長も。画面の上での分け方
+    if(!CAN_EDIT && !(opts && opts.owner && IS_OWNER)){ managerBlock(); return null; }
     // 「登録した端末だけ」が ON で、この端末が登録されていない → 見せない（端末の登録ページは別）
     if(!(opts && opts.skipDevice)){
       const st = await deviceStatus();
@@ -70,6 +70,7 @@
   function operatorName(){ try{ return localStorage.getItem("currentOperator") || ""; }catch(e){ return ""; } }
   // 作成中は、店長（きゃ）のときだけ直せる。ほかの内勤は見るだけ（画面の上での分け方）
   const CAN_EDIT = operatorName() === MANAGER_NAME;
+  const OWNER_NAME = "社長", IS_OWNER = operatorName() === OWNER_NAME;
 
   function q(res){ if(res.error) throw res.error; return res.data; }
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -88,7 +89,7 @@
   // ページの上の切りかえ
   function nav(active){
     const all = [["kiroku.html","🆕 新しい記録簿（ためし中）"],["reception.html","🧾 受付"],["settle.html","💴 精算"],["kaishu.html","📦 回収明細"],["index.html","📒 キャスト台帳"],["customers.html","👥 顧客台帳"],["stats.html","📈 集計"]];
-    const items = CAN_EDIT ? all : all.filter(([h])=>h === "index.html");   // 店長以外はキャスト台帳だけ
+    const items = CAN_EDIT ? all : all.filter(([h])=>h === "index.html" || (IS_OWNER && h === "kaishu.html"));   // 店長以外はキャスト台帳だけ（社長は回収明細も）
     return `<nav class="kbnav">${items.map(([h,l])=>`<a href="${h}" class="${h===active?"on":""}">${l}</a>`).join("")}</nav>`;
   }
   function wipBanner(){
@@ -103,5 +104,5 @@
     bg.addEventListener("click", e=>{ if(e.target === bg && down) close(); });
   }
 
-  window.KB = { sb, staffSession, deviceStatus, operatorName, CAN_EDIT, MANAGER_NAME, q, esc, yen, toast, bizDateOf, nav, wipBanner, closeOnBackdrop };
+  window.KB = { sb, staffSession, deviceStatus, operatorName, CAN_EDIT, MANAGER_NAME, IS_OWNER, OWNER_NAME, q, esc, yen, toast, bizDateOf, nav, wipBanner, closeOnBackdrop };
 })();
