@@ -11,6 +11,8 @@ let UNS = null;            // ② kb_unsettled（まだのもの＋この日に�
 let UNSD = [];
 let HAS_SLOG = false;   // kb_cast_days.settle_log（SQL 167）があるか
 Promise.resolve(sb.from("kb_cast_days").select("settle_log").limit(1)).then(r => { HAS_SLOG = !!r && !r.error; }).catch(() => {});             // ① 精算していない日 [{ date, cid, c（その日の精算の計算）, cd }]
+let HAS_170 = false;  // kb_cast_days.direct_home・camera_check と kb_envelope_checks（SQL 170）があるか
+const P170 = Promise.resolve(sb.from("kb_cast_days").select("direct_home,camera_check").limit(1)).then(r => { HAS_170 = !!r && !r.error; }).catch(() => {});
 const unsSel = {};         // cast_id → Set（今日いっしょに精算するもののキー）
 const UNS_ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ", UNS_DAYS = 60;
 const unsMd = d => { const p = String(d || "").split("-"); return p.length === 3 ? Number(p[1]) + "/" + Number(p[2]) : ""; };
@@ -152,7 +154,7 @@ settle = async function(id){
   }catch(e){ toast("未精算を保存できませんでした：" + (e.message || e)); return; }
   const cd = unsCD()[id] || {}, logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).slice();
   logs.push({ at, by, text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") });
-  await saveDay(id, Object.assign({ settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: snap }, HAS_SLOG ? { settle_log: logs } : {}));
+  await saveDay(id, Object.assign({ settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: snap }, HAS_SLOG ? { settle_log: logs } : {}, HAS_170 ? { direct_home: false } : {}));
   delete unsSel[id]; await unsLoad();
 };
 // 精算済をもどす：この日にいっしょに精算した未精算もまだにもどす。この日の精算で自動で入れた未精算は消す
@@ -340,7 +342,7 @@ function settleParts(id){
   // 精算メモ（1営業日に1枚）
   const memo = [[day, c.drop]]; uns.forEach(x => { const m = memo.find(y => y[0] === x.date); if(m) m[1] += x.amount; else memo.push([x.date, x.amount]); });
   memo.sort((p, q) => String(p[0]).localeCompare(String(q[0])));
-  const res = c.all.map((r, i) => {
+  const res = c.all.filter(r => r.status !== "cancel" && r.status !== "tobi").map((r, i) => {   // キャンセル・トビは出さない
     const off = r.status === "cancel" || r.status === "tobi";
     const bo = off ? [] : (r.options || []).filter(o => (o.back || 0) > 0);
     const ops = bo.map(o => [`${o.label}${o.qty > 1 ? "×" + o.qty : ""}`, o.back * (o.qty || 1)]);
@@ -587,21 +589,24 @@ cardHtml = function(id, c){
   const items = (list, kind)=> list.map((x, i)=>`<div class="it"><input class="lbl" value="${esc(x.label)}" ${dis} onchange="setItem('${id}','${kind}',${i},'label',this.value)">
       <input class="amt" type="number" value="${Number(x.amount) || 0}" ${dis} onchange="setItem('${id}','${kind}',${i},'amount',this.value)">
       ${dis ? "" : `<button class="btn btn-ghost btn-sm" onclick="delItem('${id}','${kind}',${i})">🗑</button>`}</div>`).join("");
-  const V = settleViewHtml(id, c);
+  const V = settleViewHtml(id, c), home = !done && !!cd.direct_home;
+  // 精算済にする か 🏠 直帰 のどちらも押していない → 右の枠をピカピカ
+  const need = KB.CAN_EDIT && !done && !home;
+  const cam = cd.camera_check || "";
   return `<div class="card svc ${done ? "done" : ""}" id="card-${id}">
-    <h2>${esc(castName(id))}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : "未精算"}</span>
+    <h2>${esc(castName(id))}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : home ? "🏠 直帰" : "未精算"}</span>
       ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
     <div class="svg2"><div class="svl">
     <details class="svf" ${svOpen.has(id) ? "open" : ""} ontoggle="this.open ? svOpen.add('${id}') : svOpen.delete('${id}')">
     <summary>🧾 精算の中身（1本目〜精算メモに書くこと）<small>${V.due < 0 ? "お店から渡す" : "投函"} ${yen(Math.abs(V.due))}</small></summary>
-    ${unsBoxHtml(id, c)}
     ${c.why.length ? `<div class="note2">🧮 ${c.why.map(esc).join("<br>")}</div>` : ""}
     ${c.cardUnconfirmed ? `<div class="warn" style="margin:6px 0">⚠️ お支払いが「カード」のままの予約が ${c.cardUnconfirmed}件あります。カード決済の完了を確認して、本日のキャスト一覧のカードのプルダウンで「✅ 決済済み」にしてください。</div>` : ""}
     ${V.view}
     </details>
-    </div><div class="svr">
+    </div><div class="svr ${need ? "need" : ""}">
+    ${need ? `<div class="needmsg">👇「精算済にする」か「🏠 直帰」のどちらかを押してください</div>` : ""}
     ${dis ? "" : `<div class="pmz"><div class="pmzh">✏️ プラス・マイナス・雑費を直す</div>
-      <div class="hint2" style="margin-top:6px">② プラス（交通費・ボーナスなど）</div><div class="items">${items(c.plusItems, "plus")}</div>
+      <div class="hint2" style="margin-top:6px">② プラス（交通費など）</div><div class="items">${items(c.plusItems, "plus")}</div>
       <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','plus')">＋ プラスを足す</button>
       <div class="hint2" style="margin-top:8px">マイナス（立て替えなど・雑費以外）</div><div class="items">${items(c.minusItems, "minus")}</div>
       <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','minus')">＋ マイナスを足す</button>
@@ -610,7 +615,10 @@ cardHtml = function(id, c){
         <button class="btn btn-ghost btn-sm" onclick="setZappi('${id}')">雑費を直す</button></div>
     </div>`}
     ${V.shop}
+    ${unsBoxHtml(id, c)}
     ${V.dep}
+    <div class="camchk"><span>📹 投函を監視カメラで確認した？</span>
+      ${[["ok", "◎ 確認した"], ["ng", "× 確認していない"]].map(([v, l]) => `<button type="button" class="cb ${v} ${cam === v ? "on" : ""}" ${KB.CAN_EDIT ? "" : "disabled"} onclick="setCamera('${id}','${cam === v ? "" : v}')">${l}</button>`).join("")}</div>
     ${V.past}
     <div class="acts">
       ${KB.CAN_EDIT ? `<select id="pl-${id}" class="plsel" style="background-color:${PLACE_COLOR[cd.settle_place || PLACES[0]] || "#fff"}" ${done ? "disabled" : ""}
@@ -618,9 +626,87 @@ cardHtml = function(id, c){
       <button class="btn btn-ghost btn-sm" onclick="copyDetailImg('${id}')">🖼 画像でコピー</button>
       ${KB.CAN_EDIT ? (done
         ? `<button class="btn btn-ghost btn-sm" onclick="unsettle('${id}')">↩ 精算済をもどす</button>`
-        : `<button class="btn btn-primary btn-sm" onclick="settle('${id}')">✅ 精算済にする</button>`) : ""}
+        : home ? `<button class="btn btn-ghost btn-sm" onclick="setDirectHome('${id}',false)">↩ 直帰をもどす</button>`
+        : `<button class="btn btn-primary btn-sm" onclick="settle('${id}')">✅ 精算済にする</button>
+           <button class="btn btn-ghost btn-sm homebtn" onclick="setDirectHome('${id}',true)">🏠 直帰</button>`) : ""}
     </div>
     </div></div>
     ${settleLogHtml(id)}
   </div>`;
 };
+
+/* ---------- 🏠 直帰・📹 監視カメラの確認（SQL 170） ----------
+   ・「精算済にする」か「🏠 直帰」のどちらかを必ず押す（どちらもまだなら右の枠がピカピカ）
+   ・直帰＝今日は精算しない。次の精算で、この日の分を未精算としていっしょに精算する */
+async function setDirectHome(id, on){
+  await P170; if(!HAS_170){ toast("先に SQL 170 を実行してください"); return; }
+  if(!confirm(castName(id) + (on ? " を「🏠 直帰」にしますか？\n今日は精算しないで、次の精算でこの日の分をいっしょに精算します" : " の「直帰」をもどしますか？"))) return;
+  const cd = unsCD()[id] || {}, logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).concat([{ at: new Date().toISOString(), by: KB.operatorName(), text: on ? "🏠 直帰にしました（次の精算でいっしょに精算）" : "直帰をもどしました" }]);
+  await saveDay(id, Object.assign({ direct_home: on }, HAS_SLOG ? { settle_log: logs } : {}));
+  await unsLoad();
+}
+async function setCamera(id, v){
+  await P170; if(!HAS_170){ toast("先に SQL 170 を実行してください"); return; }
+  await saveDay(id, { camera_check: v });
+}
+
+/* ---------- 📮 待機場の封筒（精算ページの上）
+   ・今日：待機場ごとにポスティングされた数・回収・直帰
+   ・店長が封筒を回収したら、前回の回収からいくつ封筒があったかを入れる → 記録簿の数と同じなら ✅ ---------- */
+const ENV_PLACES = ["池袋", "鶯谷", "五反田"];
+let ENV = null;
+async function envLoad(){
+  const el = document.getElementById("envBox"); if(!el) return;
+  await P170; if(!HAS_170){ el.innerHTML = ""; return; }
+  try{
+    const chk = q(await sb.from("kb_envelope_checks").select("*").order("checked_at", { ascending: false }).limit(60)) || [];
+    ENV = {};
+    for(const p of ENV_PLACES){
+      const last = chk.find(x => x.place === p) || null;
+      let qq = sb.from("kb_cast_days").select("biz_date,cast_id,settled_at").eq("settled", true).eq("settle_place", p).order("settled_at");
+      qq = last ? qq.gt("settled_at", last.checked_at) : qq.eq("biz_date", day);   // 回収の記録がまだない → 今日の分だけ
+      ENV[p] = { last, since: q(await qq) || [] };
+    }
+  }catch(e){ el.innerHTML = `<div class="warn">封筒の数を読めませんでした：${esc(e.message || e)}</div>`; return; }
+  envPaint();
+}
+function envPaint(){
+  const el = document.getElementById("envBox"); if(!el || !ENV) return;
+  const cds = Object.values(unsCD() || {}), n = p => cds.filter(x => x.settled && x.settle_place === p).length;
+  const md = t => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+  el.innerHTML = `<div class="envbox"><div class="eh">📮 封筒（ポスティング）</div>
+    <div class="etoday">今日：${ENV_PLACES.concat(["回収"]).map(p => `<span class="ep" style="background:${PLACE_COLOR[p] || "#eee"}">${p} <b>${n(p)}</b>件</span>`).join("")}
+      <span class="ep" style="background:#EDEDED">🏠 直帰 <b>${cds.filter(x => !x.settled && x.direct_home).length}</b>件</span></div>
+    <div class="egrid">${ENV_PLACES.map(p => { const E = ENV[p], l = E.last;
+      return `<div class="ec" style="border-color:${PLACE_COLOR[p]}"><div class="et" style="background:${PLACE_COLOR[p]}">${p}</div>
+        <div class="es">${l ? `前回の回収：${md(l.checked_at)}（${esc(l.checked_by)}）${l.found === l.expected ? "✅ 一致" : `⚠️ ${l.found}通／記録 ${l.expected}件`}` : "回収の記録はまだありません（今日の分を数えています）"}</div>
+        <div class="en">${l ? "前回の回収から" : "今日"}の投函：<b>${E.since.length}</b>件
+          ${E.since.length ? `<small>（${esc(E.since.map(x => unsMd(x.biz_date) + " " + castName(x.cast_id)).join("、"))}）</small>` : ""}</div>
+        ${KB.CAN_EDIT ? `<div class="ef">実際にあった封筒 <input type="number" min="0" id="env-${p}" placeholder="通"> <button class="btn btn-primary btn-sm" onclick="envSave('${p}')">📮 回収した</button></div>` : ""}</div>`; }).join("")}</div></div>`;
+}
+async function envSave(p){
+  const v = document.getElementById("env-" + p).value; if(v === ""){ toast("あった封筒の数を入れてください"); return; }
+  const found = Math.max(0, Number(v) || 0), expected = ENV[p].since.length;
+  if(!confirm(`${p} の封筒を回収しましたか？\nあった封筒 ${found}通／記録簿 ${expected}件 → ${found === expected ? "✅ 一致" : "⚠️ 合いません"}`)) return;
+  try{ q(await sb.from("kb_envelope_checks").insert({ place: p, found, expected, checked_by: KB.operatorName() })); }
+  catch(e){ toast("保存できませんでした：" + (e.message || e)); return; }
+  toast(found === expected ? `✅ ${p}：一致しました` : `⚠️ ${p}：${found}通／記録 ${expected}件。精算をたしかめてください`);
+  envLoad();
+}
+const __unsLoadEnv = unsLoad;
+unsLoad = async function(){ await __unsLoadEnv(); envLoad(); };
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .svr.need{border-radius:14px;padding:8px;animation:svrBlink 1.1s ease-in-out infinite;border:3px solid #FFD54A}
+  @keyframes svrBlink{0%,100%{box-shadow:0 0 0 0 rgba(255,193,7,.0);background:#FFFDF3}50%{box-shadow:0 0 18px 4px rgba(255,193,7,.75);background:#FFF5C9}}
+  .needmsg{font-weight:900;color:#B26A00;font-size:13.5px;margin:0 0 6px}
+  .homebtn{background:#EDEDED !important;border-color:#bbb !important;font-weight:800}
+  .camchk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0}
+  .camchk .cb{font-family:inherit;font-weight:800;font-size:13px;border:2px solid #ddd;background:#fff;border-radius:99px;padding:4px 12px;cursor:pointer;color:#5C4B4F}
+  .camchk .cb.ok.on{background:#E5F6EC;border-color:#2e8b57;color:#2e8b57} .camchk .cb.ng.on{background:#FDE7E7;border-color:#c0392b;color:#c0392b}
+  .envbox{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:10px}
+  .envbox .eh{font-weight:900;font-size:15px;margin-bottom:6px} .envbox .etoday{display:flex;gap:6px;flex-wrap:wrap;font-size:13px;font-weight:700;margin-bottom:8px}
+  .envbox .ep{border-radius:99px;padding:3px 12px} .envbox .egrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
+  .envbox .ec{border:2px solid;border-radius:12px;overflow:hidden;font-size:13px} .envbox .et{font-weight:900;padding:4px 10px}
+  .envbox .es,.envbox .en,.envbox .ef{padding:4px 10px} .envbox .en small{color:#9C8B8F}
+  .envbox .ef input{width:70px;font-family:inherit;font-size:15px;font-weight:800;padding:3px 6px;border:1.5px solid #ccc;border-radius:8px}
+</style>`);
