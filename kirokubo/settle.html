@@ -164,14 +164,16 @@ function calcCast(castId){
   // カードは予約の1時間前までに決済URLで先に払ってもらう（現金はキャストに入らない）。「カード」「カード精算済」どちらも引く
   const cardPaid = live.filter(r=>r.payment === "card" || r.payment === "card_paid").reduce((a, r)=>a + (r.total || 0), 0);
   const cardUnconfirmed = live.filter(r=>r.payment === "card").length;
-  const drop = total - takeHome - cardPaid;
+  // 🏦 振込（SQL 173）：あとで振り込んでもらう分は、カードと同じでキャストの手元にない
+  const trList = live.filter(r=>r.transfer_status && Number(r.transfer_amount)), transferPaid = trList.reduce((a, r)=>a + (Number(r.transfer_amount) || 0), 0), trIds = trList.map(r=>r.id);
+  const drop = total - takeHome - cardPaid - transferPaid;
   const withholding = Math.floor((reward + option) / 9);
   const provisional = total - reward - option;          // 暫定残額（総額 − 報酬）
   const shopDrop = total - reward - option + zappi;   // 店落ち＝総額−報酬＋雑費（交通費・プラスマイナスは経費なので入れない）                    // 店落ち（暫定残額 ＋ 雑費 など）
   const realDrop = provisional - withholding;           // 実質的な店落ち（暫定残額 − 源泉）
   const deposited = cd.deposited != null ? cd.deposited : null;
   const diff = deposited != null ? deposited - drop : null;   // マイナス＝未精算／プラス＝お釣り
-  return { all, live, cd, reward, option, transportBack, why, exempt, zappiAuto, zappi, plusItems, minusItems, plus, minus, takeHome, total, cardPaid, cardUnconfirmed, drop, withholding, provisional, shopDrop, realDrop, deposited, diff };
+  return { transferPaid, trIds, all, live, cd, reward, option, transportBack, why, exempt, zappiAuto, zappi, plusItems, minusItems, plus, minus, takeHome, total, cardPaid, cardUnconfirmed, drop, withholding, provisional, shopDrop, realDrop, deposited, diff };
 }
 
 function render(){
@@ -431,6 +433,6 @@ function copyDetail(id){
 init();
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=27"></script>
+<script src="unsettled.js?v=28"></script>
 </body>
 </html>

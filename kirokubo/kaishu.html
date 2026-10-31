@@ -109,7 +109,7 @@ const num = n => (Number(n) || 0).toLocaleString("ja-JP");
 const sgn = n => (n > 0 ? "＋" : n < 0 ? "−" : "") + num(Math.abs(n));
 const jump = (d, cid) => `<a class="j" href="settle.html?d=${d}${cid ? "&c=" + encodeURIComponent(cid) : ""}" target="_blank" rel="noopener" title="その日のそのキャストの精算へ">${md(d)} ↗</a>`;
 const backOf = r => r.back_override != null ? Number(r.back_override) : (Number(r.course_back) || 0) + (Number(r.option_back) || 0) + (Number(r.extra_back) || 0);
-const RESV_COLS = "biz_date,cast_id,status,total,payment,back_override,course_back,option_back,extra_back";
+const RESV_COLS = "*";   // 振込（SQL 173）の欄もあるので全部
 let names = {}, staffNames = {}, ENV = {}, D = null, MO = null, place = "", mode = "day";
 
 async function init(){
@@ -144,7 +144,7 @@ async function readRange(from, to){
   const R = { cds: [], resv: [], col: [], ho: [], staff: [], no171: false };
   const [a, b, c] = await Promise.all([
     sb.from("kb_cast_days").select("*").gte("biz_date", from).lt("biz_date", to),
-    sb.from("kb_reservations").select(RESV_COLS).gte("biz_date", from).lt("biz_date", to).eq("deleted", false).not("cast_id", "is", null),
+    sb.from("kb_reservations").select(RESV_COLS).gte("biz_date", from).lt("biz_date", to).eq("deleted", false),
     sb.from("kb_staff_work").select("biz_date,staff_id,day_paid,paid,pay_source").gte("biz_date", from).lt("biz_date", to),
   ]);
   R.cds = q(a) || []; R.resv = q(b) || []; R.staff = (c.error ? [] : (c.data || [])).filter(x => x.paid && x.pay_source === "drop" && Number(x.day_paid));
@@ -159,23 +159,24 @@ const nextDay = d => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getU
 // その日のキャストごとの行
 function rowsFor(day, R){
   const cds = R.cds.filter(c => c.biz_date === day), resv = R.resv.filter(r => r.biz_date === day && !["cancel", "tobi"].includes(r.status));
-  const ids = [...new Set(resv.map(r => r.cast_id).concat(cds.filter(c => c.settled || c.direct_home).map(c => c.cast_id)))];
+  const ids = [...new Set(resv.map(r => r.cast_id).filter(Boolean).concat(cds.filter(c => c.settled || c.direct_home).map(c => c.cast_id)))];
   return ids.map(id => {
     const cd = cds.find(c => c.cast_id === id) || {}, s = cd.settled ? (cd.settle_snapshot || {}) : null, mine = resv.filter(r => r.cast_id === id);
     const cl = R.col.find(x => x.biz_date === day && x.cast_id === id) || {};
-    let shop, card, exact = true;
+    let shop, card, tr = 0, exact = true;
     if(s && (s.shopDrop != null || s.total != null)){
       shop = s.shopDrop != null ? Number(s.shopDrop) : Number(s.total || 0) - Number(s.reward || 0) - Number(s.option || 0) + Number(s.zappi || 0);
-      card = Number(s.cardPaid || 0);
+      card = Number(s.cardPaid || 0); tr = Number(s.transferPaid || 0);
     } else {
       shop = mine.reduce((a, r) => a + (Number(r.total) || 0) - backOf(r), 0);
       card = mine.filter(r => r.payment === "card" || r.payment === "card_paid").reduce((a, r) => a + (Number(r.total) || 0), 0);
+      tr = mine.filter(r => r.transfer_status && Number(r.transfer_amount)).reduce((a, r) => a + (Number(r.transfer_amount) || 0), 0);
       exact = false;
     }
     const kind = cd.settled ? (s.paidOn && s.paidOn !== day ? "later" : "done") : cd.direct_home ? "home" : "open";
     // 精算場所が「回収」（内勤がその場でお金を受け取った）なら、チェックしなくても ✔ 当日回収（精算した内勤・時刻を出す）
     const auto = !cl.state && kind === "done" && cd.settle_place === "回収";
-    return { id, cd, s, cl, day, shop, card, amt: shop - card, exact, kind, place: cd.settle_place || "", state: cl.state || (auto ? "day" : ""), auto, done: !!cl.done };
+    return { id, cd, s, cl, day, shop, card, tr, amt: shop - card - tr, exact, kind, place: cd.settle_place || "", state: cl.state || (auto ? "day" : ""), auto, done: !!cl.done };
   }).sort((a, b) => (ALL_PLACES.indexOf(a.place) + 1 || 9) - (ALL_PLACES.indexOf(b.place) + 1 || 9) || String(names[a.id] || "").localeCompare(String(names[b.id] || ""), "ja"));
 }
 // 交通費・経費・精算ミス（その子のぶん）
@@ -208,7 +209,10 @@ function totalsFor(day, R, rows){
   // kb_handovers.expenses：経費（キャッシュフローへの補充）と、type:"transfer" の振込（キャンセル料など。カードと同じ扱い）
   const items = ho && Array.isArray(ho.expenses) ? ho.expenses : [];
   const ex = sum(items.filter(x => x.type !== "transfer"), x => Number(x.amount) || 0);
-  const tr = sum(items.filter(x => x.type === "transfer"), x => Number(x.amount) || 0);
+  // 🏦 振込：予約枠の振込（SQL 173。キャンセルの予約は売上に入っていないので、粗利に足してから引く）＋ 回収明細で手で入れた振込
+  const trRes = R.resv.filter(r => r.biz_date === day && r.transfer_status && Number(r.transfer_amount));
+  const trCancel = sum(trRes.filter(r => ["cancel", "tobi"].includes(r.status)), r => Number(r.transfer_amount));
+  const tr = sum(items.filter(x => x.type === "transfer"), x => Number(x.amount) || 0) + trCancel;
   const staff = R.staff.filter(x => x.biz_date === day), staffSum = sum(staff, x => Number(x.day_paid) || 0);
   const T = {
     n: rows.length, shop: sum(rows, r => r.shop), card: sum(rows, r => r.card),
@@ -219,11 +223,11 @@ function totalsFor(day, R, rows){
     todo: rows.reduce((a, r) => a + todoOf(r), 0),
   };
   // 経費・内勤日払い・手渡しは、その日の全部（場所で絞っても）
-  const A = { shop: sum(all, r => r.shop), card: sum(all, r => r.card), notCol: sum(all.filter(r => r.state === "none" || !r.state), r => r.amt), yetN: all.filter(r => !r.state).length };
+  const A = { shop: sum(all, r => r.shop), card: sum(all, r => r.card), tr: sum(all, r => r.tr), notCol: sum(all.filter(r => r.state === "none" || !r.state), r => r.amt), yetN: all.filter(r => !r.state).length };
   // 紙の回収明細と同じ：B（キャストの A の合計）＋振込 − C（内勤日払い）＝ F（店落ち粗利）。F − D（カード）− 振込 − E（経費）＝ 最終的に社長に渡す額
-  const B = A.shop + tr, F = B - staffSum, fin = F - A.card - tr - ex;
+  const B = A.shop + tr, F = B - staffSum, fin = F - A.card - A.tr - tr - ex;
   const hand = fin - A.notCol;   // 随時の回収合計（未回収 ■ を引いた、今渡す額）
-  return { T, A, ho, ex, tr, staff, staffSum, B, F, fin, hand, all };
+  return { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand, all };
 }
 
 /* ---------- 1日ごと ---------- */
@@ -241,7 +245,8 @@ async function loadDay(){
 function paintDay(){
   if(!D) return;
   const all = rowsFor(D.day, D), rows = all.filter(r => !place || r.place === place);
-  const { T, A, ho, ex, tr, staff, staffSum, B, F, fin, hand } = totalsFor(D.day, D, rows);
+  const { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand } = totalsFor(D.day, D, rows);
+  const TRL = { wait: "振込待ち", owner: "社長の確認待ち", done: "✅ 振込処理完了" }, trLine = r => `${esc(names[r.cast_id] || "")} ${["cancel", "tobi"].includes(r.status) ? "キャンセル料" : "もらい忘れ"}（${TRL[r.transfer_status] || ""}）`;
   const ed = KB.CAN_EDIT && !D.no171, dt = new Date(D.day + "T12:00:00Z");
   let h = D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "";
   h += `<div class="sum">
@@ -280,7 +285,9 @@ function paintDay(){
       ${staff.map(x => `<span>− 内勤日払い ${esc(staffNames[x.staff_id] || x.staff_id)}</span><span class="v">−${yen(x.day_paid)}</span>`).join("")}
       <span class="eq">＝ 想定店落ち 1日の粗利（F）</span><span class="v eq">${yen(F)}</span>
       <span>− クレジットカード総額（D）</span><span class="v">−${yen(A.card)}</span>
-      ${tr ? `<span>− 振込（キャンセル料など）</span><span class="v">−${yen(tr)}</span>` : ""}
+      ${rowsFor(D.day, D).filter(r => r.tr).map(r => `<span>− 🏦 振込（もらい忘れ）：${esc(names[r.id] || r.id)}</span><span class="v">−${yen(r.tr)}</span>`).join("")}
+      ${trRes.filter(r => ["cancel", "tobi"].includes(r.status)).map(r => `<span>− 🏦 振込：${trLine(r)}</span><span class="v">−${yen(r.transfer_amount)}</span>`).join("")}
+      ${tr - trCancel ? `<span>− 振込（回収明細で入れた分）</span><span class="v">−${yen(tr - trCancel)}</span>` : ""}
       <span>− 経費（E：キャッシュフローに補充）</span><span class="v">−${yen(ex)}</span>
       <span class="eq">＝ 全部回収したときに社長に渡す額</span><span class="v eq">${yen(fin)}</span>
       ${notColRows.map(r => `<span>− 未回収 <b class="mk none">■</b> ${esc(names[r.id] || r.id)}${r.state ? "" : "（まだチェックしていない）"}</span><span class="v">−${yen(r.amt)}</span>`).join("")}
@@ -371,7 +378,7 @@ function paintMonth(){
   const S = { F: 0, card: 0, tr: 0, ex: 0, fin: 0, notCol: 0, hand: 0, rcv: 0, rdays: 0, yet: 0, todo: 0 };
   const lines = days.map(d => {
     const rows = rowsFor(d, MO).filter(r => !place || r.place === place);
-    const { T, A, ho, ex, tr, F, fin, hand } = totalsFor(d, MO, rows);
+    const { T, A, ho, ex, tr: tr0, F, fin, hand } = totalsFor(d, MO, rows), tr = tr0 + A.tr;   // 振込は、予約のもらい忘れ分も入れて
     const rcv = ho && ho.received_at, got = rcv ? (ho.received_amount ?? hand) : 0;
     Object.assign(S, { F: S.F + F, card: S.card + A.card, tr: S.tr + tr, ex: S.ex + ex, fin: S.fin + fin, notCol: S.notCol + A.notCol, hand: S.hand + hand,
       rcv: S.rcv + got, rdays: S.rdays + (rcv ? 1 : 0), yet: S.yet + T.yetN, todo: S.todo + T.todo });

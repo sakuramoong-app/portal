@@ -306,6 +306,7 @@
   ul.bkl{list-style:none;margin:3px 0 0;padding:0;text-align:left;font-size:11.5px;font-weight:700;line-height:1.45;} ul.bkl li::before{content:"・";} ul.bkl li.dn{opacity:.5;text-decoration:line-through;}
   .rc-box{padding:8px 10px;border-right:1.5px solid #F1E3E7;font-size:14px;} .rc-box:last-child{border-right:none;}
   .rc-h{font-size:12px;font-weight:800;color:var(--sub);margin-bottom:4px;} .rc-row{margin:3px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+  .trrow.on{background:#EAF4FF;border-radius:8px;padding:3px 6px;} .trrow select{font-family:inherit;font-weight:800;}
   .rc-row select,.rc-num{font-family:inherit;font-size:14px;padding:3px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;} .rc-num{width:56px;}
   .rc-total{margin-top:6px;font-size:14px;} .rc-total b{font-size:18px;color:#e5638c;}
   .payurl{display:inline-block;font-size:12.5px;font-weight:800;color:#B0213F;background:#FFE8EC;border-radius:8px;padding:3px 8px;word-break:break-all;}
@@ -2500,14 +2501,16 @@ function calcCast(castId){
   // カードは予約の1時間前までに決済URLで先に払ってもらう（現金はキャストに入らない）。「カード」「カード精算済」どちらも引く
   const cardPaid = live.filter(r=>r.payment === "card" || r.payment === "card_paid").reduce((a, r)=>a + (r.total || 0), 0);
   const cardUnconfirmed = live.filter(r=>r.payment === "card").length;
-  const drop = total - takeHome - cardPaid;
+  // 🏦 振込（SQL 173）：あとで振り込んでもらう分は、カードと同じでキャストの手元にない
+  const trList = live.filter(r=>r.transfer_status && Number(r.transfer_amount)), transferPaid = trList.reduce((a, r)=>a + (Number(r.transfer_amount) || 0), 0), trIds = trList.map(r=>r.id);
+  const drop = total - takeHome - cardPaid - transferPaid;
   const withholding = Math.floor((reward + option) / 9);
   const provisional = total - reward - option;          // 暫定残額（総額 − 報酬）
   const shopDrop = total - reward - option + zappi;   // 店落ち＝総額−報酬＋雑費（交通費・プラスマイナスは経費なので入れない）                    // 店落ち（暫定残額 ＋ 雑費 など）
   const realDrop = provisional - withholding;           // 実質的な店落ち（暫定残額 − 源泉）
   const deposited = cd.deposited != null ? cd.deposited : null;
   const diff = deposited != null ? deposited - drop : null;   // マイナス＝未精算／プラス＝お釣り
-  return { all, live, cd, reward, option, transportBack, why, exempt, zappiAuto, zappi, plusItems, minusItems, plus, minus, takeHome, total, cardPaid, cardUnconfirmed, drop, withholding, provisional, shopDrop, realDrop, deposited, diff };
+  return { transferPaid, trIds, all, live, cd, reward, option, transportBack, why, exempt, zappiAuto, zappi, plusItems, minusItems, plus, minus, takeHome, total, cardPaid, cardUnconfirmed, drop, withholding, provisional, shopDrop, realDrop, deposited, diff };
 }
 
 function cardHtml(id, c){
@@ -4304,6 +4307,58 @@ function qCourse(id, v){ quickEdit(id, ()=>{ $("f_course").value = v; }, "コー
 function qExt(id, v){ quickEdit(id, ()=>{ $("f_ext").value = Math.max(0, +v || 0); }, "延長 → " + (+v || 0) + "回"); }
 function qPay(id, v){ quickEdit(id, ()=>{ setPay(v); }, "支払い → " + (PAY_LABEL[v] || v)); }
 
+/* ---------- 🏦 振込（SQL 173）。キャンセル料・もらい忘れを、あとで振り込んでもらう。振込待ち → 社長の確認待ち → 振込処理完了 ----------
+   ・振込の額は、カードと同じで「キャストの手元にないお金」（精算の投函額から引く）
+   ・振込処理完了にしたら、キャストにお釣り（未精算）を自動で作る：キャストバック ＋（振込を引く前に、もう精算済にしていた予約なら）振込の額 */
+const TR_ST = [["", "なし"], ["wait", "振込待ち"], ["owner", "社長の確認待ち"], ["done", "✅ 振込処理完了"]];
+function trRow(r, ed){
+  if(!("transfer_status" in r)) return "";   // SQL 173 がまだ
+  const st = r.transfer_status || "";
+  if(!ed && !st) return "";
+  const lock = !ed || st === "done";
+  return `<div class="rc-row trrow ${st ? "on" : ""}">🏦 振込 ${ed ? `<select onchange="trStatus(${r.id},this.value)">${TR_ST.map(([k, l])=>`<option value="${k}" ${k === st ? "selected" : ""}>${l}</option>`).join("")}</select>` : `<b>${(TR_ST.find(x=>x[0] === st) || [])[1] || ""}</b>`}
+    ${st ? `<span>額 ${lock ? yen(r.transfer_amount) : `<input type="number" min="0" class="rc-num" style="width:84px" value="${r.transfer_amount || ""}" placeholder="振込の額" onchange="trSet(${r.id},'transfer_amount',this.value)">`}</span>
+      <span>キャストバック ${lock ? yen(r.transfer_back) : `<input type="number" min="0" class="rc-num" style="width:84px" value="${r.transfer_back || ""}" placeholder="0" onchange="trSet(${r.id},'transfer_back',this.value)">`}</span>` : ""}</div>`;
+}
+async function trSet(id, k, v){
+  const n = Math.max(0, Number(v) || 0);
+  if(await pushLog(id, `🏦 振込の${k === "transfer_amount" ? "額" : "キャストバック"} → ${yen(n)}`, { [k]: n })) renderList();
+}
+async function trStatus(id, st){
+  const r = rows.find(x=>x.id === id); if(!r) return;
+  const prev = r.transfer_status || "", label = (TR_ST.find(x=>x[0] === st) || [])[1] || st;
+  try{
+    if(st === "done"){
+      if(!Number(r.transfer_amount)){ toast("先に振込の額を入れてください"); renderList(); return; }
+      const live = !["cancel", "tobi"].includes(r.status);
+      let cd = {};
+      if(r.cast_id){ const x = await sb.from("kb_cast_days").select("settled,settle_snapshot,settle_log").eq("biz_date", r.biz_date).eq("cast_id", r.cast_id).maybeSingle(); cd = x.data || {}; }
+      // 振込を引く前に精算済にしていた（もらい忘れが精算のあとでわかった）→ キャストは多く払っているので、振込の額を返す
+      const settledWithout = live && cd.settled && !(((cd.settle_snapshot || {}).trIds) || []).includes(r.id);
+      const refund = (Number(r.transfer_back) || 0) + (settledWithout ? Number(r.transfer_amount) : 0);
+      const why = [r.transfer_back ? "キャストバック " + yen(r.transfer_back) : "", settledWithout ? "精算済のあとの振込 " + yen(r.transfer_amount) : ""].filter(Boolean).join("＋");
+      if(!confirm(`振込処理完了にしますか？（振込 ${yen(r.transfer_amount)}）` + (refund && r.cast_id ? `\n${castName(r.cast_id)} にお釣り ${yen(refund)}（${why}）を未精算に入れます` : ""))){ renderList(); return; }
+      let uid = null;
+      if(refund && r.cast_id){
+        const note = `🏦 振込（${Number(r.biz_date.slice(5, 7))}/${Number(r.biz_date.slice(8))} ${live ? "もらい忘れ" : "キャンセル料"}）のお釣り：${why}`;
+        uid = q(await sb.from("kb_unsettled").insert({ cast_id: r.cast_id, biz_date: r.biz_date, amount: -refund, note, source: "manual", created_by: KB.operatorName() }).select("id").single()).id;
+        const l = (Array.isArray(cd.settle_log) ? cd.settle_log : []).concat([{ at: new Date().toISOString(), by: KB.operatorName(), kind: "uns", amount: -refund, text: note }]);
+        try{ q(await sb.from("kb_cast_days").upsert({ biz_date: r.biz_date, cast_id: r.cast_id, settle_log: l, updated_by: KB.operatorName(), updated_at: new Date().toISOString() }, { onConflict: "biz_date,cast_id" })); }catch(e){}
+      }
+      await pushLog(id, `🏦 振込 → ${label}（${yen(r.transfer_amount)}）` + (uid ? `／${castName(r.cast_id)} にお釣り ${yen(refund)} を未精算に` : ""), { transfer_status: "done", transfer_uns_id: uid });
+    } else {
+      // 振込処理完了をもどす → 自動で入れたお釣りも消す（もう精算していたら、もどせない）
+      if(prev === "done" && r.transfer_uns_id){
+        const u = q(await sb.from("kb_unsettled").select("id,done_on").eq("id", r.transfer_uns_id).maybeSingle());
+        if(u && u.done_on){ toast("このお釣りは、もう " + u.done_on + " に精算済みです。先にその精算をもどしてください"); renderList(); return; }
+        if(u) q(await sb.from("kb_unsettled").delete().eq("id", r.transfer_uns_id));
+      }
+      await pushLog(id, `🏦 振込 → ${label}`, Object.assign({ transfer_status: st, transfer_uns_id: null }, st ? {} : { transfer_amount: 0, transfer_back: 0 }));
+    }
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+  renderList();
+}
+
 function memoBoxes(r){
   const logs = logOf(r).slice().reverse();
   return `<div class="bikobox">${logs.length ? logs.map(l=>`<div class="bk1"><div class="t">${esc(l.text)}</div><div class="s">${esc(l.by || "")} ${esc(whenShort(l.at))}</div></div>`).join("")
@@ -4353,6 +4408,7 @@ function resCard(r){
           ${r.free_kind ? `<small>${esc(FREE_SUFFIX[r.free_kind] || "")}</small>` : ""}</div>
         <div class="rc-row"><small>OP：${esc(ops || "なし")}${afw ? "　希望：" + esc(afw) : ""}</small> ${ed ? `<button type="button" class="mini" onclick="openForm(${r.id})">OPを直す</button>` : ""}</div>
         <div class="rc-row">支払い ${ed ? `<select onchange="qPay(${r.id},this.value)">${["cash", "card"].map(k=>`<option value="${k}" ${k === (r.payment === "card_paid" ? "card" : r.payment) ? "selected" : ""}>${PAY_LABEL[k]}</option>`).join("")}</select>` : esc(PAY_LABEL[r.payment] || "")}</div>
+        ${trRow(r, ed)}
       </div>
       <div class="rc-box"><div class="rc-h">👤 お客さん</div>
         <div class="rc-row"><b>${c.ng ? "⚠️" : ""}${esc(c.name || "（名前なし）")}</b> <small>${(VISIT.find(v=>v[0] === r.visit_kind) || [])[1] || ""}</small></div>
@@ -5700,6 +5756,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=27"></script>
+<script src="unsettled.js?v=28"></script>
 </body>
 </html>

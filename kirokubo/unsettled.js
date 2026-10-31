@@ -183,7 +183,7 @@ settle = async function(id){
   const labels = picked.map(x => unsLine(x, open.indexOf(x), id));
   const snap = { reward: c.reward, option: c.option, transportBack: c.transportBack, plus: c.plus, zappi: c.zappi, minus: c.minus,
                  takeHome: c.takeHome, total: c.total, cardPaid: c.cardPaid, drop: c.drop, withholding: c.withholding,
-                 shopDrop: c.shopDrop, realDrop: c.realDrop, deposited: c.deposited, diff, by, at,
+                 shopDrop: c.shopDrop, realDrop: c.realDrop, deposited: c.deposited, diff, by, at, transferPaid: c.transferPaid || 0, trIds: c.trIds || [],
                  uns: picked.map((x, i) => ({ kind: x.kind, date: x.date, amount: x.amount, id: x.raw.id || null, label: labels[i] })), due };
   try{
     for(const x of picked){
@@ -415,6 +415,7 @@ const sumFx = P => {
 const dropCalc = c => {
   const a = [["本日の総額（お客さんが払った額）", yen(c.total)]];
   if(c.cardPaid) a.push(["カード払い（お店に入るので手元にない）", "−" + yen(c.cardPaid)]);
+  if(c.transferPaid) a.push(["振込（あとでお店の口座に振り込まれるので手元にない）", "−" + yen(c.transferPaid)]);
   a.push(["本日の手取り額", "−" + yen(c.takeHome)]);
   return { rows: a, res: c.drop >= 0 ? ["本日の投函額", yen(c.drop)] : ["お店から渡す（足りない分）", yen(-c.drop)],
     why: c.drop < 0 ? `カード払いの分はお店に入るため、手元の現金が手取り額より ${yen(-c.drop)} 足りません。その分をお店から渡します` : "" };
