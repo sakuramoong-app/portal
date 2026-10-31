@@ -306,7 +306,10 @@
   ul.bkl{list-style:none;margin:3px 0 0;padding:0;text-align:left;font-size:11.5px;font-weight:700;line-height:1.45;} ul.bkl li::before{content:"・";} ul.bkl li.dn{opacity:.5;text-decoration:line-through;}
   .rc-box{padding:8px 10px;border-right:1.5px solid #F1E3E7;font-size:14px;} .rc-box:last-child{border-right:none;}
   .rc-h{font-size:12px;font-weight:800;color:var(--sub);margin-bottom:4px;} .rc-row{margin:3px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
-  .trrow.on{background:#EAF4FF;border-radius:8px;padding:3px 6px;} .trrow select{font-family:inherit;font-weight:800;}
+  .trsel{font-family:inherit;font-size:12.5px;font-weight:800;border:1.5px solid var(--line);border-radius:10px;padding:4px 6px;background:#fff;color:#888;}
+  .trsel.on{border-color:#8fbce8;background:#EAF4FF;color:#1f5f99;} .trsel.wait,.trsel.owner{border-color:#f0b75a;background:#FFF6E5;color:#a8650a;}
+  .rc-tr{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:4px 10px;background:#EAF4FF;border-bottom:1.5px solid #EAD7DD;font-size:13px;font-weight:800;color:#1f5f99;}
+  .rc-tr span{font-weight:700;color:#333;}
   .rc-row select,.rc-num{font-family:inherit;font-size:14px;padding:3px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;} .rc-num{width:56px;}
   .rc-total{margin-top:6px;font-size:14px;} .rc-total b{font-size:18px;color:#e5638c;}
   .payurl{display:inline-block;font-size:12.5px;font-weight:800;color:#B0213F;background:#FFE8EC;border-radius:8px;padding:3px 8px;word-break:break-all;}
@@ -4311,14 +4314,20 @@ function qPay(id, v){ quickEdit(id, ()=>{ setPay(v); }, "支払い → " + (PAY_
    ・振込の額は、カードと同じで「キャストの手元にないお金」（精算の投函額から引く）
    ・振込処理完了にしたら、キャストにお釣り（未精算）を自動で作る：キャストバック ＋（振込を引く前に、もう精算済にしていた予約なら）振込の額 */
 const TR_ST = [["", "なし"], ["wait", "振込待ち"], ["owner", "社長の確認待ち"], ["done", "✅ 振込処理完了"]];
-function trRow(r, ed){
+function trSel(r, ed){   // いちばん上の行（状態・キャストOKのとなり）に出すプルダウン
   if(!("transfer_status" in r)) return "";   // SQL 173 がまだ
   const st = r.transfer_status || "";
-  if(!ed && !st) return "";
+  if(!ed) return st ? `<span class="trsel on ${st}">🏦 ${(TR_ST.find(x=>x[0] === st) || [])[1] || ""}</span>` : "";
+  return `<select class="trsel ${st ? "on " + st : ""}" onchange="trStatus(${r.id},this.value)">${TR_ST.map(([k, l])=>`<option value="${k}" ${k === st ? "selected" : ""}>🏦 ${k ? l : "振込なし"}</option>`).join("")}</select>`;
+}
+function trRow(r, ed){   // 振込にしたときだけ、カードの行の下に「額・キャストバック」の行
+  if(!("transfer_status" in r)) return "";
+  const st = r.transfer_status || "";
+  if(!st) return "";
   const lock = !ed || st === "done";
-  return `<div class="rc-row trrow ${st ? "on" : ""}">🏦 振込 ${ed ? `<select onchange="trStatus(${r.id},this.value)">${TR_ST.map(([k, l])=>`<option value="${k}" ${k === st ? "selected" : ""}>${l}</option>`).join("")}</select>` : `<b>${(TR_ST.find(x=>x[0] === st) || [])[1] || ""}</b>`}
-    ${st ? `<span>額 ${lock ? yen(r.transfer_amount) : `<input type="number" min="0" class="rc-num" style="width:84px" value="${r.transfer_amount || ""}" placeholder="振込の額" onchange="trSet(${r.id},'transfer_amount',this.value)">`}</span>
-      <span>キャストバック ${lock ? yen(r.transfer_back) : `<input type="number" min="0" class="rc-num" style="width:84px" value="${r.transfer_back || ""}" placeholder="0" onchange="trSet(${r.id},'transfer_back',this.value)">`}</span>` : ""}</div>`;
+  return `<div class="rc-tr">🏦 振込（${(TR_ST.find(x=>x[0] === st) || [])[1] || ""}）
+    <span>額 ${lock ? `<b>${yen(r.transfer_amount)}</b>` : `<input type="number" min="0" class="rc-num" style="width:84px" value="${r.transfer_amount || ""}" placeholder="振込の額" onchange="trSet(${r.id},'transfer_amount',this.value)">`}</span>
+    <span>キャストバック ${lock ? `<b>${yen(r.transfer_back)}</b>` : `<input type="number" min="0" class="rc-num" style="width:84px" value="${r.transfer_back || ""}" placeholder="0" onchange="trSet(${r.id},'transfer_back',this.value)">`}</span></div>`;
 }
 async function trSet(id, k, v){
   const n = Math.max(0, Number(v) || 0);
@@ -4393,12 +4402,14 @@ function resCard(r){
       <span class="rc-k">総額 <b class="rc-yen">${yen(r.total)}</b><small>（${esc(PAY_LABEL[r.payment] || "")}）</small></span>
       <span class="rc-k">👤<b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${c.phone ? ` <span class="tel">📞${esc(c.phone)}</span>` : ""}</span>
       ${told}
+      ${trSel(r, ed)}
       ${mates.map(m => `<button type="button" class="rc-mate" onclick="rcJump(${m.id})">👥 ${esc(castName(m.cast_id))}の予約へ</button>`).join("")}
       ${(r.todos || []).filter(x => !x.done_at).map(x => `<button type="button" class="told rc-todo" onclick="event.stopPropagation();toggleTodo(${r.id},${(r.todos || []).indexOf(x)})">⏳ ${esc(x.text)}</button>`).join("")}
       <span style="flex:1"></span>
       <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ 開く</button>
     </div>
     ${cardStep || payUrl ? `<div class="rc-2">${cardStep}${payUrl}</div>` : ""}
+    ${trRow(r, ed)}
     ${r.dress && dressText(r.dress) ? `<div class="rc-dress">👗 ${esc(dressText(r.dress))}</div>` : ""}
     <details class="rc-more" ${rcOpen.has(r.id) ? "open" : ""} ontoggle="rcToggle(${r.id},this.open)"><summary>くわしく（お客さん・場所・OP・備考${nLog ? " " + nLog + "件" : ""}）${lastLog ? `<div class="rc-last">📝 ${esc(lastLog.text)}<small>${esc(lastLog.by || "")} ${esc(whenShort(lastLog.at))}</small></div>` : ""}</summary>
     <div class="rc-grid">
@@ -4408,7 +4419,6 @@ function resCard(r){
           ${r.free_kind ? `<small>${esc(FREE_SUFFIX[r.free_kind] || "")}</small>` : ""}</div>
         <div class="rc-row"><small>OP：${esc(ops || "なし")}${afw ? "　希望：" + esc(afw) : ""}</small> ${ed ? `<button type="button" class="mini" onclick="openForm(${r.id})">OPを直す</button>` : ""}</div>
         <div class="rc-row">支払い ${ed ? `<select onchange="qPay(${r.id},this.value)">${["cash", "card"].map(k=>`<option value="${k}" ${k === (r.payment === "card_paid" ? "card" : r.payment) ? "selected" : ""}>${PAY_LABEL[k]}</option>`).join("")}</select>` : esc(PAY_LABEL[r.payment] || "")}</div>
-        ${trRow(r, ed)}
       </div>
       <div class="rc-box"><div class="rc-h">👤 お客さん</div>
         <div class="rc-row"><b>${c.ng ? "⚠️" : ""}${esc(c.name || "（名前なし）")}</b> <small>${(VISIT.find(v=>v[0] === r.visit_kind) || [])[1] || ""}</small></div>
