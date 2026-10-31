@@ -594,7 +594,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   @container (max-width:900px){ .svg2{grid-template-columns:1fr} .svg2 > .svr{align-self:start} }
   .sv .mmn{color:#c0392b;font-weight:800;font-size:12.5px;margin-top:6px;line-height:1.6}
   .svf > summary{cursor:pointer;font-weight:800;font-size:14px;padding:4px 0} .svf > summary small{font-weight:700;color:#9C8B8F;margin-left:8px}
-  .sv .gb .k{font-weight:800} .sv .gb .v{text-align:right;font-weight:900;font-size:26px} .sv .gb .r{padding-left:0;color:#555;font-size:12.5px}
+  .sv .gbd > summary{cursor:pointer;list-style:none} .sv .gbd > summary::before{content:"▶ ";font-size:11px} .sv .gbd[open] > summary::before{content:"▼ "} .sv .gbd > summary small{font-weight:700;color:#888;font-size:11px;margin-left:6px} .sv .gbd[open] > summary small{display:none}
+  .sv .gb .k{font-weight:800}.sv .gb .v{text-align:right;font-weight:900;font-size:26px} .sv .gb .r{padding-left:0;color:#555;font-size:12.5px}
 </style>`);
 function settleViewHtml(id, c){
   const P = settleParts(id), cd = c.cd, done = !!cd.settled;
@@ -625,17 +626,27 @@ function settleViewHtml(id, c){
   const diff = c.deposited != null ? c.deposited - P.due : null, sel = unsSel[id] || new Set();
   const past = unsOpen(id).filter(x => x.date !== day && (done || !sel.has(x.key)));
   const dep = `<div class="sv"><div class="shop"><div class="hd">🏪 お店用</div>
+    <div class="dep" style="border:none;background:transparent;padding:4px 14px 0;margin:6px 0 0"><span>${P.due < 0 ? "お店から渡す額" : "投函額"}</span><b style="font-size:22px;color:${P.due < 0 ? "#2f7fd0" : "#d0121b"}">${yen(Math.abs(P.due))}</b></div>
     <div class="dep"><span>実際に投函した額</span><input type="number" id="dep-${id}" value="${c.deposited != null ? c.deposited : ""}" placeholder="投函した額" ${KB.CAN_EDIT ? "" : "disabled"} onchange="setDeposit('${id}',this.value)"></div>
     <div class="stt" style="color:${diff == null ? "#9C8B8F" : diff === 0 ? "#2e8b57" : diff < 0 ? "#c0392b" : "#2f7fd0"}">${diff == null ? "投函した額をまだ入れていません（お金を確認してから入れる）"
       : diff === 0 ? "✅ 未精算・お釣りは出ていません" : diff < 0 ? `⚠ 未精算が出ます（足りない ${yen(-diff)}）` : `⚠ お釣りが出ます（多い ${yen(diff)}）`}</div></div></div>`;
   const stat = diff == null ? "投函した額 まだ" : diff === 0 ? "✅ ぴったり" : diff < 0 ? `⚠ 未精算 ${yen(-diff)}` : `⚠ お釣り ${yen(diff)}`;
   const pastH = `<div class="sv"><div class="stt" style="color:${past.length ? "#5b3fa6" : "#2e8b57"}">${past.length ? `📒 過去の未精算：のこり ${past.length}件（${esc(past.map(x => unsMd(x.date) + " " + (x.amount < 0 ? "お釣り " : "") + yen(Math.abs(x.amount))).join("、"))}）` : "📒 過去の未精算：なし"}</div></div>`;
-  const shop = `<div class="sv"><div class="gb"><div class="k">🏪 店落ち（暫定的な残額＋雑費）</div><div class="v">${yen(c.shopDrop)}</div>
-      ${R("総額", yen(c.total))}${R("キャスト報酬（報酬＋OP）", yen(c.reward + c.option))}${R("暫定的な残額（総額−報酬）", yen(c.provisional))}${R("【税務用】源泉徴収（手取りからは引かない）", yen(c.withholding))}${R("実質的な店落ち（暫定的な残額−源泉）", yen(c.realDrop))}</div></div>`;
+  const shop = `<div class="sv"><details class="gb gbd" ${shopOpen.has(id) ? "open" : ""} ontoggle="this.open ? shopOpen.add('${id}') : shopOpen.delete('${id}')"><summary class="k">🏪 店落ち（暫定的な残額＋雑費）<small>押すと開く</small></summary><div class="v">${yen(c.shopDrop)}</div>
+      ${R("総額", yen(c.total))}${R("キャスト報酬（報酬＋OP）", yen(c.reward + c.option))}${R("暫定的な残額（総額−報酬）", yen(c.provisional))}${R("【税務用】源泉徴収（手取りからは引かない）", yen(c.withholding))}${R("実質的な店落ち（暫定的な残額−源泉）", yen(c.realDrop))}</details></div>`;
   return { view: `<div class="sv">${h}</div>`, dep, past: pastH, shop, stat, due: P.due };
 }
 // 精算場所の色（今どこに誰が のエリアの色と同じ。回収はピンク）
 const PLACE_COLOR = { "池袋": "#FFC966", "鶯谷": "#CCCCFF", "五反田": "#C6E0B4", "回収": "#FFC2D1" };
+// 🏪 店落ちは、ふだん閉じる（開いたものは描きなおしても開いたまま）。精算画面の上のボタンで全員ぶんを開く・閉じる
+const shopOpen = new Set();
+function shopAllToggle(){
+  const ids = Array.from(document.querySelectorAll(".svc[id^='card-']")).map(el => el.id.slice(5));
+  const openAll = ids.some(id => !shopOpen.has(id));
+  ids.forEach(id => openAll ? shopOpen.add(id) : shopOpen.delete(id));
+  document.querySelectorAll("details.gbd").forEach(d => { d.open = openAll; });
+  const b = document.getElementById("shopAllBtn"); if(b) b.textContent = openAll ? "🏪 全キャストの店落ちを閉じる" : "🏪 全キャストの店落ちを開く";
+}
 const svOpen = new Set();   // 開いているアコーディオン（描きなおしても閉じない）
 cardHtml = function(id, c){
   const cd = c.cd, done = !!cd.settled, dis = (!KB.CAN_EDIT || done) ? "disabled" : "";
