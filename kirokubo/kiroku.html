@@ -190,6 +190,7 @@
   .tlg .bk.st.wait_guest,.tlg .bk.st.wait_cast,.tl .bk.st.wait_guest,.tl .bk.st.wait_cast{border-color:#a99ea2;}
   .chipc .st{display:inline-block;margin-top:3px;font-size:11px;padding:2px 8px;}
   /* 予約一覧 */
+  .infonote{background:#FFF8D6;border:2px solid #F2C94C;color:#7a5600;border-radius:10px;padding:6px 10px;margin:4px 0 6px;font-weight:800;font-size:14px;white-space:pre-wrap;}
   .guestng{margin-top:6px;background:#FFE3E3;border:2px solid #E5484D;color:#B3261E;border-radius:10px;padding:6px 10px;font-weight:800;font-size:14px;}
   .told{border:1.5px solid #f3b4b4;background:#FFF5F5;color:#d9534f;border-radius:10px;padding:5px 9px;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer;text-align:left;line-height:1.25;}
   .told.on{border-color:#9ad9bd;background:#F0FBF5;color:#1a7a5e;}
@@ -3397,7 +3398,7 @@ renderListTable = function(){
   const head = `<tr><th>時間</th><th>店舗</th><th>コース・エリア</th><th>お客さん・電話</th><th>状態・やること</th><th>キャストに</th><th>📝 備考</th></tr>`;
   // 今いない（不在・お茶・欠勤）は、枠ぜんたいをグレー・緑・赤に（今どこに誰がとつながっている）
   const block = (title, sub, list, cid, cls)=>`<div class="cblock ${cls || ""}" ${cid ? `id="cb-${cid}"` : ""}>
-      <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button>` : ""}${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
+      <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="editInfoNote('${cid}')">📌 今日のこと</button><button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button>` : ""}${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
       ${cid ? attendHtml(cid) : ""}
       ${list.length ? `<div class="wrapx"><table class="list">${head}${list.map(r=>`<tr class="r ${["cancel", "tobi"].includes(r.status) ? "cx" : ""}" onclick="openForm(${r.id})">${resCells(r)}</tr>`).join("")}</table></div>` : `<div class="none">予約なし</div>`}</div>`;
   const noCast = rows.filter(r=>!r.cast_id).sort(byStart);
@@ -3538,6 +3539,18 @@ function cancelSection(){
 
 /* ---------- 📝 勤怠（欠勤・遅刻・早退・シフト時間変更）の理由 ---------- */
 const ATTEND_KINDS = ["欠勤", "遅刻", "早退", "時間変更"];
+// 📌 今日のこと（SQL 175）：内勤みんなに知らせるメモ（病院に行ってから来る・今日は逆AF不可 など）
+function infoNoteHtml(cid){
+  const t = String((castDays[cid] || {}).info_note || "").trim();
+  return t ? `<div class="infonote">📌 今日のこと：${esc(t)}</div>` : "";
+}
+// 受付でそのキャストを選んだら、確認のいちばん上に出す
+{ const __rccInfo = renderCastChecks; renderCastChecks = function(c){ const r = __rccInfo.apply(this, arguments); if(c && $("castChecks") && (!$("f_day") || !$("f_day").value || $("f_day").value === day)) $("castChecks").insertAdjacentHTML("afterbegin", infoNoteHtml(c.id)); return r; }; }
+async function editInfoNote(cid){
+  const t = prompt(`📌 ${castName(cid)} の今日のこと（内勤みんなに知らせる）\n例：病院に行ってから来る／今日は逆AF不可／AFのみ受付\n空にすると消えます`, (castDays[cid] || {}).info_note || "");
+  if(t == null) return;
+  if(await saveDayPart(cid, { info_note: t.trim().slice(0, 300) })) toast(t.trim() ? "📌 今日のことを入れました" : "📌 今日のことを消しました");
+}
 function attendHtml(cid){
   const log = ((castDays[cid] || {}).attend_log) || [];
   if(!log.length) return "";
@@ -3958,6 +3971,7 @@ attendHtml = function(cid){
   return `<div class="attend">${log.map((a, i)=>`<span class="ak ${a.kind === "欠勤" ? "absent" : ""}">📝 <b>${esc(a.kind)}</b>${a.time ? "（" + esc(a.time) + "）" : ""}：${esc(a.reason || "理由なし")}<small> ${esc(a.by || "")} ${whenShort(a.at)}</small>
     ${KB.CAN_EDIT ? `<button type="button" class="undo" onclick="event.stopPropagation();undoAttend('${cid}',${i})">✖ 取り消し</button>` : ""}</span>`).join("")}</div>`;
 };
+{ const __attendInfo = attendHtml; attendHtml = function(cid){ return infoNoteHtml(cid) + __attendInfo(cid); }; }   // 📌 今日のことを、勤怠の上に
 async function undoAttend(cid, i){
   const cd = castDays[cid] || {}, log = (cd.attend_log || []).slice(), a = log[i];
   if(!a) return;
@@ -4509,7 +4523,7 @@ renderListTable = function(){
   const casts = sortRows(tlRows());
   const STATE = { wait: "待機中", work: "仕事中", start: "予約スタート", precall: "出勤前連絡", gone: "今いない" };
   const block = (title, sub, list, cid, cls)=>`<div class="cblock ${cls || ""}" ${cid ? `id="cb-${cid}"` : ""}>
-      <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button><button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
+      <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="editInfoNote('${cid}')">📌 今日のこと</button><button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button><button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
       ${cid ? attendHtml(cid) : ""}
       ${list.length ? list.map(resCard).join("") : `<div class="none">予約なし</div>`}</div>`;
   const noCast = rows.filter(r=>!r.cast_id).sort(byStart);
