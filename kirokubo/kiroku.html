@@ -4342,7 +4342,13 @@ function trRow(r, ed){   // 振込にしたときだけ、カードの行の下�
 // キャンセル料のキャストバック：通常料金を全額 → 通常バック／減額 → 通常バックの半額／0円 → なし。もらい忘れ（キャンセルでない）は、もとの予約にバックが入っているので 0
 function trAutoBack(r, amt){
   if(!["cancel", "tobi"].includes(r.status) || !(amt > 0)) return 0;
-  const b = Number(backOf(r)) || 0;
+  let b = Number(backOf(r)) || 0;
+  if(!b){   // 予約にバックが入っていない（キャンセルのまま保存など）→ バック表（ランク×コース）から
+    const cast = M.casts.find(x=>x.id === r.cast_id), g = storeGroup(r.store_key);
+    const rank = cast && ((r.free_kind === "special_free" || r.free_kind === "event_free") ? ranksOn(cast).event : ranksOn(cast)[g]);
+    const key = (r.course || "") + (r.free_kind ? (FREE_SUFFIX[r.free_kind] || "") : (r.visit_kind === "honshi" ? "本指" : ""));
+    if(rank) b = Number(M.back[rank + "|" + key]) || 0;
+  }
   return amt >= (Number(r.total) || 0) ? b : Math.floor(b / 2);
 }
 async function trSet(id, k, v){
@@ -4359,6 +4365,10 @@ async function trStatus(id, st){
     if(st === "done"){
       if(!Number(r.transfer_amount)){ toast("先に振込の額を入れてください"); renderList(); return; }
       const live = !["cancel", "tobi"].includes(r.status);
+      if(!live && !Number(r.transfer_back)){   // キャンセル料のバックが0のまま → 完了の前にもう一度自動で入れる
+        const b = trAutoBack(r, Number(r.transfer_amount));
+        if(b){ q(await sb.from("kb_reservations").update({ transfer_back: b }).eq("id", r.id)); r.transfer_back = b; }
+      }
       let cd = {};
       if(r.cast_id){ const x = await sb.from("kb_cast_days").select("settled,settle_snapshot,settle_log").eq("biz_date", r.biz_date).eq("cast_id", r.cast_id).maybeSingle(); cd = x.data || {}; }
       // 振込を引く前に精算済にしていた（もらい忘れが精算のあとでわかった）→ キャストは多く払っているので、振込の額を返す
