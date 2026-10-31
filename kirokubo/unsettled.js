@@ -638,6 +638,12 @@ function settleViewHtml(id, c){
 }
 // 精算場所の色（今どこに誰が のエリアの色と同じ。回収はピンク）
 const PLACE_COLOR = { "池袋": "#FFC966", "鶯谷": "#CCCCFF", "五反田": "#C6E0B4", "回収": "#FFC2D1" };
+// プラスの名前：「✏️ ほかを書く」なら自由に書く
+function plusLabel(id, i, sel){
+  let v = sel.value;
+  if(v === "__other"){ v = (prompt("プラスの名前（例：追加料金・立て替え分）") || "").trim(); if(!v){ const o = sel.querySelector("option[selected]"); sel.value = o ? o.value : ""; return; } }
+  setItem(id, "plus", i, "label", v);
+}
 // 🏪 店落ちは、ふだん閉じる（開いたものは描きなおしても開いたまま）。精算画面の上のボタンで全員ぶんを開く・閉じる
 const shopOpen = new Set();
 function shopAllToggle(){
@@ -653,7 +659,7 @@ cardHtml = function(id, c){
   // プラスは「交通費／チャージ」から選ぶ（前に手で書いたものは、そのまま選べる）
   const PLUS_KINDS = ["交通費", "チャージ"];
   const items = (list, kind)=> list.map((x, i)=>`<div class="it">${kind === "plus"
-      ? `<select class="lbl" ${dis} onchange="setItem('${id}','${kind}',${i},'label',this.value)">${(PLUS_KINDS.includes(x.label) ? PLUS_KINDS : PLUS_KINDS.concat([x.label || ""])).map(l=>`<option value="${esc(l)}" ${l === x.label ? "selected" : ""}>${esc(l || "（選ぶ）")}</option>`).join("")}</select>`
+      ? `<select class="lbl" ${dis} onchange="plusLabel('${id}',${i},this)">${(PLUS_KINDS.includes(x.label) ? PLUS_KINDS : PLUS_KINDS.concat([x.label || ""])).map(l=>`<option value="${esc(l)}" ${l === x.label ? "selected" : ""}>${esc(l || "（選ぶ）")}</option>`).join("")}<option value="__other">✏️ ほかを書く</option></select>`
       : `<input class="lbl" value="${esc(x.label)}" ${dis} onchange="setItem('${id}','${kind}',${i},'label',this.value)">`}
       <input class="amt" type="number" value="${Number(x.amount) || 0}" ${dis} onchange="setItem('${id}','${kind}',${i},'amount',this.value)">
       ${dis ? "" : `<button class="btn btn-ghost btn-sm" onclick="delItem('${id}','${kind}',${i})">🗑</button>`}</div>`).join("");

@@ -190,6 +190,7 @@
   .tlg .bk.st.wait_guest,.tlg .bk.st.wait_cast,.tl .bk.st.wait_guest,.tl .bk.st.wait_cast{border-color:#a99ea2;}
   .chipc .st{display:inline-block;margin-top:3px;font-size:11px;padding:2px 8px;}
   /* 予約一覧 */
+  .guestok{margin-top:6px;background:#EEF7F1;border:1.5px solid #9AD9BD;color:#1a6a4e;border-radius:10px;padding:5px 10px;font-weight:700;font-size:13px;}
   .infonote{background:#FFF8D6;border:2px solid #F2C94C;color:#7a5600;border-radius:10px;padding:6px 10px;margin:4px 0 6px;font-weight:800;font-size:14px;white-space:pre-wrap;}
   .guestng{margin-top:6px;background:#FFE3E3;border:2px solid #E5484D;color:#B3261E;border-radius:10px;padding:6px 10px;font-weight:800;font-size:14px;}
   .told{border:1.5px solid #f3b4b4;background:#FFF5F5;color:#d9534f;border-radius:10px;padding:5px 9px;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer;text-align:left;line-height:1.25;}
@@ -1487,8 +1488,16 @@ function renderGuestChips(){
   const c = M.casts && M.casts.find(x=>x.id === $("f_cast").value);
   const o = c && typeof profOpts === "function" ? profOpts(c) : null;
   const ng = o ? GUEST.filter(([k])=>guestFlags.has(k) && o[GUEST_PROF[k]] === "×").map(([, l])=>l.replace(/^\S+\s/, "")) : [];
-  el.parentNode.querySelectorAll(".guestng").forEach(x=>x.remove());
-  if(ng.length) el.insertAdjacentHTML("afterend", `<div class="guestng">🚫 ${esc(castName(c.id))}は ${ng.map(esc).join("・")} のお客様NG です</div>`);
+  el.parentNode.querySelectorAll(".guestng,.guestok").forEach(x=>x.remove());
+  const on = GUEST.filter(([k])=>guestFlags.has(k));
+  if(!c || !on.length) return;
+  if(!profById && typeof loadProfs === "function"){ loadProfs().then(renderGuestChips).catch(()=>{}); return; }
+  if(ng.length){ el.insertAdjacentHTML("afterend", `<div class="guestng">🚫 ${esc(castName(c.id))}は ${ng.map(esc).join("・")} のお客様NG です</div>`); return; }
+  // NGでないときも、プロフの印を出す（わからないときは、わからないと出す）
+  const MK = { "◎": "◎ 大好き", "○": "○ OK", "△": "△ 条件つき" };
+  const txt = !o ? "プロフとつながっていないので、NGかどうかわかりません"
+    : on.map(([k, l])=>`${l.replace(/^\S+\s/, "")}：${GUEST_PROF[k] in o && o[GUEST_PROF[k]] ? (MK[o[GUEST_PROF[k]]] || o[GUEST_PROF[k]]) : (["female", "couple"].includes(k) ? "プロフに質問がありません" : "プロフに入っていません")}`).join("　");
+  el.insertAdjacentHTML("afterend", `<div class="guestok">${esc(castName(c.id))}：${esc(txt)}</div>`);
 }
 const GUEST_PROF = { foreign: "外国人", josou: "女装", female: "女性のお客様", couple: "カップルのお客様" };   // プロフの可否の名前（女性・カップルはプロフにまだない）
 function toggleGuest(k){ if(guestFlags.has(k)) guestFlags.delete(k); else guestFlags.add(k); renderGuestChips(); renderCastChecks(M.casts.find(c=>c.id === $("f_cast").value)); }
@@ -2311,7 +2320,7 @@ function renderTL(){
   if(selCasts.size && want == null){
     res += list.map(x=>`<div class="info" style="margin-bottom:6px">🔎 <b>${esc(castLabel(x))}</b> の空き：${freeSlots(x).map(([s, e])=>tlLabel(s) + "〜" + tlLabel(e)).join("、") || "なし"}${gapOf(x) ? `<small>（予約の間 ${x.c.interval_min}分あけ）</small>` : ""}</div>`).join("");
   }
-  if(playSel.size && want == null) res += `<div class="${list.length ? "info" : "warn"}" style="margin-bottom:8px">🎯 ${esc($("s_playCount").textContent.replace(/[（）]/g, ""))} がOKのキャスト：<b>${list.length ? list.map(x=>esc(castLabel(x))).join("、") : "いません"}</b>${profById ? "" : "（キャストプロフを読み込み中…）"}</div>`;
+  if(playSel.size && want == null) res += `<div class="${list.length ? "info" : "warn"}" style="margin-bottom:8px">🎯 ${esc($("s_playCount").textContent.replace(/[（）]/g, ""))} がOKのキャスト：<b>${list.length ? list.map(x=>esc(castLabel(x))).join("、") : "いません"}</b>${profById ? "" : "（キャストプロフを読み込み中…）"}${list.length ? "" : playWhyHtml()}</div>`;
   $("tlResult").innerHTML = res;
 
   // 表：上の時刻と左の名前は固定。30分のマス（出勤時間だけ白）
@@ -3099,7 +3108,20 @@ function profOpts(c){
   // サクラムーンの可否 → なければ、可否が入っているほかのお店のプロフ（サクラムーンにいない子が「いません」にならないように）
   const sps = d.storeProfiles || {}, has = p => p && p.options && Object.keys(p.options).some(k => p.options[k]);
   const sp = has(sps["サクラムーン"]) ? sps["サクラムーン"] : (Object.values(sps).find(has) || {});
-  return Object.assign({}, d.options || {}, sp.options || {});
+  const o = Object.assign({}, d.options || {}, sp.options || {});
+  Object.keys(o).forEach(k => { o[k] = markNorm(o[k]); });
+  return o;
+}
+// 可否の印をそろえる（◯・〇・OK → ○、✕・x・NG → × など。プロフやHPの取りこみで字がちがうことがある）
+function markNorm(v){
+  const s = String(v == null ? "" : v).trim();
+  if(!s) return "";
+  const h = s[0];
+  if(h === "◎") return "◎";
+  if("○◯〇Oo".includes(h) || /^ok/i.test(s)) return "○";
+  if("△▲".includes(h)) return "△";
+  if("×✕✖xX".includes(h) || /^ng/i.test(s)) return "×";
+  return s;
 }
 function togglePlay(k){ if(playSel.has(k)) playSel.delete(k); else playSel.add(k); renderTL(); }
 function clearPlay(){ playSel.clear(); renderTL(); }
@@ -3117,10 +3139,23 @@ function applyPlayFilter(list){
     return list;
   }
   const okMarks = $("s_playTri") && $("s_playTri").checked ? ["◎", "○", "△"] : ["◎", "○"];
+  // 「いません」のとき、なぜかわかるように数える（プロフとつながっていない・その可否が空・×や△）
+  playWhy = { noProf: [], blank: [], ng: [] };
   return list.filter(x=>{
-    const o = profOpts(x.c); if(!o) return false;
-    return [...playSel].every(k=>okMarks.includes(o[k]));
+    const o = profOpts(x.c);
+    if(!o){ if(x.c) playWhy.noProf.push(castLabel(x)); return false; }
+    const ok = [...playSel].every(k=>okMarks.includes(o[k]));
+    if(!ok) ([...playSel].some(k=>!o[k]) ? playWhy.blank : playWhy.ng).push(castLabel(x));
+    return ok;
   });
+}
+let playWhy = null;
+function playWhyHtml(){
+  if(!playWhy) return "";
+  const p = [playWhy.noProf.length ? `プロフとつながっていない：${playWhy.noProf.map(esc).join("、")}` : "",
+    playWhy.blank.length ? `プロフに可否が入っていない：${playWhy.blank.map(esc).join("、")}` : "",
+    playWhy.ng.length ? `×・△など：${playWhy.ng.map(esc).join("、")}` : ""].filter(Boolean);
+  return p.length ? `<div style="font-size:12px;font-weight:700;margin-top:4px">${p.join("<br>")}</div>` : "";
 }
 // 名前の下に出す可否（例：AF◎ 逆AF○）
 function playMarks(x){
@@ -5847,6 +5882,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=30"></script>
+<script src="unsettled.js?v=31"></script>
 </body>
 </html>
