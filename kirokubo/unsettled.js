@@ -125,6 +125,13 @@ async function unsLogOther(date, cid, text, extra){
   q(await sb.from("kb_cast_days").upsert(Object.assign({ biz_date: date, cast_id: cid, settle_log: l, updated_at: new Date().toISOString(), updated_by: KB.operatorName() }, extra || {}), { onConflict: "biz_date,cast_id" }));
 }
 
+// 🕒 実際に投函した時刻（カメラのアーカイブで見た時刻）。入れてあれば、精算の時刻はこちらで残す。朝6時より前は営業日の次の日
+const ptVal = {};
+function ptAt(id){
+  const v = ptVal[id]; if(!/^\d{2}:\d{2}$/.test(v || "")) return "";
+  const d = new Date(day + "T" + v + ":00+09:00"); if(Number(v.slice(0, 2)) < 6) d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString();
+}
 // 精算済にする：チェックした未精算もいっしょに。投函した額が合わなければ、新しい未精算（お釣り）を入れる
 settle = async function(id){
   const c = calcCast(id), sel = unsSel[id] || new Set(), open = unsOpen(id), picked = open.filter(x => sel.has(x.key));
@@ -134,7 +141,7 @@ settle = async function(id){
     + (picked.length ? "\n＋ 未精算 " + picked.length + "件（" + yen(add) + "）→ 合計 " + yen(due) : "")
     + (diff ? "\n投函した額 " + yen(c.deposited) + " → " + (diff < 0 ? "未精算 " + yen(-diff) : "お釣り " + yen(diff)) + " を未精算に入れます" : "");
   if(!confirm(msg)) return;
-  const by = KB.operatorName(), at = new Date().toISOString(), pl = document.getElementById("pl-" + id), place = pl ? pl.value : "";
+  const by = KB.operatorName(), at = ptAt(id) || new Date().toISOString(), pl = document.getElementById("pl-" + id), place = pl ? pl.value : "";
   const labels = picked.map(x => unsLine(x, open.indexOf(x), id));
   const snap = { reward: c.reward, option: c.option, transportBack: c.transportBack, plus: c.plus, zappi: c.zappi, minus: c.minus,
                  takeHome: c.takeHome, total: c.total, cardPaid: c.cardPaid, drop: c.drop, withholding: c.withholding,
@@ -157,7 +164,7 @@ settle = async function(id){
   const cd = unsCD()[id] || {}, logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).slice();
   logs.push({ at, by, text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") });
   await saveDay(id, Object.assign({ settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: snap }, HAS_SLOG ? { settle_log: logs } : {}, HAS_170 ? { direct_home: false } : {}));
-  delete unsSel[id]; await unsLoad();
+  delete unsSel[id]; delete ptVal[id]; await unsLoad();
 };
 // 精算済をもどす：この日にいっしょに精算した未精算もまだにもどす。この日の精算で自動で入れた未精算は消す
 unsettle = async function(id){
@@ -622,6 +629,7 @@ cardHtml = function(id, c){
     ${V.dep}
     <div class="camchk"><span>📹 投函を監視カメラで確認した？</span>
       ${[["ok", "◎ 確認した"], ["ng", "× 確認していない"]].map(([v, l]) => `<button type="button" class="cb ${v} ${cam === v ? "on" : ""}" ${KB.CAN_EDIT ? "" : "disabled"} onclick="setCamera('${id}','${cam === v ? "" : v}')">${l}</button>`).join("")}</div>
+    ${KB.CAN_EDIT && !done ? `<div class="ptime">🕒 実際に投函した時刻 <input type="time" value="${ptVal[id] || ""}" onchange="ptVal['${id}']=this.value"><small>カメラのアーカイブで見た時刻。空なら「精算済にする」を押した時刻</small></div>` : ""}
     ${V.past}
     <div class="acts">
       ${KB.CAN_EDIT ? `<select id="pl-${id}" class="plsel" style="background-color:${PLACE_COLOR[cd.settle_place || PLACES[0]] || "#fff"}" ${done ? "disabled" : ""}
@@ -658,6 +666,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   @keyframes svrBlink{0%,100%{box-shadow:0 0 0 0 rgba(255,193,7,.0);background:#FFFDF3}50%{box-shadow:0 0 18px 4px rgba(255,193,7,.75);background:#FFF5C9}}
   .needmsg{font-weight:900;color:#B26A00;font-size:13.5px;margin:0 0 6px}
   .homebtn{background:#EDEDED !important;border-color:#bbb !important;font-weight:800}
+  .ptime{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .ptime input{font-family:inherit;font-size:15px;font-weight:800;padding:3px 8px;border:1.5px solid #ccc;border-radius:8px} .ptime small{flex-basis:100%;font-weight:700;color:#9C8B8F;font-size:11.5px}
   .camchk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .camchk > span{flex-basis:100%}
   .camchk .cb{font-family:inherit;font-weight:800;font-size:13px;border:2px solid #ddd;background:#fff;border-radius:99px;padding:4px 12px;cursor:pointer;color:#5C4B4F}
   .camchk .cb.ok.on{background:#E5F6EC;border-color:#2e8b57;color:#2e8b57} .camchk .cb.ng.on{background:#FDE7E7;border-color:#c0392b;color:#c0392b}

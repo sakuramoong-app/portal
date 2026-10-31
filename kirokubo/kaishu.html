@@ -61,6 +61,7 @@
   .cs button:disabled{cursor:default;}
   .mk{font-weight:900;font-size:16px;} .mk.day{color:#222;} .mk.me,.mk.none{color:#E0001B;}
   .xi{display:block;font-size:12px;font-weight:700;line-height:1.6;}
+  .who2{font-size:11.5px;color:var(--sub);font-weight:700;margin-top:3px;}
   td.amt b{font-size:15px;} td.amt small{color:var(--sub);font-weight:700;}
 </style>
 </head>
@@ -171,7 +172,9 @@ function rowsFor(day, R){
       exact = false;
     }
     const kind = cd.settled ? (s.paidOn && s.paidOn !== day ? "later" : "done") : cd.direct_home ? "home" : "open";
-    return { id, cd, s, cl, day, shop, card, amt: shop - card, exact, kind, place: cd.settle_place || "", state: cl.state || "", done: !!cl.done };
+    // 精算場所が「回収」（内勤がその場でお金を受け取った）なら、チェックしなくても ✔ 当日回収（精算した内勤・時刻を出す）
+    const auto = !cl.state && kind === "done" && cd.settle_place === "回収";
+    return { id, cd, s, cl, day, shop, card, amt: shop - card, exact, kind, place: cd.settle_place || "", state: cl.state || (auto ? "day" : ""), auto, done: !!cl.done };
   }).sort((a, b) => (ALL_PLACES.indexOf(a.place) + 1 || 9) - (ALL_PLACES.indexOf(b.place) + 1 || 9) || String(names[a.id] || "").localeCompare(String(names[b.id] || ""), "ja"));
 }
 // 交通費・経費・精算ミス（その子のぶん）
@@ -255,7 +258,7 @@ function paintDay(){
       return `<tr class="${!r.state ? "" : r.state === "none" ? "bad" : ""}"><td class="l"><b>${esc(names[r.id] || r.id)}</b></td>
         <td class="l">${r.place ? `<span class="st" style="background:${PLACE_COLOR[r.place] || "#eee"};color:#333">${esc(r.place)}</span>` : ""}</td>
         <td class="amt"><b>${num(r.shop)}</b> <small>／ ${r.card ? num(r.card) : "0"}</small>${r.card ? `<br><small>袋には ${num(r.amt)}</small>` : ""}</td>
-        <td class="l"><span class="cs">${["day", "me", "none"].map(k => `<button class="${k} ${r.state === k ? "on" : ""}" ${ed ? "" : "disabled"} onclick="setState('${r.id}','${r.state === k ? "" : k}')">${STATE[k]}</button>`).join("")}</span></td>
+        <td class="l"><span class="cs">${["day", "me", "none"].map(k => `<button class="${k} ${r.state === k ? "on" : ""}" ${ed ? "" : "disabled"} onclick="setState('${r.id}','${r.state === k && !r.auto ? "" : k}')">${STATE[k]}</button>`).join("")}</span>${r.cd.settled && r.cd.settled_at ? `<div class="who2">${r.auto ? "✔ 当日回収（自動）・" : ""}精算 ${esc(r.cd.settled_by || "")} ${when(r.cd.settled_at)}</div>` : ""}</td>
         <td class="l wrapc" id="row-${r.id}">${x}</td></tr>`; }).join("")}
     <tr class="tot"><td class="l">合計</td><td></td><td>${num(T.shop)} <small>／ ${num(T.card)}</small></td><td class="l"><span class="mk day">✔${T.dayN}</span>　<span class="mk me">✔${T.meN}</span>　<span class="mk none">■${T.noneN}</span>${T.yetN ? `　まだ ${T.yetN}` : ""}</td><td></td></tr>
   </table></div>
