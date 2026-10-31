@@ -4336,11 +4336,21 @@ function trRow(r, ed){   // 振込にしたときだけ、カードの行の下�
   const lock = !ed || st === "done";
   return `<div class="rc-tr">🏦 振込（${(TR_ST.find(x=>x[0] === st) || [])[1] || ""}）
     <span>額 ${lock ? `<b>${yen(r.transfer_amount)}</b>` : `<input type="number" min="0" class="rc-num" style="width:84px" value="${r.transfer_amount || ""}" placeholder="振込の額" onchange="trSet(${r.id},'transfer_amount',this.value)">`}</span>
-    <span>キャストバック ${lock ? `<b>${yen(r.transfer_back)}</b>` : `<input type="number" min="0" class="rc-num" style="width:84px" value="${r.transfer_back || ""}" placeholder="0" onchange="trSet(${r.id},'transfer_back',this.value)">`}</span></div>`;
+    <span>キャストバック ${lock ? `<b>${yen(r.transfer_back)}</b>` : `<input type="number" min="0" class="rc-num" style="width:84px" value="${r.transfer_back || ""}" placeholder="0" onchange="trSet(${r.id},'transfer_back',this.value)">`}</span>
+    ${!lock && ["cancel", "tobi"].includes(r.status) ? `<small style="font-weight:700;color:#777">額を入れるとバックは自動（通常料金 ${yen(r.total)} 全額→通常バック ${yen(backOf(r))}／減額→半額）</small>` : ""}</div>`;
+}
+// キャンセル料のキャストバック：通常料金を全額 → 通常バック／減額 → 通常バックの半額／0円 → なし。もらい忘れ（キャンセルでない）は、もとの予約にバックが入っているので 0
+function trAutoBack(r, amt){
+  if(!["cancel", "tobi"].includes(r.status) || !(amt > 0)) return 0;
+  const b = Number(backOf(r)) || 0;
+  return amt >= (Number(r.total) || 0) ? b : Math.floor(b / 2);
 }
 async function trSet(id, k, v){
-  const n = Math.max(0, Number(v) || 0);
-  if(await pushLog(id, `🏦 振込の${k === "transfer_amount" ? "額" : "キャストバック"} → ${yen(n)}`, { [k]: n })) renderList();
+  const n = Math.max(0, Number(v) || 0), r = rows.find(x=>x.id === id);
+  const patch = { [k]: n };
+  let msg = `🏦 振込の${k === "transfer_amount" ? "額" : "キャストバック"} → ${yen(n)}`;
+  if(k === "transfer_amount" && r){ patch.transfer_back = trAutoBack(r, n); msg += `（キャストバック 自動 ${yen(patch.transfer_back)}）`; }
+  if(await pushLog(id, msg, patch)) renderList();
 }
 async function trStatus(id, st){
   const r = rows.find(x=>x.id === id); if(!r) return;
@@ -4371,7 +4381,10 @@ async function trStatus(id, st){
         if(u && u.done_on){ toast("このお釣りは、もう " + u.done_on + " に精算済みです。先にその精算をもどしてください"); renderList(); return; }
         if(u) q(await sb.from("kb_unsettled").delete().eq("id", r.transfer_uns_id));
       }
-      await pushLog(id, `🏦 振込 → ${label}`, Object.assign({ transfer_status: st, transfer_uns_id: null }, st ? {} : { transfer_amount: 0, transfer_back: 0 }));
+      // はじめて振込にしたキャンセル：通常料金を全額もらう前提で、額と通常バックを入れておく（減額したら額を直すとバックも半額に）
+      const first = !prev && st && ["cancel", "tobi"].includes(r.status) && !Number(r.transfer_amount);
+      const fill = first ? { transfer_amount: Number(r.total) || 0, transfer_back: trAutoBack(r, Number(r.total) || 0) } : {};
+      await pushLog(id, `🏦 振込 → ${label}` + (first ? `（額 ${yen(fill.transfer_amount)}・キャストバック ${yen(fill.transfer_back)}）` : ""), Object.assign({ transfer_status: st, transfer_uns_id: null }, fill, st ? {} : { transfer_amount: 0, transfer_back: 0 }));
     }
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
   renderList();
