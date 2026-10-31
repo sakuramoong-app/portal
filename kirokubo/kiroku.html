@@ -1489,7 +1489,7 @@ function renderGuestChips(){
   el.parentNode.querySelectorAll(".guestng").forEach(x=>x.remove());
   if(ng.length) el.insertAdjacentHTML("afterend", `<div class="guestng">🚫 ${esc(castName(c.id))}は ${ng.map(esc).join("・")} のお客様NG です</div>`);
 }
-const GUEST_PROF = { foreign: "外国人のお客様", josou: "女装されているお客様", female: "女性のお客様", couple: "カップルのお客様" };
+const GUEST_PROF = { foreign: "外国人", josou: "女装", female: "女性のお客様", couple: "カップルのお客様" };   // プロフの可否の名前（女性・カップルはプロフにまだない）
 function toggleGuest(k){ if(guestFlags.has(k)) guestFlags.delete(k); else guestFlags.add(k); renderGuestChips(); renderCastChecks(M.casts.find(c=>c.id === $("f_cast").value)); }
 function formMinutes(){ try{ const c = calc(); return minutesOf(c.course) + c.ext*30 + c.date*30; }catch(e){ return 0; } }
 function formOptLabels(){ try{ return (calc().opts || []).map(o=>String(o.label || "")); }catch(e){ return []; } }
@@ -1515,8 +1515,8 @@ function ngWarnings(c){
     const kc = core(k); if(!kc) return;
     if(labels.some(l=>{ const lc = core(l); return lc && (lc.includes(kc) || kc.includes(lc)); })) out.push(`「${k}」は × です`);
   });
-  if(guestFlags.has("josou") && o["女装されているお客様"] === "×") out.push("女装のお客様は × です");
-  if(guestFlags.has("foreign") && o["外国人のお客様"] === "×") out.push("外国人のお客様は × です");
+  if(guestFlags.has("josou") && o["女装"] === "×") out.push("女装のお客様は × です");
+  if(guestFlags.has("foreign") && o["外国人"] === "×") out.push("外国人のお客様は × です");
   if(guestFlags.has("female") && o["女性のお客様"] === "×") out.push("女性のお客様は × です");
   if(guestFlags.has("couple") && o["カップルのお客様"] === "×") out.push("カップルのお客様は × です");
   return out;
@@ -3095,7 +3095,9 @@ let profLoading = false;
 function profOpts(c){
   if(!c || !c.prof_id || !profById) return null;
   const d = profById[c.prof_id]; if(!d) return null;
-  const sp = (d.storeProfiles && d.storeProfiles["サクラムーン"]) || {};
+  // サクラムーンの可否 → なければ、可否が入っているほかのお店のプロフ（サクラムーンにいない子が「いません」にならないように）
+  const sps = d.storeProfiles || {}, has = p => p && p.options && Object.keys(p.options).some(k => p.options[k]);
+  const sp = has(sps["サクラムーン"]) ? sps["サクラムーン"] : (Object.values(sps).find(has) || {});
   return Object.assign({}, d.options || {}, sp.options || {});
 }
 function togglePlay(k){ if(playSel.has(k)) playSel.delete(k); else playSel.add(k); renderTL(); }
