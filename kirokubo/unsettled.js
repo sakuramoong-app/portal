@@ -9,7 +9,7 @@
    ============================================================ */
 let UNS = null;            // ② kb_unsettled（まだのもの＋この日にいっしょに精算したもの）。null＝表がない
 let UNSD = [];
-let HAS_SLOG = false;   // kb_cast_days.settle_log（SQL 167）があるか
+let HAS_SLOG = false, SLOG_ERR = "";   // kb_cast_days.settle_log（SQL 167）があるか
 Promise.resolve(sb.from("kb_cast_days").select("settle_log").limit(1)).then(r => { HAS_SLOG = HAS_SLOG || (!!r && !r.error); }).catch(() => {});             // ① 精算していない日 [{ date, cid, c（その日の精算の計算）, cd }]
 let HAS_170 = false;  // kb_cast_days.direct_home・camera_check と kb_envelope_checks（SQL 170）があるか
 const P170 = Promise.resolve(sb.from("kb_cast_days").select("direct_home,camera_check").limit(1)).then(r => { HAS_170 = HAS_170 || (!!r && !r.error); }).catch(() => {});
@@ -34,7 +34,7 @@ function unsCalcDay(date, cid, dayRows, cdRow){
 async function unsLoad(){
   if(!day) return;
   // 読みこんだ直後（ログインの確認の前）に調べると失敗することがあるので、ここでもう一度（履歴・直帰・カメラの欄）
-  if(!HAS_SLOG){ try{ const r = await sb.from("kb_cast_days").select("settle_log").limit(1); HAS_SLOG = !r.error; }catch(e){} }
+  if(!HAS_SLOG){ try{ const r = await sb.from("kb_cast_days").select("settle_log").limit(1); HAS_SLOG = !r.error; SLOG_ERR = r.error ? (r.error.message || String(r.error)) : ""; }catch(e){ SLOG_ERR = String(e && e.message || e); } }
   if(!HAS_170){ try{ const r = await sb.from("kb_cast_days").select("direct_home,camera_check").limit(1); HAS_170 = !r.error; }catch(e){} }
   try{
     const r = await sb.from("kb_unsettled").select("*").or(`done_on.is.null,done_on.eq.${day}`).order("biz_date").order("id");
@@ -124,7 +124,7 @@ function slogLine(x){
 }
 function settleLogHtml(id){
   const cd = unsCD()[id] || {};
-  if(!HAS_SLOG) return "";
+  if(!HAS_SLOG) return `<div class="slog"><b>📜 精算の履歴</b><div class="hint2" style="font-size:12px">履歴の欄を読めませんでした（${esc(SLOG_ERR || "確認中…")}）。SQL 167 が実行されているか確認してください</div></div>`;
   const l = (Array.isArray(cd.settle_log) ? cd.settle_log : []).slice().sort((a, b) => String(a.at).localeCompare(String(b.at)));
   return `<div class="slog"><b>📜 精算の履歴</b><small style="color:#9C8B8F">（上書きしないで、全部残ります）</small>
     ${l.length ? l.map(slogLine).join("") : `<div class="hint2" style="font-size:12px">まだありません</div>`}
