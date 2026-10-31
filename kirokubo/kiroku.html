@@ -4378,7 +4378,7 @@ async function trStatus(id, st){
       if(!confirm(`振込処理完了にしますか？（振込 ${yen(r.transfer_amount)}）` + (refund && r.cast_id ? `\n${castName(r.cast_id)} にお釣り ${yen(refund)}（${why}）を未精算に入れます` : ""))){ renderList(); return; }
       let uid = null;
       if(refund && r.cast_id){
-        const note = `🏦 振込（${Number(r.biz_date.slice(5, 7))}/${Number(r.biz_date.slice(8))} ${live ? "もらい忘れ" : "キャンセル料"}）のお釣り：${why}`;
+        const note = `🏦 振込（${Number(r.biz_date.slice(5, 7))}/${Number(r.biz_date.slice(8))} ${hm(r.start_at)}の予約・${live ? "もらい忘れ" : "キャンセル料"}）のお釣り：${why}`;
         uid = q(await sb.from("kb_unsettled").insert({ cast_id: r.cast_id, biz_date: r.biz_date, amount: -refund, note, source: "manual", created_by: KB.operatorName() }).select("id").single()).id;
         const l = (Array.isArray(cd.settle_log) ? cd.settle_log : []).concat([{ at: new Date().toISOString(), by: KB.operatorName(), kind: "uns", amount: -refund, text: note }]);
         try{ q(await sb.from("kb_cast_days").upsert({ biz_date: r.biz_date, cast_id: r.cast_id, settle_log: l, updated_by: KB.operatorName(), updated_at: new Date().toISOString() }, { onConflict: "biz_date,cast_id" })); }catch(e){}
