@@ -650,7 +650,11 @@ function shopAllToggle(){
 const svOpen = new Set();   // 開いているアコーディオン（描きなおしても閉じない）
 cardHtml = function(id, c){
   const cd = c.cd, done = !!cd.settled, dis = (!KB.CAN_EDIT || done) ? "disabled" : "";
-  const items = (list, kind)=> list.map((x, i)=>`<div class="it"><input class="lbl" value="${esc(x.label)}" ${dis} onchange="setItem('${id}','${kind}',${i},'label',this.value)">
+  // プラスは「交通費／チャージ」から選ぶ（前に手で書いたものは、そのまま選べる）
+  const PLUS_KINDS = ["交通費", "チャージ"];
+  const items = (list, kind)=> list.map((x, i)=>`<div class="it">${kind === "plus"
+      ? `<select class="lbl" ${dis} onchange="setItem('${id}','${kind}',${i},'label',this.value)">${(PLUS_KINDS.includes(x.label) ? PLUS_KINDS : PLUS_KINDS.concat([x.label || ""])).map(l=>`<option value="${esc(l)}" ${l === x.label ? "selected" : ""}>${esc(l || "（選ぶ）")}</option>`).join("")}</select>`
+      : `<input class="lbl" value="${esc(x.label)}" ${dis} onchange="setItem('${id}','${kind}',${i},'label',this.value)">`}
       <input class="amt" type="number" value="${Number(x.amount) || 0}" ${dis} onchange="setItem('${id}','${kind}',${i},'amount',this.value)">
       ${dis ? "" : `<button class="btn btn-ghost btn-sm" onclick="delItem('${id}','${kind}',${i})">🗑</button>`}</div>`).join("");
   const V = settleViewHtml(id, c), home = !done && !!cd.direct_home;

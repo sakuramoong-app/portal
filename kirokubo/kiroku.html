@@ -190,6 +190,7 @@
   .tlg .bk.st.wait_guest,.tlg .bk.st.wait_cast,.tl .bk.st.wait_guest,.tl .bk.st.wait_cast{border-color:#a99ea2;}
   .chipc .st{display:inline-block;margin-top:3px;font-size:11px;padding:2px 8px;}
   /* 予約一覧 */
+  .guestng{margin-top:6px;background:#FFE3E3;border:2px solid #E5484D;color:#B3261E;border-radius:10px;padding:6px 10px;font-weight:800;font-size:14px;}
   .told{border:1.5px solid #f3b4b4;background:#FFF5F5;color:#d9534f;border-radius:10px;padding:5px 9px;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer;text-align:left;line-height:1.25;}
   .told.on{border-color:#9ad9bd;background:#F0FBF5;color:#1a7a5e;}
   .told small{display:block;font-size:10.5px;font-weight:700;opacity:.85;}
@@ -607,6 +608,8 @@
       </div>
       <div id="castCal" style="display:none"></div>
       <div class="row1"><div class="f"><label>コース<span class="req">必須</span></label><select id="f_course" onchange="recalc()"></select></div></div>
+      <div class="row1"><div class="f"><label>割引（円）・割引の名前</label>
+        <div style="display:flex;gap:6px"><input type="number" id="f_discount" min="0" value="0" oninput="recalc()" style="max-width:140px"><input id="f_discnote" placeholder="例：口コミ割" maxlength="60"></div></div></div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px;font-size:14px;font-weight:800">
         <label id="nhWrap"><input type="checkbox" id="f_nh" onchange="recalc()"> キューティ：NH料金で取った</label>
         <label id="admWrap"><input type="checkbox" id="f_adm" onchange="recalc()"> 入会金あり（極門の新規）</label>
@@ -694,8 +697,6 @@
       <div class="row1"><div class="f"><label>支払い方法<span class="req">必須</span></label><div id="f_payChips" style="display:none"></div>
         <select id="f_pay" style="max-width:220px" onchange="recalc()"><option value="">（選ぶ）</option><option value="cash">現金</option><option value="card">カード（×1.15）</option></select></div></div>
       <div class="calc" id="calc"></div>
-      <div class="row1" style="margin-top:8px"><div class="f"><label>割引（円）・割引の名前</label>
-        <div style="display:flex;gap:6px"><input type="number" id="f_discount" min="0" value="0" oninput="recalc()" style="max-width:140px"><input id="f_discnote" placeholder="例：口コミ割" maxlength="60"></div></div></div>
       <details id="backDet" class="calc" style="margin-top:8px"><summary style="cursor:pointer;font-weight:800;font-size:14px">💗 キャストの報酬<span id="backSum"></span>（受付では見なくてOK）</summary><div id="calcBack"></div></details>
     </div>
 
@@ -1481,7 +1482,14 @@ const GUEST = [["foreign", "🌏 外国人"], ["josou", "👗 女装"], ["female
 function renderGuestChips(){
   const el = $("f_guest"); if(!el) return;
   el.innerHTML = GUEST.map(([k, l])=>`<button type="button" class="chip ${guestFlags.has(k) ? "on" : ""}" onclick="toggleGuest('${k}')">${l}</button>`).join("");
+  // 押したらすぐ真下に：このキャストがプロフで × にしているもの
+  const c = M.casts && M.casts.find(x=>x.id === $("f_cast").value);
+  const o = c && typeof profOpts === "function" ? profOpts(c) : null;
+  const ng = o ? GUEST.filter(([k])=>guestFlags.has(k) && o[GUEST_PROF[k]] === "×").map(([, l])=>l.replace(/^\S+\s/, "")) : [];
+  el.parentNode.querySelectorAll(".guestng").forEach(x=>x.remove());
+  if(ng.length) el.insertAdjacentHTML("afterend", `<div class="guestng">🚫 ${esc(castName(c.id))}は ${ng.map(esc).join("・")} のお客様NG です</div>`);
 }
+const GUEST_PROF = { foreign: "外国人のお客様", josou: "女装されているお客様", female: "女性のお客様", couple: "カップルのお客様" };
 function toggleGuest(k){ if(guestFlags.has(k)) guestFlags.delete(k); else guestFlags.add(k); renderGuestChips(); renderCastChecks(M.casts.find(c=>c.id === $("f_cast").value)); }
 function formMinutes(){ try{ const c = calc(); return minutesOf(c.course) + c.ext*30 + c.date*30; }catch(e){ return 0; } }
 function formOptLabels(){ try{ return (calc().opts || []).map(o=>String(o.label || "")); }catch(e){ return []; } }
@@ -1514,6 +1522,7 @@ function ngWarnings(c){
   return out;
 }
 function renderCastChecks(c){
+  renderGuestChips();   // キャストが変わったら、お客様のことのNGも出しなおす
   const el = $("castChecks");
   if(!c){ el.innerHTML = ""; return; }
   // いまチェックしてあるもの（描きなおしても消さない）＋ 前に保存したもの
@@ -1965,7 +1974,7 @@ async function saveRes(){
       // 📱 スマホで保存したら「仮入力」。PCで（キャストに送ったか確かめて）保存すると取り入れる（SQL 155 のあと）
       ...(("phone_draft" in (rows[0] || editing || {})) || IS_PHONE() ? (IS_PHONE() ? { phone_draft: true, phone_draft_by: by, phone_draft_at: new Date().toISOString() } : { phone_draft: false }) : {}),
       status: $("f_status").value, confirm_call: $("f_confirm").value.trim(), note: $("f_note").value, updated_by: by,
-      ...(() => { const lg = statusLog(editing ? (rows.find(x => x.id === editing.id) || editing) : null, $("f_status").value, by); return lg ? { memo_log: lg } : {}; })(),   // 備考に状態の経緯
+      ...(() => { const lg = statusLog(editing ? (rows.find(x => x.id === editing.id) || editing) : null, $("f_status").value, by); const all = editing ? lg : (lg || []).concat(formPendingNow()); return all && all.length ? { memo_log: all } : {}; })(),   // 備考に状態の経緯
     };
     if(editing) q(await sb.from("kb_reservations").update(row).eq("id", editing.id));
     else { row.created_by = by; const extra = partyExtraRows(row); q(await sb.from("kb_reservations").insert([row, ...extra])); if(extra.length) toast(`👥 ${extra.length + 1}人のキャストの予約を作りました`); }
@@ -3049,19 +3058,23 @@ openCast = function(castId, name){
 /* ---------- 予約の入力 ⑥：対応ログ ---------- */
 function renderFormLog(){
   const el = $("formLog"); if(!el) return;
-  if(!editing){ el.innerHTML = `<div class="hist" style="margin:0">登録したあとに、備考を書けます（一覧の「＋ 備考」からも書けます）</div>`; return; }
-  const r = rows.find(x=>x.id === editing.id) || editing;
-  const logs = logOf(r);
+  // 新しい予約：書いた備考は、保存したときにいっしょに入る
+  const logs = editing ? logOf(rows.find(x=>x.id === editing.id) || editing) : formPending;
   el.innerHTML = `<div class="mlog full">${logs.length ? logs.map(l=>`<div><b>${esc(whenShort(l.at))} ${esc(l.by || "")}</b> ${esc(l.text)}</div>`).join("") : `<div class="none">まだありません</div>`}</div>
     ${KB.CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:6px"><input id="formLogText" maxlength="200" placeholder="例：お客様に折り返し済み" style="flex:1"
       onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addFormLog();}"><button type="button" class="btn btn-ghost btn-sm" onclick="addFormLog()">＋ 書く</button></div>` : ""}`;
 }
 async function addFormLog(){
-  const t = $("formLogText").value.trim(); if(!t || !editing) return;
+  const t = $("formLogText").value.trim(); if(!t) return;
+  if(!editing){ formPending.push({ at: new Date().toISOString(), by: KB.operatorName() || "（担当者なし）", text: t }); $("formLogText").value = ""; renderFormLog(); return; }
   if(await pushLog(editing.id, t)){ $("formLogText").value = ""; renderFormLog(); renderList(); }
 }
+let formPending = [];   // 新しい予約で、保存の前に書いた備考
+// 「＋ 書く」を押し忘れて保存しても、欄に書いてあるものは入れる
+function formPendingNow(){ const t = $("formLogText") ? $("formLogText").value.trim() : ""; return t ? formPending.concat([{ at: new Date().toISOString(), by: KB.operatorName() || "（担当者なし）", text: t }]) : formPending; }
 const __openForm2 = openForm;
 openForm = function(id){
+  formPending = [];
   __openForm2(id);
   if(!id){ $("f_status").value = ""; stColor(); }   // 新しい予約は「選択してください」から（点滅）
   renderFormLog();
@@ -5818,6 +5831,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=29"></script>
+<script src="unsettled.js?v=30"></script>
 </body>
 </html>
