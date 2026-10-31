@@ -10,9 +10,9 @@
 let UNS = null;            // ② kb_unsettled（まだのもの＋この日にいっしょに精算したもの）。null＝表がない
 let UNSD = [];
 let HAS_SLOG = false;   // kb_cast_days.settle_log（SQL 167）があるか
-Promise.resolve(sb.from("kb_cast_days").select("settle_log").limit(1)).then(r => { HAS_SLOG = !!r && !r.error; }).catch(() => {});             // ① 精算していない日 [{ date, cid, c（その日の精算の計算）, cd }]
+Promise.resolve(sb.from("kb_cast_days").select("settle_log").limit(1)).then(r => { HAS_SLOG = HAS_SLOG || (!!r && !r.error); }).catch(() => {});             // ① 精算していない日 [{ date, cid, c（その日の精算の計算）, cd }]
 let HAS_170 = false;  // kb_cast_days.direct_home・camera_check と kb_envelope_checks（SQL 170）があるか
-const P170 = Promise.resolve(sb.from("kb_cast_days").select("direct_home,camera_check").limit(1)).then(r => { HAS_170 = !!r && !r.error; }).catch(() => {});
+const P170 = Promise.resolve(sb.from("kb_cast_days").select("direct_home,camera_check").limit(1)).then(r => { HAS_170 = HAS_170 || (!!r && !r.error); }).catch(() => {});
 const unsSel = {};         // cast_id → Set（今日いっしょに精算するもののキー）
 const UNS_ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ", UNS_DAYS = 60;
 const unsMd = d => { const p = String(d || "").split("-"); return p.length === 3 ? Number(p[1]) + "/" + Number(p[2]) : ""; };
@@ -33,6 +33,9 @@ function unsCalcDay(date, cid, dayRows, cdRow){
 }
 async function unsLoad(){
   if(!day) return;
+  // 読みこんだ直後（ログインの確認の前）に調べると失敗することがあるので、ここでもう一度（履歴・直帰・カメラの欄）
+  if(!HAS_SLOG){ try{ const r = await sb.from("kb_cast_days").select("settle_log").limit(1); HAS_SLOG = !r.error; }catch(e){} }
+  if(!HAS_170){ try{ const r = await sb.from("kb_cast_days").select("direct_home,camera_check").limit(1); HAS_170 = !r.error; }catch(e){} }
   try{
     const r = await sb.from("kb_unsettled").select("*").or(`done_on.is.null,done_on.eq.${day}`).order("biz_date").order("id");
     UNS = r.error ? null : (r.data || []);
