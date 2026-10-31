@@ -2910,6 +2910,7 @@ function shiftStoresOf(ks){
   if(ks.includes("gokumon")) out.push("(極)ぴゅあらば", "(極)情報局");
   // ほかのお店（サクラ系・逆AF・18）のぴゅあらば・口コミ情報局：お店ごとに入れる「ぴゅあらば」「情報局」（2026/11/01〜）
   if(ks.some(k => ["sakuramoon", "lana_uguisu", "lana_kinshi", "dressgarden", "peachmoon", "gyakuanal", "eighteen"].includes(k))) out.push("ぴゅあらば", "情報局");
+  if(ks.some(k => k !== "gokumon")) out.push("NHF");   // NHF は極門いがいのお店ぜんぶ
   return out;
 }
 // prev：保存する前の在籍店舗。サクラシフトにもういる子は、新しくチェックしたお店と、変えたダミー名だけ送る（今の媒体の設定はさわらない）
