@@ -4389,7 +4389,16 @@ async function trStatus(id, st){
       if(prev === "done" && r.transfer_uns_id){
         const u = q(await sb.from("kb_unsettled").select("id,done_on").eq("id", r.transfer_uns_id).maybeSingle());
         if(u && u.done_on){ toast("このお釣りは、もう " + u.done_on + " に精算済みです。先にその精算をもどしてください"); renderList(); return; }
-        if(u) q(await sb.from("kb_unsettled").delete().eq("id", r.transfer_uns_id));
+        if(u){
+          q(await sb.from("kb_unsettled").delete().eq("id", r.transfer_uns_id));
+          if(r.cast_id){   // 精算の履歴にも「取り消した」を残す
+            try{
+              const cd = (await sb.from("kb_cast_days").select("settle_log").eq("biz_date", r.biz_date).eq("cast_id", r.cast_id).maybeSingle()).data || {};
+              const l = (Array.isArray(cd.settle_log) ? cd.settle_log : []).concat([{ at: new Date().toISOString(), by: KB.operatorName(), kind: "memo", text: `🗑 ${hm(r.start_at)}の予約の振込を「${label}」にもどしたので、振込のお釣り（未精算）を取り消し` }]);
+              q(await sb.from("kb_cast_days").upsert({ biz_date: r.biz_date, cast_id: r.cast_id, settle_log: l, updated_by: KB.operatorName(), updated_at: new Date().toISOString() }, { onConflict: "biz_date,cast_id" }));
+            }catch(e){}
+          }
+        }
       }
       // はじめて振込にしたキャンセル：通常料金を全額もらう前提で、額と通常バックを入れておく（減額したら額を直すとバックも半額に）
       const first = !prev && st && ["cancel", "tobi"].includes(r.status) && !Number(r.transfer_amount);
