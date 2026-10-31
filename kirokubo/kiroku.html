@@ -1519,10 +1519,10 @@ function ngWarnings(c){
   const o = typeof profOpts === "function" ? profOpts(c) : null;
   if(!o){ if(typeof profById !== "undefined" && !profById && typeof loadProfs === "function" && !window.__profLoadingRules){ window.__profLoadingRules = true; loadProfs().then(()=>renderCastChecks(M.casts.find(x=>x.id === $("f_cast").value))).catch(()=>{}); } return out; }
   const core = s => String(s).replace(/（.*?）|\(.*?\)/g, "").replace(/^キャスト/, "").replace(/のお客様$/, "").trim();
-  const labels = formOptLabels();
+  const labels = formOptLabels(), seenNg = new Set();
   Object.keys(o).forEach(k=>{
     if(o[k] !== "×") return;
-    const kc = core(k); if(!kc) return;
+    const kc = core(k); if(!kc || seenNg.has(kc)) return; seenNg.add(kc);   // 名前とidの両方で入っているので、同じものは1回だけ
     if(labels.some(l=>{ const lc = core(l); return lc && (lc.includes(kc) || kc.includes(lc)); })) out.push(`「${k}」は × です`);
   });
   if(guestFlags.has("josou") && o["女装"] === "×") out.push("女装のお客様は × です");
@@ -3110,8 +3110,16 @@ function profOpts(c){
   const sp = has(sps["サクラムーン"]) ? sps["サクラムーン"] : (Object.values(sps).find(has) || {});
   const o = Object.assign({}, d.options || {}, sp.options || {});
   Object.keys(o).forEach(k => { o[k] = markNorm(o[k]); });
+  // HPから取りこんだプロフは、名前（例：「キャスト射精（有料）」「外国人のお客様」）で入っている → プロフの id にそろえる
+  Object.keys(o).forEach(k => {
+    const ids = OPT_ALIAS[k] || OPT_ALIAS[k.replace(/（有料）$/, "")] || [k.replace(/（有料）$/, "")];
+    ids.forEach(id => { if(!o[id]) o[id] = o[k]; });
+  });
   return o;
 }
+const OPT_ALIAS = { "前立腺マッサージ": ["前立腺"], "お泊りコース": ["お泊り"], "デートコース": ["デート"],
+  "コース内キャスト2回以上射精": ["無限射精"], "3P": ["3P_お客2名", "3P_キャスト2名"], "3P／お客様2名": ["3P_お客2名"], "3P／キャスト2名": ["3P_キャスト2名"],
+  "女装されているお客様": ["女装"], "外国人のお客様": ["外国人"] };
 // 可否の印をそろえる（◯・〇・OK → ○、✕・x・NG → × など。プロフやHPの取りこみで字がちがうことがある）
 function markNorm(v){
   const s = String(v == null ? "" : v).trim();
