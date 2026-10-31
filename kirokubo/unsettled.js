@@ -103,18 +103,45 @@ function unsCopy(id){
   navigator.clipboard.writeText(lines.join("\n")).then(() => toast("📋 未精算をコピーしました"), () => alert(lines.join("\n")));
 }
 
-// 📝 精算の備考（kb_cast_days.settle_log。SQL 167）
+// 📜 精算の履歴（kb_cast_days.settle_log。SQL 167）。上書きしないで足していく
+//   { at（実際の時刻）, by（対応した内勤）, kind, place, amount, cam（'ok'|'ng'|''）, cam_at（カメラを見た時刻）, text }
+//   精算済にする・未精算をいっしょに精算・回収明細の回収サイン でも自動で1行入る
 const logWhen = at => { const d = new Date(at); return isNaN(d) ? "" : (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
+const SLOG_KINDS = { post: "📮 当日ポスティング", late: "📮 後日投函（未精算分）", receipt: "🧾 領収書だけ投函", collect: "👛 回収", change: "💴 お釣りを渡した", settle: "✅ 精算済", memo: "📝 メモ" };
+// 時刻（HH:MM）→ その営業日の日時（朝6時より前は次の日）
+function bizTimeAt(v){
+  if(!/^\d{2}:\d{2}$/.test(v || "")) return "";
+  const d = new Date(day + "T" + v + ":00+09:00"); if(Number(v.slice(0, 2)) < 6) d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString();
+}
+function slogLine(x){
+  const head = x.kind ? `<b>${esc(SLOG_KINDS[x.kind] || x.kind)}</b>${x.place ? `（${esc(x.place)}）` : ""}${x.amount ? ` ${yen(x.amount)}` : ""}` : "";
+  const cam = x.cam === "ok" ? `📹◎${x.cam_at ? " " + logWhen(x.cam_at) + "確認" : ""}` : x.cam === "ng" ? "📹×" : "";
+  return `<div class="sl"><div class="t"><span class="sw">${logWhen(x.at)}</span> ${head}${head && x.text ? "<br>" : ""}${esc(x.text || "")}</div><div class="s">${esc(x.by || "")}${cam ? "　" + cam : ""}</div></div>`;
+}
 function settleLogHtml(id){
   const cd = unsCD()[id] || {};
   if(!HAS_SLOG) return "";
-  const l = Array.isArray(cd.settle_log) ? cd.settle_log : [];
-  return `<div class="slog"><b>📝 精算の備考</b>${KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="settleLogAdd('${id}')">＋ 備考を書く</button>` : ""}
-    ${l.length ? l.slice().reverse().map(x => `<div class="sl"><div class="t">${esc(x.text)}</div><div class="s">${esc(x.by || "")} ${logWhen(x.at)}</div></div>`).join("") : `<div class="hint2" style="font-size:12px">まだありません</div>`}</div>`;
+  const l = (Array.isArray(cd.settle_log) ? cd.settle_log : []).slice().sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  return `<div class="slog"><b>📜 精算の履歴</b><small style="color:#9C8B8F">（上書きしないで、全部残ります）</small>
+    ${l.length ? l.map(slogLine).join("") : `<div class="hint2" style="font-size:12px">まだありません</div>`}
+    ${KB.CAN_EDIT ? `<details class="sladd"><summary>＋ 記録を足す</summary><div class="slf">
+      <select id="sk-${id}">${Object.entries(SLOG_KINDS).filter(([k]) => k !== "settle").map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
+      <select id="sp-${id}"><option value="">場所</option>${PLACES.map(p => `<option>${p}</option>`).join("")}</select>
+      <input type="number" id="sa-${id}" placeholder="金額" style="width:100px">
+      <label>🕒 時刻 <input type="time" id="st-${id}"></label>
+      <select id="sc-${id}"><option value="">📹 カメラ</option><option value="ok">◎ 確認した</option><option value="ng">× 確認していない</option></select>
+      <label>見た時刻 <input type="time" id="sct-${id}"></label>
+      <input id="sm-${id}" placeholder="メモ（あとから見てわかるように）" maxlength="300" style="flex:1;min-width:180px">
+      <button type="button" class="btn btn-primary btn-sm" onclick="settleLogAdd('${id}')">足す</button>
+      <div class="hint2" style="font-size:11.5px;flex-basis:100%">時刻が空なら今の時刻。対応した内勤（${esc(KB.operatorName())}）は自動で入ります</div></div></details>` : ""}</div>`;
 }
 async function settleLogAdd(id){
-  const v = prompt("精算の備考（あとから見てわかるように）"); if(!v || !v.trim()) return;
-  const cd = unsCD()[id] || {}, l = (Array.isArray(cd.settle_log) ? cd.settle_log : []).concat([{ at: new Date().toISOString(), by: KB.operatorName(), text: v.trim() }]);
+  const g = k => { const e = document.getElementById(k + "-" + id); return e ? e.value.trim() : ""; };
+  const kind = g("sk"), text = g("sm"), amount = Number(g("sa")) || 0, cam = g("sc");
+  if(kind === "memo" && !text){ toast("メモを入れてください"); return; }
+  const x = { at: bizTimeAt(g("st")) || new Date().toISOString(), by: KB.operatorName(), kind, place: g("sp"), amount, cam, cam_at: cam === "ok" ? (bizTimeAt(g("sct")) || "") : "", text };
+  const cd = unsCD()[id] || {}, l = (Array.isArray(cd.settle_log) ? cd.settle_log : []).concat([x]);
   await saveDay(id, { settle_log: l });
 }
 // ほかの日の精算に、備考を足す（未精算をいっしょに精算したとき）
@@ -127,11 +154,7 @@ async function unsLogOther(date, cid, text, extra){
 
 // 🕒 実際に投函した時刻（カメラのアーカイブで見た時刻）。入れてあれば、精算の時刻はこちらで残す。朝6時より前は営業日の次の日
 const ptVal = {};
-function ptAt(id){
-  const v = ptVal[id]; if(!/^\d{2}:\d{2}$/.test(v || "")) return "";
-  const d = new Date(day + "T" + v + ":00+09:00"); if(Number(v.slice(0, 2)) < 6) d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString();
-}
+function ptAt(id){ return bizTimeAt(ptVal[id]); }
 // 精算済にする：チェックした未精算もいっしょに。投函した額が合わなければ、新しい未精算（お釣り）を入れる
 settle = async function(id){
   const c = calcCast(id), sel = unsSel[id] || new Set(), open = unsOpen(id), picked = open.filter(x => sel.has(x.key));
@@ -162,7 +185,7 @@ settle = async function(id){
       note: diff < 0 ? "投函が足りなかった（投函 " + yen(c.deposited) + "／" + yen(due) + "）" : "多く投函した（投函 " + yen(c.deposited) + "／" + yen(due) + "）" }));
   }catch(e){ toast("未精算を保存できませんでした：" + (e.message || e)); return; }
   const cd = unsCD()[id] || {}, logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).slice();
-  logs.push({ at, by, text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") });
+  logs.push({ at, by, kind: "settle", place, amount: c.deposited != null ? c.deposited : null, cam: cd.camera_check || "", text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") });
   await saveDay(id, Object.assign({ settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: snap }, HAS_SLOG ? { settle_log: logs } : {}, HAS_170 ? { direct_home: false } : {}));
   delete unsSel[id]; delete ptVal[id]; await unsLoad();
 };
@@ -319,6 +342,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .unsc{background:#fff;border:1.5px solid #E4DDF2;border-radius:12px;padding:8px 12px;margin-bottom:8px} .unsc .uh{font-size:14px;margin-bottom:2px}
   .slog{background:#FFFCEB;border:1.5px solid #F2D27A;border-radius:12px;padding:8px 10px;margin:8px 0;font-size:13px}
   .slog > b{color:#8a6d00;margin-right:8px} .slog .sl{background:#fff;border:1px solid #F2D27A;border-radius:8px;padding:5px 8px;margin-top:5px}
+  .slog .sw{font-weight:900;color:#5C4B4F;margin-right:4px} .sladd{margin-top:8px} .sladd summary{cursor:pointer;font-weight:800;font-size:12.5px;color:#8a6d00}
+  .slf{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:12.5px;font-weight:700} .slf select,.slf input{font-family:inherit;font-size:12.5px;padding:3px 6px;border:1.5px solid #ddd;border-radius:6px}
   .slog .sl .t{white-space:pre-wrap} .slog .sl .s{font-size:11px;color:#9C8B8F;text-align:right}
   .uonly{background:#FFFBEA;border:2px solid #F2C200;border-radius:10px;padding:8px 10px;margin-top:6px;font-size:13px}
   .pmz{background:#F7FBF4;border:1.5px solid #CFE6C2;border-radius:12px;padding:8px 10px;margin:8px 0} .pmzh{font-weight:800;font-size:13px}
