@@ -194,7 +194,10 @@ function totalsFor(day, R, rows){
   const all = rowsFor(day, R), ho = R.ho.find(h => h.biz_date === day) || null;
   rows = rows || all;
   const sum = (l, f) => l.reduce((a, r) => a + f(r), 0);
-  const ex = ho && Array.isArray(ho.expenses) ? ho.expenses.reduce((a, x) => a + (Number(x.amount) || 0), 0) : 0;
+  // kb_handovers.expenses：経費（キャッシュフローへの補充）と、type:"transfer" の振込（キャンセル料など。カードと同じ扱い）
+  const items = ho && Array.isArray(ho.expenses) ? ho.expenses : [];
+  const ex = sum(items.filter(x => x.type !== "transfer"), x => Number(x.amount) || 0);
+  const tr = sum(items.filter(x => x.type === "transfer"), x => Number(x.amount) || 0);
   const staff = R.staff.filter(x => x.biz_date === day), staffSum = sum(staff, x => Number(x.day_paid) || 0);
   const T = {
     n: rows.length, shop: sum(rows, r => r.shop), card: sum(rows, r => r.card),
@@ -206,8 +209,10 @@ function totalsFor(day, R, rows){
   };
   // 経費・内勤日払い・手渡しは、その日の全部（場所で絞っても）
   const A = { shop: sum(all, r => r.shop), card: sum(all, r => r.card), notCol: sum(all.filter(r => r.state === "none" || !r.state), r => r.amt), yetN: all.filter(r => !r.state).length };
-  const hand = A.shop - A.card - ex - A.notCol - staffSum;
-  return { T, A, ho, ex, staff, staffSum, hand, all };
+  // 紙の回収明細と同じ：B（キャストの A の合計）＋振込 − C（内勤日払い）＝ F（店落ち粗利）。F − D（カード）− 振込 − E（経費）＝ 最終的に社長に渡す額
+  const B = A.shop + tr, F = B - staffSum, fin = F - A.card - tr - ex;
+  const hand = fin - A.notCol;   // 随時の回収合計（未回収 ■ を引いた、今渡す額）
+  return { T, A, ho, ex, tr, staff, staffSum, B, F, fin, hand, all };
 }
 
 /* ---------- 1日ごと ---------- */
@@ -225,12 +230,13 @@ async function loadDay(){
 function paintDay(){
   if(!D) return;
   const all = rowsFor(D.day, D), rows = all.filter(r => !place || r.place === place);
-  const { T, A, ho, ex, staff, staffSum, hand } = totalsFor(D.day, D, rows);
+  const { T, A, ho, ex, tr, staff, staffSum, B, F, fin, hand } = totalsFor(D.day, D, rows);
   const ed = KB.CAN_EDIT && !D.no171, dt = new Date(D.day + "T12:00:00Z");
   let h = D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "";
   h += `<div class="sum">
-    <div class="s">想定店落ち（1日の粗利）<b>${yen(T.shop)}</b></div>
-    <div class="s">カード<b>${yen(T.card)}</b></div>
+    <div class="s">想定店落ち 1日の粗利（F）<b>${yen(F)}</b></div>
+    <div class="s">随時の回収合計<b style="color:#E0001B">${yen(hand)}</b></div>
+    <div class="s">カード（D）<b>${yen(A.card)}</b></div>
     <div class="s">回収サイン<b><span class="mk day">✔${T.dayN}</span>　<span class="mk me">✔${T.meN}</span>　<span class="mk none">■${T.noneN}</span></b></div>
     <div class="s ${T.yetN ? "ng" : ""}">まだチェックしていない<b>${T.yetN}人</b></div>
     <div class="s ${T.todo ? "ng" : ""}">処理まだ（精算ミス）<b>${T.todo}件</b></div></div>`;
@@ -251,28 +257,37 @@ function paintDay(){
     ・交通費・プラスはキャッシュフローから出して、袋には「店落ち − カード」の額をそろえます　・精算ミスは精算画面で未精算・お釣りになっています。処理したら ✓</div>`;
   h += `</div>`;
 
-  const ex2 = ho && Array.isArray(ho.expenses) ? ho.expenses : [];
+  const ex2 = (ho && Array.isArray(ho.expenses) ? ho.expenses : []).map((x, i) => Object.assign({ i }, x));
   const notColRows = rowsFor(D.day, D).filter(r => (r.state === "none" || !r.state) && r.amt);
+  const itemRows = (list, kind) => list.map(x => `<tr>
+      <td class="l">${ed ? `<input value="${esc(x.memo || "")}" placeholder="${kind === "transfer" ? "メモ（例：キャンセル料 ○○さん）" : "メモ（例：キャッシュフロー補充）"}" maxlength="60" style="width:100%" onchange="setExp(${x.i},'memo',this.value)">` : esc(x.memo || "")}</td>
+      <td>${ed ? `<input type="number" value="${Number(x.amount) || ""}" placeholder="金額" style="width:100px;text-align:right" onchange="setExp(${x.i},'amount',this.value)">` : num(x.amount)}</td>
+      <td class="l" style="white-space:nowrap">${ed ? `<a class="j" href="javascript:void 0" onclick="delExp(${x.i})">🗑</a>` : ""}</td></tr>`).join("");
   h += `<div class="grid"><div class="card"><h2>🧮 社長に渡す額${place ? "<small style='font-size:12px;color:var(--sub)'>（この日の全部）</small>" : ""}</h2>
     <div class="flow">
-      <span>想定店落ち（1日の粗利）</span><span class="v">${yen(A.shop)}</span>
-      <span>− クレジットカード総額</span><span class="v">−${yen(A.card)}</span>
-      <span>− 経費（キャッシュフローに補充）</span><span class="v">−${yen(ex)}</span>
-      ${notColRows.map(r => `<span>− 未回収 <b class="mk none">■</b> ${esc(names[r.id] || r.id)}${r.state ? "" : "（まだチェックしていない）"}</span><span class="v">−${yen(r.amt)}</span>`).join("")}
+      <span>キャスト全員の店落ち（暫定的な残額＋雑費）の合計</span><span class="v">${yen(A.shop)}</span>
+      ${tr ? `<span>＋ 振込（キャンセル料など）</span><span class="v">＋${yen(tr)}</span>` : ""}
       ${staff.map(x => `<span>− 内勤日払い ${esc(staffNames[x.staff_id] || x.staff_id)}</span><span class="v">−${yen(x.day_paid)}</span>`).join("")}
-      <span class="eq">＝ 社長に渡す額</span><span class="v eq">${yen(hand)}</span>
+      <span class="eq">＝ 想定店落ち 1日の粗利（F）</span><span class="v eq">${yen(F)}</span>
+      <span>− クレジットカード総額（D）</span><span class="v">−${yen(A.card)}</span>
+      ${tr ? `<span>− 振込（キャンセル料など）</span><span class="v">−${yen(tr)}</span>` : ""}
+      <span>− 経費（E：キャッシュフローに補充）</span><span class="v">−${yen(ex)}</span>
+      <span class="eq">＝ 全部回収したときに社長に渡す額</span><span class="v eq">${yen(fin)}</span>
+      ${notColRows.map(r => `<span>− 未回収 <b class="mk none">■</b> ${esc(names[r.id] || r.id)}${r.state ? "" : "（まだチェックしていない）"}</span><span class="v">−${yen(r.amt)}</span>`).join("")}
+      <span class="eq">＝ 随時の回収合計（今、社長に渡す額）</span><span class="v eq" style="color:#E0001B">${yen(hand)}</span>
     </div>
     <div class="flow" style="margin-top:12px">
       <span class="ref">当日現金回収金額合計（✔黒 ${yen(T.daySum)}${staffSum ? " − 内勤日払い " + yen(staffSum) : ""}）</span><span class="v ref">${yen(T.daySum - staffSum)}</span>
     </div></div>
-  <div class="card"><h2>💼 経費（回収金からキャッシュフローに補充）</h2>
+  <div class="card"><h2>💼 経費（E：回収金からキャッシュフローに補充）</h2>
     <div class="leg" style="margin:0 0 6px">キャッシュフローが足りなくなったときに、回収金から補充した額を入れます。キャストの交通費は、キャッシュフローから出したものなので、ここには入れません。</div>
-    <table class="ex">${ex2.map((x, i) => `<tr>
-      <td class="l">${ed ? `<input value="${esc(x.memo || "")}" placeholder="メモ（例：キャッシュフロー補充）" maxlength="60" style="width:100%" onchange="setExp(${i},'memo',this.value)">` : esc(x.memo || "")}</td>
-      <td>${ed ? `<input type="number" value="${Number(x.amount) || ""}" placeholder="金額" style="width:100px;text-align:right" onchange="setExp(${i},'amount',this.value)">` : "−" + num(x.amount)}</td>
-      <td class="l" style="white-space:nowrap">${ed ? `<a class="j" href="javascript:void 0" onclick="delExp(${i})">🗑</a>` : ""}</td></tr>`).join("")}
+    <table class="ex">${itemRows(ex2.filter(x => x.type !== "transfer"), "ex")}
       ${ed ? `<tr><td class="l" colspan="3"><button class="btn btn-ghost btn-sm" onclick="addExp()">＋ 経費を足す</button></td></tr>` : ""}</table>
-    <div class="hand"><div class="k">🤝 社長に手渡し（現金）</div><div class="v">${yen(hand)}</div></div>
+    <h2 style="margin-top:12px">🏦 振込（キャンセル料など）</h2>
+    <div class="leg" style="margin:0 0 6px">お店の口座に振り込まれた分です。カードと同じで、粗利には入りますが、回収金には入りません。</div>
+    <table class="ex">${itemRows(ex2.filter(x => x.type === "transfer"), "transfer")}
+      ${ed ? `<tr><td class="l" colspan="3"><button class="btn btn-ghost btn-sm" onclick="addExp('transfer')">＋ 振込を足す</button></td></tr>` : ""}</table>
+    <div class="hand"><div class="k">🤝 社長に手渡し（随時の回収合計・現金）</div><div class="v">${yen(hand)}</div></div>
     ${ho && ho.received_at && ho.received_amount != null && ho.received_amount !== hand ? `<div class="warn" style="margin-top:8px">受け取ったときは ${yen(ho.received_amount)} でした。そのあと ${sgn(hand - ho.received_amount)}円 変わっています（あとから回収した分など）。</div>` : ""}
     <div class="sign">✍ 締め担当者サイン（2人以上のときダブルチェック）：
       ${((ho && Array.isArray(ho.signs)) ? ho.signs : []).map(s => `<span class="st ok">${esc(s.by)} ${when(s.at)}</span>`).join("") || `<span class="st no">まだ</span>`}
@@ -296,8 +311,8 @@ async function saveHo(patch){
 }
 const HO = () => D.ho.find(h => h.biz_date === D.day) || null;
 const exList = () => ((HO() && Array.isArray(HO().expenses)) ? HO().expenses : []).map(x => Object.assign({}, x));
-function addExp(){ const l = exList(); l.push({ memo: "キャッシュフロー補充", amount: 0 }); saveHo({ expenses: l }); }
-function delExp(i){ const l = exList(); if(!confirm("この経費を消しますか？")) return; l.splice(i, 1); saveHo({ expenses: l }); }
+function addExp(type){ const l = exList(); l.push(type === "transfer" ? { type, memo: "キャンセル料", amount: 0 } : { memo: "キャッシュフロー補充", amount: 0 }); saveHo({ expenses: l }); }
+function delExp(i){ const l = exList(); if(!confirm("この行を消しますか？")) return; l.splice(i, 1); saveHo({ expenses: l }); }
 function setExp(i, k, v){ const l = exList(); if(!l[i]) return; l[i][k] = k === "amount" ? Math.max(0, Number(v) || 0) : v; saveHo({ expenses: l }); }
 function addSign(){
   const l = ((HO() && Array.isArray(HO().signs)) ? HO().signs : []).concat([{ by: KB.operatorName(), at: new Date().toISOString() }]);
@@ -326,36 +341,38 @@ async function loadMonth(){
 function paintMonth(){
   if(!MO) return;
   const days = [...new Set(MO.resv.map(r => r.biz_date).concat(MO.cds.filter(c => c.settled || c.direct_home).map(c => c.biz_date), MO.ho.map(h => h.biz_date)))].sort();
-  const S = { shop: 0, card: 0, ex: 0, notCol: 0, staff: 0, hand: 0, rcv: 0, rdays: 0, yet: 0, todo: 0 };
+  const S = { F: 0, card: 0, tr: 0, ex: 0, fin: 0, notCol: 0, hand: 0, rcv: 0, rdays: 0, yet: 0, todo: 0 };
   const lines = days.map(d => {
     const rows = rowsFor(d, MO).filter(r => !place || r.place === place);
-    const { T, A, ho, ex, staffSum, hand } = totalsFor(d, MO, rows);
-    const rcv = ho && ho.received_at;
-    Object.assign(S, { shop: S.shop + T.shop, card: S.card + T.card, ex: S.ex + ex, notCol: S.notCol + A.notCol, staff: S.staff + staffSum, hand: S.hand + hand,
-      rcv: S.rcv + (rcv ? hand : 0), rdays: S.rdays + (rcv ? 1 : 0), yet: S.yet + T.yetN, todo: S.todo + T.todo });
+    const { T, A, ho, ex, tr, F, fin, hand } = totalsFor(d, MO, rows);
+    const rcv = ho && ho.received_at, got = rcv ? (ho.received_amount ?? hand) : 0;
+    Object.assign(S, { F: S.F + F, card: S.card + A.card, tr: S.tr + tr, ex: S.ex + ex, fin: S.fin + fin, notCol: S.notCol + A.notCol, hand: S.hand + hand,
+      rcv: S.rcv + got, rdays: S.rdays + (rcv ? 1 : 0), yet: S.yet + T.yetN, todo: S.todo + T.todo });
     const dt = new Date(d + "T12:00:00Z");
     return `<tr class="${T.yetN || T.todo ? "bad" : ""}"><td class="l"><a class="j" style="font-size:13.5px;margin:0" href="javascript:void 0" onclick="openDay('${d}')">${md(d)}(${DOW[dt.getUTCDay()]})</a></td>
-      <td>${num(T.shop)}</td><td>${T.card ? num(T.card) : ""}</td>
+      <td>${num(F)}</td><td>${A.card ? "−" + num(A.card) : ""}</td><td>${tr ? "−" + num(tr) : ""}</td><td>${ex ? "−" + num(ex) : ""}</td><td><b>${num(fin)}</b></td>
       <td class="l"><span class="mk day">✔${T.dayN}</span> <span class="mk me">✔${T.meN}</span> <span class="mk none">■${T.noneN}</span>${T.yetN ? ` <span class="st wait">まだ ${T.yetN}</span>` : ""}${T.todo ? ` <span class="st wait">処理 ${T.todo}</span>` : ""}</td>
-      <td>${ex ? "−" + num(ex) : ""}</td><td>${A.notCol ? "−" + num(A.notCol) : ""}</td><td>${staffSum ? "−" + num(staffSum) : ""}</td><td><b>${num(hand)}</b></td>
-      <td class="l">${rcv ? `<span class="st ok">🤝 ${when(ho.received_at)}</span>` : `<span class="st no">まだ</span>`}</td></tr>`;
+      <td>${A.notCol ? "−" + num(A.notCol) : ""}</td><td><b style="color:#E0001B">${num(hand)}</b></td>
+      <td class="l">${rcv ? `<span class="st ok">🤝 ${num(got)} ${when(ho.received_at)}</span>` : `<span class="st no">まだ</span>`}</td></tr>`;
   });
   let html = MO.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です。</div>` : "";
   html += `<div class="sum">
-    <div class="s">想定店落ち<b>${yen(S.shop)}</b></div>
-    <div class="s">カード<b>${yen(S.card)}</b></div>
-    <div class="s">経費<b>${yen(S.ex)}</b></div>
-    <div class="s">内勤日払い<b>${yen(S.staff)}</b></div>
-    <div class="s">社長に渡す額<b>${yen(S.hand)}</b></div>
-    <div class="s ${S.hand - S.rcv ? "ng" : S.hand ? "ok" : ""}">社長がまだ受け取っていない<b>${yen(S.hand - S.rcv)}</b></div>
+    <div class="s">店落ち粗利（F）<b>${yen(S.F)}</b></div>
+    <div class="s">カード（D）<b>${yen(S.card)}</b></div>
+    ${S.tr ? `<div class="s">振込<b>${yen(S.tr)}</b></div>` : ""}
+    <div class="s">経費（E）<b>${yen(S.ex)}</b></div>
+    <div class="s">全部回収したら社長に渡す額<b>${yen(S.fin)}</b></div>
+    <div class="s">社長が受け取った<b>${yen(S.rcv)}</b></div>
+    <div class="s ${S.fin - S.rcv ? "ng" : S.fin ? "ok" : ""}">まだ渡していない<b>${yen(S.fin - S.rcv)}</b></div>
     <div class="s ${S.yet ? "ng" : ""}">回収サインまだ<b>${S.yet}人</b></div></div>`;
   html += `<div class="card"><h2>📅 ${esc($("ymLabel").textContent)}の回収${place ? "（" + esc(place) + "）" : ""}</h2>`
     + (days.length ? `<div class="tbl"><table>
-      <tr><th class="l">営業日</th><th>想定店落ち</th><th>カード</th><th class="l">回収サイン</th><th>経費</th><th>未回収</th><th>内勤日払い</th><th>社長に渡す額</th><th class="l">社長が受け取った</th></tr>
+      <tr><th class="l">営業日</th><th>店落ち粗利（F）</th><th>カード（D）</th><th>振込</th><th>経費（E）</th><th>全部回収したら</th><th class="l">回収サイン</th><th>未回収</th><th>随時の回収合計</th><th class="l">社長が受け取った</th></tr>
       ${lines.join("")}
-      <tr class="tot"><td class="l">合計</td><td>${num(S.shop)}</td><td>${num(S.card)}</td><td class="l">${S.yet ? `まだ ${S.yet}人` : ""}</td><td>${S.ex ? "−" + num(S.ex) : ""}</td><td>${S.notCol ? "−" + num(S.notCol) : ""}</td><td>${S.staff ? "−" + num(S.staff) : ""}</td><td>${num(S.hand)}</td><td class="l">${S.rdays}日分</td></tr>
+      <tr class="tot"><td class="l">合計</td><td>${num(S.F)}</td><td>${S.card ? "−" + num(S.card) : ""}</td><td>${S.tr ? "−" + num(S.tr) : ""}</td><td>${S.ex ? "−" + num(S.ex) : ""}</td><td>${num(S.fin)}</td><td class="l">${S.yet ? `まだ ${S.yet}人` : ""}</td><td>${S.notCol ? "−" + num(S.notCol) : ""}</td><td>${num(S.hand)}</td><td class="l">${num(S.rcv)}（${S.rdays}日分）</td></tr>
     </table></div>
-    <div class="leg">・日付を押すと、その日の「1日ごと」が開きます　・経費・未回収・内勤日払い・社長に渡す額は、場所で絞ってもその日の全部です</div>` : `<div class="lead">この月の予約はありません。</div>`) + `</div>`;
+    <div class="leg">・日付を押すと、その日の「1日ごと」が開きます　・場所で絞っても、店落ち粗利から右はその日の全部です<br>
+      ・店落ち粗利（F）＝ キャスト全員の店落ち（暫定的な残額＋雑費）＋ 振込 − 内勤日払い　・全部回収したら ＝ F − D − 振込 − E</div>` : `<div class="lead">この月の予約はありません。</div>`) + `</div>`;
   $("dayArea").innerHTML = html;
 }
 
