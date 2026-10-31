@@ -67,7 +67,7 @@ function unsOpen(id){
   const a = UNSD.filter(x => x.cid === id).map(x => ({ key: "d" + x.date, kind: "day", date: x.date, amount: x.c.drop, raw: x,
     what: x.c.drop >= 0 ? `未精算 ${yen(x.c.drop)}` : `お店から渡す ${yen(-x.c.drop)}` }));
   const b = (UNS || []).filter(x => x.cast_id === id && !x.done_on).map(x => ({ key: "u" + x.id, kind: "entry", date: x.biz_date, amount: x.amount, raw: x,
-    what: (x.note || (x.amount >= 0 ? "投函が足りなかった" : "多く投函した")) + (x.amount >= 0 ? `（未精算 ${yen(x.amount)}）` : `（お釣り ${yen(-x.amount)}）`) }));
+    what: (x.note || (x.amount >= 0 ? "投函が足りなかった" : "多く投函した")) + (x.amount > 0 ? `（未精算 ${yen(x.amount)}）` : x.amount < 0 ? `（お釣り ${yen(-x.amount)}）` : "（金額なし）") }));
   return a.concat(b).sort((p, q) => String(p.date).localeCompare(String(q.date)) || (p.kind === "day" ? -1 : 1));
 }
 // その日の、そのキャストの精算の枠へ（新しいタブ）
@@ -81,7 +81,7 @@ function unsBoxHtml(id, c){
   const today = (UNS || []).filter(x => x.cast_id === id && x.done_on === day);
   if(done){
     const snapU = ((unsCD()[id] || {}).settle_snapshot || {}).uns || [];
-    const rest = open.length ? `<div class="hint2" style="font-size:12px">のこりの未精算 ${open.length}件は、つぎの精算で</div>` : "";
+    const rest = open.length ? `<div class="hint2" style="font-size:12px">⚠️ のこりの未精算 ${open.length}件は、つぎの精算で：</div>${open.map(x => `<div class="ur">・<b>${unsMd(x.date)}</b> <span class="${x.amount >= 0 ? "neg" : "pos"}">${esc(x.what)}</span>${x.date !== day ? unsJump(x.date, id) : ""}</div>`).join("")}` : "";
     if(!snapU.length && !today.length) return open.length ? `<div class="unsbox"><b>📒 未精算</b>${rest}</div>` : "";
     return `<div class="unsbox"><b>📒 この日いっしょに精算した未精算</b>
       ${snapU.map(x => `<div class="ur">✅ ${esc(x.label || (unsMd(x.date) + " " + yen(x.amount)))}</div>`).join("")}
@@ -110,7 +110,9 @@ function unsCopy(id){
 //   { at（実際の時刻）, by（対応した内勤）, kind, place, amount, cam（'ok'|'ng'|''）, cam_at（カメラを見た時刻）, text }
 //   精算済にする・未精算をいっしょに精算・回収明細の回収サイン でも自動で1行入る
 const logWhen = at => { const d = new Date(at); return isNaN(d) ? "" : (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
-const SLOG_KINDS = { post: "📮 当日ポスティング", late: "📮 後日投函（未精算分）", receipt: "🧾 領収書だけ投函", collect: "👛 回収", change: "💴 お釣りを渡した", settle: "✅ 精算済", memo: "📝 メモ" };
+const SLOG_KINDS = { post: "📮 当日ポスティング", late: "💴 未精算を精算", receipt: "🧾 領収書だけ投函", collect: "👛 回収", change: "💴 お釣りを渡した", settle: "✅ 精算済", uns: "⚠️ 未精算にした", memo: "📝 メモ" };
+// ⚠️ あとで対応が必要（精算済のあとに起きたこと）→ 未精算（kb_unsettled）にする。あとは未精算と同じ流れで精算する
+const FOLLOW = { receipt: ["🧾 領収書の投函がまだ", 0], short: ["📮 投函が足りない", 1], over: ["💴 多く投函した・お釣りを渡していない", -1], other: ["📝 その他", 1] };
 // 時刻（HH:MM）→ その営業日の日時（朝6時より前は次の日）
 function bizTimeAt(v){
   if(!/^\d{2}:\d{2}$/.test(v || "")) return "";
@@ -126,32 +128,41 @@ function settleLogHtml(id){
   const cd = unsCD()[id] || {};
   if(!HAS_SLOG) return `<div class="slog"><b>📜 精算の履歴</b><div class="hint2" style="font-size:12px">履歴の欄を読めませんでした（${esc(SLOG_ERR || "確認中…")}）。SQL 167 が実行されているか確認してください</div></div>`;
   const l = (Array.isArray(cd.settle_log) ? cd.settle_log : []).slice().sort((a, b) => String(a.at).localeCompare(String(b.at)));
-  return `<div class="slog"><b>📜 精算の履歴</b><small style="color:#9C8B8F">（上書きしないで、全部残ります）</small>
+  return `<div class="slog"><b>📜 精算の履歴</b><small style="color:#9C8B8F">（自動で残ります。上書きしません）</small>
+    ${KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-left:6px" onclick="settleLogAdd('${id}')">📝 メモを書く</button>` : ""}
     ${l.length ? l.map(slogLine).join("") : `<div class="hint2" style="font-size:12px">まだありません</div>`}
-    ${KB.CAN_EDIT ? `<details class="sladd"><summary>＋ 記録を足す</summary><div class="slf">
-      <select id="sk-${id}">${Object.entries(SLOG_KINDS).filter(([k]) => k !== "settle").map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
-      <select id="sp-${id}"><option value="">場所</option>${PLACES.map(p => `<option>${p}</option>`).join("")}</select>
-      <input type="number" id="sa-${id}" placeholder="金額" style="width:100px">
-      <label>🕒 時刻 <input type="time" id="st-${id}"></label>
-      <select id="sc-${id}"><option value="">📹 カメラ</option><option value="ok">◎ 確認した</option><option value="ng">× 確認していない</option></select>
-      <label>見た時刻 <input type="time" id="sct-${id}"></label>
-      <input id="sm-${id}" placeholder="メモ（あとから見てわかるように）" maxlength="300" style="flex:1;min-width:180px">
-      <button type="button" class="btn btn-primary btn-sm" onclick="settleLogAdd('${id}')">足す</button>
-      <div class="hint2" style="font-size:11.5px;flex-basis:100%">時刻が空なら今の時刻。対応した内勤（${esc(KB.operatorName())}）は自動で入ります</div></div></details>` : ""}</div>`;
+    ${KB.CAN_EDIT && cd.settled && UNS !== null ? `<details class="sladd"><summary>⚠️ あとで対応が必要（未精算にする）</summary><div class="slf">
+      <select id="fk-${id}">${Object.entries(FOLLOW).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join("")}</select>
+      <input type="number" id="fa-${id}" min="0" placeholder="金額（領収書は空でOK）" style="width:170px">
+      <input id="fm-${id}" placeholder="メモ（何があったか）" maxlength="200" style="flex:1;min-width:180px">
+      <button type="button" class="btn btn-primary btn-sm" onclick="unsFollow('${id}')">未精算にする</button>
+      <div class="hint2" style="font-size:11.5px;flex-basis:100%">未精算になって、次の精算の「未精算」と「📒 未精算のキャスト」に出ます。精算したときの時刻・場所・内勤・カメラは自動で残ります</div></div></details>` : ""}</div>`;
 }
 async function settleLogAdd(id){
-  const g = k => { const e = document.getElementById(k + "-" + id); return e ? e.value.trim() : ""; };
-  const kind = g("sk"), text = g("sm"), amount = Number(g("sa")) || 0, cam = g("sc");
-  if(kind === "memo" && !text){ toast("メモを入れてください"); return; }
-  const x = { at: bizTimeAt(g("st")) || new Date().toISOString(), by: KB.operatorName(), kind, place: g("sp"), amount, cam, cam_at: cam === "ok" ? (bizTimeAt(g("sct")) || "") : "", text };
-  const cd = unsCD()[id] || {}, l = (Array.isArray(cd.settle_log) ? cd.settle_log : []).concat([x]);
+  const v = prompt("メモ（あとから見てわかるように）"); if(!v || !v.trim()) return;
+  const cd = unsCD()[id] || {}, l = (Array.isArray(cd.settle_log) ? cd.settle_log : []).concat([{ at: new Date().toISOString(), by: KB.operatorName(), kind: "memo", text: v.trim() }]);
   await saveDay(id, { settle_log: l });
 }
+async function unsFollow(id){
+  const g = k => { const e = document.getElementById(k + "-" + id); return e ? e.value.trim() : ""; };
+  const k = g("fk"), f = FOLLOW[k], memo = g("fm"), amt = Math.abs(Number(g("fa")) || 0);
+  if(!f) return;
+  if(k !== "receipt" && !amt){ toast("金額を入れてください"); return; }
+  if(k === "other" && !memo){ toast("メモを入れてください"); return; }
+  const amount = k === "receipt" ? 0 : amt * f[1], note = f[0].replace(/^\S+\s/, "") + (memo ? "：" + memo : "");
+  if(!confirm(`${castName(id)}：「${note}」${amount ? (amount > 0 ? " 未精算 " + yen(amount) : " お釣り " + yen(-amount)) : ""} を未精算にしますか？`)) return;
+  const by = KB.operatorName();
+  try{ q(await sb.from("kb_unsettled").insert({ cast_id: id, biz_date: day, amount, note, source: "manual", created_by: by })); }
+  catch(e){ toast("未精算にできませんでした：" + (e.message || e)); return; }
+  const cd = unsCD()[id] || {}, l = (Array.isArray(cd.settle_log) ? cd.settle_log : []).concat([{ at: new Date().toISOString(), by, kind: "uns", amount, text: note }]);
+  await saveDay(id, { settle_log: l });
+  toast("⚠️ 未精算にしました"); await unsLoad();
+}
 // ほかの日の精算に、備考を足す（未精算をいっしょに精算したとき）
-async function unsLogOther(date, cid, text, extra){
+async function unsLogOther(date, cid, text, extra, meta){
   if(!HAS_SLOG){ if(extra) q(await sb.from("kb_cast_days").upsert(Object.assign({ biz_date: date, cast_id: cid, updated_at: new Date().toISOString(), updated_by: KB.operatorName() }, extra), { onConflict: "biz_date,cast_id" })); return; }
   const r = await sb.from("kb_cast_days").select("settle_log").eq("biz_date", date).eq("cast_id", cid).maybeSingle();
-  const l = ((r.data && Array.isArray(r.data.settle_log)) ? r.data.settle_log : []).concat([{ at: new Date().toISOString(), by: KB.operatorName(), text }]);
+  const l = ((r.data && Array.isArray(r.data.settle_log)) ? r.data.settle_log : []).concat([Object.assign({ at: new Date().toISOString(), by: KB.operatorName(), text }, meta || {})]);
   q(await sb.from("kb_cast_days").upsert(Object.assign({ biz_date: date, cast_id: cid, settle_log: l, updated_at: new Date().toISOString(), updated_by: KB.operatorName() }, extra || {}), { onConflict: "biz_date,cast_id" }));
 }
 
@@ -168,6 +179,7 @@ settle = async function(id){
     + (diff ? "\n投函した額 " + yen(c.deposited) + " → " + (diff < 0 ? "未精算 " + yen(-diff) : "お釣り " + yen(diff)) + " を未精算に入れます" : "");
   if(!confirm(msg)) return;
   const by = KB.operatorName(), at = ptAt(id) || new Date().toISOString(), pl = document.getElementById("pl-" + id), place = pl ? pl.value : "";
+  const camNow = (unsCD()[id] || {}).camera_check || "";
   const labels = picked.map(x => unsLine(x, open.indexOf(x), id));
   const snap = { reward: c.reward, option: c.option, transportBack: c.transportBack, plus: c.plus, zappi: c.zappi, minus: c.minus,
                  takeHome: c.takeHome, total: c.total, cardPaid: c.cardPaid, drop: c.drop, withholding: c.withholding,
@@ -178,10 +190,10 @@ settle = async function(id){
       const txt = `${unsMd(day)}の精算で、この日の${x.kind === "day" ? "精算" : "未精算（" + x.what + "）"}をいっしょに精算しました（合計 ${yen(due)}・${place}）`;
       if(x.kind === "day"){
         const s2 = Object.assign({}, { reward: x.raw.c.reward, option: x.raw.c.option, takeHome: x.raw.c.takeHome, total: x.raw.c.total, cardPaid: x.raw.c.cardPaid, drop: x.raw.c.drop, zappi: x.raw.c.zappi }, { paidOn: day, by, at });
-        await unsLogOther(x.date, id, txt, { settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: s2 });
+        await unsLogOther(x.date, id, txt, { settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: s2 }, { at, kind: "late", place, amount: x.amount, cam: camNow });
       } else {
         q(await sb.from("kb_unsettled").update({ done_on: day, done_by: by, done_at: at }).eq("id", x.raw.id));
-        await unsLogOther(x.date, id, txt);
+        await unsLogOther(x.date, id, txt, null, { at, kind: "late", place, amount: x.amount, cam: camNow });
       }
     }
     if(diff && UNS !== null) q(await sb.from("kb_unsettled").insert({ cast_id: id, biz_date: day, amount: -diff, source: "auto", created_by: by,
@@ -242,6 +254,8 @@ function unsOnlyFoot(cid, l){
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px">
       <select id="uo_pl_${cid}">${(typeof PLACES !== "undefined" ? PLACES : ["池袋", "鶯谷", "五反田", "回収"]).map(p => `<option>${p}</option>`).join("")}</select>
       <input type="number" id="uo_dep_${cid}" placeholder="投函した額" style="width:150px">
+      <select id="uo_cam_${cid}"><option value="">📹 カメラ</option><option value="ok">◎ 確認した</option><option value="ng">× 確認していない</option></select>
+      <label style="font-size:12.5px;font-weight:700">🕒 実際の時刻 <input type="time" id="uo_t_${cid}"></label>
       <button type="button" class="btn btn-primary btn-sm" onclick="unsOnlySettle('${cid}')">✅ 未精算だけ精算済にする</button></div></div>`;
 }
 async function unsOnlySettle(cid){
@@ -250,22 +264,22 @@ async function unsOnlySettle(cid){
   const dep = dv === "" ? null : Number(dv) || 0, diff = dep != null ? dep - sum : null;
   const labels = picked.map(x => unsLine(x, l.indexOf(x), cid));
   if(!confirm(`${castName(cid)} の未精算だけを精算済にしますか？（${unsMd(day)}・${place}）\n${labels.join("\n")}\n→ 合計 ${sum >= 0 ? "投函 " + yen(sum) : "お店から渡す " + yen(-sum)}` + (diff ? `\n投函した額 ${yen(dep)} → ${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}` : ""))) return;
-  const by = KB.operatorName(), at = new Date().toISOString();
+  const by = KB.operatorName(), at = bizTimeAt($("uo_t_" + cid).value) || new Date().toISOString(), cam = $("uo_cam_" + cid).value;
   try{
     for(const x of picked){
       const txt = `${unsMd(day)}に、この日の${x.kind === "day" ? "精算" : "未精算（" + x.what + "）"}を精算しました（未精算だけの精算・合計 ${yen(sum)}・${place}）`;
       if(x.kind === "day"){
         const s2 = { reward: x.raw.c.reward, option: x.raw.c.option, takeHome: x.raw.c.takeHome, total: x.raw.c.total, cardPaid: x.raw.c.cardPaid, drop: x.raw.c.drop, zappi: x.raw.c.zappi, paidOn: day, by, at };
-        await unsLogOther(x.date, cid, txt, { settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: s2 });
+        await unsLogOther(x.date, cid, txt, { settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: s2 }, { at, kind: "late", place, amount: x.amount, cam });
       } else {
         q(await sb.from("kb_unsettled").update({ done_on: day, done_by: by, done_at: at }).eq("id", x.raw.id));
-        await unsLogOther(x.date, cid, txt);
+        await unsLogOther(x.date, cid, txt, null, { at, kind: "late", place, amount: x.amount, cam });
       }
     }
     if(diff && UNS !== null) q(await sb.from("kb_unsettled").insert({ cast_id: cid, biz_date: day, amount: -diff, source: "auto", created_by: by,
       note: diff < 0 ? "未精算の精算で投函が足りなかった（投函 " + yen(dep) + "／" + yen(sum) + "）" : "未精算の精算で多く投函した（投函 " + yen(dep) + "／" + yen(sum) + "）" }));
     // 今日のこの子の精算の備考にも残す（今日の精算は「精算済」にはしない）
-    await unsLogOther(day, cid, `💴 未精算だけ精算しました（${place}）\n${labels.join("／")}\n→ 合計 ${sum >= 0 ? "投函 " + yen(sum) : "お店から渡す " + yen(-sum)}` + (dep != null ? `／投函した額 ${yen(dep)}` : ""));
+    await unsLogOther(day, cid, `💴 未精算だけ精算しました（${place}）\n${labels.join("／")}\n→ 合計 ${sum >= 0 ? "投函 " + yen(sum) : "お店から渡す " + yen(-sum)}` + (dep != null ? `／投函した額 ${yen(dep)}` : ""), null, { at, kind: "late", place, amount: dep, cam });
   }catch(e){ toast("精算できませんでした：" + (e.message || e)); return; }
   delete unsOnly[cid]; toast(`✅ ${castName(cid)} の未精算を精算しました`);
   if(typeof loadDay === "function") await loadDay(); await unsLoad();
@@ -632,7 +646,7 @@ cardHtml = function(id, c){
   const need = KB.CAN_EDIT && !done && !home;
   const cam = cd.camera_check || "";
   return `<div class="card svc ${done ? "done" : ""}" id="card-${id}">
-    <h2>${esc(castName(id))}${cd.status === "お茶" ? `<span class="st tea">🟩 お茶</span>` : cd.status === "欠勤" ? `<span class="st absent">🟥 欠勤</span>` : ""}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : home ? "🏠 直帰" : "未精算"}</span>
+    <h2>${esc(castName(id))}${cd.status === "お茶" ? `<span class="st tea">🟩 お茶</span>` : cd.status === "欠勤" ? `<span class="st absent">🟥 欠勤</span>` : ""}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : home ? "🏠 直帰" : "未精算"}</span>${done && (UNS || []).some(x => x.cast_id === id && x.biz_date === day && !x.done_on) ? `<span class="st" style="background:#FDE7E7;color:#c0392b;margin-left:4px">⚠️ 未精算あり</span>` : ""}
       ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
     <div class="svg2"><div class="svl">
     <details class="svf" ${svOpen.has(id) ? "open" : ""} ontoggle="this.open ? svOpen.add('${id}') : svOpen.delete('${id}')">
