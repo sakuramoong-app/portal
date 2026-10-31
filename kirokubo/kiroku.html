@@ -847,7 +847,7 @@ function renderList(){
       const when = t => { if(!t) return ""; const d = new Date(t); return (d.getMonth()+1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); };
       // 状態は、一覧から直接変えられる（小窓を開かなくてよい）
       const stSel = KB.CAN_EDIT
-        ? `<select class="stsel st ${r.status}" onclick="event.stopPropagation()" onchange="quickStatus(${r.id},this.value)">${Object.keys(STATUS).map(k=>`<option value="${k}" ${k===r.status?"selected":""}>${STATUS[k]}</option>`).join("")}</select>`
+        ? `<select class="stsel st ${r.status}" onclick="event.stopPropagation()" onchange="quickStatus(${r.id},this.value)">${stOpts(r, Object.keys(STATUS))}</select>`
         : `<span class="st ${r.status}">${STATUS[r.status]||r.status}</span>`;
       return `<tr class="r" onclick="openForm(${r.id})">
         <td>${hm(r.start_at)}〜${hm(r.end_at)}</td><td>${r.dummy_name ? `<small style="color:#6c5896">🎭${esc(r.dummy_name)} →</small> ` : ""}<b>${esc(castName(r.cast_id))}</b></td><td>${esc(storeLabel(r.store_key))}</td>
@@ -2862,7 +2862,7 @@ function renderListTable(){
     rows.map(r=>{
       const c = r.kb_customers || {};
       const stSel = KB.CAN_EDIT
-        ? `<select class="stsel st ${r.status}" onclick="event.stopPropagation()" onchange="quickStatus(${r.id},this.value)">${statusKeys(r.status).map(k=>`<option value="${k}" ${k === r.status ? "selected" : ""}>${STATUS[k]}</option>`).join("")}</select>`
+        ? `<select class="stsel st ${r.status}" onclick="event.stopPropagation()" onchange="quickStatus(${r.id},this.value)">${stOpts(r)}</select>`
         : `<span class="st ${r.status}">${STATUS[r.status] || r.status}</span>`;
       const told = r.cast_notified_at
         ? `<button class="told on" onclick="event.stopPropagation();toggleNotified(${r.id})" title="押すと取り消し">✅ 伝えた<small>${esc(r.cast_notified_by || "")} ${whenShort(r.cast_notified_at)}</small></button>`
@@ -3347,7 +3347,7 @@ function openSettle(cid){
 function resCells(r){
   const c = r.kb_customers || {};
   const stSel = KB.CAN_EDIT
-    ? `<select class="stsel st ${r.status}" onclick="event.stopPropagation()" onchange="quickStatus(${r.id},this.value)">${statusKeys(r.status).map(k=>`<option value="${k}" ${k === r.status ? "selected" : ""}>${STATUS[k]}</option>`).join("")}</select>`
+    ? `<select class="stsel st ${r.status}" onclick="event.stopPropagation()" onchange="quickStatus(${r.id},this.value)">${stOpts(r)}</select>`
     : `<span class="st ${r.status}">${STATUS[r.status] || r.status}</span>`;
   const told = r.cast_notified_at
     ? `<button class="told on" onclick="event.stopPropagation();toggleNotified(${r.id})" title="押すと取り消し">✅ 伝えた<small>${esc(r.cast_notified_by || "")} ${whenShort(r.cast_notified_at)}</small></button>`
@@ -3698,6 +3698,14 @@ quickStatus = async function(id, st){
   const r = rows.find(x=>x.id === id), was = r && r.status;
   await __quickStatusM(id, st);
   if(r && r.cast_id && st === "moving" && was !== "moving") markMoving(r.cast_id);
+};
+const __quickStatusT = quickStatus;
+quickStatus = async function(id, st){   // 状態のプルダウンの「🏦 振込」は、状態を変えずに振込だけ変える
+  if(!String(st).startsWith("tr:")) return __quickStatusT(id, st);
+  if(!KB.CAN_EDIT) return;
+  const r = rows.find(x=>x.id === id), v = st.slice(3);
+  if(r && v === (r.transfer_status || "")){ renderList(); return; }
+  return trStatus(id, v);
 };
 const __saveResM = saveRes;
 saveRes = async function(){
@@ -4314,11 +4322,12 @@ function qPay(id, v){ quickEdit(id, ()=>{ setPay(v); }, "支払い → " + (PAY_
    ・振込の額は、カードと同じで「キャストの手元にないお金」（精算の投函額から引く）
    ・振込処理完了にしたら、キャストにお釣り（未精算）を自動で作る：キャストバック ＋（振込を引く前に、もう精算済にしていた予約なら）振込の額 */
 const TR_ST = [["", "なし"], ["wait", "振込待ち"], ["owner", "社長の確認待ち"], ["done", "✅ 振込処理完了"]];
-function trSel(r, ed){   // いちばん上の行（状態・キャストOKのとなり）に出すプルダウン
-  if(!("transfer_status" in r)) return "";   // SQL 173 がまだ
-  const st = r.transfer_status || "";
-  if(!ed) return st ? `<span class="trsel on ${st}">🏦 ${(TR_ST.find(x=>x[0] === st) || [])[1] || ""}</span>` : "";
-  return `<select class="trsel ${st ? "on " + st : ""}" onchange="trStatus(${r.id},this.value)">${TR_ST.map(([k, l])=>`<option value="${k}" ${k === st ? "selected" : ""}>🏦 ${k ? l : "振込なし"}</option>`).join("")}</select>`;
+// 状態のプルダウンの中身：ふつうの状態 ＋ 下に「🏦 振込」（選ぶと状態はそのままで、振込だけ変わる）
+function stOpts(r, keys){
+  const st = r.transfer_status || "", has = "transfer_status" in r;   // SQL 173 がまだなら振込は出さない
+  const trL = st ? "・🏦" + ((TR_ST.find(x=>x[0] === st) || [])[1] || "").replace("✅ ", "") : "";
+  return (keys || statusKeys(r.status)).map(k=>`<option value="${k}" ${k === r.status ? "selected" : ""}>${STATUS[k]}${k === r.status ? trL : ""}</option>`).join("")
+    + (has ? `<optgroup label="🏦 振込（キャンセル料・もらい忘れ）">${TR_ST.filter(([k])=>k || st).map(([k, l])=>`<option value="tr:${k}">${k === st ? "✔ " : "　"}🏦 ${k ? l : "振込なしにもどす"}</option>`).join("")}</optgroup>` : "");
 }
 function trRow(r, ed){   // 振込にしたときだけ、カードの行の下に「額・キャストバック」の行
   if(!("transfer_status" in r)) return "";
@@ -4378,7 +4387,7 @@ function resCard(r){
   const c = r.kb_customers || {}, ed = KB.CAN_EDIT, cx = ["cancel", "tobi"].includes(r.status);
   const prices = M.prices.filter(p=>p.store_key === r.store_key);
   const stSel = ed
-    ? `<select class="stsel st ${r.status}" onchange="quickStatus(${r.id},this.value)">${statusKeys(r.status).map(k=>`<option value="${k}" ${k === r.status ? "selected" : ""}>${STATUS[k]}</option>`).join("")}</select>`
+    ? `<select class="stsel st ${r.status}" onchange="quickStatus(${r.id},this.value)">${stOpts(r)}</select>`
     : `<span class="st ${r.status}">${STATUS[r.status] || r.status}</span>`;
   const told = r.cast_notified_at   // 押すと「キャストまだ」⇔「キャストOK」（伝えたか）
     ? `<button class="told on" onclick="toggleNotified(${r.id})" title="${esc(r.cast_notified_by || "")} ${whenShort(r.cast_notified_at)}に伝えた。押すと取り消し">✅ キャストOK</button>`
@@ -4402,7 +4411,7 @@ function resCard(r){
       <span class="rc-k">総額 <b class="rc-yen">${yen(r.total)}</b><small>（${esc(PAY_LABEL[r.payment] || "")}）</small></span>
       <span class="rc-k">👤<b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${c.phone ? ` <span class="tel">📞${esc(c.phone)}</span>` : ""}</span>
       ${told}
-      ${trSel(r, ed)}
+
       ${mates.map(m => `<button type="button" class="rc-mate" onclick="rcJump(${m.id})">👥 ${esc(castName(m.cast_id))}の予約へ</button>`).join("")}
       ${(r.todos || []).filter(x => !x.done_at).map(x => `<button type="button" class="told rc-todo" onclick="event.stopPropagation();toggleTodo(${r.id},${(r.todos || []).indexOf(x)})">⏳ ${esc(x.text)}</button>`).join("")}
       <span style="flex:1"></span>
