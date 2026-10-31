@@ -25,6 +25,7 @@
   .card h2 .st{font-size:11px;font-weight:800;border-radius:99px;padding:3px 10px;background:var(--lemon-soft);color:#9a7000;}
   .card.done h2 .st{background:var(--mint-soft);color:#1a7a5e;}
   .card h2 .st.tea{background:#E3F6E8;color:#1f7a3f;margin-right:4px;} .card h2 .st.absent{background:#FDE3E3;color:#c0392b;margin-right:4px;}
+  .card.jumpflash{animation:jf 1.2s ease 3;} @keyframes jf{0%,100%{box-shadow:none}50%{box-shadow:0 0 0 5px #2f7fd0}}
   .grph{font-weight:900;font-size:14px;margin:18px 0 8px;padding:6px 14px;border-radius:12px;background:#F4F4F4;color:#777;} .grph.g2{background:#E3F6E8;color:#1f7a3f;} .grph.g3{background:#FDE3E3;color:#c0392b;}
   table.res{width:100%;border-collapse:collapse;font-size:12.5px;margin:4px 0 8px;}
   table.res th{font-size:11px;color:var(--sub);text-align:left;font-weight:800;padding:3px 4px;border-bottom:1px solid var(--line);}
@@ -209,6 +210,10 @@ function render(){
     h += l.map(({ id, c })=>cardHtml(id, c)).join("");
   });
   $("list").innerHTML = h;
+  // 回収明細・未精算の ↗ から：そのキャストの枠まで飛んで、少し光らせる（1回だけ）
+  const jc = new URLSearchParams(location.search).get("c");
+  if(jc && day === new URLSearchParams(location.search).get("d") && (!render.jumpAt || Date.now() - render.jumpAt < 4000)){   // 描きなおし（未精算の読みこみ）のあとも、少しのあいだ追いかける
+    const el = document.getElementById("card-" + jc); if(el){ render.jumpAt = render.jumpAt || Date.now(); el.scrollIntoView({ block: "start" }); el.classList.add("jumpflash"); } }
 }
 
 function cardHtml(id, c){
@@ -426,6 +431,6 @@ function copyDetail(id){
 init();
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=21"></script>
+<script src="unsettled.js?v=22"></script>
 </body>
 </html>

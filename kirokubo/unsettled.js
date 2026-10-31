@@ -67,6 +67,8 @@ function unsOpen(id){
     what: (x.note || (x.amount >= 0 ? "投函が足りなかった" : "多く投函した")) + (x.amount >= 0 ? `（未精算 ${yen(x.amount)}）` : `（お釣り ${yen(-x.amount)}）`) }));
   return a.concat(b).sort((p, q) => String(p.date).localeCompare(String(q.date)) || (p.kind === "day" ? -1 : 1));
 }
+// その日の、そのキャストの精算の枠へ（新しいタブ）
+const unsJump = (d, cid) => `<a class="ujump" href="settle.html?d=${d}&c=${encodeURIComponent(cid)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ ${unsMd(d)}の枠へ</a>`;
 const unsLine = (x, i, cid) => `${UNS_ABC[i] || i + 1}　${unsMd(x.date)}（${castName(cid)}）${x.what}`;
 function unsToggle(id, key, on){ const s = unsSel[id] = unsSel[id] || new Set(); if(on) s.add(key); else s.delete(key); unsRedraw(id); }
 
@@ -86,7 +88,7 @@ function unsBoxHtml(id, c){
   const sel = unsSel[id] || new Set(), picked = open.filter(x => sel.has(x.key)), due = c.drop + picked.reduce((a, x) => a + x.amount, 0);
   return `<div class="unsbox"><b>📒 未精算 ${open.length}件</b><small>（今日いっしょに精算するものにチェック。当日の精算明細はそのまま）</small>
     ${open.map((x, i) => `<label class="ur"><input type="checkbox" ${sel.has(x.key) ? "checked" : ""} ${KB.CAN_EDIT ? "" : "disabled"} onchange="unsToggle('${id}','${x.key}',this.checked)">
-      <b class="ab">${UNS_ABC[i] || i + 1}</b> <b>${unsMd(x.date)}</b>（${esc(castName(id))}）<span class="${x.amount >= 0 ? "neg" : "pos"}">${esc(x.what)}</span></label>`).join("")}
+      <b class="ab">${UNS_ABC[i] || i + 1}</b> <b>${unsMd(x.date)}</b>（${esc(castName(id))}）<span class="${x.amount >= 0 ? "neg" : "pos"}">${esc(x.what)}</span>${unsJump(x.date, id)}</label>`).join("")}
     ${picked.length ? `<div class="ut">当日の投函額 ${yen(c.drop)}${picked.map(x => (x.amount >= 0 ? " ＋ " : " − ") + yen(Math.abs(x.amount))).join("")} ＝
         ${due >= 0 ? `<span class="due">💰 合計で投函 ${yen(due)}</span>` : `<span class="due give">💴 お店から渡す ${yen(-due)}</span>`}</div>
       <div class="hint2" style="font-size:11.5px">「精算済にする」で、チェックしたものも精算になります（のこりは A から繰り上げ）。投函した額は、この合計と比べます。</div>` : `<div class="hint2" style="font-size:11.5px">チェックしないものは、つぎの精算にのこります</div>`}
@@ -183,7 +185,7 @@ function unsListHtml(){
   return `<div class="uhd">📒 未精算のキャスト（${ids.length}人）<small>前の${UNS_DAYS}日の、精算していない日と、投函が合わなかった分</small></div>
     ${ids.length ? ids.map(cid => { const l = unsOpen(cid), sum = l.reduce((a, x) => a + x.amount, 0);
       return `<div class="unsc"><div class="uh">★ <b>${esc(castName(cid))}</b>　のこり <b class="${sum >= 0 ? "neg" : "pos"}">${sum >= 0 ? "未精算 " + yen(sum) : "お店から渡す " + yen(-sum)}</b>（${l.length}件）</div>
-        ${l.map((x, i) => `<div class="ur">${KB.CAN_EDIT ? `<input type="checkbox" ${(unsOnly[cid] || new Set()).has(x.key) ? "checked" : ""} onchange="unsOnlyToggle('${cid}','${x.key}',this.checked)" title="未精算だけを、今日精算する">` : ""}<b class="ab">${UNS_ABC[i] || i + 1}</b> <b>${unsMd(x.date)}</b>（${esc(castName(cid))}）<span class="${x.amount >= 0 ? "neg" : "pos"}">${esc(x.what)}</span>
+        ${l.map((x, i) => `<div class="ur">${KB.CAN_EDIT ? `<input type="checkbox" ${(unsOnly[cid] || new Set()).has(x.key) ? "checked" : ""} onchange="unsOnlyToggle('${cid}','${x.key}',this.checked)" title="未精算だけを、今日精算する">` : ""}<b class="ab">${UNS_ABC[i] || i + 1}</b> <b>${unsMd(x.date)}</b>（${esc(castName(cid))}）<span class="${x.amount >= 0 ? "neg" : "pos"}">${esc(x.what)}</span>${unsJump(x.date, cid)}
           ${x.kind === "entry" && x.raw.source === "manual" ? `<small>手で入れた・${esc(x.raw.created_by || "")}</small>` : ""}
           ${KB.CAN_EDIT && x.kind === "entry" ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="unsDel(${x.raw.id})">🗑</button>` : ""}</div>`).join("")}
         ${unsOnlyFoot(cid, l)}</div>`; }).join("")
@@ -299,6 +301,7 @@ let unsDay = "";
 setInterval(() => { if(typeof day !== "undefined" && day && day !== unsDay){ unsDay = day; unsLoad(); } }, 800);
 document.head.insertAdjacentHTML("beforeend", `<style>
   .unsbox{background:#F6F2FF;border:2px dashed #A98BE6;border-radius:12px;padding:8px 12px;margin:8px 0;font-size:13.5px}
+  .ujump{margin-left:8px;font-size:11.5px;font-weight:800;color:#2f7fd0;text-decoration:none;border:1.5px solid #BFD8F2;background:#fff;border-radius:99px;padding:1px 8px;white-space:nowrap}
   .unsbox > b{color:#5b3fa6} .unsbox > small{color:#8a7f99;margin-left:4px}
   .ur{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:3px 0} .ur small{color:#8a7f99;font-size:11.5px}
   .ur .ab{display:inline-flex;width:22px;height:22px;border-radius:50%;background:#7b5cd6;color:#fff;align-items:center;justify-content:center;font-size:12px}
