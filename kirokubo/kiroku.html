@@ -633,7 +633,7 @@
       <div class="row2" style="margin-top:10px">
         <div class="f"><label>エリア<span class="req">必須</span></label>
           <select id="f_areaSel" onchange="onAreaSel()"></select>
-          <input id="f_area" maxlength="60" placeholder="場所（駅・地名など。例：川崎）" style="display:none;margin-top:6px" oninput="showAreaFee();recalc()"><div id="castArea"></div></div>
+          <input id="f_area" type="hidden"><input id="f_trip" maxlength="50" placeholder="出張の行き先（例：横浜・川崎）" style="display:none;margin-top:6px" oninput="onTripDest()"><div id="castArea"></div></div>
         <div class="f"><label>ホテル・自宅（部屋番号）<span class="req">種類は必須</span></label>
           <div style="display:flex;gap:6px"><select id="f_place" style="max-width:110px" onchange="checkNewHotel();recalc()"><option value="">（種類）</option><option value="love">ラブホ</option><option value="biz">ビジホ</option><option value="home">自宅</option></select>
           <input id="f_address" maxlength="200" list="hotelList" oninput="recalc();checkNewHotel()" style="flex:1"></div><datalist id="hotelList"></datalist><div id="castHotel"></div></div>
@@ -1272,23 +1272,27 @@ function optSummary(){
 }
 
 /* ---------- エリア：ホテル一覧（地図つき）・交通費のめやす ---------- */
-const AREA_OTHER = "__other";
+const AREA_TRIP = "出張";   // 出張は行き先（例：横浜）を書ける → エリアは「出張（横浜）」
 function areaList(){ return [...new Set((M.hotels || []).map(h=>h.area).filter(Boolean))]; }
+function tripDest(area){ const m = String(area || "").match(/^出張(?:（(.*)）)?$/); return m ? (m[1] || "") : null; }
 function fillAreaSel(area){
-  const list = areaList();
-  $("f_areaSel").innerHTML = `<option value="">（エリアを選ぶ）</option>` + list.map(a=>`<option>${esc(a)}</option>`).join("") + `<option value="${AREA_OTHER}">そのほか（場所を入力）</option>`;
-  if(!area){ $("f_areaSel").value = ""; $("f_area").value = ""; $("f_area").style.display = "none"; }
-  else if(list.includes(area)){ $("f_areaSel").value = area; $("f_area").value = area; $("f_area").style.display = "none"; }
-  else { $("f_areaSel").value = AREA_OTHER; $("f_area").value = area; $("f_area").style.display = ""; }
+  const list = areaList(), dest = tripDest(area), known = !area || dest != null || list.includes(area);
+  $("f_areaSel").innerHTML = `<option value="">（エリアを選ぶ）</option>` + list.map(a=>`<option>${esc(a)}</option>`).join("")
+    + (known ? "" : `<option>${esc(area)}</option>`);   // 前に「そのほか」で書いた場所は、そのまま
+  $("f_area").value = area || ""; $("f_area").style.display = "none";
+  $("f_areaSel").value = dest != null ? AREA_TRIP : (area || "");
+  $("f_trip").style.display = dest != null ? "" : "none"; $("f_trip").value = dest || "";
   showAreaFee();
 }
 function onAreaSel(){
-  const v = $("f_areaSel").value;
-  if(v === AREA_OTHER){ $("f_area").value = ""; $("f_area").style.display = ""; $("f_area").focus(); }
-  else { $("f_area").value = v; $("f_area").style.display = "none"; }
+  const v = $("f_areaSel").value, trip = v === AREA_TRIP;
+  $("f_trip").style.display = trip ? "" : "none"; if(!trip) $("f_trip").value = "";
+  $("f_area").value = v;
+  if(trip) $("f_trip").focus();
   showAreaFee();
   recalc();   // キャストへの予約連絡も新しい場所に
 }
+function onTripDest(){ const d = $("f_trip").value.trim(); $("f_area").value = AREA_TRIP + (d ? "（" + d + "）" : ""); showAreaFee(); recalc(); }
 let areaTimer = null;
 function showAreaFee(){ clearTimeout(areaTimer); areaTimer = setTimeout(paintAreaInfo, 300); }
 async function paintAreaInfo(){
