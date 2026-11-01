@@ -5788,12 +5788,34 @@ lookupCustomer = async function(){ const r = await __lookupCustomerLock.apply(th
 function paintSubPhones(){
   const box = $("custInfo"); if(!box) return;
   box.querySelectorAll(".subph").forEach(x => x.remove());
-  const c = curCustomer; if(!c || !c.id) return;
-  const typed = phoneNorm($("f_phone").value), ps = c.phones || [];
+  const c = curCustomer, typed = phoneNorm($("f_phone").value);
+  if(!c || !c.id){   // はじめての番号：話してみたら前のお客さんだった → 前の番号でつなぐ
+    if(KB.CAN_EDIT && digits(typed).length >= 6) box.insertAdjacentHTML("beforeend", `<div class="subph" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:13px;margin:6px 0 0">
+      <span style="color:var(--sub);font-weight:700">前に別の番号で来たお客さんなら →</span>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="linkOldPhone()">🔗 前の番号でつなぐ</button></div>`);
+    return;
+  }
+  const ps = c.phones || [];
   box.insertAdjacentHTML("afterbegin", `<div class="subph" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:13px;margin:0 0 6px">
     ${c.phone && typed && typed !== c.phone ? `<span style="font-weight:800;color:#6b4fa0">📞 副番号で見つかりました（主の番号 ${esc(c.phone)}）</span>` : ""}
     <span style="color:var(--sub);font-weight:700">副番号：</span>${ps.length ? ps.map(p => `<span style="border:1.5px solid var(--line);border-radius:99px;padding:1px 9px;font-weight:700">${esc(p)}</span>`).join("") : `<span style="color:var(--sub)">なし</span>`}
     ${KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="addSubPhoneK()">＋ 番号を追加</button>` : ""}</div>`);
+}
+// 🔗 入電した番号（はじめて）を、前の番号のお客さんにつなぐ：メイン＝いまの番号、前のメイン番号は副番号へ
+async function linkOldPhone(){
+  const now = phoneNorm($("f_phone").value); if(digits(now).length < 6) return;
+  const old = phoneNorm(prompt("前の電話番号（そのお客さんが前に使っていた番号）") || "");
+  if(digits(old).length < 6) return;
+  const c = await custByPhone(old, "*");
+  if(!c){ toast("その番号のお客さんは見つかりませんでした"); return; }
+  if(!("phones" in c)){ toast("先に SQL 179（副番号）を実行してください"); return; }
+  if(!confirm(`「${c.name || "名前なし"}」さん（${c.phone || old}）とつなぎます。\n\nメインの番号 → ${now}（今回の番号）\n副番号 → ${[...new Set([...(c.phones || []), c.phone].filter(p => p && p !== now))].join("・")}\n\nよろしいですか？`)) return;
+  try{
+    const phones = [...new Set([...(c.phones || []), c.phone].filter(p => p && p !== now))];
+    q(await sb.from("kb_customers").update({ phone: now, phones, updated_by: KB.operatorName() }).eq("id", c.id));
+    toast(`🔗 ${c.name || "お客さん"}さんとつなぎました`);
+    await lookupCustomer();   // つないだお客さんの履歴などを出しなおす
+  }catch(e){ toast("つなげませんでした：" + (e.message || e)); }
 }
 async function addSubPhoneK(){
   const c = curCustomer; if(!c || !c.id) return;
