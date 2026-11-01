@@ -86,7 +86,7 @@
     <div id="wip"></div>
     <div class="bar">
       <span class="seg"><button id="mDay" class="on" onclick="setMode('day')">1日ごと</button><button id="mMonth" onclick="setMode('month')">1か月ごと</button></span>
-      <button class="btn btn-ghost btn-sm" onclick="shift(-1)">◀</button><input type="date" id="day" onchange="reload()"><span id="ymLabel" class="ym" style="display:none"></span><button class="btn btn-ghost btn-sm" onclick="shift(1)">▶</button>
+      <button class="btn btn-ghost btn-sm" onclick="shift(-1)">◀</button><label class="datebox" id="dayBox" onclick="event.preventDefault();openCuteCal()" title="押すとカレンダー"><span id="dayLabel"></span><span class="calico">📅</span><input type="date" id="day" onchange="reload()"></label><span id="ymLabel" class="ym" style="display:none"></span><button class="btn btn-ghost btn-sm" onclick="shift(1)">▶</button>
       <button class="btn btn-ghost btn-sm" onclick="$('day').value=KB.bizDateOf();reload()" id="todayBtn">今日</button>
       <span style="width:12px"></span><span id="plBar"></span>
     </div>
@@ -145,7 +145,7 @@ async function init(){
 }
 function setMode(m){
   mode = m; $("mDay").classList.toggle("on", m === "day"); $("mMonth").classList.toggle("on", m === "month");
-  $("day").style.display = m === "day" ? "" : "none"; $("ymLabel").style.display = m === "month" ? "" : "none";
+  $("dayBox").style.display = m === "day" ? "" : "none"; $("ymLabel").style.display = m === "month" ? "" : "none";
   $("todayBtn").textContent = m === "day" ? "今日" : "今月";
   reload();
 }
@@ -554,7 +554,10 @@ async function save(p){
   toast(found === expected ? `✅ ${p}：記録しました` : `⚠️ ${p}：${found}通／記録 ${expected}件。精算をたしかめてください`);
   load();
 }
+// 上の日付の箱（kb_cal.js・記録簿と同じカレンダー）：日付を変えたら「11/2(日) 今日」を描きなおす
+{ const __loadDayDL = loadDay; loadDay = async function(){ if(typeof paintDayLabel === "function") paintDayLabel(); return __loadDayDL.apply(this, arguments); }; }
 init();
 </script>
+<script src="kb_cal.js?v=1"></script>
 </body>
 </html>
