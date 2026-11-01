@@ -3022,7 +3022,11 @@ function renderOwner(){
     ["オプション額", r=>r.option_total], ["割引", r=>r.discount], ["総額", r=>r.total], ["キャスト報酬", r=>backOf(r)],
     ["暫定的な残額（源泉含む）", r=>(r.total || 0) - backOf(r)], ["【税務用】源泉徴収", r=>Math.floor(backOf(r) / 9)],
     ["実質的な店落ち", r=>(r.total || 0) - backOf(r) - Math.floor(backOf(r) / 9)]];
-  const sum = cols.map(([, f])=>live.reduce((a, r)=>a + (Number(f(r)) || 0), 0));
+  // 👤 内勤（スタッフ）：記録簿エクセルと同じく、合計にスタッフ分も入れる。報酬＝日払い（払った分）、残額・店落ちはマイナス、源泉は報酬÷9
+  const spRows = (typeof staffPay !== "undefined" && staffPay.rows) || [];
+  const staffAmt = r => r.amount != null ? Number(r.amount) || 0 : (r.in != null && r.out != null && r.out > r.in ? Math.round((r.out - r.in) * r.hourly) : 0);
+  const staff = spRows.filter(r => r.paid && staffAmt(r) > 0).map(r => { const p = staffAmt(r), w = Math.floor(p / 9); return { name: r.name, vals: [0, 0, 0, 0, 0, 0, 0, 0, p, -p, w, -p - w] }; });
+  const sum = cols.map(([, f], i)=>live.reduce((a, r)=>a + (Number(f(r)) || 0), 0) + staff.reduce((a, s)=>a + s.vals[i], 0));
   const ids = [...new Set(live.map(r=>r.cast_id).filter(Boolean))];
   let zappi = 0; ids.forEach(id=>{ try{ zappi += calcCast(id).zappi || 0; }catch(e){} });
   const card = live.filter(r=>r.payment !== "cash").reduce((a, r)=>a + (r.total || 0), 0);
@@ -3032,7 +3036,11 @@ function renderOwner(){
       <div class="t"><div class="k">実質的な店落ち（合計）</div><div class="v">${yen(sum[11])}</div></div></div>
     <div class="wrapx"><table class="list" style="font-size:12.5px"><tr><th>時間</th><th>キャスト</th>${cols.map(([l])=>`<th>${l}</th>`).join("")}</tr>
       ${live.map(r=>`<tr><td>${hm(r.start_at)}</td><td>${esc(castName(r.cast_id))}</td>${cols.map(([, f])=>`<td class="money">${yen(Number(f(r)) || 0)}</td>`).join("")}</tr>`).join("")}
-      <tr style="font-weight:800;background:#FFF7FA"><td colspan="2">合計（${live.length}件）</td>${sum.map(v=>`<td class="money">${yen(v)}</td>`).join("")}</tr></table></div>`;
+      ${staff.map(s=>`<tr style="background:#F4F8FF"><td>内勤</td><td>👤 ${esc(s.name)}</td>${s.vals.map((v, i)=>`<td class="money">${i < 8 ? "" : yen(v)}</td>`).join("")}</tr>`).join("")}
+      <tr style="font-weight:800;background:#FFF7FA"><td colspan="2">合計（${live.length}件${staff.length ? "・スタッフ分含む" : ""}）</td>${sum.map(v=>`<td class="money">${yen(v)}</td>`).join("")}</tr></table></div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:flex-end;margin-top:8px;font-weight:900;font-size:14px">
+      <span>雑費合計 <span style="color:#e5638c">${yen(zappi)}</span></span><span>カード合計 <span style="color:#e5638c">${yen(card)}</span></span>
+      <span>暫定的な残額＋雑費（スタッフ分含む） <span style="color:#e5638c">${yen(sum[9] + zappi)}</span></span></div>`;
 }
 
 /* ---------- 🪑 鶯谷待機席（1〜5番）：座った時刻〜退席の時刻を、日付ごとに記録（kb_seat_logs） ---------- */
@@ -6071,7 +6079,7 @@ async function qStatusAt(id, v){
 })();
 
 /* ---------- 内勤の日払いを読んだら・直したら、「今日の店落ち」も描きなおす（日払いを引くので） ---------- */
-{ const __paintSPToday = paintStaffPay; paintStaffPay = function(){ const r = __paintSPToday.apply(this, arguments); try{ renderToday(); }catch(e){} return r; }; }
+{ const __paintSPToday = paintStaffPay; paintStaffPay = function(){ const r = __paintSPToday.apply(this, arguments); try{ renderToday(); }catch(e){} try{ renderOwner(); }catch(e){} return r; }; }
 
 /* ---------- 🗺 地図のURLを開く（入っていなければ、登録されているホテルの地図） ---------- */
 function openMapUrl(){
