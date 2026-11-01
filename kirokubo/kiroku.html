@@ -4250,8 +4250,9 @@ function custNextFee(id){
 /* ---------- エリア：池袋・鶯谷・五反田・渋谷・錦糸町・出張 は、ホテルリストになくてもいつも出す ---------- */
 areaList = function(){
   const rank = a=>{ const i = AREA_ORDER.findIndex(x=>String(a).includes(x)); return i < 0 ? 99 : i; };
-  const fromHotels = __areaList();
-  const all = AREA_ORDER.filter(a=>!fromHotels.some(h=>String(h).includes(a))).concat(fromHotels);
+  // 出張の行き先で足したホテル（エリアが「出張（新宿）」など）は、エリアの一覧では「出張」1つにまとめる
+  const fromHotels = __areaList().map(a => tripDest(a) != null ? AREA_TRIP : a);
+  const all = AREA_ORDER.filter(a=>!fromHotels.some(h=>String(h).includes(a))).concat(fromHotels, [AREA_TRIP]);
   return [...new Set(all)].sort((a, b)=>rank(a) - rank(b) || String(a).localeCompare(String(b), "ja"));
 };
 
