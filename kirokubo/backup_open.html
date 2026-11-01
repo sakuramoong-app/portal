@@ -6,6 +6,7 @@
 <title>バックアップを開く│サクラG</title>
 <link rel="stylesheet" href="kb.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   .wrap{max-width:640px;}
   .bk{background:#fff;border:2px solid #FFC2D1;border-radius:18px;padding:18px 20px;margin-top:12px;line-height:1.8;font-size:14px}
@@ -26,7 +27,7 @@
   </div>
   <div class="bk">
     <h2>1. ファイルを選ぶ</h2>
-    <input type="file" id="file" accept=".sgb">
+    <input type="file" id="file" accept=".sgb,.zip">
     <h2 style="margin-top:12px">2. パスワードを入れる</h2>
     <input type="password" id="pw" autocomplete="off" placeholder="バックアップのパスワード（BACKUP_ZIP_PASS）" onkeydown="if(event.key==='Enter')openIt()">
     <button type="button" class="bigbtn" id="go" onclick="openIt()">🔓 開いてエクセルで保存</button>
@@ -51,7 +52,15 @@ async function openIt(){
   if(!pw){ say("パスワードを入れてください", "ng"); return; }
   $("go").disabled = true; say("開いています…");
   try{
-    const buf = new Uint8Array(await f.arrayBuffer());
+    let buf = new Uint8Array(await f.arrayBuffer()), from = f.name;
+    // Dropbox でフォルダごとダウンロードした ZIP（PK…）なら、中のいちばん新しい .sgb を使う
+    if(buf[0] === 0x50 && buf[1] === 0x4B){
+      const zip = await JSZip.loadAsync(buf);
+      const names = Object.keys(zip.files).filter(n => /\.sgb$/i.test(n) && !zip.files[n].dir).sort();
+      if(!names.length) throw new Error("ZIPの中に自動バックアップのファイル（.sgb）がありません");
+      from = names[names.length - 1].split("/").pop();
+      buf = await zip.files[names[names.length - 1]].async("uint8array");
+    }
     if(new TextDecoder().decode(buf.slice(0, 9)) !== MAGIC) throw new Error("自動バックアップのファイル（.sgb）ではありません");
     const salt = buf.slice(9, 25), iv = buf.slice(25, 37), ct = buf.slice(37);
     const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
@@ -72,7 +81,7 @@ async function openIt(){
       names.add(name);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows.length ? [cols].concat(rows.map(r => cols.map(c => cell(r[c])))) : [["（データなし）"]]), name);
     }
-    const fname = f.name.replace(/\.sgb$/i, "") + ".xlsx";
+    const fname = from.replace(/\.sgb$/i, "") + ".xlsx";
     XLSX.writeFile(wb, fname);
     say(`✅ 開けました：${fname}（${jst(data.at)} のバックアップ）`, "ok");
     $("pw").value = "";
