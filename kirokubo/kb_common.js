@@ -146,3 +146,13 @@
 /* ---------- 数字の欄（記録簿のページ共通）：スクロールしても数字を変えない・クリックで中身をぜんぶ選ぶ ---------- */
 document.addEventListener("wheel", e => { const t = e.target; if(t && t.matches && t.matches("input[type=number]") && document.activeElement === t) t.blur(); }, { passive: true, capture: true });
 document.addEventListener("focusin", e => { const t = e.target; if(t && t.matches && t.matches("input[type=number]")) setTimeout(() => { try{ t.select(); }catch(err){} }, 0); });
+
+/* ---------- 📱 スマホでは出さないもの（記録簿のページ共通）：あかさたな・今日の数字・内勤の日払い ---------- */
+(function(){
+  const phone = /iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent) || matchMedia("(max-width:640px)").matches;
+  if(!phone) return;
+  document.documentElement.classList.add("is-phone");
+  const css = document.createElement("style");
+  css.textContent = `.is-phone .kanabar, .is-phone #kanaBar, .is-phone #todayBox, .is-phone #staffPayBox{display:none !important}`;
+  (document.head || document.documentElement).appendChild(css);
+})();

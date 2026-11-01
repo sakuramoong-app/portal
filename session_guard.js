@@ -131,7 +131,56 @@
     } catch (e) { /* 読めないときは何もしない（今までどおり20時間） */ }
     finally { busy = false; }
   }
+  /* ---------- 📱 スマホのとき（2026/11/02）
+     ・開けるのは：ポータル・記録簿の受付（kiroku）・精算・キャスト台帳・端末の登録・内勤カレンダー・在籍ルーム。ほかは「スマホでは開けません」
+     ・3分さわらないと画面をロック → 端末の合言葉で解除（ページを開きなおしてもロックのまま） ---------- */
+  const IS_PHONE = /iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent) || (matchMedia("(max-width:640px)").matches && matchMedia("(pointer:coarse)").matches);
+  const PHONE_OK = [/^\/portal\/?$/, /^\/portal\/index\.html$/, /^\/portal\/kirokubo\/(kiroku|settle|index|device)\.html$/, /^\/portal\/kirokubo\/?$/, /^\/naikin-shift\//, /^\/sakura-newcast\//];
+  const LOCK_KEY = "phoneLockAt", LOCK_MIN = 3;
+  const overlay = (html) => {
+    let el = document.getElementById("phoneGuard");
+    if (!el) { el = document.createElement("div"); el.id = "phoneGuard"; el.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#FFF0F5;display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit"; document.body.appendChild(el); }
+    el.innerHTML = `<div style="width:100%;max-width:360px;background:#fff;border:2px solid #FFC2D1;border-radius:20px;padding:22px;text-align:center;line-height:1.8;color:#5C4B4F">${html}</div>`;
+    return el;
+  };
+  function phoneBlock(){
+    overlay(`<div style="font-size:40px">📱</div><div style="font-size:17px;font-weight:900;color:#e5638c">このページはスマホでは開けません</div>
+      <div style="font-size:13.5px;margin:6px 0 14px">PCで開いてください。<br>スマホで使えるのは、記録簿の受付・精算、キャスト台帳、内勤カレンダー、在籍ルームです。</div>
+      <a href="/portal/index.html" style="display:inline-block;background:#e5638c;color:#fff;border-radius:99px;padding:10px 20px;font-weight:900;text-decoration:none">🏠 ポータルへ</a>`);
+  }
+  let lastAct = Date.now();
+  function phoneLock(){
+    lsSet(LOCK_KEY, String(Date.now()));
+    const el = overlay(`<div style="font-size:40px">🔒</div><div style="font-size:17px;font-weight:900;color:#e5638c">画面をロックしました</div>
+      <div style="font-size:13px;margin:4px 0 12px">3分さわらなかったので、ロックしました。<br>端末の合言葉を入れてください。</div>
+      <input type="password" id="pgPass" autocomplete="off" style="width:100%;box-sizing:border-box;font-size:18px;padding:12px;border:2px solid #FFC2D1;border-radius:12px;text-align:center;font-family:inherit">
+      <div id="pgMsg" style="color:#c0392b;font-weight:800;font-size:13px;min-height:20px;margin-top:6px"></div>
+      <button type="button" id="pgOk" style="width:100%;border:none;border-radius:99px;padding:12px;background:#e5638c;color:#fff;font-weight:900;font-size:16px;font-family:inherit">🔓 解除</button>`);
+    const ok = async () => {
+      const s = session(), v = el.querySelector("#pgPass").value;
+      if (!s) { location.href = "/portal/index.html"; return; }
+      try {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/device_pass_ok`, { method: "POST", headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + s.access_token, "Content-Type": "application/json" }, body: JSON.stringify({ p_pass: v }) });
+        if (r.ok && (await r.json()) === true) { lsDel(LOCK_KEY); lastAct = Date.now(); el.remove(); return; }
+        el.querySelector("#pgMsg").textContent = "合言葉がちがいます";
+      } catch (e) { el.querySelector("#pgMsg").textContent = "確かめられませんでした（電波を確かめてください）"; }
+    };
+    el.querySelector("#pgOk").onclick = ok;
+    el.querySelector("#pgPass").onkeydown = e => { if (e.key === "Enter") ok(); };
+  }
+  function phoneSetup(){
+    if (!IS_PHONE) return;
+    const s = session();
+    if (!s || !s.user || String(s.user.email || "").toLowerCase() !== STAFF_EMAIL) return;   // 内勤のログインのときだけ
+    if (!PHONE_OK.some(re => re.test(location.pathname))) { phoneBlock(); return; }
+    if (lsGet(LOCK_KEY)) { phoneLock(); return; }   // 開きなおしてもロックのまま
+    ["pointerdown", "keydown", "touchstart", "scroll"].forEach(ev => document.addEventListener(ev, () => { if (!lsGet(LOCK_KEY)) lastAct = Date.now(); }, { passive: true, capture: true }));
+    const check = () => { if (!document.getElementById("phoneGuard") && Date.now() - lastAct >= LOCK_MIN * MIN) phoneLock(); };
+    setInterval(check, 10 * 1000);
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") check(); });
+  }
   window.SessionGuard = { tick, plan };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", phoneSetup); else phoneSetup();
   const start = () => { tick(); setInterval(tick, 30 * 1000); };
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") tick(); });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
