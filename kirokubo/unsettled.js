@@ -269,7 +269,7 @@ async function unsOnlySettle(cid){
     for(const x of picked){
       const txt = `${unsMd(day)}に、この日の${x.kind === "day" ? "精算" : "未精算（" + x.what + "）"}を精算しました（未精算だけの精算・合計 ${yen(sum)}・${place}）`;
       if(x.kind === "day"){
-        const s2 = { reward: x.raw.c.reward, option: x.raw.c.option, takeHome: x.raw.c.takeHome, total: x.raw.c.total, cardPaid: x.raw.c.cardPaid, drop: x.raw.c.drop, zappi: x.raw.c.zappi, paidOn: day, by, at };
+        const s2 = { reward: x.raw.c.reward, option: x.raw.c.option, takeHome: x.raw.c.takeHome, total: x.raw.c.total, cardPaid: x.raw.c.cardPaid, drop: x.raw.c.drop, zappi: x.raw.c.zappi, paidOn: day, by, at, only: true };   // only＝未精算だけの個別精算
         await unsLogOther(x.date, cid, txt, { settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: s2 }, { at, kind: "late", place, amount: x.amount, cam });
       } else {
         q(await sb.from("kb_unsettled").update({ done_on: day, done_by: by, done_at: at }).eq("id", x.raw.id));
@@ -372,7 +372,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
          → 本日＋未精算（合算）A・B・C…（いちばん下が本日精算）→ A＋B＋…＝ → 合計で投函
          → 精算メモ（1営業日に1枚） ---------- */
 // 精算メモの書きかた（画像・LINE の文・精算画面 共通）
-const MEMO_NOTE = ["※金額は、実際に投函する額をご記入ください", "※精算メモを一番上にして、表向きでお入れください"];
+const MEMO_NOTE = ["※金額は、実際に投函する額をご記入ください", "※精算メモを一番上にして、表向きでお入れください", "※領収書がある場合は必ず同封してください"];
 function settleParts(id){
   const c = calcCast(id), d = new Date(day + "T12:00:00Z");
   const pay = c.reward + c.option - c.zappi;   // 本日の報酬
@@ -633,7 +633,7 @@ function settleViewHtml(id, c){
   const stat = diff == null ? "投函した額 まだ" : diff === 0 ? "✅ ぴったり" : diff < 0 ? `⚠ 未精算 ${yen(-diff)}` : `⚠ お釣り ${yen(diff)}`;
   const pastH = `<div class="sv"><div class="stt" style="color:${past.length ? "#5b3fa6" : "#2e8b57"}">${past.length ? `📒 過去の未精算：のこり ${past.length}件（${esc(past.map(x => unsMd(x.date) + " " + (x.amount < 0 ? "お釣り " : "") + yen(Math.abs(x.amount))).join("、"))}）` : "📒 過去の未精算：なし"}</div></div>`;
   const shop = `<div class="sv"><details class="gb gbd" ${shopOpen.has(id) ? "open" : ""} ontoggle="this.open ? shopOpen.add('${id}') : shopOpen.delete('${id}')"><summary class="k">🏪 店落ち（暫定的な残額＋雑費）<small>押すと開く</small></summary><div class="v">${yen(c.shopDrop)}</div>
-      ${R("総額", yen(c.total))}${R("キャスト報酬（報酬＋OP）", yen(c.reward + c.option))}${R("暫定的な残額（総額−報酬）", yen(c.provisional))}${R("【税務用】源泉徴収（手取りからは引かない）", yen(c.withholding))}${R("実質的な店落ち（暫定的な残額−源泉）", yen(c.realDrop))}</details></div>`;
+      ${R("総額", yen(c.total))}${R("キャスト報酬（報酬＋OP）", yen(c.reward + c.option))}${R("暫定的な残額（総額−報酬）", yen(c.provisional))}${R("＋ 雑費", yen(c.zappi))}${R("＝ 店落ち（暫定的な残額＋雑費）", yen(c.provisional + c.zappi))}${R("【税務用】源泉徴収（手取りからは引かない）", yen(c.withholding))}${R("実質的な店落ち（暫定的な残額−源泉）", yen(c.realDrop))}</details></div>`;
   return { view: `<div class="sv">${h}</div>`, dep, past: pastH, shop, stat, due: P.due };
 }
 // 精算場所の色（今どこに誰が のエリアの色と同じ。回収はピンク）
