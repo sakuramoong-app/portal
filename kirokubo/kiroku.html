@@ -2004,8 +2004,8 @@ async function saveRes(){
       course_back: c.courseBack, option_back: c.optionBack, extra_back: c.extra,
       back_override: ovRaw === "" ? null : Number(ovRaw),
       ...(("back_override_note" in (rows[0] || editing || {})) || ovRaw !== "" ? { back_override_note: ovRaw === "" ? "" : backOvNote.trim() } : {}),
-      // 📱 スマホで保存したら「仮入力」。PCで（キャストに送ったか確かめて）保存すると取り入れる（SQL 155 のあと）
-      ...(("phone_draft" in (rows[0] || editing || {})) || IS_PHONE() ? (IS_PHONE() ? { phone_draft: true, phone_draft_by: by, phone_draft_at: new Date().toISOString() } : { phone_draft: false }) : {}),
+      // 📱 スマホで保存しても、そのまま本予約（2026/11/02 社長OK。前の「仮入力」は使わない）
+      ...(("phone_draft" in (rows[0] || editing || {})) ? { phone_draft: false } : {}),
       status: $("f_status").value, confirm_call: $("f_confirm").value.trim(), note: $("f_note").value, updated_by: by,
       ...formStatusAtPatch(),   // ⏰ この状態の時刻（SQL 182）
       ...(() => { const v = $("f_castnote") ? $("f_castnote").value.trim() : ""; return v || rows.some(x => "cast_note" in x) || (editing && "cast_note" in editing) ? { cast_note: v } : {}; })(),   // 📝 キャストに伝える特記事項（SQL 187）
@@ -5986,7 +5986,7 @@ const __renderListDraft = renderList;   // 最初の読みこみ（この上書�
 renderList = function(){ const r = __renderListDraft.apply(this, arguments); try{ draftAlertPaint(); }catch(e){} return r; };
 const __saveResDraft = saveRes;
 saveRes = async function(){ const wasOpen = $("formBg").classList.contains("show"); const r = await __saveResDraft.apply(this, arguments);
-  if(wasOpen && !$("formBg").classList.contains("show") && IS_PHONE()) toast("📱 仮入力で保存しました（事務所のPCで確かめて取り入れます）"); return r; };
+  return r; };   // スマホでもそのまま本予約（仮入力のお知らせは出さない）
 
 /* ---------- 📱 スマホ（外出中・車の中で少しだけ使う）：上に「よく使う4つ」・はみ出しを直す・長い説明はしまう ---------- */
 function spGo(w){
