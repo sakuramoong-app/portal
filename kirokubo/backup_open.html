@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>バックアップを開く│サクラG</title>
+<link rel="stylesheet" href="kb.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  .wrap{max-width:640px;}
+  .bk{background:#fff;border:2px solid #FFC2D1;border-radius:18px;padding:18px 20px;margin-top:12px;line-height:1.8;font-size:14px}
+  .bk h2{margin:0 0 6px;font-size:17px;color:#e5638c}
+  input[type=password]{width:100%;box-sizing:border-box;font-family:inherit;font-size:16px;padding:10px 12px;border:1.5px solid #F1E3E7;border-radius:12px}
+  .bigbtn{display:block;width:100%;border:none;border-radius:16px;padding:14px;font-family:inherit;font-size:17px;font-weight:900;color:#fff;background:linear-gradient(135deg,#FF8FB1,#e5638c);cursor:pointer;margin-top:10px}
+  .bigbtn:disabled{opacity:.6}
+  .msg{margin-top:10px;font-weight:800;font-size:14px;white-space:pre-wrap}
+  .msg.ng{color:#c0392b} .msg.ok{color:#2e8b57}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 style="font-size:20px;color:#e5638c">🔓 バックアップを開く</h1>
+  <div class="bk">
+    Dropbox の「アプリ ＞ sakura-backup-2026」にある自動バックアップ（<b>サクラG_バックアップ_〇〇.sgb</b>）を、エクセルにもどします。<br>
+    ファイルとパスワードは、このPCの中だけで使います（どこにも送りません）。
+  </div>
+  <div class="bk">
+    <h2>1. ファイルを選ぶ</h2>
+    <input type="file" id="file" accept=".sgb">
+    <h2 style="margin-top:12px">2. パスワードを入れる</h2>
+    <input type="password" id="pw" autocomplete="off" placeholder="バックアップのパスワード（BACKUP_ZIP_PASS）" onkeydown="if(event.key==='Enter')openIt()">
+    <button type="button" class="bigbtn" id="go" onclick="openIt()">🔓 開いてエクセルで保存</button>
+    <div class="msg" id="msg"></div>
+  </div>
+  <div class="bk" style="font-size:13px;color:#5C4B4F">
+    ・できたエクセルには、お客さん・キャストの個人情報が全部入っています。見終わったら消してください。<br>
+    ・パスワードがちがうと開けません。パスワードを忘れると、だれも開けません。
+  </div>
+</div>
+<script>
+/* kb-backup（Edge Function）が作った .sgb を開く：
+   先頭 "SAKURABK1"（9バイト）＋ salt 16 ＋ iv 12 ＋ 暗号（AES-256-GCM。鍵は PBKDF2・SHA-256・10万回）→ gzip をほどく → JSON → エクセル */
+const $ = id => document.getElementById(id);
+const MAGIC = "SAKURABK1", ITER = 100000, MAX_CELL = 32000;
+const say = (t, cls) => { $("msg").textContent = t; $("msg").className = "msg " + (cls || ""); };
+const cell = v => { if(v == null) return ""; if(typeof v === "object") v = JSON.stringify(v); v = String(v); return v.length > MAX_CELL ? v.slice(0, MAX_CELL) + "…（長いので切りました）" : v; };
+const jst = s => { const d = new Date(new Date(s).getTime() + 9 * 3600e3); return d.toISOString().slice(0, 16).replace("T", " "); };
+async function openIt(){
+  const f = $("file").files[0], pw = $("pw").value;
+  if(!f){ say("ファイルを選んでください", "ng"); return; }
+  if(!pw){ say("パスワードを入れてください", "ng"); return; }
+  $("go").disabled = true; say("開いています…");
+  try{
+    const buf = new Uint8Array(await f.arrayBuffer());
+    if(new TextDecoder().decode(buf.slice(0, 9)) !== MAGIC) throw new Error("自動バックアップのファイル（.sgb）ではありません");
+    const salt = buf.slice(9, 25), iv = buf.slice(25, 37), ct = buf.slice(37);
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: ITER, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    let gz;
+    try{ gz = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct); }
+    catch(e){ throw new Error("パスワードがちがいます（またはファイルがこわれています）"); }
+    const text = await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+    const data = JSON.parse(text);
+    say("エクセルを作っています…");
+    const wb = XLSX.utils.book_new(), names = new Set();
+    const toc = [[`自動バックアップ ${jst(data.at)}`, "", (data.summary || []).reduce((a, x) => a + (x.rows || 0), 0), ""], ["表", "中身", "行の数", "メモ"]]
+      .concat((data.summary || []).map(x => [x.t, x.label, x.rows, x.error ? "読めませんでした：" + x.error : ""]));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(toc), "目次");
+    for(const tb of data.tables || []){
+      const rows = tb.rows || [], cols = [...new Set(rows.flatMap(r => Object.keys(r)))];
+      let name = String(tb.label || tb.t).slice(0, 31).replace(/[\\\/\?\*\[\]:]/g, "_"); while(names.has(name) || name === "目次") name = name.slice(0, 29) + "_" + names.size;
+      names.add(name);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows.length ? [cols].concat(rows.map(r => cols.map(c => cell(r[c])))) : [["（データなし）"]]), name);
+    }
+    const fname = f.name.replace(/\.sgb$/i, "") + ".xlsx";
+    XLSX.writeFile(wb, fname);
+    say(`✅ 開けました：${fname}（${jst(data.at)} のバックアップ）`, "ok");
+    $("pw").value = "";
+  }catch(e){ say("開けませんでした：" + (e.message || e), "ng"); }
+  $("go").disabled = false;
+}
+</script>
+</body>
+</html>
