@@ -120,3 +120,25 @@
 
   window.KB = { sb, staffSession, deviceStatus, operatorName, CAN_EDIT, MANAGER_NAME, IS_OWNER, OWNER_NAME, q, esc, yen, toast, bizDateOf, rememberDay, startDay, nav, wipBanner, closeOnBackdrop };
 })();
+
+/* ---------- ⬆ 上に戻るボタン（記録簿のページ共通）：ある程度下までスクロールしたら右下に出る。
+   受付の窓（#formBg）を開いているときは、窓の中を上に戻す ---------- */
+(function(){
+  function setup(){
+    const css = document.createElement("style");
+    css.textContent = `#toTopBtn{position:fixed;right:16px;bottom:64px;z-index:1100;width:52px;height:52px;border-radius:50%;border:2px solid #FFC2D1;background:#fff;color:#e5638c;font-size:22px;font-weight:900;cursor:pointer;box-shadow:0 6px 16px rgba(229,99,140,.3);display:none;align-items:center;justify-content:center;font-family:inherit;line-height:1}
+    #toTopBtn:hover{background:#FFE4EC} #toTopBtn.show{display:flex}`;
+    document.head.appendChild(css);
+    const b = document.createElement("button");
+    b.id = "toTopBtn"; b.type = "button"; b.title = "いちばん上に戻る"; b.textContent = "⬆";
+    document.body.appendChild(b);
+    const form = () => { const f = document.getElementById("formBg"); return f && f.classList.contains("show") ? f : null; };
+    const paint = () => { const f = form(); b.classList.toggle("show", (f ? f.scrollTop : window.scrollY) > 600); };
+    b.addEventListener("click", () => { const f = form(); (f || window).scrollTo({ top: 0, behavior: "smooth" }); });
+    window.addEventListener("scroll", paint, { passive: true });
+    document.addEventListener("scroll", e => { if(e.target && e.target.id === "formBg") paint(); }, { passive: true, capture: true });
+    const f = document.getElementById("formBg");
+    if(f) new MutationObserver(paint).observe(f, { attributes: true, attributeFilter: ["class"] });
+  }
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", setup); else setup();
+})();

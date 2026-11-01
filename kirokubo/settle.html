@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_live.js?v=1"></script><!-- いっしょに使う（保存の合図・入力中）。kb_common より前 -->
-<script src="kb_common.js?v=2"></script>
+<script src="kb_common.js?v=3"></script>
 <style>
   .daybar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
   .daybar input[type=date]{font-family:inherit;font-size:14px;padding:8px 12px;border:1.5px solid var(--line);border-radius:99px;background:#fff;color:var(--ink);}
@@ -57,7 +57,7 @@
   <div id="main" style="display:none">
     <div class="daybar">
       <button class="btn btn-ghost btn-sm" onclick="moveDay(-1)">◀</button>
-      <input type="date" id="day" onchange="loadDay()">
+      <label class="datebox" onclick="event.preventDefault();openCuteCal()" title="押すとカレンダー"><span id="dayLabel"></span><span class="calico">📅</span><input type="date" id="day" onchange="loadDay()"></label>
       <button class="btn btn-ghost btn-sm" onclick="moveDay(1)">▶</button>
       <button class="btn btn-ghost btn-sm" onclick="goToday()">今日（営業日）</button>
     </div>
@@ -508,6 +508,20 @@ function jumpKana(k){
   if(ids.length > 1) toast(castName(ids[kanaLast.i]) + "（" + k + "行 " + (kanaLast.i + 1) + "/" + ids.length + "・もう一度押すと次の子）");
 }
 { const __renderKana = render; render = function(){ const r = __renderKana.apply(this, arguments); renderKanaBar(); return r; }; }
+// お茶・欠勤の子は、名前の段だけにたたむ（押すと開く・もう一度押すとたたむ。描きなおしても開いたまま）
+const offOpen = new Set();
+function foldOffCards(){
+  document.querySelectorAll("#list .card.svc.tea, #list .card.svc.absent").forEach(el => {
+    const id = el.id.slice(5), h = el.querySelector("h2"); if(!h) return;
+    el.classList.add("foldable"); el.classList.toggle("fold", !offOpen.has(id));
+    h.onclick = e => { if(e.target.closest("button, a, input, select, label")) return; if(offOpen.has(id)) offOpen.delete(id); else offOpen.add(id); el.classList.toggle("fold", !offOpen.has(id)); };
+  });
+}
+{ const __renderFold = render; render = function(){ const r = __renderFold.apply(this, arguments); foldOffCards(); return r; }; }
+(function(){ const css = document.createElement("style");
+  css.textContent = `.card.svc.foldable > h2{cursor:pointer} .card.svc.foldable > h2::before{content:"▼ ";font-size:12px;color:#9C8B8F} .card.svc.fold > h2::before{content:"▶ "}
+  .card.svc.fold > *:not(h2){display:none !important} .card.svc.fold > h2{margin:0}`;
+  document.head.appendChild(css); })();
 (function(){
   const css = document.createElement("style");
   css.textContent = `.kanabar{display:flex;gap:4px;flex-wrap:wrap;position:sticky;top:0;z-index:40;background:var(--bg,#FFF7FA);padding:6px 0;margin-bottom:6px}
@@ -517,9 +531,13 @@ function jumpKana(k){
   document.head.appendChild(css);
 })();
 
+// 上の日付の箱（kb_cal.js）：日付を変えたら「11/2(日) 今日」を描きなおす
+{ const __loadDayDL = loadDay; loadDay = async function(){ if(typeof paintDayLabel === "function") paintDayLabel(); const r = await __loadDayDL.apply(this, arguments); if(typeof paintDayLabel === "function") paintDayLabel(); return r; }; }
+
 init();
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
+<script src="kb_cal.js?v=1"></script>
 <script src="unsettled.js?v=36"></script>
 </body>
 </html>
