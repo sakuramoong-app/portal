@@ -98,9 +98,9 @@
   function nav(active){
     const all = [["kiroku.html","🆕 新しい記録簿（ためし中）"],["reception.html","🧾 受付"],["settle.html","💴 精算"],["kaishu.html","📦 回収明細"],["index.html","📒 キャスト台帳"],["customers.html","👥 顧客台帳"],["stats.html","📈 集計"],["backup.html","💾 バックアップ"]];
     const items = CAN_EDIT || IS_OWNER ? all : all.filter(([h])=>h === "index.html");   // 店長・社長は全部、ほかの内勤はキャスト台帳だけ
-    // スマホでは、スマホで開けるページだけ（session_guard.js と同じ：受付・精算・キャスト台帳）
+    // スマホでは、スマホで開けるページだけ（session_guard.js と同じ：受付・精算・キャスト台帳。回収明細は店長・社長）
     const phone = /iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent) || matchMedia("(max-width:640px)").matches;
-    const shown = phone ? items.filter(([h]) => ["kiroku.html", "settle.html", "index.html"].includes(h)) : items;
+    const shown = phone ? items.filter(([h]) => ["kiroku.html", "settle.html", "index.html"].includes(h) || (h === "kaishu.html" && (CAN_EDIT || IS_OWNER))) : items;
     return `<nav class="kbnav">${shown.map(([h,l])=>`<a href="${h}" class="${h===active?"on":""}">${l}</a>`).join("")}</nav>`;
   }
   function wipBanner(){
