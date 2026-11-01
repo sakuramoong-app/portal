@@ -62,7 +62,7 @@
   .money{text-align:right;white-space:nowrap;}
   .st{font-size:11.5px;font-weight:800;border-radius:99px;padding:3px 9px;white-space:nowrap;}
   .st.done{background:var(--mint-soft);color:#1a7a5e;}
-  .st.checking,.st.pre_call,.st.hour_call{background:var(--lemon-soft);color:#9a7000;}
+  .st.checking,.st.pre_call,.st.hour_call,.st.pre_mail,.st.hour_mail{background:var(--lemon-soft);color:#9a7000;}
   .st.wait_hotel,.st.wait_guest,.st.wait_cast{background:var(--lav-soft);color:#6c5896;}
   .st.working{background:#FFE3EC;color:#c9556a;}
   .st.cancel,.st.tobi{background:var(--gray-soft);color:#999;}
@@ -176,8 +176,8 @@
   /* 状態の色 */
   .st.wait_cast_reply{background:#DCEBFF;color:#1f5fbf;}
   .st.wait_guest_reply,.st.wait_foreign_call{background:#E4F6D6;color:#3f7d1e;}
-  .st.pre_call{background:#FFF1A8;color:#8a6d00;}
-  .st.hour_call{background:#FFD3E3;color:#c9356a;}
+  .st.pre_call,.st.pre_mail{background:#FFF1A8;color:#8a6d00;}
+  .st.hour_call,.st.hour_mail{background:#FFD3E3;color:#c9356a;}
   .st.wait_guest,.st.wait_cast{background:#fff;color:#555;border:1.5px solid #cfc7ca;}
   .st.working{background:#EADCFB;color:#6c3fb5;}
   .st.moving{background:#D4F1F4;color:#0F7C8A;}
@@ -190,6 +190,9 @@
   .tlg .bk.st.wait_guest,.tlg .bk.st.wait_cast,.tl .bk.st.wait_guest,.tl .bk.st.wait_cast{border-color:#a99ea2;}
   .chipc .st{display:inline-block;margin-top:3px;font-size:11px;padding:2px 8px;}
   /* 予約一覧 */
+  /* 数字の欄：▲▼を出さない（クリックしたら中身を選ぶので、そのまま打てる） */
+  #formBg input[type=number]::-webkit-outer-spin-button,#formBg input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  #formBg input[type=number]{-moz-appearance:textfield;appearance:textfield;}
   .guestok{margin-top:6px;background:#EEF7F1;border:1.5px solid #9AD9BD;color:#1a6a4e;border-radius:10px;padding:5px 10px;font-weight:700;font-size:13px;}
   .infonote{background:#FFF8D6;border:2px solid #F2C94C;color:#7a5600;border-radius:10px;padding:6px 10px;margin:4px 0 6px;font-weight:800;font-size:14px;white-space:pre-wrap;}
   .guestng{margin-top:6px;background:#FFE3E3;border:2px solid #E5484D;color:#B3261E;border-radius:10px;padding:6px 10px;font-weight:800;font-size:14px;}
@@ -768,7 +771,7 @@
 const { sb, q, esc, yen, toast } = KB;
 const $ = id => document.getElementById(id);
 const DOW = ["日","月","火","水","木","金","土"];
-const STATUS = { pre_call:"前日確認電話", hour_call:"1H前確認電話", moving:"移動中", wait_guest:"客ホテル入室待ち", wait_cast:"キャストホテル入室待ち", working:"仕事中", done:"終了", wait_cast_reply:"キャスト返事待ち", wait_guest_reply:"お客様返事待ち", wait_foreign_call:"外国人1コール待ち", cancel:"キャンセル", tobi:"トビ", checking:"確認中（旧）", wait_hotel:"ホテル連絡待ち（旧）" };   // 並び：前日確認〜終了 → 返事待ち → キャンセル・トビ
+const STATUS = { pre_call:"前日確認電話", pre_mail:"前日確認メール", hour_call:"1H前確認電話", hour_mail:"1H前確認メール", moving:"移動中", wait_guest:"客ホテル入室待ち", wait_cast:"キャストホテル入室待ち", working:"仕事中", done:"終了", wait_cast_reply:"キャスト返事待ち", wait_guest_reply:"お客様返事待ち", wait_foreign_call:"外国人1コール待ち", cancel:"キャンセル", tobi:"トビ", checking:"確認中（旧）", wait_hotel:"ホテル連絡待ち（旧）" };   // 並び：前日確認〜終了 → 返事待ち → キャンセル・トビ
 const STATUS_OLD = ["checking", "wait_hotel"];   // 今は選べない（前の予約のために残している）
 const VISIT = [["new","新規"],["repeat","店リピ"],["honshi","本指名"]];
 const FREE_SUFFIX = { "":"", free:"フリー", special_free:"特別フリー", event_free:"イベフリー" };
@@ -1160,14 +1163,8 @@ function partyRepPaint(){
   el.innerHTML = ms.map(id => `<option value="${id}">${esc(castName(id))}</option>`).join("") || `<option value="">（キャストを選ぶ）</option>`;
   el.value = party.rep || "";
 }
-// 一緒に行く子は、AF・逆AF（と3P料金）だけ。ほかの有料オプションは、その子の枠を開いてつける
-function withAf(w, fn){
-  const boxes = [...document.querySelectorAll("#f_opts input[type=checkbox]")].filter(b => !["o_af", "o_gyakuaf"].includes(b.id)), keepB = boxes.map(b => b.checked);
-  const keepX = $("f_xop_label").value, keepU = typeof underSel !== "undefined" ? underSel : "";
-  boxes.forEach(b => { b.checked = false; }); $("f_xop_label").value = ""; if(typeof underSel !== "undefined") underSel = "";
-  try{ return withAf0(w, fn); }
-  finally{ boxes.forEach((b, i) => { b.checked = keepB[i]; }); $("f_xop_label").value = keepX; if(typeof underSel !== "undefined") underSel = keepU; }
-}
+// 一緒に行く子も、有料オプション・交通費は同じ（11/2 きゃ：3Pはオプションも交通費も人数ぶん）。AF・逆AFだけ、その子のご希望で
+function withAf(w, fn){ return withAf0(w, fn); }
 // 一緒に行く子のAF・逆AFのご希望で、いったん計算する（終わったら上の子のご希望にもどす）
 function withAf0(w, fn){
   const keep = { af: radioVal("f_afw"), raf: radioVal("f_rafw"), o1: $("o_af") ? $("o_af").checked : null, o2: $("o_gyakuaf") ? $("o_gyakuaf").checked : null };
@@ -2198,6 +2195,13 @@ recalc = function(){
     <div class="l2">${dummy ? `🎭 ${esc(dummy)}（実際：${esc(cname)}）` : esc(cname)}　${esc(course)}</div>
     ${last.opts.length ? `<div class="l2" style="font-size:16px">OP：${esc(last.opts.map(o => o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・"))}</div>` : ""}
     <div class="l3">総額 <b>${yen(last.total)}</b>（${pay}）</div>`;
+  // 👥 3P・4P（キャスト複数）：全員ぶんの総額を読み上げる
+  if(party.kind === "cast" && !editing && partyMembers().length > 1){
+    const sh = partyShares(), sum = sh.reduce((a, x) => a + x.total, 0);
+    el.querySelector(".l2").textContent = sh.map(x => castName(x.cid)).join("・") + "（" + (party.n === 3 ? "4P" : "3P") + "）　" + course;
+    el.querySelector(".l3").innerHTML = `総額 <b>${yen(sum)}</b>（${pay}・${sh.map(x => esc(castName(x.cid)) + " " + yen(x.total)).join("／")}）`;
+    $("footTotal").textContent = yen(sum);
+  }
 };
 
 /* ============================================================
@@ -3500,7 +3504,7 @@ async function loadCallAlerts(){
   try{
     const today = KB.bizDateOf();
     callAlertRows = q(await sb.from("kb_reservations").select("id,biz_date,start_at,end_at,area,cast_id,status,store_key")
-      .in("biz_date", [addDays(today, -1), today, addDays(today, 1)]).in("status", ["pre_call", "hour_call", "working"]).eq("deleted", false)) || [];
+      .in("biz_date", [addDays(today, -1), today, addDays(today, 1)]).in("status", ["pre_call", "hour_call", "pre_mail", "hour_mail", "working"]).eq("deleted", false)) || [];
   }catch(e){ callAlertRows = []; }
   renderCallAlerts();
 }
@@ -3511,10 +3515,11 @@ function renderCallAlerts(){
   callAlertRows.forEach(r=>{
     const st = r.start_at ? Date.parse(r.start_at) : null, en = r.end_at ? Date.parse(r.end_at) : null;
     if(r.status === "working"){ if(en && now >= en) outs.push(r); return; }   // ⏰ 終了時刻になった → アウトコールの確認
-    if(st && now >= st - 3600000 && now < st) items.push({ r, kind: "1時間前の確認電話がまだ" });
-    else if(r.status === "pre_call" && (!st || now < st)){
+    const how = /_mail$/.test(r.status) ? "メール" : "電話";   // 確認がメールで来るお客さん（SQL 180）
+    if(st && now >= st - 3600000 && now < st) items.push({ r, kind: "1時間前の確認" + how + "がまだ" });
+    else if(["pre_call", "pre_mail"].includes(r.status) && (!st || now < st)){
       const due = Date.parse(addDays(r.biz_date, -1) + "T20:15:00+09:00");
-      if(now >= due) items.push({ r, kind: "前日の確認電話がまだ" });
+      if(now >= due) items.push({ r, kind: "前日の確認" + how + "がまだ" });
     }
   });
   const md = r => r.biz_date !== day ? esc(r.biz_date.slice(5).replace("-", "/")) + " " : "";
@@ -3947,7 +3952,7 @@ function draftSave(close){
   });
   document.querySelectorAll("#formBg input[type=radio][name]:checked").forEach(el => { radios[el.name] = el.value; });
   const d = { id: editing ? editing.id : null, day, at: new Date().toISOString(), by: KB.operatorName(), vals, radios,
-    st: { visit, mediaSel, free: $("f_free").value, wig: typeof wigSel !== "undefined" ? wigSel : "", under: typeof underSel !== "undefined" ? underSel : "", party: JSON.parse(JSON.stringify(party)) },
+    st: { visit, mediaSel, free: $("f_free").value, wig: typeof wigSel !== "undefined" ? wigSel : "", under: typeof underSel !== "undefined" ? underSel : "", party: JSON.parse(JSON.stringify(party)), biz: typeof bizState !== "undefined" ? Object.assign({}, bizState) : null },
     label: [$("f_start").value, $("f_cast").value ? castName($("f_cast").value) : "", $("f_name").value].filter(Boolean).join(" ") || "（まだ何も入っていない）" };
   try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); }catch(e){}
   if(close){ closeForm(); toast("⏸ 編集中として一時保存しました（右下のボタンで続きから）"); }
@@ -3967,6 +3972,8 @@ async function draftResume(){
   if("free" in s){ $("f_free").value = s.free; renderNomiChips(); }
   if(typeof wigSel !== "undefined"){ wigSel = s.wig || ""; underSel = s.under || ""; paintWig(); }
   if(s.party){ party = s.party; paintParty(); }
+  if(s.biz && typeof bizState !== "undefined") bizState = Object.assign({ twin: "", pickup: "", towel: "" }, s.biz);
+  checkNewHotel();   // ビジホの確認の欄・ホテルの候補も出しなおす
   if(v.f_phone && digits(v.f_phone).length >= 6) lookupCustomer(true);
   recalc(); draftPaint();
   toast("✏️ 一時保存したところから続けます");
@@ -4751,7 +4758,7 @@ openForm = function(id){
 const __saveResB = saveRes;
 saveRes = async function(){
   const cx = ["cancel", "tobi"].includes($("f_status").value);
-  if(!cx && bizMissing()){ toast("🏢 ビジホの確認（2名部屋・下迎え・タオル）を選んでください"); $("bizBox").scrollIntoView({ block: "center" }); return; }
+  if(!cx && bizMissing()){ paintBiz(); toast("🏢 ビジホの確認（2名部屋・下迎え・タオル）を選んでください"); $("bizBox").scrollIntoView({ block: "center" }); return; }
   return __saveResB();
 };
 // 一覧の予約にも、ビジホの確認を小さく出す
@@ -4795,8 +4802,10 @@ paintNewHotel = function(){
   if(!isBiz()) return __paintNewHotelBz();
   const el = $("newHotelBox"); if(!el) return;
   const name = hotelNameFromAddr($("f_address").value);
-  if(!KB.CAN_EDIT || !name || name.length < 2 || bizFind()){ el.innerHTML = ""; return; }
-  const q2 = encodeURIComponent(($("f_area").value.trim() || "") + " " + name);
+  if(!name || name.length < 2){ el.innerHTML = ""; return; }
+  const q2 = encodeURIComponent(($("f_area").value.trim().replace(/^出張（(.*)）$/, "$1").replace(/^出張$/, "") || "") + " " + name);
+  // 履歴にあるビジホでも、Googleで調べられるように
+  if(!KB.CAN_EDIT || bizFind()){ el.innerHTML = `<div style="margin:4px 0;font-size:13px"><a href="https://www.google.com/maps/search/?api=1&query=${q2}" target="_blank" rel="noopener">🔍 「${esc(name)}」をGoogleマップで調べる</a>　<a href="https://www.google.com/search?q=${q2}" target="_blank" rel="noopener">🔍 Google検索</a></div>`; return; }
   el.innerHTML = `<div class="newhotel">🆕 「<b>${esc(name)}</b>」はビジホの履歴にありません。ビジホとして足しますか？（足さなくても、予約を保存すると自動で入ります）
     <div class="row2" style="margin-top:6px">
       <div class="f"><label>ビジホの名前</label><input id="nb_name" value="${esc(name)}" maxlength="80"></div>
@@ -5832,6 +5841,8 @@ async function addSubPhoneK(){
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
 { const __lcSub = lookupCustomer; lookupCustomer = async function(){ const r = await __lcSub.apply(this, arguments); try{ paintSubPhones(); }catch(e){} return r; }; }
+// 数字の欄（交通費・割引・延長など）：クリックしたら中身をぜんぶ選ぶ → そのまま打つと入れかわる（「0」のうしろに続いて 08000 にならない）
+document.addEventListener("focusin", e => { const t = e.target; if(t && t.matches && t.matches("#formBg input[type=number]")) setTimeout(() => { try{ t.select(); }catch(err){} }, 0); });
 const __renderDummyLock = renderDummy;
 renderDummy = function(){ const r = __renderDummyLock.apply(this, arguments); dmLock(); return r; };
 $("f_phone").addEventListener("input", () => { custPast = null; dmLock(); });   // 番号を打ちなおしたら、調べなおすまでロック
