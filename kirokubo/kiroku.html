@@ -4537,9 +4537,8 @@ function resCard(r){
   const payUrl = r.payment === "card" && (r.card_step || "unsent") === "unsent" ? `<a class="payurl" href="${PAY_ADMIN_URL}" target="_blank" rel="noopener" title="${esc(PAY_ADMIN_URL)}">💳 決済URL</a>` : "";
   // 1〜2行に：時間・お店・状態・場所・コース・総額（支払い）・電話・カードの状態・伝えた。ほかは「くわしく」にたたむ
   const nLog = logOf(r).length;
-  // 閉じていても、書いた備考を「キャストOK」の右に出す（新しい順に2つまで。状態・振込・伝えた などの自動のログはとばす）
-  const AUTO_LOG = /^(🔁|状態 →|🏦|👥|キャストに伝えた|アウトコールあり|カード：|この場所の|ホテル・部屋 →|場所の種類 →|NG|🚫|⚠️|🚕|次回の交通費)/;
-  const lastLogs = logOf(r).filter(x => x.text && !AUTO_LOG.test(String(x.text).trim())).slice(-2).reverse();
+  // 閉じていても、備考を「キャストOK」の右に出す（新しい順に2つまで。登録時の状態など自動のログも出す）
+  const lastLogs = logOf(r).filter(x => x.text && String(x.text).trim()).slice(-2).reverse();
   const memoInline = lastLogs.length ? `<span class="rc-memo" title="${esc(lastLogs.map(l => String(l.text).trim() + "（" + (l.by || "") + " " + whenShort(l.at) + "）").join("\n"))}">📝 ${lastLogs.map(l => esc(String(l.text).trim())).join("<i>／</i>")}</span>` : `<span style="flex:1"></span>`;
   const mates = partyMates(r);
   return `<div class="rescard ${cx ? "cx" : ""}" id="rc-${r.id}">
