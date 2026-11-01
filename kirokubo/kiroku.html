@@ -4111,10 +4111,15 @@ function paintNewHotel(){
   const kind = $("f_place") ? $("f_place").value : "";
   if(!KB.CAN_EDIT || !name || name.length < 2 || kind === "home"){ el.innerHTML = ""; return; }
   const key = s=>String(s || "").replace(/[\s　]/g, "");
-  if((M.hotels || []).some(h=>key(name).includes(key(h.hotel_name)) || key(h.hotel_name).includes(key(name)))){ el.innerHTML = ""; return; }
+  // 同じエリアに、名前がぴったり同じホテルがあるときだけ「リストにある」（名前の一部が同じだけ・ほかのエリアのホテルは、新しいホテルとして聞く）
+  const inArea = (M.hotels || []).filter(h=>!area || !h.area || h.area === area);
+  const raw = key($("f_address").value);
+  if(inArea.some(h=>key(h.hotel_name) === key(name) || (raw.startsWith(key(h.hotel_name)) && /^[0-9０-９号室]*$/.test(raw.slice(key(h.hotel_name).length))))){ el.innerHTML = ""; return; }
+  const similar = inArea.filter(h=>key(h.hotel_name).includes(key(name)) || (key(h.hotel_name).length >= 3 && key(name).includes(key(h.hotel_name)))).map(h=>h.hotel_name).slice(0, 5);
   const c = M.casts.find(x=>x.id === $("f_cast").value);
   const q2 = encodeURIComponent((area || "") + " " + name);
-  el.innerHTML = `<div class="newhotel">🆕 「<b>${esc(name)}</b>」はホテルリストにありません。リストに足しますか？
+  el.innerHTML = `<div class="newhotel">🆕 「<b>${esc(name)}</b>」は${area ? esc(area) + "の" : ""}ホテルリストにありません。リストに足しますか？
+    ${similar.length ? `<div style="margin-top:4px;font-size:13px">似た名前：${similar.map(s=>`<b>${esc(s)}</b>`).join("、")}（同じホテルなら、その名前を選びなおせばOK。足さなくて大丈夫）</div>` : ""}
     <div class="row2" style="margin-top:6px">
       <div class="f"><label>ホテルの名前</label><input id="nh_name" value="${esc(name)}" maxlength="80"></div>
       <div class="f"><label>どう足す？</label><select id="nh_kind">
