@@ -696,6 +696,7 @@
           <span></span><input type="text" id="f_xop_label" placeholder="ほかのOP（自由入力）" oninput="recalc()">
           <span></span><input type="number" id="f_xop_price" placeholder="料金" oninput="recalc()"><input type="number" id="f_xop_back" placeholder="バック" oninput="recalc()">
         </div>
+        <div class="f" style="margin-top:8px"><label>📝 キャストに伝える特記事項（予約連絡の文面に入ります）</label><input id="f_castnote" maxlength="200" placeholder="例：個人コスプレオプション「私物コス6番」" oninput="recalc()"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="openOptAdd()">＋ 一覧にオプションを足す</button><button type="button" class="btn btn-ghost btn-sm edit-only" onclick="openOptEdit()">⚙️ 一覧を直す・消す（店長）</button></div>
       </details>
     </div>
@@ -1885,7 +1886,7 @@ ${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st||"--:--"}〜$
 【コース】${c.course}${/^\d+$/.test(c.course)?"分":""}${c.free?"（"+FREE_SUFFIX[c.free]+"）":""}${c.ext?"＋延長"+c.ext*30+"分":""}
 【${{ love: "ホテル", biz: "ホテル", home: "自宅" }[$("f_place").value] || "ホテル・自宅"}】${$("f_area").value} ${$("f_address").value}${hotelMapUrl() ? "\n【地図】" + hotelMapUrl() : ""}
 【バック有OP】${backOps}
-【バック無OP】${noBackOps}
+【バック無OP】${noBackOps}${$("f_castnote") && $("f_castnote").value.trim() ? "\n【特記事項】" + $("f_castnote").value.trim() : ""}
 ${c.pay === "cash"
   ? `【料金総額】${c.total.toLocaleString("ja-JP")}円
 ※お会いしたら最初に料金をいただいてください。盗難・貰い忘れに注意！`
@@ -2007,6 +2008,7 @@ async function saveRes(){
       ...(("phone_draft" in (rows[0] || editing || {})) || IS_PHONE() ? (IS_PHONE() ? { phone_draft: true, phone_draft_by: by, phone_draft_at: new Date().toISOString() } : { phone_draft: false }) : {}),
       status: $("f_status").value, confirm_call: $("f_confirm").value.trim(), note: $("f_note").value, updated_by: by,
       ...formStatusAtPatch(),   // ⏰ この状態の時刻（SQL 182）
+      ...(() => { const v = $("f_castnote") ? $("f_castnote").value.trim() : ""; return v || rows.some(x => "cast_note" in x) || (editing && "cast_note" in editing) ? { cast_note: v } : {}; })(),   // 📝 キャストに伝える特記事項（SQL 187）
       ...(() => { const lg = statusLog(editing ? (rows.find(x => x.id === editing.id) || editing) : null, $("f_status").value, by); const all = editing ? lg : (lg || []).concat(formPendingNow()); return all && all.length ? { memo_log: all } : {}; })(),   // 備考に状態の経緯
     };
     if(editing) q(await sb.from("kb_reservations").update(row).eq("id", editing.id));
@@ -4601,7 +4603,7 @@ function resCard(r){
         <div class="rc-row">${ed ? `<select onchange="qCourse(${r.id},this.value)">${prices.map(p=>`<option value="${esc(p.course)}" ${p.course === r.course ? "selected" : ""}>${esc(p.course)}${/^\d+$/.test(p.course) ? "分" : ""}</option>`).join("")}${prices.some(p=>p.course === r.course) ? "" : `<option selected>${esc(r.course || "")}</option>`}</select>` : esc(r.course)}
           延長 ${ed ? `<input type="number" min="0" class="rc-num" value="${r.extension_count || 0}" onchange="qExt(${r.id},this.value)">` : (r.extension_count || 0)}回
           ${r.free_kind ? `<small>${esc(FREE_SUFFIX[r.free_kind] || "")}</small>` : ""}</div>
-        <div class="rc-row"><small>OP：${esc(ops || "なし")}${afw ? "　希望：" + esc(afw) : ""}</small> ${ed ? `<button type="button" class="mini" onclick="openForm(${r.id})">OPを直す</button>` : ""}</div>
+        <div class="rc-row"><small>OP：${esc(ops || "なし")}${afw ? "　希望：" + esc(afw) : ""}${r.cast_note ? "　📝 " + esc(r.cast_note) : ""}</small> ${ed ? `<button type="button" class="mini" onclick="openForm(${r.id})">OPを直す</button>` : ""}</div>
         <div class="rc-row">支払い ${ed ? `<select onchange="qPay(${r.id},this.value)">${["cash", "card"].map(k=>`<option value="${k}" ${k === (r.payment === "card_paid" ? "card" : r.payment) ? "selected" : ""}>${PAY_LABEL[k]}</option>`).join("")}</select>` : esc(PAY_LABEL[r.payment] || "")}</div>
       </div>
       <div class="rc-box"><div class="rc-h">👤 お客さん</div>
@@ -6052,7 +6054,7 @@ async function qStatusAt(id, v){
   .statadd{height:32px;width:32px;border:1.5px dashed #E6CF8A;background:#fff;border-radius:8px;cursor:pointer;font-size:14px;opacity:.55;padding:0} .statadd:hover{opacity:1;background:#FFF8E1}`;
   document.head.appendChild(css);
   const __openFormSA = openForm;
-  openForm = function(id){ const r = __openFormSA.apply(this, arguments); Promise.resolve(r).then(() => { if($("f_status_at")) $("f_status_at").value = editing && editing.status_at ? hm(editing.status_at) : ""; }); return r; };
+  openForm = function(id){ const r = __openFormSA.apply(this, arguments); Promise.resolve(r).then(() => { if($("f_status_at")) $("f_status_at").value = editing && editing.status_at ? hm(editing.status_at) : ""; if($("f_castnote")) $("f_castnote").value = (editing && editing.cast_note) || ""; if(editing && editing.cast_note){ try{ recalc(); }catch(e){} } }); return r; };
 })();
 
 /* ---------- 内勤の日払いを読んだら・直したら、「今日の店落ち」も描きなおす（日払いを引くので） ---------- */
