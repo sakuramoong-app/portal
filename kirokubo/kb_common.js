@@ -105,11 +105,17 @@
       ? "👑 店長として開いています（直せます）。"
       : "店長（きゃ）が準備中のページです。見るだけで、直すことはできません。"}</span></div>`;
   }
-  // 外側を押したら閉じる小窓（中で押し始めて外で離したときは閉じない）
+  // 外側を押したら閉じる小窓（押すのも離すのも外のときだけ。中で押し始めた・文字を選んでいる間は閉じない）
   function closeOnBackdrop(bg, close){
-    let down = false;
-    bg.addEventListener("mousedown", e=>{ down = e.target === bg; });
-    bg.addEventListener("click", e=>{ if(e.target === bg && down) close(); });
+    let down = false, up = false;
+    bg.addEventListener("pointerdown", e=>{ down = e.target === bg; up = false; }, true);
+    bg.addEventListener("pointerup", e=>{ up = e.target === bg; }, true);
+    bg.addEventListener("click", e=>{
+      const sel = window.getSelection ? String(window.getSelection()) : "";
+      const ok = e.target === bg && down && up && !sel;
+      down = up = false;
+      if(ok) close();
+    });
   }
 
   window.KB = { sb, staffSession, deviceStatus, operatorName, CAN_EDIT, MANAGER_NAME, IS_OWNER, OWNER_NAME, q, esc, yen, toast, bizDateOf, rememberDay, startDay, nav, wipBanner, closeOnBackdrop };

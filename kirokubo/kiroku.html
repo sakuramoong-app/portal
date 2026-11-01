@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_live.js?v=1"></script><!-- いっしょに使う（保存の合図・入力中）。kb_common より前 -->
-<script src="kb_common.js"></script>
+<script src="kb_common.js?v=2"></script>
 <style>
   /* ===== 見やすさ重視（文字は大きめ・枠は少なめ・色は状態と注意だけ） ===== */
   body{font-size:14.5px;}
@@ -3999,7 +3999,15 @@ function draftPaint(){
   el.innerHTML = `<button type="button" class="dr-go" onclick="draftResume()">✏️ 編集中の受付：${esc(d.label)}<small>（${esc(d.by || "")} ${whenShort(d.at)}・押すと続きから）</small></button><button type="button" class="dr-x" onclick="draftDrop()" title="消す">✕</button>`;
 }
 // 受付の外（暗いところ）を押したら、一時保存して閉じる
-$("formBg").addEventListener("click", e => { if(e.target === $("formBg") && KB.CAN_EDIT) draftSave(true); });
+// （押すのも離すのも外のときだけ。中で押し始めて外で離した・文字を選んでいる間は閉じない）
+{ let down = false, up = false; const bg = $("formBg");
+  bg.addEventListener("pointerdown", e => { down = e.target === bg; up = false; }, true);
+  bg.addEventListener("pointerup", e => { up = e.target === bg; }, true);
+  bg.addEventListener("click", e => {
+    const ok = e.target === bg && down && up && !(window.getSelection && String(window.getSelection()));
+    down = up = false;
+    if(ok && KB.CAN_EDIT) draftSave(true);
+  }); }
 { const __closeFormD = closeForm; closeForm = function(){ const r = __closeFormD.apply(this, arguments); setTimeout(draftPaint, 0); return r; }; }
 { const __openFormD = openForm; openForm = function(){ const r = __openFormD.apply(this, arguments); draftPaint(); return r; }; }
 document.head.insertAdjacentHTML("beforeend", `<style>
