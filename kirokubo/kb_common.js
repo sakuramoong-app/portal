@@ -35,7 +35,7 @@
     if(!s || String(s.user.email||"").toLowerCase() !== STAFF_EMAIL) return null;
     if(Date.now() >= (loginAt(s) + 20*3600) * 1000) return null;
     // 作成中は、店長（きゃ）だけが開ける（キャスト台帳は別：ほかの内勤も見られる）。回収明細は社長も。画面の上での分け方
-    if(!CAN_EDIT && !IS_OWNER){ managerBlock(); return null; }   // 社長は全部見られる（直せるのは店長だけ）
+    if(!CAN_EDIT && !IS_OWNER){ managerBlock(); return null; }   // 店長・社長は全部見られて直せる
     // 「登録した端末だけ」が ON で、この端末が登録されていない → 見せない（端末の登録ページは別）
     if(!(opts && opts.skipDevice)){
       const st = await deviceStatus();
@@ -68,9 +68,9 @@
     document.body.appendChild(d);
   }
   function operatorName(){ try{ return localStorage.getItem("currentOperator") || ""; }catch(e){ return ""; } }
-  // 作成中は、店長（きゃ）のときだけ直せる。ほかの内勤は見るだけ（画面の上での分け方）
-  const CAN_EDIT = operatorName() === MANAGER_NAME;
+  // 作成中は、店長（きゃ）と社長のときだけ直せる。ほかの内勤は見るだけ（画面の上での分け方）
   const OWNER_NAME = "社長", IS_OWNER = operatorName() === OWNER_NAME;
+  const CAN_EDIT = operatorName() === MANAGER_NAME || IS_OWNER;
 
   function q(res){ if(res.error) throw res.error; return res.data; }
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -102,7 +102,7 @@
   }
   function wipBanner(){
     return `<div class="wip">🚧 <b>作成中です。触らないでください。</b><br><span>${CAN_EDIT
-      ? "👑 店長として開いています（直せます）。"
+      ? (IS_OWNER ? "👑 社長として開いています（直せます）。" : "👑 店長として開いています（直せます）。")
       : "店長（きゃ）が準備中のページです。見るだけで、直すことはできません。"}</span></div>`;
   }
   // 外側を押したら閉じる小窓（押すのも離すのも外のときだけ。中で押し始めた・文字を選んでいる間は閉じない）

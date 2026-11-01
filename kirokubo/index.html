@@ -461,11 +461,11 @@ const RANK_KEYS = [["sakurana","サクラナ"],["cutie","CC"],["gokumon","極門
 let casts = [], stores = [], tab = "active", editingId = null;
 let rankHist = [], castRules = [], kbOptions = [], castChecks = [];   // ランクの移り変わり・キャストごとの条件・オプション
 
-// 作成中は、ポータルの担当者が店長（きゃ）のときだけ直せる。ほかの内勤は見るだけ
+// 作成中は、ポータルの担当者が店長（きゃ）・社長のときだけ直せる。ほかの内勤は見るだけ
 // ※ 内勤は共通アカウントなので、画面の上での分け方（あとで「Googleでログイン」にすると本当に分けられる）
 const MANAGER_NAME = "きゃ";
 function operatorName(){ try{ return localStorage.getItem("currentOperator") || ""; }catch(e){ return ""; } }
-const CAN_EDIT = operatorName() === MANAGER_NAME;
+const CAN_EDIT = operatorName() === MANAGER_NAME || operatorName() === "社長";   // 社長も直せる
 if(!CAN_EDIT) document.body.classList.add("readonly");
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
