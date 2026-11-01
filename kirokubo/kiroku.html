@@ -1949,7 +1949,8 @@ async function saveRes(){
   const ck = checksForSave();
   // 出禁・店NGのお客さんは受けない（NGが解除になったら「NG客」を「NGではない」に直してから）
   if(!cancelLike && curCustomer && curCustomer.ng && curCustomer.ng_ask){ toast("🤔 このお客さんが出禁・店NGか、先に決めてください（お客さんの欄のボタン）"); $("custInfo").scrollIntoView({ block: "center" }); return; }
-  if(!cancelLike && $("f_ng").value === "1"){ toast("🚫 出禁・店NGのお客さんです。受けられません（解除なら、お客さんの「NG客」を直してから）"); $("custInfo").scrollIntoView({ block: "center" }); return; }
+  // 止めるのは「新しい予約」で「もともとNG客」のお客さんだけ。終わった予約などを開いて、今回 NG客 にする（記録する）のは保存できる
+  if(!cancelLike && !editing && $("f_ng").value === "1" && curCustomer && curCustomer.ng){ toast("🚫 出禁・店NGのお客さんです。受けられません（解除なら、お客さんの「NG客」を直してから）"); $("custInfo").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.longNg){ toast("🚫 このキャストでは受けられません（赤い枠の理由を見てください）"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.missAnnounce){ toast("📣 お客様に案内することに、まだチェックがついていません"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.missConfirm && !waiting){ toast("✅ キャストに確認してから受けるものがあります。確認したらチェック、まだなら状態を「キャスト返事待ち」に"); $("castChecks").scrollIntoView({ block: "center" }); return; }
