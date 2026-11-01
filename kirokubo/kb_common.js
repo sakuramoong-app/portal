@@ -96,9 +96,12 @@
   }
   // ページの上の切りかえ
   function nav(active){
-    const all = [["kiroku.html","🆕 新しい記録簿（ためし中）"],["reception.html","🧾 受付"],["settle.html","💴 精算"],["kaishu.html","📦 回収明細"],["index.html","📒 キャスト台帳"],["customers.html","👥 顧客台帳"],["stats.html","📈 集計"]];
+    const all = [["kiroku.html","🆕 新しい記録簿（ためし中）"],["reception.html","🧾 受付"],["settle.html","💴 精算"],["kaishu.html","📦 回収明細"],["index.html","📒 キャスト台帳"],["customers.html","👥 顧客台帳"],["stats.html","📈 集計"],["backup.html","💾 バックアップ"]];
     const items = CAN_EDIT || IS_OWNER ? all : all.filter(([h])=>h === "index.html");   // 店長・社長は全部、ほかの内勤はキャスト台帳だけ
-    return `<nav class="kbnav">${items.map(([h,l])=>`<a href="${h}" class="${h===active?"on":""}">${l}</a>`).join("")}</nav>`;
+    // スマホでは、スマホで開けるページだけ（session_guard.js と同じ：受付・精算・キャスト台帳）
+    const phone = /iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent) || matchMedia("(max-width:640px)").matches;
+    const shown = phone ? items.filter(([h]) => ["kiroku.html", "settle.html", "index.html"].includes(h)) : items;
+    return `<nav class="kbnav">${shown.map(([h,l])=>`<a href="${h}" class="${h===active?"on":""}">${l}</a>`).join("")}</nav>`;
   }
   function wipBanner(){
     return `<div class="wip">🚧 <b>作成中です。触らないでください。</b><br><span>${CAN_EDIT
