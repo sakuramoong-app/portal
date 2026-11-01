@@ -181,7 +181,7 @@
     const s = session();
     if (!isStaff(s)) return;   // 内勤のログインのときだけ
     const role = claimOf(s.access_token).staff_role;
-    const boss = ["staff", "manager", "owner"].includes(role) ? ["manager", "owner"].includes(role) : ["きゃ", "社長"].includes(lsGet(OPERATOR_KEY) || "");
+    const boss = ["staff", "manager", "owner"].includes(role) ? ["manager", "owner"].includes(role) : false;   // 共通アカウントでは、店長・社長あつかいにしない
     if (!PHONE_OK.some(re => re.test(location.pathname)) && !(boss && BOSS_OK.test(location.pathname))) { phoneBlock(); return; }
     if (lsGet(LOCK_KEY)) { phoneLock(); return; }   // 開きなおしてもロックのまま
     ["pointerdown", "keydown", "touchstart", "scroll"].forEach(ev => document.addEventListener(ev, () => { if (!lsGet(LOCK_KEY)) lastAct = Date.now(); }, { passive: true, capture: true }));

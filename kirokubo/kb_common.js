@@ -76,8 +76,8 @@
   const CLAIM = myClaim(), GOOGLE = ["staff", "manager", "owner"].includes(CLAIM.staff_role);
   function operatorName(){ if(GOOGLE) return CLAIM.staff_name || ""; try{ return localStorage.getItem("currentOperator") || ""; }catch(e){ return ""; } }
   // 店長（きゃ）と社長のときだけ直せる。Googleで入った人は、内勤の一覧の役わり（店長・社長）で決まる
-  const OWNER_NAME = "社長", IS_OWNER = GOOGLE ? CLAIM.staff_role === "owner" : operatorName() === OWNER_NAME;
-  const CAN_EDIT = GOOGLE ? ["manager", "owner"].includes(CLAIM.staff_role) : (operatorName() === MANAGER_NAME || IS_OWNER);
+  const OWNER_NAME = "社長", IS_OWNER = GOOGLE && CLAIM.staff_role === "owner";   // 共通アカウントでは、社長にはなれない（Googleだけ）
+  const CAN_EDIT = GOOGLE && ["manager", "owner"].includes(CLAIM.staff_role);   // 店長・社長はGoogleで入ったときだけ（共通アカウントでは、きゃ・社長は選べない）
 
   function q(res){ if(res.error) throw res.error; return res.data; }
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));

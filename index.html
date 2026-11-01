@@ -174,8 +174,6 @@
       <button class="operator-btn" data-name="らん">らん</button>
       <button class="operator-btn" data-name="わか">わか</button>
       <button class="operator-btn" data-name="かみ">かみ</button>
-      <button class="operator-btn" data-name="きゃ">きゃ</button>
-      <button class="operator-btn" data-name="社長">社長</button>
     </div>
     <button class="link-btn" id="logoutBtn2" style="margin-top:18px">ログアウト</button>
   </div>
@@ -271,6 +269,8 @@
   }
 
   function renderOperator() {
+    // 共通アカウントでは、きゃ・社長は選べない（Googleで入ったときだけ）。前に選んでいたら選びなおし
+    if (!GOOGLE_STAFF && ["きゃ", "社長"].includes(localStorage.getItem(OPERATOR_STORAGE_KEY))) localStorage.removeItem(OPERATOR_STORAGE_KEY);
     const saved = localStorage.getItem(OPERATOR_STORAGE_KEY);
     if (saved) {
       operatorSection.style.display = "none";
