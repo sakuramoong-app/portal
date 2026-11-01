@@ -2052,7 +2052,7 @@ renderList = function(){
   const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi");
   const total = live.reduce((a, r)=>a + (r.total || 0), 0), back = live.reduce((a, r)=>a + backOf(r), 0);
   const casts = new Set(live.map(r=>r.cast_id).filter(Boolean)).size;
-  const tax = live.reduce((a, r)=>a + Math.floor(backOf(r) / 9), 0);
+  const tax = live.reduce((a, r)=>a + Math.round(backOf(r) / 9), 0);
   const card = live.filter(r=>r.payment !== "cash").reduce((a, r)=>a + (r.total || 0), 0);
   $("stats").className = "stats" + (showMoney ? "" : " hide");
   $("tax").className = "tax" + (showMoney ? "" : " hide");
@@ -2569,7 +2569,7 @@ function calcCast(castId){
   // 🏦 振込（SQL 173）：あとで振り込んでもらう分は、カードと同じでキャストの手元にない
   const trList = live.filter(r=>r.transfer_status && Number(r.transfer_amount)), transferPaid = trList.reduce((a, r)=>a + (Number(r.transfer_amount) || 0), 0), trIds = trList.map(r=>r.id);
   const drop = total - takeHome - cardPaid - transferPaid;
-  const withholding = Math.floor((reward + option) / 9);
+  const withholding = Math.round((reward + option) / 9);   // 源泉：エクセルと同じく四捨五入
   const provisional = total - reward - option;          // 暫定残額（総額 − 報酬）
   const shopDrop = total - reward - option + zappi;   // 店落ち＝総額−報酬＋雑費（交通費・プラスマイナスは経費なので入れない）                    // 店落ち（暫定残額 ＋ 雑費 など）
   const realDrop = provisional - withholding;           // 実質的な店落ち（暫定残額 − 源泉）
@@ -3020,12 +3020,12 @@ function renderOwner(){
   const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi").sort((a, b)=>String(a.start_at).localeCompare(String(b.start_at)));
   const cols = [["基本額", r=>r.base_price], ["入会金", r=>r.admission], ["指名料", r=>r.nomination_fee], ["延長", r=>r.extension_fee], ["交通費", r=>r.transport],
     ["オプション額", r=>r.option_total], ["割引", r=>r.discount], ["総額", r=>r.total], ["キャスト報酬", r=>backOf(r)],
-    ["暫定的な残額（源泉含む）", r=>(r.total || 0) - backOf(r)], ["【税務用】源泉徴収", r=>Math.floor(backOf(r) / 9)],
-    ["実質的な店落ち", r=>(r.total || 0) - backOf(r) - Math.floor(backOf(r) / 9)]];
-  // 👤 内勤（スタッフ）：記録簿エクセルと同じく、合計にスタッフ分も入れる。報酬＝日払い（払った分）、残額・店落ちはマイナス、源泉は報酬÷9
+    ["暫定的な残額（源泉含む）", r=>(r.total || 0) - backOf(r)], ["【税務用】源泉徴収", r=>Math.round(backOf(r) / 9)],
+    ["実質的な店落ち", r=>(r.total || 0) - backOf(r) - Math.round(backOf(r) / 9)]];
+  // 👤 内勤（スタッフ）：記録簿エクセルと同じく、合計にスタッフ分も入れる。報酬＝日払い（まだ払っていない人も）、残額・店落ちはマイナス、源泉は報酬÷9
   const spRows = (typeof staffPay !== "undefined" && staffPay.rows) || [];
   const staffAmt = r => r.amount != null ? Number(r.amount) || 0 : (r.in != null && r.out != null && r.out > r.in ? Math.round((r.out - r.in) * r.hourly) : 0);
-  const staff = spRows.filter(r => r.paid && staffAmt(r) > 0).map(r => { const p = staffAmt(r), w = Math.floor(p / 9); return { name: r.name, vals: [0, 0, 0, 0, 0, 0, 0, 0, p, -p, w, -p - w] }; });
+  const staff = spRows.filter(r => staffAmt(r) > 0).map(r => { const p = staffAmt(r), w = Math.round(p / 9); return { name: r.name, vals: [0, 0, 0, 0, 0, 0, 0, 0, p, -p, w, -p - w] }; });
   const sum = cols.map(([, f], i)=>live.reduce((a, r)=>a + (Number(f(r)) || 0), 0) + staff.reduce((a, s)=>a + s.vals[i], 0));
   const ids = [...new Set(live.map(r=>r.cast_id).filter(Boolean))];
   let zappi = 0; ids.forEach(id=>{ try{ zappi += calcCast(id).zappi || 0; }catch(e){} });

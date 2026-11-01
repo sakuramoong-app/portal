@@ -169,7 +169,7 @@ function calcCast(castId){
   // 🏦 振込（SQL 173）：あとで振り込んでもらう分は、カードと同じでキャストの手元にない
   const trList = live.filter(r=>r.transfer_status && Number(r.transfer_amount)), transferPaid = trList.reduce((a, r)=>a + (Number(r.transfer_amount) || 0), 0), trIds = trList.map(r=>r.id);
   const drop = total - takeHome - cardPaid - transferPaid;
-  const withholding = Math.floor((reward + option) / 9);
+  const withholding = Math.round((reward + option) / 9);   // 源泉：エクセルと同じく四捨五入
   const provisional = total - reward - option;          // 暫定残額（総額 − 報酬）
   const shopDrop = total - reward - option + zappi;   // 店落ち＝総額−報酬＋雑費（交通費・プラスマイナスは経費なので入れない）                    // 店落ち（暫定残額 ＋ 雑費 など）
   const realDrop = provisional - withholding;           // 実質的な店落ち（暫定残額 − 源泉）
