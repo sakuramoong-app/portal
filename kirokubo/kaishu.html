@@ -37,6 +37,7 @@
   .flow .ref{font-size:12px;color:var(--sub);}
   .ex{width:100%;margin-top:6px;} .ex td{font-size:13px;padding:5px 6px;white-space:normal;}
   .ex input,.ex select{font-family:inherit;font-size:13px;padding:3px 6px;border:1.5px solid #ddd;border-radius:6px;max-width:100%;}
+  .envres{margin-top:6px;font-weight:900;font-size:14px} .envres .ok{color:#2e8b57} .envres .ng{color:#c0392b}
   .hand{background:#FFF8D6;border:3px solid #F2C94C;border-radius:14px;padding:10px 16px;margin-top:10px;}   /* 社長に手渡し＝随時の回収合計（同じ枠の色） */
   .sum .s.handbox{background:#FFF8D6;border:3px solid #F2C94C;}
   .flow .handrow{background:#FFF8D6;border:3px solid #F2C94C;border-radius:10px;padding:6px 10px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;font-weight:900;grid-column:1 / -1;}
@@ -92,7 +93,7 @@
 
     <h2 style="font-size:17px;margin:18px 0 2px">📮 待機場の封筒</h2>
     <div class="lead">「精算済にする」で精算場所に池袋・鶯谷・五反田を選んだ分が、前回の回収から数えられていきます。<br>
-      封筒を回収したら、あった封筒の数を入れて「📮 回収した」を押してください（そこからまた 0 から数えます）。記録簿の数と同じなら ✅、ちがえば ⚠️ が残ります。</div>
+      封筒を回収したら、回収した封筒の数を入れて「📮 回収した」を押してください（そこからまた 0 から数えます）。記録簿の数と同じなら ✅、ちがえば ⚠️ が残ります。</div>
     <div class="egrid" id="egrid"></div>
   </div>
 </div>
@@ -213,10 +214,10 @@ function extraList(r){
   const tb = Number(s.transportBack || 0) + Number(s.plus || 0);
   if(tb) a.push({ key: "tb", html: `🚃 交通費・プラス ${num(tb)}（キャッシュフローから）` });
   if(Number(s.minus || 0)) a.push({ key: "minus", html: `➖ マイナス ${num(s.minus)}` });
-  if(s.diff) a.push({ key: "diff", warn: true, html: `<span style="color:#c0392b">⚠️ 精算ミス：投函が${s.diff < 0 ? "足りない " + num(-s.diff) + "（未精算へ）" : "多い " + num(s.diff) + "（お釣りへ）"}</span>` });
+  if(s.diff) a.push({ key: "diff", warn: true, html: `<span style="color:#c0392b">⚠️ 精算ミス：投函が${s.diff < 0 ? "足りない " + num(-s.diff) + "（未精算へ）" : "多い " + num(s.diff) + "（お釣りへ）"} ${jump(r.day, id)}</span>` });
   (s.uns || []).forEach(x => a.push({ key: "uns:" + x.date, html: `<span style="color:#5b3fa6">↔ ${md(x.date)} の${x.kind === "day" ? "精算" : x.amount >= 0 ? "未精算 " + num(x.amount) : "お釣り " + num(-x.amount)} をいっしょに精算 ${jump(x.date, id)}</span>` }));
   if(r.kind === "later") a.push({ key: "", html: `<span style="color:#5b3fa6">→ ${md(r.s.paidOn)} にまとめて精算 ${jump(r.s.paidOn, id)}</span>` });
-  if(r.kind === "home") a.push({ key: "", html: `<span style="color:#9C8B8F">🏠 直帰（精算はまだ）</span>` });
+  if(r.kind === "home") a.push({ key: "", html: `<span style="color:#9C8B8F">🏠 直帰（精算はまだ） ${jump(r.day, id)}</span>` });
   if(r.kind === "open") a.push({ key: "", html: `<span style="color:#c0392b">💴 まだ精算していない ${jump(r.day, id)}</span>` });
   if(!r.exact) a.push({ key: "", html: `<span style="color:#9C8B8F">（金額は予約からの概算・雑費こみ）</span>` });
   return a;
@@ -495,8 +496,8 @@ async function load(){
     for(const p of PLACES){
       const hist = chk.filter(x => x.place === p), last = hist[0] || null;
       let qq = sb.from("kb_cast_days").select("biz_date,cast_id,settled_at").eq("settled", true).eq("settle_place", p).order("settled_at");
-      if(last) qq = qq.gt("settled_at", last.checked_at);
-      ENV[p] = { last, hist: hist.slice(0, 5), since: last ? (q(await qq) || []) : null };
+      if(last) qq = qq.gt("settled_at", last.checked_at);   // 回収の記録がまだなければ、これまでの全部を数える
+      ENV[p] = { last, hist: hist.slice(0, 5), since: q(await qq) || [] };
     }
   }catch(e){ $("egrid").innerHTML = `<div class="warn">読めませんでした（SQL 170 は実行ずみ？）：${esc(e.message || e)}</div>`; return; }
   paint();
@@ -504,20 +505,26 @@ async function load(){
 function paint(){
   $("egrid").innerHTML = PLACES.map(p => { const E = ENV[p], l = E.last;
     return `<div class="ec" style="border-color:${PLACE_COLOR[p]}"><div class="et" style="background:${PLACE_COLOR[p]}">${p}</div><div class="body">
-      ${l ? `<div class="now">前回の回収 ${when(l.checked_at)}（${esc(l.checked_by)}）から、今あるはずの封筒</div>
+      <div class="now">${l ? `前回の回収 ${when(l.checked_at)}（${esc(l.checked_by)}）から、` : "（回収の記録はまだありません）"}あるはずの封筒</div>
         <div class="num">${E.since.length}<small>通</small></div>
-        <div class="who">${E.since.length ? E.since.map(x => `${md(x.biz_date)} ${esc(names[x.cast_id] || x.cast_id)}`).join("　") : "まだ投函はありません"}</div>`
-      : `<div class="now">まだ回収の記録がありません。いちど回収して「📮 回収した」を押すと、そこから数えはじめます。</div>`}
-      ${KB.CAN_EDIT ? `<div class="f">あった封筒 <input type="number" min="0" id="env-${p}" placeholder="0"> 通 <button class="btn btn-primary btn-sm" onclick="save('${p}')">📮 回収した</button></div>` : ""}
+        <div class="who">${E.since.length ? E.since.map(x => `${md(x.biz_date)} ${esc(names[x.cast_id] || x.cast_id)}`).join("　") : "まだ投函はありません"}</div>
+      ${KB.CAN_EDIT ? `<div class="f">回収した封筒 <input type="number" min="0" id="env-${p}" oninput="envCheck('${p}')"> 通 <button class="btn btn-primary btn-sm" onclick="save('${p}')">📮 回収した</button></div>
+        <div class="envres" id="envres-${p}"></div>` : ""}
       ${E.hist.length ? `<div class="hist">${E.hist.map(h => `<div><span>${when(h.checked_at)} ${esc(h.checked_by)}</span><span style="flex:1"></span>
         ${h.found === h.expected ? `<span class="ok">✅ ${h.found}通 一致</span>` : `<span class="ng">⚠️ ${h.found}通／記録 ${h.expected}件</span>`}</div>`).join("")}</div>` : ""}
     </div></div>`; }).join("");
 }
+// 回収した封筒の数を打ったら、あるはずの数と合っているか、その場で出す
+function envCheck(p){
+  const v = $("env-" + p).value, el = $("envres-" + p); if(!el) return;
+  if(v === ""){ el.innerHTML = ""; return; }
+  const found = Math.max(0, Number(v) || 0), exp = ENV[p].since.length;
+  el.innerHTML = found === exp ? `<span class="ok">✅ 合っています（${exp}通）</span>` : `<span class="ng">⚠️ 合いません：回収 ${found}通／あるはず ${exp}通（${found > exp ? "多い " + (found - exp) : "足りない " + (exp - found)}）</span>`;
+}
 async function save(p){
-  const v = $("env-" + p).value; if(v === ""){ toast("あった封筒の数を入れてください"); return; }
-  const found = Math.max(0, Number(v) || 0), first = !ENV[p].last, expected = first ? found : ENV[p].since.length;
-  if(!confirm(first ? `${p} の封筒を回収しましたか？（はじめての記録なので、ここから数えはじめます）\nあった封筒 ${found}通`
-    : `${p} の封筒を回収しましたか？\nあった封筒 ${found}通／記録簿 ${expected}件 → ${found === expected ? "✅ 一致" : "⚠️ 合いません"}`)) return;
+  const v = $("env-" + p).value; if(v === ""){ toast("回収した封筒の数を入れてください"); return; }
+  const found = Math.max(0, Number(v) || 0), expected = ENV[p].since.length;
+  if(!confirm(`${p} の封筒を回収しましたか？\n回収した封筒 ${found}通／あるはず ${expected}通 → ${found === expected ? "✅ 一致" : "⚠️ 合いません"}\n（ここからまた 0 から数えます）`)) return;
   try{ q(await sb.from("kb_envelope_checks").insert({ place: p, found, expected, checked_by: KB.operatorName() })); }
   catch(e){ toast("保存できませんでした：" + (e.message || e)); return; }
   toast(found === expected ? `✅ ${p}：記録しました` : `⚠️ ${p}：${found}通／記録 ${expected}件。精算をたしかめてください`);
