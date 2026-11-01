@@ -308,8 +308,12 @@
       const biz = new Date(Date.now() + 9 * 3600e3 - 6 * 3600e3).toISOString().slice(0, 10);
       const at = data && data.value && data.value.at;
       const done = at && new Date(new Date(at).getTime() + 9 * 3600e3 - 6 * 3600e3).toISOString().slice(0, 10) >= biz;
+      // 朝6時〜7時は、6:30の自動バックアップを待っているところ（まだ失敗ではない）
+      const h = new Date(Date.now() + 9 * 3600e3).getUTCHours(), waiting = !done && h >= 6 && h < 7;
       el.style.display = done ? "none" : "block";
-      el.innerHTML = done ? "" : `⚠️ 今日のバックアップがまだです → <a href="kirokubo/backup.html" target="_blank" rel="noopener" style="color:#C62828">💾 バックアップを取る</a>`;
+      el.style.background = waiting ? "#F3F7FF" : "#FFF1F1"; el.style.borderColor = waiting ? "#9DB7E8" : "#E5484D"; el.style.color = waiting ? "#2B5AA8" : "#C62828";
+      el.innerHTML = done ? "" : waiting ? "⏳ 今日のバックアップは、6:30に自動で取ります（7時をすぎても出ていたら、うまくいっていません）"
+        : `⚠️ 今日のバックアップがまだです → <a href="kirokubo/backup.html" target="_blank" rel="noopener" style="color:#C62828">💾 バックアップを取る</a>`;
     } catch (e) {}
   }
 
