@@ -3027,6 +3027,8 @@ function renderOwner(){
   const staffAmt = r => r.amount != null ? Number(r.amount) || 0 : (r.in != null && r.out != null && r.out > r.in ? Math.round((r.out - r.in) * r.hourly) : 0);
   const staff = spRows.filter(r => staffAmt(r) > 0).map(r => { const p = staffAmt(r), w = Math.round(p / 9); return { name: r.name, vals: [0, 0, 0, 0, 0, 0, 0, 0, p, -p, w, -p - w] }; });
   const sum = cols.map(([, f], i)=>live.reduce((a, r)=>a + (Number(f(r)) || 0), 0) + staff.reduce((a, s)=>a + s.vals[i], 0));
+  // 合計の源泉は、エクセルと同じく「報酬の合計 ÷ 9 を四捨五入」（1行ずつ四捨五入して足すと数円ずれる）。実質的な店落ちは 残額の合計 − その源泉
+  sum[10] = Math.round(sum[8] / 9); sum[11] = sum[9] - sum[10];
   const ids = [...new Set(live.map(r=>r.cast_id).filter(Boolean))];
   let zappi = 0; ids.forEach(id=>{ try{ zappi += calcCast(id).zappi || 0; }catch(e){} });
   const card = live.filter(r=>r.payment !== "cash").reduce((a, r)=>a + (r.total || 0), 0);
