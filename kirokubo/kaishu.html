@@ -91,7 +91,7 @@
    📦 回収明細（紙の回収明細のかわり。店長と社長だけ。社長は見る＋サイン＋「受け取った」）
    ・キャストごと：店落ち（暫定的な残額＋雑費）／カード。回収サイン：✔黒＝当日回収／✔赤＝店長が回収／■赤＝未回収のまま社長に渡す（kb_collections・SQL 171）
        交通費・プラスはキャッシュフローから出して袋にそろえる → 袋には「店落ち − カード」が入る。精算ミス・前の日の分も出す。処理✓
-       精算済にしていない日（直帰・まだ）は、予約から出した概算（雑費ぬき）
+       精算済にしていない日（直帰・まだ）は、予約から出した概算（雑費こみ。プラス・マイナスはまだ）
    ・社長に渡す ＝ 店落ち − カード − 経費（回収金からキャッシュフローに補充）− 未回収 − 内勤日払い（回収金から払った分）
    ・当日現金回収 ＝ ✔黒 の合計 − 内勤日払い（紙と同じ）
    ・📮 待機場の封筒：kb_envelope_checks（SQL 170）の前回の回収から、settle_place がその待機場の精算済を数える
@@ -109,6 +109,14 @@ const num = n => (Number(n) || 0).toLocaleString("ja-JP");
 const sgn = n => (n > 0 ? "＋" : n < 0 ? "−" : "") + num(Math.abs(n));
 const jump = (d, cid) => `<a class="j" href="settle.html?d=${d}${cid ? "&c=" + encodeURIComponent(cid) : ""}" target="_blank" rel="noopener" title="その日のそのキャストの精算へ">${md(d)} ↗</a>`;
 const backOf = r => r.back_override != null ? Number(r.back_override) : (Number(r.course_back) || 0) + (Number(r.option_back) || 0) + (Number(r.extra_back) || 0);
+// 雑費（精算と同じ）：手で直していればその額。なければ 報酬＋OP 10,500円ごとに500円（3,000円まで）。雑費なしの曜日（キャストのルール）は0
+let ZRULES = [];
+function zappiOf(id, day, cd, mine){
+  if(cd && cd.zappi_override != null) return Number(cd.zappi_override) || 0;
+  const dow = new Date(day + "T12:00:00Z").getUTCDay();
+  if(ZRULES.some(x => x.cast_id === id && (x.valid_from || "2000-01-01") <= day && (!x.valid_to || x.valid_to > day) && ((x.params || {}).days || []).includes(dow))) return 0;
+  return Math.min(3000, Math.floor(mine.reduce((a, r) => a + backOf(r), 0) / 10500) * 500);
+}
 const RESV_COLS = "*";   // 振込（SQL 173）の欄もあるので全部
 let names = {}, staffNames = {}, ENV = {}, D = null, MO = null, place = "", mode = "day";
 
@@ -118,6 +126,7 @@ async function init(){
   $("wip").innerHTML = KB.wipBanner();
   $("gate").style.display = "none"; $("main").style.display = "";
   try{ (q(await sb.from("master_casts").select("id,official_name,temp_name")) || []).forEach(c => { names[c.id] = c.official_name || c.temp_name || c.id; }); }catch(e){}
+  try{ ZRULES = q(await sb.from("kb_cast_rules").select("*").eq("active", true).eq("kind", "zappi_exempt")) || []; }catch(e){}
   try{ (q(await sb.from("kb_staff_rates").select("staff_id,record_name")) || []).forEach(r => { if(r.record_name) staffNames[r.staff_id] = r.record_name; }); }catch(e){}
   $("day").value = KB.startDay();   // 記録簿・精算で見ていた日
   paintPlaces(); loadDay(); load();
@@ -168,7 +177,7 @@ function rowsFor(day, R){
       shop = s.shopDrop != null ? Number(s.shopDrop) : Number(s.total || 0) - Number(s.reward || 0) - Number(s.option || 0) + Number(s.zappi || 0);
       card = Number(s.cardPaid || 0); tr = Number(s.transferPaid || 0);
     } else {
-      shop = mine.reduce((a, r) => a + (Number(r.total) || 0) - backOf(r), 0);
+      shop = mine.reduce((a, r) => a + (Number(r.total) || 0) - backOf(r), 0) + zappiOf(id, day, cd, mine);   // 雑費も入れる（精算と同じ）
       card = mine.filter(r => r.payment === "card" || r.payment === "card_paid").reduce((a, r) => a + (Number(r.total) || 0), 0);
       tr = mine.filter(r => r.transfer_status && Number(r.transfer_amount)).reduce((a, r) => a + (Number(r.transfer_amount) || 0), 0);
       exact = false;
@@ -191,7 +200,7 @@ function extraList(r){
   if(r.kind === "later") a.push({ key: "", html: `<span style="color:#5b3fa6">→ ${md(r.s.paidOn)} にまとめて精算 ${jump(r.s.paidOn, id)}</span>` });
   if(r.kind === "home") a.push({ key: "", html: `<span style="color:#9C8B8F">🏠 直帰（精算はまだ）</span>` });
   if(r.kind === "open") a.push({ key: "", html: `<span style="color:#c0392b">💴 まだ精算していない ${jump(r.day, id)}</span>` });
-  if(!r.exact) a.push({ key: "", html: `<span style="color:#9C8B8F">（金額は予約からの概算・雑費ぬき）</span>` });
+  if(!r.exact) a.push({ key: "", html: `<span style="color:#9C8B8F">（金額は予約からの概算・雑費こみ）</span>` });
   return a;
 }
 const doneItems = r => Array.isArray(r.cl.done_items) ? r.cl.done_items : [];
