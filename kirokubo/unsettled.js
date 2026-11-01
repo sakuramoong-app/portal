@@ -730,7 +730,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   @keyframes svrBlink{0%,100%{box-shadow:0 0 0 0 rgba(255,193,7,.0);background:#FFFDF3}50%{box-shadow:0 0 18px 4px rgba(255,193,7,.75);background:#FFF5C9}}
   .needmsg{font-weight:900;color:#B26A00;font-size:13.5px;margin:0 0 6px}
   .homebtn{background:#EDEDED !important;border-color:#bbb !important;font-weight:800}
-  .ptime{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .ptime input{font-family:inherit;font-size:15px;font-weight:800;padding:3px 8px;border:1.5px solid #ccc;border-radius:8px} .ptime small{flex-basis:100%;font-weight:700;color:#9C8B8F;font-size:11.5px}
+  .ptime{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .ptime input, input[id^="uo_t_"]{font-family:inherit;font-size:16px;font-weight:800;padding:10px 12px;border:1.5px solid var(--line,#F1E3E7);border-radius:12px;background:#fff;color:var(--ink,#5C4B4F);min-width:150px}   /* 受付の時刻の欄と同じ形 */ .ptime small{flex-basis:100%;font-weight:700;color:#9C8B8F;font-size:11.5px}
   .camchk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .camchk > span{flex-basis:100%}
   .camchk .cb{font-family:inherit;font-weight:800;font-size:13px;border:2px solid #ddd;background:#fff;border-radius:99px;padding:4px 12px;cursor:pointer;color:#5C4B4F}
   .camchk .cb.ok.on{background:#E5F6EC;border-color:#2e8b57;color:#2e8b57} .camchk .cb.ng.on{background:#FDE7E7;border-color:#c0392b;color:#c0392b}
