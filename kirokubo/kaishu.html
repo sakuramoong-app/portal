@@ -59,6 +59,8 @@
   .cs{display:inline-flex;gap:4px;} .cs button{font-family:inherit;font-weight:900;font-size:12.5px;border:1.5px solid #ddd;background:#fff;border-radius:8px;padding:4px 8px;cursor:pointer;color:#999;}
   .cs button.day.on{background:#222;border-color:#222;color:#fff;} .cs button.me.on{background:#E0001B;border-color:#E0001B;color:#fff;} .cs button.none.on{background:#fff;border-color:#E0001B;color:#E0001B;box-shadow:inset 0 0 0 2px #E0001B;}
   .cs button:disabled{cursor:default;}
+  input.cnt{width:110px;text-align:right;font-family:inherit;font-size:15px;font-weight:800;padding:6px 8px;border:1.5px solid var(--line);border-radius:10px}
+  .perfect{display:inline-flex;align-items:center;gap:4px;font-weight:900;font-size:13px;white-space:nowrap;padding:4px 10px;border:1.5px solid #ddd;border-radius:99px} .perfect.on{background:#E5F6EC;border-color:#2e8b57;color:#2e8b57}
   .mk{font-weight:900;font-size:16px;} .mk.day{color:#222;} .mk.me,.mk.none{color:#E0001B;}
   .xi{display:block;font-size:12px;font-weight:700;line-height:1.6;}
   .hl{margin-top:4px;font-size:11.5px;} .hl summary{cursor:pointer;color:#8a6d00;font-weight:800;} .hli{background:#FFFCEB;border:1px solid #F2D27A;border-radius:8px;padding:4px 7px;margin-top:4px;white-space:normal;min-width:220px;line-height:1.5;} .hli .ht{white-space:pre-wrap;color:var(--ink);} .hli .hb{color:var(--sub);text-align:right;}
@@ -268,14 +270,15 @@ function paintDay(){
   h += `<div class="card"><h2>👛 キャストごとの回収（${md(D.day)}(${DOW[dt.getUTCDay()]})${place ? "・" + esc(place) : ""}）</h2>`;
   if(!rows.length) h += `<div class="lead">この日に予約のあったキャストはいません。</div>`;
   else h += `<div class="tbl"><table>
-    <tr><th class="l">キャスト名</th><th class="l">回収場所</th><th>店落ち（暫定的な残額＋雑費）／カード</th><th class="l">回収サイン</th><th class="l">交通費・経費・精算ミス（処理したら ✓）</th></tr>
+    <tr><th class="l">キャスト名</th><th class="l">回収場所</th><th>店落ち（暫定的な残額＋雑費）／カード</th><th class="l">回収サイン</th><th class="l">交通費・経費・精算ミス（処理したら ✓）</th><th>封筒の中（数えた額）・差額</th><th class="l">完璧回収</th></tr>
     ${rows.map(r => { const x = extraItems(r, ed);
       return `<tr class="${!r.state ? "" : r.state === "none" ? "bad" : ""}"><td class="l"><b>${esc(names[r.id] || r.id)}</b>${histHtml(r)}</td>
         <td class="l">${r.place ? `<span class="st" style="background:${PLACE_COLOR[r.place] || "#eee"};color:#333">${esc(r.place)}</span>` : ""}</td>
         <td class="amt"><b>${num(r.shop)}</b> <small>／ ${r.card ? num(r.card) : "0"}</small>${r.card ? `<br><small>袋には ${num(r.amt)}</small>` : ""}</td>
         <td class="l"><span class="cs">${["day", "me", "none"].map(k => `<button class="${k} ${r.state === k ? "on" : ""}" ${ed ? "" : "disabled"} onclick="setState('${r.id}','${r.state === k && !r.auto ? "" : k}')">${STATE[k]}</button>`).join("")}</span>${r.cd.settled && r.cd.settled_at ? `<div class="who2">${r.auto ? "✔ 当日回収（自動）・" : ""}精算 ${esc(r.cd.settled_by || "")} ${when(r.cd.settled_at)}</div>` : ""}</td>
-        <td class="l wrapc" id="row-${r.id}">${x}</td></tr>`; }).join("")}
-    <tr class="tot"><td class="l">合計</td><td></td><td>${num(T.shop)} <small>／ ${num(T.card)}</small></td><td class="l"><span class="mk day">✔${T.dayN}</span>　<span class="mk me">✔${T.meN}</span>　<span class="mk none">■${T.noneN}</span>${T.yetN ? `　まだ ${T.yetN}` : ""}</td><td></td></tr>
+        <td class="l wrapc" id="row-${r.id}">${x}</td>${countCells(r, ed)}</tr>`; }).join("")}
+    <tr class="tot"><td class="l">合計</td><td></td><td>${num(T.shop)} <small>／ ${num(T.card)}</small></td><td class="l"><span class="mk day">✔${T.dayN}</span>　<span class="mk me">✔${T.meN}</span>　<span class="mk none">■${T.noneN}</span>${T.yetN ? `　まだ ${T.yetN}` : ""}</td><td></td>
+      <td>${(() => { const c = rows.filter(r => r.cl.collected != null); return c.length ? num(c.reduce((a, r) => a + Number(r.cl.collected), 0)) : ""; })()}</td><td class="l"><b>✅ ${rows.filter(r => r.done).length} / ${rows.length}人</b></td></tr>
   </table></div>
   <div class="leg">・回収サイン：<b class="mk day">✔ 当日回収</b>（黒）／<b class="mk me">✔ 店長が回収</b>（赤）／<b class="mk none">■ 未回収</b>のまま社長に渡す（赤）。もう一度押すと消えます<br>
     ・交通費・プラスはキャッシュフローから出して、袋には「店落ち − カード」の額をそろえます　・精算ミスは精算画面で未精算・お釣りになっています。項目ごとに、処理したら ✓</div>`;
@@ -346,6 +349,24 @@ async function setState(cid, st){
   }
   loadDay();
 }
+/* ---------- 封筒の中（数えた額）・差額・完璧回収（スプレッドシートと同じ）
+   ・封筒には「店落ち − カード − 振込」がそろっているはず（交通費・プラスはキャッシュフローから足してそろえる）
+   ・差額 ＝ 数えた額 − そろっているはずの額。0 で、交通費・経費・精算ミスを全部 ✓ したら「完璧回収」にできる
+   ・kb_collections.collected（数えた額）・done（完璧回収）（SQL 171） ---------- */
+function countCells(r, ed){
+  const has = r.cl.collected != null, diff = has ? Number(r.cl.collected) - r.amt : null, todo = todoOf(r);
+  const can = ed && (r.done || (has && diff === 0 && !todo));
+  const why = !has ? "先に封筒の中の額を入れてください" : diff ? "差額が 0 ではありません" : todo ? "交通費・経費・精算ミスの ✓ がまだです" : "";
+  return `<td class="amt" style="white-space:nowrap">${ed ? `<input type="number" class="cnt" value="${has ? Number(r.cl.collected) : ""}" placeholder="${num(r.amt)}" onchange="setCollected('${r.id}',this.value)">` : (has ? num(r.cl.collected) : "")}
+      <div style="font-size:12px;font-weight:800;color:${diff == null ? "var(--sub)" : diff === 0 ? "#2e8b57" : "#c0392b"}">${diff == null ? "はず " + num(r.amt) : diff === 0 ? "差額 0 ✅" : "差額 " + (diff > 0 ? "＋" : "−") + num(Math.abs(diff))}</div></td>
+    <td class="l"><label class="perfect ${r.done ? "on" : ""}" title="${esc(why)}"><input type="checkbox" ${r.done ? "checked" : ""} ${can ? "" : "disabled"} onchange="setPerfect('${r.id}',this.checked)"> 完璧回収</label>
+      ${r.done && r.cl.updated_by ? `<div class="who2">${esc(r.cl.updated_by)}</div>` : !r.done && why && has ? `<div class="who2" style="color:#c0392b">${esc(why)}</div>` : ""}</td>`;
+}
+function setCollected(cid, v){
+  const n = v === "" ? null : Math.round(Number(v) || 0);
+  saveCol(cid, Object.assign({ collected: n }, n == null ? { done: false } : {}));   // 消したら完璧回収もはずす
+}
+function setPerfect(cid, on){ saveCol(cid, { done: !!on }); }
 function setDoneItem(cid, key, on){
   const r = rowsFor(D.day, D).find(x => x.id === cid), l = (r ? doneItems(r) : []).filter(k => k !== key);
   if(on) l.push(key);
