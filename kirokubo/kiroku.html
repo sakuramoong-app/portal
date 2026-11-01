@@ -3015,7 +3015,7 @@ renderList = function(){ __renderListT(); renderToday(); renderOwner(); };
 const OWNER_NAME = "社長";
 function renderOwner(){
   const box = $("ownerBox"); if(!box) return;
-  if(KB.operatorName() !== OWNER_NAME){ box.style.display = "none"; return; }
+  if(!KB.IS_OWNER){ box.style.display = "none"; return; }   // 社長（内勤の一覧の役わり「社長」。きぬ・はな）だけ
   box.style.display = "";
   const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi").sort((a, b)=>String(a.start_at).localeCompare(String(b.start_at)));
   const cols = [["基本額", r=>r.base_price], ["入会金", r=>r.admission], ["指名料", r=>r.nomination_fee], ["延長", r=>r.extension_fee], ["交通費", r=>r.transport],

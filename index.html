@@ -289,8 +289,8 @@
     const el = document.getElementById("fbBadge");
     if (!el) return;
     el.style.display = "none";
-    document.getElementById("testLinks").style.display = (operator === "きゃ" || operator === "社長") ? "block" : "none";
-    if (operator === "きゃ" || operator === "社長") checkBackup();
+    document.getElementById("testLinks").style.display = (GOOGLE_STAFF && ["manager", "owner"].includes(GOOGLE_STAFF.role)) ? "block" : "none";
+    if (GOOGLE_STAFF && ["manager", "owner"].includes(GOOGLE_STAFF.role)) checkBackup();   // 店長・社長（Googleで入った人）だけ
     if (operator !== "きゃ") return;
     try {
       const { data, error } = await supabaseClient.rpc("fb_unread_count");
