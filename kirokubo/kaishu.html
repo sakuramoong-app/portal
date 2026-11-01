@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="kb.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
-<script src="kb_common.js?v=3"></script>
+<script src="kb_common.js?v=4"></script>
 <style>
   body{font-size:14.5px;}
   .wrap{max-width:1180px;}
@@ -60,6 +60,7 @@
   .cs button.day.on{background:#222;border-color:#222;color:#fff;} .cs button.me.on{background:#E0001B;border-color:#E0001B;color:#fff;} .cs button.none.on{background:#fff;border-color:#E0001B;color:#E0001B;box-shadow:inset 0 0 0 2px #E0001B;}
   .cs button:disabled{cursor:default;}
   input.cnt{width:96px;text-align:right;font-family:inherit;font-size:15px;font-weight:800;padding:5px 6px;border:1.5px solid var(--line);border-radius:10px}
+  input.cnt.auto{color:#5b6b8a;font-style:italic} input.cnt::-webkit-outer-spin-button,input.cnt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0} input.cnt{-moz-appearance:textfield;appearance:textfield}
   /* 回収の表：項目ごとに縦の線・横にスクロールしないで1画面に */
   table.coltbl th, table.coltbl td{border-left:1px solid #E6D6DC;border-right:1px solid #E6D6DC;padding:6px 7px}
   table.coltbl td.l{white-space:normal} table.coltbl td.wrapc{min-width:180px} table.coltbl th{white-space:normal}
@@ -299,7 +300,7 @@ function paintDay(){
         <td class="l"><span class="cs">${["day", "me"].map(k => `<button class="${k} ${r.state === k ? "on" : ""}" ${ed ? "" : "disabled"} onclick="setState('${r.id}','${r.state === k && !r.auto ? "" : k}')">${STATE[k]}</button>`).join("")}</span>${!r.state || r.state === "none" ? `<div class="who2" style="color:#E0001B">■ 未回収</div>` : ""}${r.cd.settled && r.cd.settled_at ? `<div class="who2">${r.auto ? "✔ 当日回収（自動）・" : ""}精算 ${esc(r.cd.settled_by || "")} ${when(r.cd.settled_at)}</div>` : ""}</td>
         <td class="l wrapc" id="row-${r.id}">${x}</td></tr>`; }).join("")}
     <tr class="tot"><td class="l">合計</td><td></td><td>${num(T.shop)} <small>／ ${num(T.card)}</small></td>
-      <td>${(() => { const c = rows.filter(r => r.cl.collected != null); return c.length ? num(c.reduce((a, r) => a + Number(r.cl.collected), 0)) : ""; })()}<div class="who2">💯 ${rows.filter(countPerfect).length} / ${rows.length}人</div></td>
+      <td>${(() => { const c = rows.filter(r => countVal(r) != null); return c.length ? num(c.reduce((a, r) => a + countVal(r), 0)) : ""; })()}<div class="who2">💯 ${rows.filter(countPerfect).length} / ${rows.length}人</div></td>
       <td class="l"><span class="mk day">✔${T.dayN}</span>　<span class="mk me">✔${T.meN}</span>${T.yetN + T.noneN ? `　<span class="mk none">■ 未回収 ${T.yetN + T.noneN}</span>` : ""}</td><td></td></tr>
   </table></div>
   <div class="leg">・回収サイン：<b class="mk day">✔ 当日回収</b>（黒）／<b class="mk me">✔ 店長が回収</b>（赤）。どちらも押していなければ <b class="mk none">■ 未回収</b>（そのまま社長に渡す）。もう一度押すと消えます<br>
@@ -395,15 +396,22 @@ async function setState(cid, st){
    ・封筒には「店落ち − カード − 振込」がそろっているはず（交通費・プラスはキャッシュフローから足してそろえる）
    ・数えた額がそろっているはずの額と同じなら、自動で 💯 完璧回収（押し忘れがないように、ボタンはなし）
    ・kb_collections.collected（数えた額）・done（完璧回収。数えた額を保存したときに自動で入る）（SQL 171） ---------- */
-const countPerfect = r => r.cl.collected != null && Number(r.cl.collected) === r.amt;
+// 当日回収（✔黒）で精算済なら、精算画面の「実際に投函した額」から自動で入れる（交通費・プラスはキャッシュフローから足すので、精算ミスの分だけずれる）
+const countAuto = r => r.state === "day" && r.s && r.s.deposited != null ? r.amt + Number(r.s.diff || 0) : null;
+const countVal = r => r.cl.collected != null ? Number(r.cl.collected) : countAuto(r);
+// 領収書だけ投函（あとで回収が必要）
+const hasReceipt = r => (Array.isArray(r.cd.settle_log) ? r.cd.settle_log : []).some(l => l.kind === "receipt");
+// 💯 完璧回収：封筒の中がそろっているはずの額と同じ・精算ミスなし・領収書の回収待ちなし（あとで変われば自動ではずれる）
+const countPerfect = r => { const v = countVal(r); return v != null && v === r.amt && !Number((r.s || {}).diff || 0) && !hasReceipt(r); };
 function countCell(r, ed){
-  const has = r.cl.collected != null, diff = has ? Number(r.cl.collected) - r.amt : null, ok = countPerfect(r);
-  return `<td class="amt cntc ${ok ? "ok" : has ? "ng" : ""}">${ed ? `<input type="number" class="cnt" value="${has ? Number(r.cl.collected) : ""}" placeholder="${num(r.amt)}" onchange="setCollected('${r.id}',this.value,${r.amt})">` : (has ? `<b>${num(r.cl.collected)}</b>` : "")}${ok ? `<span class="hyaku">💯</span>` : ""}
-      <div class="dif">${diff == null ? "はず " + num(r.amt) : diff === 0 ? "完璧回収" : "差額 " + (diff > 0 ? "＋" : "−") + num(Math.abs(diff))}</div></td>`;
+  const man = r.cl.collected != null, v = countVal(r), auto = !man && v != null, diff = v == null ? null : v - r.amt, ok = countPerfect(r);
+  const why = v == null ? "はず " + num(r.amt) : ok ? "完璧回収" : diff ? "差額 " + (diff > 0 ? "＋" : "−") + num(Math.abs(diff)) : (r.s || {}).diff ? "精算ミスあり" : hasReceipt(r) ? "領収書の回収待ち" : "";
+  return `<td class="amt cntc ${ok ? "ok" : v != null ? "ng" : ""}">${ed ? `<input type="number" class="cnt ${auto ? "auto" : ""}" value="${v != null ? v : ""}" onchange="setCollected('${r.id}',this.value,${r.amt})">` : (v != null ? `<b>${num(v)}</b>` : "")}${ok ? `<span class="hyaku">💯</span>` : ""}
+      <div class="dif">${why}${auto ? `<br><small>自動（精算で投函した額）</small>` : ""}</div></td>`;
 }
 function setCollected(cid, v, amt){
-  const n = v === "" ? null : Math.round(Number(v) || 0);
-  saveCol(cid, { collected: n, done: n != null && n === amt });   // 合っていれば自動で完璧回収
+  const n = v === "" ? null : Math.round(Number(v) || 0);   // 空にすると、自動（当日回収なら精算の投函額）にもどる
+  saveCol(cid, { collected: n, done: n != null && n === amt });
 }
 function setDoneItem(cid, key, on){
   const r = rowsFor(D.day, D).find(x => x.id === cid), l = (r ? doneItems(r) : []).filter(k => k !== key);

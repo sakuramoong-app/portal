@@ -142,3 +142,7 @@
   }
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", setup); else setup();
 })();
+
+/* ---------- 数字の欄（記録簿のページ共通）：スクロールしても数字を変えない・クリックで中身をぜんぶ選ぶ ---------- */
+document.addEventListener("wheel", e => { const t = e.target; if(t && t.matches && t.matches("input[type=number]") && document.activeElement === t) t.blur(); }, { passive: true, capture: true });
+document.addEventListener("focusin", e => { const t = e.target; if(t && t.matches && t.matches("input[type=number]")) setTimeout(() => { try{ t.select(); }catch(err){} }, 0); });
