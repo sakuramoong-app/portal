@@ -32,7 +32,7 @@
   async function staffSession(opts){
     const { data } = await sb.auth.getSession();
     const s = data && data.session;
-    if(!s || String(s.user.email||"").toLowerCase() !== STAFF_EMAIL) return null;
+    if(!s || !isStaffSession(s)) return null;   // 共通アカウント、または内勤の一覧のGoogleアカウント（SQL 192）
     if(Date.now() >= (loginAt(s) + 20*3600) * 1000) return null;
     // 作成中は、店長（きゃ）だけが開ける（キャスト台帳は別：ほかの内勤も見られる）。回収明細は社長も。画面の上での分け方
     if(!CAN_EDIT && !IS_OWNER){ managerBlock(); return null; }   // 店長・社長は全部見られて直せる
@@ -67,10 +67,17 @@
       <div style="margin-top:14px"><a href="index.html" style="font-weight:800;color:#e5638c">📒 キャスト台帳へ</a></div></div>`;
     document.body.appendChild(d);
   }
-  function operatorName(){ try{ return localStorage.getItem("currentOperator") || ""; }catch(e){ return ""; } }
-  // 作成中は、店長（きゃ）と社長のときだけ直せる。ほかの内勤は見るだけ（画面の上での分け方）
-  const OWNER_NAME = "社長", IS_OWNER = operatorName() === OWNER_NAME;
-  const CAN_EDIT = operatorName() === MANAGER_NAME || IS_OWNER;
+  // 👤 だれか：Googleで入った人は、通行証の印（staff_name・staff_role。SQL 192）でわかる。共通アカウントのときは、ポータルで選んだ担当者
+  function claimOf(token){
+    try{ let p = String(token || "").split(".")[1].replace(/-/g, "+").replace(/_/g, "/"); while(p.length % 4) p += "="; return JSON.parse(decodeURIComponent(escape(atob(p)))) || {}; }catch(e){ return {}; }
+  }
+  function isStaffSession(s){ return !!s && !!s.user && (String(s.user.email || "").toLowerCase() === STAFF_EMAIL || ["staff", "manager", "owner"].includes(claimOf(s.access_token).staff_role)); }
+  function myClaim(){ try{ const t = JSON.parse(localStorage.getItem("sb-tuxqpqokbvkrckgxcfdn-auth-token") || "null"); return t && t.access_token ? claimOf(t.access_token) : {}; }catch(e){ return {}; } }
+  const CLAIM = myClaim(), GOOGLE = ["staff", "manager", "owner"].includes(CLAIM.staff_role);
+  function operatorName(){ if(GOOGLE) return CLAIM.staff_name || ""; try{ return localStorage.getItem("currentOperator") || ""; }catch(e){ return ""; } }
+  // 店長（きゃ）と社長のときだけ直せる。Googleで入った人は、内勤の一覧の役わり（店長・社長）で決まる
+  const OWNER_NAME = "社長", IS_OWNER = GOOGLE ? CLAIM.staff_role === "owner" : operatorName() === OWNER_NAME;
+  const CAN_EDIT = GOOGLE ? ["manager", "owner"].includes(CLAIM.staff_role) : (operatorName() === MANAGER_NAME || IS_OWNER);
 
   function q(res){ if(res.error) throw res.error; return res.data; }
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));

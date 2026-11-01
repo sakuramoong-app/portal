@@ -27,6 +27,10 @@
   const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
   const lsDel = k => { try { localStorage.removeItem(k); } catch (e) {} };
+  // 👤 Googleで入った内勤は、通行証の印（staff_name・staff_role。SQL 192）でわかる
+  function claimOf(token){ try { let p = String(token || "").split(".")[1].replace(/-/g, "+").replace(/_/g, "/"); while (p.length % 4) p += "="; return JSON.parse(decodeURIComponent(escape(atob(p)))) || {}; } catch (e) { return {}; } }
+  const isStaff = s => !!s && !!s.user && (String(s.user.email || "").toLowerCase() === STAFF_EMAIL || ["staff", "manager", "owner"].includes(claimOf(s.access_token).staff_role));
+  const opOf = s => claimOf(s && s.access_token).staff_name || lsGet(OPERATOR_KEY) || "";   // Googleならその人、共通アカウントならポータルで選んだ担当者
   function session(){
     try { const s = JSON.parse(lsGet(TOKEN_KEY) || "null"); return s && s.access_token ? s : null; } catch (e) { return null; }
   }
@@ -73,8 +77,8 @@
   // いまの状態：{ at: ログアウトする時刻, it: そのシフト } / null（このしくみでは切らない）
   async function plan(){
     const s = session();
-    if (!s || !s.user || String(s.user.email || "").toLowerCase() !== STAFF_EMAIL) return null;
-    const op = lsGet(OPERATOR_KEY) || "", staffId = STAFF_IDS[op];
+    if (!isStaff(s)) return null;
+    const op = opOf(s), staffId = STAFF_IDS[op];
     if (!staffId) return null;
     // 店長の家のPC：端末登録のページで「このPCは退勤で自動ログアウトしない」を押した端末は、きゃのときだけ20時間のまま
     if (op === "きゃ" && lsGet(OFF_KEY) === "1") return null;
@@ -175,8 +179,9 @@
   function phoneSetup(){
     if (!IS_PHONE) return;
     const s = session();
-    if (!s || !s.user || String(s.user.email || "").toLowerCase() !== STAFF_EMAIL) return;   // 内勤のログインのときだけ
-    const boss = ["きゃ", "社長"].includes(lsGet(OPERATOR_KEY) || "");
+    if (!isStaff(s)) return;   // 内勤のログインのときだけ
+    const role = claimOf(s.access_token).staff_role;
+    const boss = ["staff", "manager", "owner"].includes(role) ? ["manager", "owner"].includes(role) : ["きゃ", "社長"].includes(lsGet(OPERATOR_KEY) || "");
     if (!PHONE_OK.some(re => re.test(location.pathname)) && !(boss && BOSS_OK.test(location.pathname))) { phoneBlock(); return; }
     if (lsGet(LOCK_KEY)) { phoneLock(); return; }   // 開きなおしてもロックのまま
     ["pointerdown", "keydown", "touchstart", "scroll"].forEach(ev => document.addEventListener(ev, () => { if (!lsGet(LOCK_KEY)) lastAct = Date.now(); }, { passive: true, capture: true }));

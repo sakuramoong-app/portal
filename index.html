@@ -156,6 +156,10 @@
   <input id="email" type="email" placeholder="メールアドレス" value="naikin@sakuramoong.internal">
   <input id="password" type="password" placeholder="パスワード" autocomplete="current-password">
   <button class="btn" id="loginBtn">ログイン</button>
+  <!-- 一人ずつのGoogleログイン（内勤の一覧に入っている人だけ。SQL 192） -->
+  <div style="margin:14px 0 6px;font-size:12px;color:var(--text2)">または</div>
+  <button class="btn" id="googleBtn" style="background:#fff;color:#3c4043;border:1.5px solid #dadce0;box-shadow:none">
+    <svg width="18" height="18" viewBox="0 0 48 48" style="vertical-align:-3px;margin-right:6px"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.1-.4-4.6H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.7c-2.1 1.4-4.8 2.2-8.5 2.2-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>Googleでログイン</button>
   <div id="result"></div>
 </div>
 
@@ -203,7 +207,8 @@
         <a href="kirokubo/customers.html" target="_blank" rel="noopener">👥 顧客台帳</a>　<a href="kirokubo/index.html" target="_blank" rel="noopener">📋 キャスト台帳</a><br>
         <a href="kirokubo/stats.html" target="_blank" rel="noopener">📊 集計</a>　<a href="kirokubo/daicho_import.html" target="_blank" rel="noopener">📥 台帳エクセルの取りこみ</a><br>
         <a href="kirokubo/device.html" target="_blank" rel="noopener">🔐 端末の登録</a>　<a href="hpsync.html" target="_blank" rel="noopener">🌐 公式HP自動反映</a><br>
-        <a href="kirokubo/backup.html" target="_blank" rel="noopener">💾 バックアップ（手動）</a>　<a href="kirokubo/backup_open.html" target="_blank" rel="noopener">🔓 自動バックアップを開く</a>
+        <a href="kirokubo/backup.html" target="_blank" rel="noopener">💾 バックアップ（手動）</a>　<a href="kirokubo/backup_open.html" target="_blank" rel="noopener">🔓 自動バックアップを開く</a><br>
+        <a href="staff_admin.html" target="_blank" rel="noopener">👥 内勤の一覧（Googleログイン）</a>
         <div id="backupWarn" style="display:none;margin-top:6px;padding:8px 12px;background:#FFF1F1;border:2px solid #E5484D;border-radius:12px;color:#C62828;font-weight:900"></div>
       </div>
     </div>
@@ -222,11 +227,43 @@
   const menuSection = document.getElementById("menuSection");
   const currentOperatorEl = document.getElementById("currentOperator");
 
-  function showAppView() {
+  // 👤 Googleで入った人：内勤の一覧（SQL 192）にいれば、その人を担当者にする（担当者は選ばない）。いなければログアウト
+  let GOOGLE_STAFF = null;   // { name, role } / null（共通アカウント）
+  async function applyGoogleStaff() {
+    const { data } = await supabaseClient.auth.getSession();
+    const s = data && data.session;
+    GOOGLE_STAFF = null;
+    if (!s || String(s.user.email || "").toLowerCase() === "naikin@sakuramoong.internal") return true;
+    const r = await supabaseClient.rpc("staff_me");
+    const me = !r.error && Array.isArray(r.data) ? r.data.find((x) => !x.shared) : null;
+    if (!me) {
+      await supabaseClient.auth.signOut();
+      localStorage.removeItem(OPERATOR_STORAGE_KEY);
+      showLoginView();
+      const el = document.getElementById("result");
+      el.style.color = "#E05260";
+      el.textContent = "このGoogleアカウントは、内勤の一覧に入っていないか、止められています。店長・社長に確かめてください。";
+      return false;
+    }
+    GOOGLE_STAFF = { name: me.name, role: me.role };
+    localStorage.setItem(OPERATOR_STORAGE_KEY, me.name);   // ほかのアプリも、この名前を担当者として使う
+    return true;
+  }
+  async function showAppView() {
+    if (!(await applyGoogleStaff())) return;
     loginView.style.display = "none";
     appView.style.display = "block";
     renderOperator();
+    const ch = document.getElementById("changeOperatorBtn");
+    if (ch) ch.style.display = GOOGLE_STAFF ? "none" : "";   // Googleで入った人は、担当者を変えられない
   }
+  async function googleLogin() {
+    const el = document.getElementById("result");
+    el.style.color = "var(--text2)"; el.textContent = "Googleを開いています…";
+    const { error } = await supabaseClient.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname, queryParams: { prompt: "select_account" } } });
+    if (error) { el.style.color = "#E05260"; el.textContent = "Googleでログインできませんでした：" + error.message; }
+  }
+  document.getElementById("googleBtn").addEventListener("click", googleLogin);
 
   function showLoginView() {
     appView.style.display = "none";

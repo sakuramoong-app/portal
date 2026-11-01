@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>内勤の一覧│サクラG</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
+<style>
+  :root{--pink:#e5638c;--line:#F1E3E7;--sub:#9C8B8F;--ink:#5C4B4F;--bg:#FBF7F8}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Hiragino Maru Gothic ProN","Zen Maru Gothic","Noto Sans JP",sans-serif;font-size:14.5px;line-height:1.7}
+  .wrap{max-width:820px;margin:0 auto;padding:20px 16px 60px}
+  h1{color:var(--pink);font-size:22px;margin:0 0 4px}
+  .lead{color:var(--sub);font-size:13px;margin:0 0 14px}
+  .card{background:#fff;border:2px solid #FFC2D1;border-radius:18px;padding:16px 18px;margin-top:12px}
+  .card h2{margin:0 0 8px;font-size:16px;color:var(--pink)}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:8px 6px;border-top:1px solid var(--line);text-align:left;vertical-align:middle;font-size:13.5px}
+  th{color:var(--sub);font-size:12px;border-top:none}
+  tr.off td{opacity:.5}
+  input,select{font-family:inherit;font-size:14px;padding:7px 9px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+  .btn{font-family:inherit;font-weight:800;font-size:13px;border:1.5px solid #FFC2D1;background:#fff;color:var(--pink);border-radius:99px;padding:6px 14px;cursor:pointer}
+  .btn.pri{background:var(--pink);border-color:var(--pink);color:#fff}
+  .btn.stop{border-color:#E5486C;color:#C62850}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .row > *{flex:1 1 160px;min-width:0}
+  .row .btn{flex:none}
+  .tag{display:inline-block;font-size:11.5px;font-weight:800;border-radius:99px;padding:1px 9px}
+  .tag.on{background:#E5F6EC;color:#2e8b57} .tag.off{background:#FFE8EC;color:#C62850}
+  .gate{text-align:center;color:var(--sub);padding:40px 0}
+  .msg{font-weight:800;font-size:13px;margin-top:8px}
+  .note{font-size:12.5px;color:var(--sub);line-height:1.8}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>👥 内勤の一覧（Googleログイン）</h1>
+  <p class="lead">ここに入っている人だけが、自分のGoogleアカウントでポータルに入れます。「止める」を押すと、その人はすぐに何も見られなくなります。</p>
+  <div id="gate" class="gate">読み込み中…</div>
+  <div id="main" style="display:none">
+    <div class="card">
+      <h2>＋ 人を足す</h2>
+      <div class="row">
+        <input id="n_email" type="email" placeholder="Googleのメールアドレス（〇〇@gmail.com など）" autocomplete="off">
+        <input id="n_name" list="names" maxlength="20" placeholder="名前（ポータルの担当者：きゃ・すや など）">
+        <select id="n_role"><option value="staff">内勤</option><option value="manager">店長</option><option value="owner">社長</option></select>
+        <button type="button" class="btn pri" onclick="addStaff()">足す</button>
+      </div>
+      <datalist id="names"><option value="きゃ"><option value="すや"><option value="らん"><option value="かみ"><option value="わか"><option value="社長"></datalist>
+      <div class="msg" id="addMsg"></div>
+      <div class="note">・名前は、今のポータルの担当者と同じ名前にしてください（内勤カレンダーのシフトや、退勤時刻での自動ログアウトにつながります）。<br>・役わり：店長・社長は、記録簿の全部のページと、この一覧を直せます。</div>
+    </div>
+    <div class="card">
+      <h2>今の一覧</h2>
+      <div style="overflow-x:auto"><table id="list"></table></div>
+    </div>
+    <div class="card note" id="sharedBox"></div>
+  </div>
+</div>
+<script>
+/* ============================================================
+   👥 内勤の一覧（staff_accounts・SQL 192）
+   ・見る：内勤ならだれでも（表の鍵）／直す：店長・社長（Googleで入った人）。移るあいだは共通アカウントでも直せる（最初の登録のため）
+   ・止める（active=false）と、データベースの鍵（is_staff_active）でその場で読めなくなる
+   ============================================================ */
+const sb = supabase.createClient("https://tuxqpqokbvkrckgxcfdn.supabase.co", "sb_publishable_PyvCZHSzYlaqauYbdZybng_zbftghak");
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ROLE = { staff: "内勤", manager: "店長", owner: "社長" };
+let me = { email: "", admin: false, by: "" }, rows = [];
+function q(r){ if(r.error) throw r.error; return r.data; }
+async function load(){
+  try{ rows = q(await sb.from("staff_accounts").select("*").order("role", { ascending: false }).order("name")) || []; }
+  catch(e){ $("list").innerHTML = `<tr><td>読めませんでした（SQL 192 は実行ずみ？）：${esc(e.message || e)}</td></tr>`; return; }
+  $("list").innerHTML = `<tr><th>名前</th><th>Googleのメール</th><th>役わり</th><th>状態</th><th></th></tr>` + (rows.length ? rows.map(r => `<tr class="${r.active ? "" : "off"}">
+      <td><b>${esc(r.name)}</b></td><td style="word-break:break-all">${esc(r.email)}</td>
+      <td>${me.admin ? `<select onchange="setRole('${esc(r.email)}',this.value)">${Object.entries(ROLE).map(([k, l]) => `<option value="${k}" ${k === r.role ? "selected" : ""}>${l}</option>`).join("")}</select>` : esc(ROLE[r.role] || r.role)}</td>
+      <td>${r.active ? `<span class="tag on">使える</span>` : `<span class="tag off">止めている</span>`}</td>
+      <td style="white-space:nowrap">${me.admin ? (r.active ? `<button class="btn stop" onclick="setActive('${esc(r.email)}',false)">🚫 止める</button>` : `<button class="btn" onclick="setActive('${esc(r.email)}',true)">↩ もどす</button>`) + ` <button class="btn" onclick="delStaff('${esc(r.email)}')">🗑</button>` : ""}</td></tr>`).join("")
+    : `<tr><td colspan="5" style="color:var(--sub)">まだだれもいません。上の「＋ 人を足す」から入れてください（まずは店長・社長）。</td></tr>`);
+}
+async function addStaff(){
+  const email = $("n_email").value.trim().toLowerCase(), name = $("n_name").value.trim(), role = $("n_role").value;
+  if(!/^[^@\s]+@[^@\s]+$/.test(email)){ $("addMsg").textContent = "メールアドレスを確かめてください"; return; }
+  if(!name){ $("addMsg").textContent = "名前を入れてください"; return; }
+  try{ q(await sb.from("staff_accounts").insert({ email, name, role, updated_by: me.by })); $("n_email").value = ""; $("n_name").value = ""; $("addMsg").textContent = `✅ ${name}（${ROLE[role]}）を足しました`; load(); }
+  catch(e){ $("addMsg").textContent = "足せませんでした：" + (/duplicate/.test(e.message || "") ? "そのメールはもう入っています" : (e.message || e)); }
+}
+async function setActive(email, on){
+  const r = rows.find(x => x.email === email); if(!r) return;
+  if(!on && !confirm(`${r.name} を止めますか？\nすぐに、どのアプリも見られなくなります（ログイン中でも）。`)) return;
+  try{ q(await sb.from("staff_accounts").update({ active: on, updated_by: me.by, updated_at: new Date().toISOString() }).eq("email", email)); load(); }
+  catch(e){ alert("直せませんでした：" + (e.message || e)); }
+}
+async function setRole(email, role){
+  try{ q(await sb.from("staff_accounts").update({ role, updated_by: me.by, updated_at: new Date().toISOString() }).eq("email", email)); load(); }
+  catch(e){ alert("直せませんでした：" + (e.message || e)); load(); }
+}
+async function delStaff(email){
+  const r = rows.find(x => x.email === email); if(!r) return;
+  if(!confirm(`${r.name}（${email}）を一覧から消しますか？\n（ふつうは「止める」で大丈夫です）`)) return;
+  try{ q(await sb.from("staff_accounts").delete().eq("email", email)); load(); }
+  catch(e){ alert("消せませんでした：" + (e.message || e)); }
+}
+(async () => {
+  const { data } = await sb.auth.getSession(), s = data && data.session;
+  if(!s){ $("gate").textContent = "ポータルからログインして開いてください"; return; }
+  const st = await sb.rpc("is_staff_active");
+  if(st.error || st.data !== true){ $("gate").textContent = "内勤のログインで開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
+  const ad = await sb.rpc("is_staff_admin");
+  me = { email: s.user.email, admin: !ad.error && ad.data === true, by: (() => { try{ return localStorage.getItem("currentOperator") || ""; }catch(e){ return ""; } })() };
+  if(ad.error){ $("gate").textContent = "SQL 192 を先に実行してください：" + ad.error.message; return; }
+  $("gate").style.display = "none"; $("main").style.display = "";
+  if(!me.admin) document.querySelector(".card").style.display = "none";   // 足すのは店長・社長だけ
+  const shared = String(s.user.email).toLowerCase() === "naikin@sakuramoong.internal";
+  $("sharedBox").innerHTML = shared
+    ? "🔑 今は<b>共通アカウント</b>で開いています（移るあいだは、ここからも一覧を直せます）。全員がGoogleで入れるようになったら、共通アカウントを止めます。"
+    : `🔑 ${esc(me.by)}（${esc(s.user.email)}）として開いています。${me.admin ? "" : "一覧を直せるのは、店長・社長だけです。"}`;
+  load();
+})();
+</script>
+</body>
+</html>
