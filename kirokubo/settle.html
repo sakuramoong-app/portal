@@ -67,7 +67,7 @@
     <div style="margin:0 0 8px"><button class="btn btn-ghost btn-sm" onclick="slogToggle()">📜 精算・未精算のログ（月ごと）</button></div>
     <div id="slogPanel" style="display:none;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:10px"></div>
     <div class="sum" id="sum"></div>
-    <div class="kanabar" id="kanaBar"></div>
+    <div class="kanabar" id="kanaBar"></div><!-- 並び順の選択も、ここ（下の renderKanaBar）に出す -->
     <div id="list"></div>
   </div>
 </div>
@@ -181,7 +181,8 @@ function calcCast(castId){
 function render(){
   const ids = [...new Set(rows.map(r=>r.cast_id).filter(Boolean).concat(Object.keys(days)))];
   const first = id => { const r = rows.find(x=>x.cast_id === id && x.start_at); return r ? r.start_at : "9999"; };
-  ids.sort((a, b)=>String(first(a)).localeCompare(String(first(b))));
+  const kanaOf = id => { const c = M.casts.find(x=>x.id === id) || {}; return String(c.kana || c.official_name || c.temp_name || id); };
+  ids.sort(settleSortFn(kanaOf));   // 並び順（あいうえお順／出勤が早い順／退勤が早い順）。グループ分け：売上あり→売上なし→お茶→欠勤 は下でそのまま
   const cs = ids.map(id=>({ id, c: calcCast(id) }));
   const sum = cs.reduce((a, x)=>({ total: a.total + x.c.total, take: a.take + x.c.takeHome, drop: a.drop + x.c.drop, zappi: a.zappi + x.c.zappi, done: a.done + (x.c.cd.settled ? 1 : 0), shop: a.shop + x.c.shopDrop,
     pay: a.pay + x.c.reward + x.c.option, prov: a.prov + x.c.provisional, wh: a.wh + x.c.withholding, real: a.real + x.c.realDrop }), { total: 0, take: 0, drop: 0, zappi: 0, done: 0, shop: 0, pay: 0, prov: 0, wh: 0, real: 0 });
@@ -249,7 +250,7 @@ function cardHtml(id, c){
       <span class="k">OP（バック有）</span><span class="v">${yen(c.option)}</span>
       ${c.transportBack ? `<span class="k">交通費バック（自動）</span><span class="v">＋${yen(c.transportBack)}</span>` : ""}
       ${c.plus ? `<span class="k">② プラス（手入力）</span><span class="v">＋${yen(c.plus)}</span>` : ""}
-      <span class="k">③ 雑費${c.exempt ? "（この曜日はなし）" : ""}${cd.zappi_override != null ? "（手で直した）" : ""}</span><span class="v">−${yen(c.zappi)}</span>
+      <span class="k">③ 雑費${c.exempt ? "（この曜日はなし）" : ""}${cd.zappi_override != null ? "（手で直した" + (cd.zappi_note ? "：" + esc(cd.zappi_note) : "") + "）" : ""}</span><span class="v">−${yen(c.zappi)}</span>
       ${c.minus ? `<span class="k">マイナス（手入力）</span><span class="v">−${yen(c.minus)}</span>` : ""}
       <span class="k"><b>手取り</b></span><span class="v big">${yen(c.takeHome)}</span>
       <span class="k">カード払分</span><span class="v">${yen(c.cardPaid)}</span>
@@ -268,7 +269,7 @@ function cardHtml(id, c){
       <div class="hint2" style="margin-top:8px">マイナス（雑費以外）</div><div class="items">${items(c.minusItems, "minus")}</div>
       <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','minus')">＋ マイナスを足す</button>
       <div class="hint2" style="margin-top:8px">雑費（自動：${yen(c.zappiAuto)}）</div>
-      <div class="it" style="display:flex;gap:6px;align-items:center"><input type="number" id="zo-${id}" value="${cd.zappi_override != null ? cd.zappi_override : ""}" placeholder="空なら自動" style="width:120px">
+      <div class="it" style="display:flex;gap:6px;align-items:center"><input type="number" id="zo-${id}" value="${cd.zappi_override != null ? cd.zappi_override : ""}" placeholder="空なら自動" style="width:120px"><input id="zr-${id}" value="${esc(cd.zappi_note || "")}" maxlength="100" placeholder="理由（例：体調不良で早退のため雑費なし）" style="flex:1;min-width:160px">
         <button class="btn btn-ghost btn-sm" onclick="setZappi('${id}')">雑費を直す</button></div>
     </div>`}
     <details style="margin-top:6px"><summary style="cursor:pointer;font-size:12.5px;font-weight:800;color:var(--sub)">🏪 店落ち・税務用</summary>
@@ -304,7 +305,8 @@ function addItem(id, kind){ const l = curItems(id, kind); l.push({ label: kind =
 function setItem(id, kind, i, k, v){ const l = curItems(id, kind); if(!l[i]) return; l[i][k] = k === "amount" ? (Number(v) || 0) : v; saveDay(id, { [kind + "_items"]: l }); }
 function delItem(id, kind, i){ const l = curItems(id, kind); l.splice(i, 1); saveDay(id, { [kind + "_items"]: l }); }
 function setDeposit(id, v){ saveDay(id, { deposited: v === "" ? null : Number(v) || 0 }); }
-function setZappi(id){ const v = $("zo-" + id).value; saveDay(id, { zappi_override: v === "" ? null : Math.max(0, Number(v) || 0) }); }
+function setZappi(id){ const v = $("zo-" + id).value, n = $("zr-" + id) ? $("zr-" + id).value.trim() : "", has = "zappi_note" in (days[id] || {}) || Object.values(days).some(d => d && "zappi_note" in d);
+  saveDay(id, Object.assign({ zappi_override: v === "" ? null : Math.max(0, Number(v) || 0) }, has || n ? { zappi_note: v === "" ? "" : n } : {})); }   // 理由は SQL 183
 function settle(id){
   const c = calcCast(id);
   if(!confirm(castName(id) + " を精算済にしますか？\n手取り " + yen(c.takeHome) + "／投函額 " + yen(c.drop))) return;
@@ -464,7 +466,41 @@ const cardIds = () => [...document.querySelectorAll("#list .card[id^='card-']")]
 function renderKanaBar(){
   const el = $("kanaBar"); if(!el) return;
   const have = new Set(cardIds().map(kanaHeadOf));
-  el.innerHTML = KANA_ROWS.map(([k]) => `<button type="button" class="kb ${have.has(k) ? "" : "off"}" onclick="jumpKana('${k}')">${k}</button>`).join("");
+  el.innerHTML = `<select class="ssort" onchange="setSettleSort(this.value)" title="並び順">${SETTLE_SORTS.map(([v, l]) => `<option value="${v}" ${v === settleSort ? "selected" : ""}>${l}</option>`).join("")}</select>`
+    + KANA_ROWS.map(([k]) => `<button type="button" class="kb ${have.has(k) ? "" : "off"}" onclick="jumpKana('${k}')">${k}</button>`).join("");
+}
+
+/* ---------- 並び順：あいうえお順／出勤が早い順／退勤が早い順（出勤・退勤はシフト。勤怠で直した時刻があればそちら。シフトがなければ予約の時刻） ---------- */
+const SETTLE_SORTS = [["kana", "あいうえお順"], ["start", "出勤が早い順"], ["endEarly", "退勤が早い順"]];
+let settleSort = "kana"; try{ settleSort = localStorage.getItem("settleSort") || "kana"; }catch(e){}
+function setSettleSort(v){ settleSort = v; try{ localStorage.setItem("settleSort", v); }catch(e){} render(); }
+const settleShifts = {};   // 日付 → { シフトの名前: {start, end} }
+async function loadSettleShifts(ymd){
+  if(settleShifts[ymd]) return;
+  settleShifts[ymd] = {};
+  try{
+    const [y, m, d] = ymd.split("-").map(Number), dt = new Date(Date.UTC(y, m - 1, d)), dow = dt.getUTCDay();
+    dt.setUTCDate(dt.getUTCDate() + (dow === 0 ? -6 : 1 - dow));
+    const rs = q(await sb.from("shift_weeks").select("cast_name,data").eq("wk", dt.toISOString().slice(0, 10))) || [];
+    rs.forEach(r => { const sh = r.data && r.data.shifts && r.data.shifts[ymd]; if(sh && sh.start != null && sh.end != null) settleShifts[ymd][r.cast_name] = { start: Number(sh.start), end: Number(sh.end) }; });
+  }catch(e){}
+  if(settleSort !== "kana" && ymd === day) render();
+}
+function shiftOfCast(id){
+  const c = M.casts.find(x => x.id === id) || {}, sh = (settleShifts[day] || {})[c.shift_name] || (settleShifts[day] || {})[c.official_name] || null;
+  const cd = days[id] || {};
+  const h = iso => { if(!iso) return null; const t = new Date(new Date(iso).getTime() + 9 * 3600 * 1000); let x = t.getUTCHours() + t.getUTCMinutes() / 60; if(x < 6) x += 24; return x; };
+  const mine = rows.filter(r => r.cast_id === id && r.start_at);
+  const start = cd.shift_start_ov != null ? Number(cd.shift_start_ov) : sh ? sh.start : mine.length ? Math.min(...mine.map(r => h(r.start_at))) : 99;
+  const end = cd.shift_end_ov != null ? Number(cd.shift_end_ov) : sh ? sh.end : mine.length ? Math.max(...mine.map(r => h(r.end_at || r.start_at))) : 99;
+  return { start, end };
+}
+function settleSortFn(kanaOf){
+  if(settleSort !== "kana") loadSettleShifts(day);
+  const byKana = (a, b) => kanaOf(a).localeCompare(kanaOf(b), "ja");
+  if(settleSort === "start") return (a, b) => shiftOfCast(a).start - shiftOfCast(b).start || byKana(a, b);
+  if(settleSort === "endEarly") return (a, b) => shiftOfCast(a).end - shiftOfCast(b).end || byKana(a, b);
+  return byKana;
 }
 let kanaLast = { k: "", i: -1 };
 function jumpKana(k){
@@ -483,13 +519,14 @@ function jumpKana(k){
   const css = document.createElement("style");
   css.textContent = `.kanabar{display:flex;gap:4px;flex-wrap:wrap;position:sticky;top:0;z-index:40;background:var(--bg,#FFF7FA);padding:6px 0;margin-bottom:6px}
   .kanabar .kb{font-family:inherit;font-size:15px;font-weight:800;min-width:36px;padding:5px 8px;border:1.5px solid #FFC2D1;border-radius:9px;background:#fff;color:#e5638c;cursor:pointer}
-  .kanabar .kb:hover{background:#FFE4EC} .kanabar .kb.off{opacity:.35}`;
+  .kanabar .kb:hover{background:#FFE4EC} .kanabar .kb.off{opacity:.35}
+  .kanabar .ssort{font-family:inherit;font-size:14px;font-weight:800;border:1.5px solid #FFC2D1;border-radius:9px;background:#fff;color:#B0124F;padding:4px 8px;margin-right:6px}`;
   document.head.appendChild(css);
 })();
 
 init();
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=33"></script>
+<script src="unsettled.js?v=34"></script>
 </body>
 </html>

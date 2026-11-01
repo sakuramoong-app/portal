@@ -606,7 +606,7 @@ function settleViewHtml(id, c){
     if(r.off) return;
     h += R("コース報酬", yen(r.courseBack)) + r.ops.map(o => R("OP：" + o[0], "＋" + yen(o[1]), "op")).join("") + R("▶ この仕事の報酬（OP込み）", yen(r.total), "ans");
   });
-  h += `<div class="dl"></div>` + R("本日の報酬総額", yen(c.reward), "big") + R("本日のOP総額", yen(c.option), "big") + R("雑費", "−" + yen(c.zappi), "big")
+  h += `<div class="dl"></div>` + R("本日の報酬総額", yen(c.reward), "big") + R("本日のOP総額", yen(c.option), "big") + R("雑費" + (c.cd && c.cd.zappi_override != null ? "（手で直した" + (c.cd.zappi_note ? "：" + esc(c.cd.zappi_note) : "") + "）" : ""), "−" + yen(c.zappi), "big")
     + P.pm.map(([l, v]) => R(l, pmYen(v), "big")).join("") + `<div class="dl"></div>`;
   h += `<div class="pb"><div class="k">本日の報酬 ／ 本日の手取り額</div><div class="v">${yen(P.pay)} ／ ${yen(c.takeHome)}</div></div>`;
   const dc = dropCalc(c);
@@ -685,7 +685,7 @@ cardHtml = function(id, c){
       <div class="hint2" style="margin-top:8px">マイナス（立て替えなど・雑費以外）</div><div class="items">${items(c.minusItems, "minus")}</div>
       <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','minus')">＋ マイナスを足す</button>
       <div class="hint2" style="margin-top:8px">雑費（自動：${yen(c.zappiAuto)}）</div>
-      <div class="it" style="display:flex;gap:6px;align-items:center"><input type="number" id="zo-${id}" value="${cd.zappi_override != null ? cd.zappi_override : ""}" placeholder="空なら自動" style="width:120px">
+      <div class="it" style="display:flex;gap:6px;align-items:center"><input type="number" id="zo-${id}" value="${cd.zappi_override != null ? cd.zappi_override : ""}" placeholder="空なら自動" style="width:120px"><input id="zr-${id}" value="${esc(cd.zappi_note || "")}" maxlength="100" placeholder="理由（例：体調不良で早退のため雑費なし）" style="flex:1;min-width:160px">
         <button class="btn btn-ghost btn-sm" onclick="setZappi('${id}')">雑費を直す</button></div>
     </div>`}
     ${V.shop}
