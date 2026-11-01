@@ -1656,12 +1656,17 @@ async function lookupCustomer(keepName){
     if(!keepName || !$("f_email").value) $("f_email").value = c.email || "";   // メールは、受付で入れたものを消さない
     $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = c.ng_reason || c.note || "";
     // ダミーで行った子の確認（renderCastChecks）のため、多めに読む。履歴に出すのは新しい10件
-    const pastAll = q(await sb.from("kb_reservations").select("id,biz_date,store_key,cast_id,dummy_name,course,status").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(200)) || [];
+    const pastAll = q(await sb.from("kb_reservations").select("id,biz_date,store_key,cast_id,dummy_name,course,status,total,address").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(200)) || [];
     custPast = pastAll;
     // 台帳エクセルの過去の利用もいっしょに（これまで・指名したことのあるキャスト・新規／店リピ／本指名の自動）
     let xl = [];
-    try{ const h = await sb.from("kb_cust_history").select("biz_date,store_key,store_raw,cast_id,cast_raw,course,status").eq("customer_id", c.id).order("biz_date", { ascending: false }).limit(300);
-      xl = (h.data || []).map(x => ({ biz_date: x.biz_date || "", store_key: x.store_key, store_raw: x.store_raw, cast_id: x.cast_id, cast_raw: x.cast_raw, dummy_name: "", course: x.course, status: x.status, excel: true })); }catch(e){}
+    try{ const h = await sb.from("kb_cust_history").select("biz_date,store_key,store_raw,cast_id,cast_raw,course,status,total,place").eq("customer_id", c.id).order("biz_date", { ascending: false }).limit(300);
+      xl = (h.data || []).map(x => ({ biz_date: x.biz_date || "", store_key: x.store_key, store_raw: x.store_raw, cast_id: x.cast_id, cast_raw: x.cast_raw, dummy_name: "", course: x.course, status: x.status, total: x.total, place: x.place, excel: true })); }catch(e){}
+    // 台帳エクセルの行が、記録簿の予約と キャスト・お店・総額・場所 まで同じなら、同じ利用を2回書いたもの（日付が打ちまちがいで別の日になっていても）
+    //   → 数えない・出さない（本指名と判断されないように）。台帳のデータは変えない
+    const pk = s => String(s || "").normalize("NFKC").replace(/\s/g, "");
+    const dupOf = x => x.cast_id && Number(x.total) > 0 && pk(x.place) && pastAll.some(r => r.cast_id === x.cast_id && r.store_key === x.store_key && Number(r.total) === Number(x.total) && pk(r.address) === pk(x.place));
+    xl = xl.filter(x => !dupOf(x));
     custSeen = pastAll.concat(xl).sort((a, b) => String(b.biz_date).localeCompare(String(a.biz_date)));
     const seenAll = custSeen;
     const past = seenAll.slice(0, 10);
