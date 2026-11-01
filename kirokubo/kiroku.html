@@ -1671,7 +1671,7 @@ async function lookupCustomer(keepName){
       // 履歴は1回ずつ1行で、大きめ・濃いめに（受付でいちばん大事なので）
       `<div class="custhist"><div class="ch-head">📋 これまで ${seenAll.length}件${xl.length ? `（うち台帳エクセル ${xl.length}件）` : ""}${seenAll.length > 10 ? "（新しい10件）" : ""}</div>
         ${past.map(p => { const x = p.status === "cancel" ? "キャンセル" : p.status === "tobi" ? "トビ" : "";
-          return `<div class="ch-row ${x ? "x" : ""} ${M.stores.some(s => s.dummy && s.key === p.store_key) ? "dm" : ""}"><span class="d">${p.biz_date ? (p.biz_date.slice(2, 4) !== new Date().toISOString().slice(2, 4) ? p.biz_date.slice(2, 4) + "/" : "") + p.biz_date.slice(5).replace("-","/") : "日付なし"}</span><span class="s">${esc(p.store_key ? storeLabel(p.store_key) : p.store_raw || "")}${p.excel ? " 📚" : ""}</span>
+          return `<div class="ch-row ${x ? "chx" : ""} ${M.stores.some(s => s.dummy && s.key === p.store_key) ? "dm" : ""}"><span class="d">${p.biz_date ? (p.biz_date.slice(2, 4) !== new Date().toISOString().slice(2, 4) ? p.biz_date.slice(2, 4) + "/" : "") + p.biz_date.slice(5).replace("-","/") : "日付なし"}</span><span class="s">${esc(p.store_key ? storeLabel(p.store_key) : p.store_raw || "")}${p.excel ? " 📚" : ""}</span>
             <span class="c">${p.dummy_name ? `<span class="dn">🎭${esc(p.dummy_name)}</span> → ` : ""}<b>${esc(p.cast_id ? castName(p.cast_id) : p.cast_raw || "")}</b></span><span class="k">${esc(p.course)}</span>${x ? `<span class="xx">${x}</span>` : ""}</div>`; }).join("") || `<div class="ch-row">なし</div>`}
         <div class="ch-foot">指名したことのあるキャスト：<b>${casts.map(esc).join("、") || "なし"}</b></div></div>`;
     if(!editing){
@@ -5938,7 +5938,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .custhist .ch-row{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;padding:5px 2px;border-top:1px dashed #EEE3F3}
   .custhist .ch-row .d{font-weight:800;min-width:42px} .custhist .ch-row .s{color:#7a6468;font-size:13px} .custhist .ch-row .k{color:#7a6468;font-size:13px}
   .custhist .ch-row .c b{font-size:15px} .custhist .ch-row .dn{background:#EFE6FA;color:#5c3d7a;border-radius:99px;padding:1px 8px;font-weight:800;font-size:13px}
-  .custhist .ch-row.dm{background:#FAF6FE} .custhist .ch-row.x{opacity:.55} .custhist .ch-row .xx{color:#d9534f;font-weight:800;font-size:12.5px}
+  .custhist .ch-row.dm{background:#FAF6FE} .custhist .ch-row.chx{opacity:.55} .custhist .ch-row .xx{color:#d9534f;font-weight:800;font-size:12.5px}
   .custhist .ch-foot{border-top:1px solid #EEE3F3;margin-top:4px;padding-top:5px;font-size:13px;color:#7a6468} .custhist .ch-foot b{color:var(--ink)}
   #dmModeChips .chip.on{background:#8a6fd1;border-color:#8a6fd1;color:#fff}
   #dmModeChips .dmgrp{background:#fff;border-radius:10px;padding:5px 8px;margin-bottom:5px} #dmModeChips .dmgl{font-size:12px;font-weight:800;color:#5c3d7a;margin-bottom:3px}
