@@ -4140,7 +4140,13 @@ function paintNewHotel(){
   const el = $("newHotelBox"); if(!el) return;
   const area = $("f_area").value.trim(), name = hotelNameFromAddr($("f_address").value);
   const kind = $("f_place") ? $("f_place").value : "";
-  if(!KB.CAN_EDIT || !name || name.length < 2 || kind === "home"){ el.innerHTML = ""; return; }
+  // 🏠 自宅：住所を Google で調べるボタンだけ（ホテルリストには足さない）
+  if(kind === "home"){
+    const addr = $("f_address").value.trim(), q3 = encodeURIComponent(((area || "").replace(/^出張（(.*)）$/, "$1").replace(/^出張$/, "") + " " + addr).trim());
+    el.innerHTML = addr.length >= 2 ? `<div style="margin:4px 0;font-size:13px"><a href="https://www.google.com/maps/search/?api=1&query=${q3}" target="_blank" rel="noopener">🔍 この住所をGoogleマップで調べる</a>　<a href="https://www.google.com/search?q=${q3}" target="_blank" rel="noopener">🔍 Google検索</a></div>` : "";
+    return;
+  }
+  if(!KB.CAN_EDIT || !name || name.length < 2){ el.innerHTML = ""; return; }
   const key = s=>String(s || "").replace(/[\s　]/g, "");
   // 同じエリアに、名前がぴったり同じホテルがあるときだけ「リストにある」（名前の一部が同じだけ・ほかのエリアのホテルは、新しいホテルとして聞く）
   const inArea = (M.hotels || []).filter(h=>!area || !h.area || h.area === area);
