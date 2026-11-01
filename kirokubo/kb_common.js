@@ -35,7 +35,7 @@
     if(!s || String(s.user.email||"").toLowerCase() !== STAFF_EMAIL) return null;
     if(Date.now() >= (loginAt(s) + 20*3600) * 1000) return null;
     // 作成中は、店長（きゃ）だけが開ける（キャスト台帳は別：ほかの内勤も見られる）。回収明細は社長も。画面の上での分け方
-    if(!CAN_EDIT && !(opts && opts.owner && IS_OWNER)){ managerBlock(); return null; }
+    if(!CAN_EDIT && !IS_OWNER){ managerBlock(); return null; }   // 社長は全部見られる（直せるのは店長だけ）
     // 「登録した端末だけ」が ON で、この端末が登録されていない → 見せない（端末の登録ページは別）
     if(!(opts && opts.skipDevice)){
       const st = await deviceStatus();
@@ -97,7 +97,7 @@
   // ページの上の切りかえ
   function nav(active){
     const all = [["kiroku.html","🆕 新しい記録簿（ためし中）"],["reception.html","🧾 受付"],["settle.html","💴 精算"],["kaishu.html","📦 回収明細"],["index.html","📒 キャスト台帳"],["customers.html","👥 顧客台帳"],["stats.html","📈 集計"]];
-    const items = CAN_EDIT ? all : all.filter(([h])=>h === "index.html" || (IS_OWNER && h === "kaishu.html"));   // 店長以外はキャスト台帳だけ（社長は回収明細も）
+    const items = CAN_EDIT || IS_OWNER ? all : all.filter(([h])=>h === "index.html");   // 店長・社長は全部、ほかの内勤はキャスト台帳だけ
     return `<nav class="kbnav">${items.map(([h,l])=>`<a href="${h}" class="${h===active?"on":""}">${l}</a>`).join("")}</nav>`;
   }
   function wipBanner(){

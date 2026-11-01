@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="kb.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
-<script src="kb_common.js?v=4"></script>
+<script src="kb_common.js?v=5"></script>
 <style>
   body{font-size:14.5px;}
   .wrap{max-width:1180px;}
@@ -92,7 +92,7 @@
     <div id="dayArea"></div>
 
     <h2 style="font-size:17px;margin:18px 0 2px">📮 待機場の封筒</h2>
-    <div class="lead">「精算済にする」で精算場所に池袋・鶯谷・五反田を選んだ分が、前回の回収から数えられていきます。<br>
+    <div class="lead">「精算済にする」で精算場所に池袋・鶯谷・五反田を選んだ分が、前回の回収から数えられていきます（日をまたいでたまります。上の表はその日の分だけ）。<br>
       封筒を回収したら、回収した封筒の数を入れて「📮 回収した」を押してください（そこからまた 0 から数えます）。記録簿の数と同じなら ✅、ちがえば ⚠️ が残ります。</div>
     <div class="egrid" id="egrid"></div>
   </div>
@@ -507,7 +507,8 @@ function paint(){
     return `<div class="ec" style="border-color:${PLACE_COLOR[p]}"><div class="et" style="background:${PLACE_COLOR[p]}">${p}</div><div class="body">
       <div class="now">${l ? `前回の回収 ${when(l.checked_at)}（${esc(l.checked_by)}）から、` : "（回収の記録はまだありません）"}あるはずの封筒</div>
         <div class="num">${E.since.length}<small>通</small></div>
-        <div class="who">${E.since.length ? E.since.map(x => `${md(x.biz_date)} ${esc(names[x.cast_id] || x.cast_id)}`).join("　") : "まだ投函はありません"}</div>
+        <div class="who">${E.since.length ? (() => { const g = {}; E.since.forEach(x => (g[x.biz_date] = g[x.biz_date] || []).push(names[x.cast_id] || x.cast_id));   // 営業日ごとに（前の日の分もたまっている）
+          return Object.keys(g).sort().map(d => `<div><b>${md(d)}</b>（${g[d].length}通）：${g[d].map(esc).join("・")}</div>`).join(""); })() : "まだ投函はありません"}</div>
       ${KB.CAN_EDIT ? `<div class="f">回収した封筒 <input type="number" min="0" id="env-${p}" oninput="envCheck('${p}')"> 通 <button class="btn btn-primary btn-sm" onclick="save('${p}')">📮 回収した</button></div>
         <div class="envres" id="envres-${p}"></div>` : ""}
       ${E.hist.length ? `<div class="hist">${E.hist.map(h => `<div><span>${when(h.checked_at)} ${esc(h.checked_by)}</span><span style="flex:1"></span>

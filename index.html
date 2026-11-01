@@ -198,7 +198,7 @@
       <a href="worklog.html" target="_blank" rel="noopener" style="font-size:12px;font-weight:700;color:var(--text2);text-decoration:none;">🛠 店長作業ログ</a>
       <!-- テスト中のページ（店長「きゃ」のときだけ出す。登録した端末でしか開けないかを確かめる用） -->
       <div id="testLinks" style="display:none;margin-top:10px;padding:10px 14px;border:1.5px dashed #e5638c;border-radius:14px;font-size:13px;line-height:2;text-align:left;">
-        <b style="color:#e5638c;">🧪 テスト中（店長だけ）</b><br>
+        <b style="color:#e5638c;">🧪 テスト中（店長・社長だけ）</b><br>
         <a href="kirokubo/kiroku.html" target="_blank" rel="noopener">📒 記録簿</a>　<a href="kirokubo/reception.html" target="_blank" rel="noopener">☎️ 受付</a>　<a href="kirokubo/settle.html" target="_blank" rel="noopener">💴 精算</a><br>
         <a href="kirokubo/customers.html" target="_blank" rel="noopener">👥 顧客台帳</a>　<a href="kirokubo/index.html" target="_blank" rel="noopener">📋 キャスト台帳</a><br>
         <a href="kirokubo/stats.html" target="_blank" rel="noopener">📊 集計</a>　<a href="kirokubo/daicho_import.html" target="_blank" rel="noopener">📥 台帳エクセルの取りこみ</a><br>
@@ -250,7 +250,7 @@
     const el = document.getElementById("fbBadge");
     if (!el) return;
     el.style.display = "none";
-    document.getElementById("testLinks").style.display = operator === "きゃ" ? "block" : "none";
+    document.getElementById("testLinks").style.display = (operator === "きゃ" || operator === "社長") ? "block" : "none";
     if (operator !== "きゃ") return;
     try {
       const { data, error } = await supabaseClient.rpc("fb_unread_count");
