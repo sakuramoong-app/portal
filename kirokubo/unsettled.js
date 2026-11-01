@@ -224,12 +224,22 @@ unsettle = async function(id){
 };
 
 // 📒 未精算のキャスト（全員）。精算ページの上にいつも出す。手で足す（エクセルの頃の分など）・消す
+// 今見ている日が今日より前なら、その日の「精算していない子」もリストに出す（精算済をもどした日など）。見るだけ（精算はその日の枠で）
+function unsSelfDay(){
+  if(!day || typeof KB === "undefined" || day >= KB.bizDateOf() || typeof rows === "undefined") return [];
+  const cds = unsCD() || {};
+  return [...new Set(rows.filter(r => r.cast_id && !["cancel", "tobi"].includes(r.status)).map(r => r.cast_id))]
+    .filter(cid => !(cds[cid] || {}).settled)
+    .map(cid => { let c = null; try{ c = calcCast(cid); }catch(e){} return c ? { cid, date: day, amount: c.drop } : null; }).filter(Boolean);
+}
 function unsListHtml(){
-  const ids = [...new Set(UNSD.map(x => x.cid).concat((UNS || []).filter(x => !x.done_on).map(x => x.cast_id)))].sort((a, b) => castName(a).localeCompare(castName(b), "ja"));
+  const self = unsSelfDay();
+  const ids = [...new Set(UNSD.map(x => x.cid).concat((UNS || []).filter(x => !x.done_on).map(x => x.cast_id), self.map(x => x.cid)))].sort((a, b) => castName(a).localeCompare(castName(b), "ja"));
   const casts = (M.casts || []).filter(c => c.status !== "left").sort((a, b) => castName(a.id).localeCompare(castName(b.id), "ja"));
   return `<div class="uhd">📒 未精算のキャスト（${ids.length}人）<small>前の${UNS_DAYS}日の、精算していない日と、投函が合わなかった分</small></div>
-    ${ids.length ? ids.map(cid => { const l = unsOpen(cid), sum = l.reduce((a, x) => a + x.amount, 0);
-      return `<div class="unsc"><div class="uh">★ <b>${esc(castName(cid))}</b>　のこり <b class="${sum >= 0 ? "neg" : "pos"}">${sum >= 0 ? "未精算 " + yen(sum) : "お店から渡す " + yen(-sum)}</b>（${l.length}件）</div>
+    ${ids.length ? ids.map(cid => { const l = unsOpen(cid), me = self.filter(x => x.cid === cid), sum = l.concat(me).reduce((a, x) => a + x.amount, 0);
+      return `<div class="unsc"><div class="uh">★ <b>${esc(castName(cid))}</b>　のこり <b class="${sum >= 0 ? "neg" : "pos"}">${sum >= 0 ? "未精算 " + yen(sum) : "お店から渡す " + yen(-sum)}</b>（${l.length + me.length}件）</div>
+        ${me.map(x => `<div class="ur"><b class="ab">・</b> <b>${unsMd(x.date)}</b>（${esc(castName(cid))}）${x.amount >= 0 ? "未精算 " + yen(x.amount) : "お店から渡す " + yen(-x.amount)}　<small style="color:#c0392b">今見ている日・まだ精算していない（この日の枠で精算）</small></div>`).join("")}
         ${l.map((x, i) => `<div class="ur">${KB.CAN_EDIT ? `<input type="checkbox" ${(unsOnly[cid] || new Set()).has(x.key) ? "checked" : ""} onchange="unsOnlyToggle('${cid}','${x.key}',this.checked)" title="未精算だけを、今日精算する">` : ""}<b class="ab">${UNS_ABC[i] || i + 1}</b> <b>${unsMd(x.date)}</b>（${esc(castName(cid))}）<span class="${x.amount >= 0 ? "neg" : "pos"}">${esc(x.what)}</span>${unsJump(x.date, cid)}
           ${x.kind === "entry" && x.raw.source === "manual" ? `<small>手で入れた・${esc(x.raw.created_by || "")}</small>` : ""}
           ${KB.CAN_EDIT && x.kind === "entry" ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="unsDel(${x.raw.id})">🗑</button>` : ""}</div>`).join("")}
