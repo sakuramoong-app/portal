@@ -67,6 +67,7 @@
     <div style="margin:0 0 8px"><button class="btn btn-ghost btn-sm" onclick="slogToggle()">📜 精算・未精算のログ（月ごと）</button></div>
     <div id="slogPanel" style="display:none;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:10px"></div>
     <div class="sum" id="sum"></div>
+    <div class="kanabar" id="kanaBar"></div>
     <div id="list"></div>
   </div>
 </div>
@@ -97,7 +98,7 @@ async function init(){
   if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
   try{
     const r = await Promise.all([
-      sb.from("master_casts").select("id,official_name,temp_name"),
+      sb.from("master_casts").select("*"),
       sb.from("master_stores").select("key,label"),
       sb.from("kb_cast_rules").select("*").eq("active", true),
     ]);
@@ -448,6 +449,43 @@ async function liveReload(){
   }catch(e){}
 }
 if(window.KBLive) KBLive.onChanged(() => { clearTimeout(liveTimer); liveTimer = setTimeout(liveReload, 800); });
+
+/* ---------- あかさたな ジャンプ（記録簿と同じ）：押すと、その行のキャストの枠へ（上にいる順に、押すたびに次の子へ） ---------- */
+const KANA_ROWS = [["あ", "あいうえおぁぃぅぇぉ"], ["か", "かきくけこがぎぐげご"], ["さ", "さしすせそざじずぜぞ"], ["た", "たちつてとだぢづでどっ"], ["な", "なにぬねの"],
+  ["は", "はひふへほばびぶべぼぱぴぷぺぽ"], ["ま", "まみむめも"], ["や", "やゆよゃゅょ"], ["ら", "らりるれろ"], ["わ", "わをんゐゑ"]];
+function kanaHeadOf(id){
+  const c = M.casts.find(x => x.id === id) || {};
+  let s = String(c.kana || c.official_name || c.temp_name || "").trim().charAt(0);
+  const code = s.charCodeAt(0); if(code >= 0x30A1 && code <= 0x30F6) s = String.fromCharCode(code - 0x60);   // カタカナ→ひらがな
+  const row = KANA_ROWS.find(r => r[1].includes(s));
+  return row ? row[0] : "他";
+}
+const cardIds = () => [...document.querySelectorAll("#list .card[id^='card-']")].map(el => el.id.slice(5));
+function renderKanaBar(){
+  const el = $("kanaBar"); if(!el) return;
+  const have = new Set(cardIds().map(kanaHeadOf));
+  el.innerHTML = KANA_ROWS.map(([k]) => `<button type="button" class="kb ${have.has(k) ? "" : "off"}" onclick="jumpKana('${k}')">${k}</button>`).join("");
+}
+let kanaLast = { k: "", i: -1 };
+function jumpKana(k){
+  const ids = cardIds().filter(id => kanaHeadOf(id) === k)
+    .sort((a, b) => String((M.casts.find(x => x.id === a) || {}).kana || castName(a)).localeCompare(String((M.casts.find(x => x.id === b) || {}).kana || castName(b)), "ja"));
+  if(!ids.length){ toast("「" + k + "」行のキャストは、この日いません"); return; }
+  kanaLast = { k, i: kanaLast.k === k ? (kanaLast.i + 1) % ids.length : 0 };   // 同じ行をもう一度押すと、次の子へ
+  const el = $("card-" + ids[kanaLast.i]); if(!el) return;
+  const y = el.getBoundingClientRect().top + window.scrollY - ($("kanaBar").offsetHeight + 12);
+  window.scrollTo({ top: y, behavior: "smooth" });
+  el.classList.remove("jumpflash"); void el.offsetWidth; el.classList.add("jumpflash");
+  if(ids.length > 1) toast(castName(ids[kanaLast.i]) + "（" + k + "行 " + (kanaLast.i + 1) + "/" + ids.length + "・もう一度押すと次の子）");
+}
+{ const __renderKana = render; render = function(){ const r = __renderKana.apply(this, arguments); renderKanaBar(); return r; }; }
+(function(){
+  const css = document.createElement("style");
+  css.textContent = `.kanabar{display:flex;gap:4px;flex-wrap:wrap;position:sticky;top:0;z-index:40;background:var(--bg,#FFF7FA);padding:6px 0;margin-bottom:6px}
+  .kanabar .kb{font-family:inherit;font-size:15px;font-weight:800;min-width:36px;padding:5px 8px;border:1.5px solid #FFC2D1;border-radius:9px;background:#fff;color:#e5638c;cursor:pointer}
+  .kanabar .kb:hover{background:#FFE4EC} .kanabar .kb.off{opacity:.35}`;
+  document.head.appendChild(css);
+})();
 
 init();
 </script>
