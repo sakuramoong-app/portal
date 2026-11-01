@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="kb.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
-<script src="kb_common.js?v=9"></script>
+<script src="kb_common.js?v=10"></script>
 <style>
   body{font-size:14.5px;}
   .wrap{max-width:1180px;}
@@ -135,6 +135,7 @@ let names = {}, kanas = {}, kanaSel = "", staffNames = {}, ENV = {}, D = null, M
 async function init(){
   $("navArea").innerHTML = KB.nav("kaishu.html");
   if(!(await KB.staffSession({ owner: true }))){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
+  if(!(await KB.passGate("回収明細"))) return;   // 🔒 端末の登録の合言葉
   $("wip").innerHTML = KB.wipBanner();
   $("gate").style.display = "none"; $("main").style.display = "";
   try{ (q(await sb.from("master_casts").select("*")) || []).forEach(c => { names[c.id] = c.official_name || c.temp_name || c.id; kanas[c.id] = c.kana || names[c.id]; }); }catch(e){}

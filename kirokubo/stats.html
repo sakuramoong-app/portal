@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="kb.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
-<script src="kb_common.js?v=9"></script>
+<script src="kb_common.js?v=10"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   body{font-size:14.5px;}
@@ -158,10 +158,8 @@ async function fetchAll(table, cols, orderCol, build){
 async function init(){
   $("navArea").innerHTML = KB.nav("stats.html");
   if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
-  $("gate").style.display = "none";
-  let ok = false; try{ ok = sessionStorage.getItem("kbStatsOK") === "1"; }catch(e){}
-  if(ok) return start();
-  $("lock").style.display = ""; $("pw").focus();
+  // 🔒 合言葉は、回収明細・バックアップと同じ「端末の登録の合言葉」（2026/11/02〜。前の集計の合言葉は使わない）
+  if(await KB.passGate("集計")) start();
 }
 async function unlock(){
   const p = $("pw").value; if(!p){ $("lockMsg").textContent = "合言葉を入れてください"; return; }

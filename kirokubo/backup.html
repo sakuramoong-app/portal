@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="kb.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
-<script src="kb_common.js?v=9"></script>
+<script src="kb_common.js?v=10"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   .wrap{max-width:760px;}
@@ -127,6 +127,7 @@ async function init(){
   $("navArea").innerHTML = KB.nav("backup.html");
   if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（店長・社長だけ）"; return; }
   if(!KB.CAN_EDIT){ $("gate").textContent = "店長・社長だけが使えます"; return; }
+  if(!(await KB.passGate("バックアップ"))) return;   // 🔒 端末の登録の合言葉
   $("gate").style.display = "none"; $("main").style.display = "";
   paintLast();
 }

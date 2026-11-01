@@ -121,7 +121,38 @@
     });
   }
 
-  window.KB = { sb, staffSession, deviceStatus, operatorName, CAN_EDIT, MANAGER_NAME, IS_OWNER, OWNER_NAME, q, esc, yen, toast, bizDateOf, rememberDay, startDay, nav, wipBanner, closeOnBackdrop };
+  // 🔒 店長・社長だけのページ（回収明細・集計・バックアップ）は、開くときに端末の登録の合言葉。同じタブで一度入れたら、そのタブを閉じるまで聞かない
+  function passGate(label){
+    try{ if(sessionStorage.getItem("kbPassOK") === "1") return Promise.resolve(true); }catch(e){}
+    return new Promise(resolve => {
+      const d = document.createElement("div");
+      d.style.cssText = "position:fixed;inset:0;z-index:99998;background:#FBF7F8;display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit";
+      d.innerHTML = `<div style="width:100%;max-width:380px;background:#fff;border:2px solid #FFC2D1;border-radius:18px;padding:22px;text-align:center;line-height:1.8">
+        <div style="font-size:36px">🔒</div><div style="font-size:17px;font-weight:800;color:#e5638c">${esc(label)}は合言葉で開きます</div>
+        <div style="font-size:12.5px;color:#9C8B8F;margin-bottom:10px">端末の登録の合言葉です（店長・社長だけ）</div>
+        <input type="password" id="kbPass" autocomplete="off" style="width:100%;box-sizing:border-box;font-size:17px;padding:11px;border:2px solid #FFC2D1;border-radius:12px;text-align:center;font-family:inherit">
+        <div id="kbPassMsg" style="color:#c0392b;font-weight:800;font-size:13px;min-height:20px;margin-top:6px"></div>
+        <button type="button" id="kbPassOk" style="width:100%;border:none;border-radius:99px;padding:11px;background:#e5638c;color:#fff;font-weight:900;font-size:16px;font-family:inherit;cursor:pointer">開く</button></div>`;
+      document.body.appendChild(d);
+      const inp = d.querySelector("#kbPass"), msg = d.querySelector("#kbPassMsg");
+      const go = async () => {
+        if(!inp.value){ msg.textContent = "合言葉を入れてください"; return; }
+        msg.textContent = "たしかめています…";
+        try{
+          const r = await sb.rpc("device_pass_ok", { p_pass: inp.value });
+          if(r.error) throw r.error;
+          if(r.data !== true){ msg.textContent = "合言葉がちがいます"; return; }
+          try{ sessionStorage.setItem("kbPassOK", "1"); }catch(e){}
+          d.remove(); resolve(true);
+        }catch(e){ msg.textContent = "たしかめられませんでした：" + (e.message || e); }
+      };
+      d.querySelector("#kbPassOk").onclick = go;
+      inp.onkeydown = e => { if(e.key === "Enter") go(); };
+      setTimeout(() => inp.focus(), 50);
+    });
+  }
+
+  window.KB = { sb, staffSession, deviceStatus, operatorName, CAN_EDIT, MANAGER_NAME, IS_OWNER, OWNER_NAME, q, esc, yen, toast, bizDateOf, rememberDay, startDay, nav, wipBanner, closeOnBackdrop, passGate };
 })();
 
 /* ---------- ⬆ 上に戻るボタン（記録簿のページ共通）：ある程度下までスクロールしたら右下に出る。
