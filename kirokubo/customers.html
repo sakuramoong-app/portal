@@ -189,6 +189,7 @@ function paintDetail(){
         <div class="f"><label>名前</label><input id="c_name" value="${esc(c.name)}" maxlength="80" ${ed}></div>
         <div class="f"><label>電話番号（数字だけ）</label><input id="c_phone" value="${esc(c.phone)}" maxlength="20" ${ed}></div>
       </div>
+      <div class="f" style="margin-top:6px"><label>副番号（番号が変わった・2つ以上持っている）</label><div id="c_subs" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${subPhonesHtmlC(c, ed)}</div></div>
       <div class="f" style="margin-top:6px"><label>メール（WEB予約・外国人のお客さん）</label><input id="c_email" value="${esc(c.email || "")}" maxlength="200" ${ed}></div>
       <div class="f2" style="margin-top:6px">
         <div class="f"><label>NG客</label><select id="c_ng" ${ed}><option value="0">NGではない</option><option value="1" ${c.ng ? "selected" : ""}>⚠️ NG客</option></select></div>
@@ -257,6 +258,35 @@ function markText(m){
                            : `<span class="mark" style="color:${col};font-weight:800">✏️ ${esc(where)}が色文字</span>`;
   });
   return (out.length ? `<br><span class="mark">⚠️ ${esc(out.join("／"))}</span>` : "") + (chips.length ? "<br>" + chips.join(" ") : "");
+}
+/* ---------- 📞 副番号（SQL 179）：番号が変わった・2つ以上持っているお客さん。どの番号で調べても同じお客さんが出る ---------- */
+function subPhonesHtmlC(c, ed){
+  const ps = c.phones || [];
+  return (ps.length ? ps.map((p, i) => `<span style="display:inline-flex;gap:4px;align-items:center;border:1.5px solid var(--line);border-radius:99px;padding:2px 10px;font-weight:700">📞 ${esc(p)}${ed ? "" : ` <button type="button" onclick="delSubPhone(${i})" style="border:none;background:none;color:#d9534f;font-weight:900;cursor:pointer" title="消す">✕</button>`}</span>`).join("")
+      : `<span class="hint" style="margin:0">なし</span>`)
+    + (ed ? "" : `<button type="button" class="btn btn-ghost btn-sm" onclick="addSubPhone()">＋ 番号を追加</button>`);
+}
+async function setSubPhones(list){
+  if(!("phones" in cur)){ toast("先に SQL 179（副番号）を実行してください"); return; }
+  try{
+    q(await sb.from("kb_customers").update({ phones: list, updated_by: KB.operatorName(), updated_at: new Date().toISOString() }).eq("id", cur.id));
+    cur.phones = list; $("c_subs").innerHTML = subPhonesHtmlC(cur, ""); toast("📞 副番号を保存しました");
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+async function addSubPhone(){
+  const p = phoneNormC(prompt("足す電話番号（海外は + から）") || "");
+  if(p.replace(/\D/g, "").length < 6) return;
+  if(p === cur.phone || (cur.phones || []).includes(p)){ toast("この番号は、もう入っています"); return; }
+  try{
+    const ex = q(await sb.from("kb_customers").select("id,name").or(`phone.eq."${p}",phones.cs.{"${p}"}`).neq("id", cur.id).limit(1).maybeSingle());
+    if(ex && !confirm(`この番号は「${ex.name || "名前なし"}」さんでも使われています。このまま足しますか？`)) return;
+  }catch(e){}
+  await setSubPhones([...(cur.phones || []), p]);
+}
+async function delSubPhone(i){
+  const ps = (cur.phones || []).slice(), p = ps[i];
+  if(!confirm(`副番号 ${p} を消しますか？`)) return;
+  ps.splice(i, 1); await setSubPhones(ps);
 }
 async function saveCustomer(){
   const patch = { name: $("c_name").value.trim(), phone: phoneNormC($("c_phone").value), email: $("c_email").value.trim(), ng: $("c_ng").value === "1", ng_reason: $("c_ngr").value.trim(), note: $("c_note").value, updated_by: KB.operatorName(), updated_at: new Date().toISOString() };

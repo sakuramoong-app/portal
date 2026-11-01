@@ -1636,12 +1636,19 @@ function checksForSave(){
 const digits = s => String(s||"").normalize("NFKC").replace(/[^\d]/g, "");
 // 電話番号：数字だけにする。「+81」（日本）は 0 から始まる形に、ほかの国の「+」「00」で始まる番号は「+」を残す
 const phoneNorm = s => { const t = String(s||"").normalize("NFKC").trim(), d = digits(t); if(!/^(\+|00)/.test(t)) return d; const n = t.startsWith("00") ? d.slice(2) : d; return n.startsWith("81") ? "0" + n.slice(2) : (n ? "+" + n : ""); };
+// 電話番号でお客さんを探す：主の番号 → 副番号（SQL 179。まだなら主の番号だけ）
+async function custByPhone(phone, cols){
+  const a = q(await sb.from("kb_customers").select(cols).eq("phone", phone).order("id").limit(1).maybeSingle());
+  if(a) return a;
+  const b = await sb.from("kb_customers").select(cols).contains("phones", [phone]).order("id").limit(1).maybeSingle();
+  return b.error ? null : b.data;
+}
 async function lookupCustomer(keepName){
   const phone = phoneNorm($("f_phone").value);
   $("f_phone").value = phone;
   if(phone.length < 6){ curCustomer = null; custPast = null; custSeen = null; $("custInfo").innerHTML = ""; return; }
   try{
-    const c = q(await sb.from("kb_customers").select("*").eq("phone", phone).order("id").limit(1).maybeSingle());
+    const c = await custByPhone(phone, "*");
     curCustomer = c || null;
     if(!c){ custPast = []; custSeen = []; $("custInfo").innerHTML = `<div class="info">🆕 はじめての電話番号です（保存すると新しいお客さんとして登録します）</div>`; if(!editing) setVisit("new"); return; }
     if(!keepName || !$("f_name").value) $("f_name").value = c.name || "";
@@ -1947,14 +1954,17 @@ async function saveRes(){
   const c = calc(), by = KB.operatorName();
   try{
     // お客さん（電話番号があれば探す・なければ作る）
-    let customerId = curCustomer ? curCustomer.id : null;
+    let customerId = curCustomer ? curCustomer.id : null, exPrimary = "";
     const phone = phoneNorm($("f_phone").value), name = $("f_name").value.trim(), ng = $("f_ng").value === "1", cn = $("f_custnote").value.trim();
     if(phone || name){
       if(!customerId && phone){
-        const ex = q(await sb.from("kb_customers").select("id").eq("phone", phone).limit(1).maybeSingle());
-        if(ex) customerId = ex.id;
+        const ex = await custByPhone(phone, "id,phone");
+        if(ex){ customerId = ex.id; exPrimary = ex.phone || ""; }
       }
       const cu = { phone, name, ng, updated_by: by };
+      // 副番号で見つけたお客さんは、主の番号を書きかえない（主の番号がまだないときだけ入れる）
+      const primary = curCustomer && curCustomer.id === customerId ? (curCustomer.phone || "") : exPrimary;
+      if(customerId && primary && primary !== phone) delete cu.phone;
       { const em = $("f_email").value.trim(); if(em) cu.email = em; }   // メールアドレス（入れたときだけ。消すのは顧客台帳で）
       if(ng) cu.ng_reason = cn; else if(cn) cu.note = cn;
       if(customerId) q(await sb.from("kb_customers").update(cu).eq("id", customerId));
@@ -4330,7 +4340,7 @@ saveRes = async function(){
   if($("formBg").classList.contains("show")) return;   // 保存できなかった
   if(!phone || (!area && !address) || ["cancel", "tobi"].includes(st)) return;
   try{
-    const cu = q(await sb.from("kb_customers").select("id").eq("phone", phone).limit(1).maybeSingle());
+    const cu = await custByPhone(phone, "id");
     if(!cu) return;
     const ex = q(await sb.from("kb_customer_places").select("*").eq("customer_id", cu.id).eq("area", area).eq("address", address).maybeSingle());
     if(ex) q(await sb.from("kb_customer_places").update({ place_kind: kind || ex.place_kind, map_url: map || ex.map_url, use_count: (ex.use_count || 0) + (editing ? 0 : 1), last_used: day, updated_at: new Date().toISOString(), updated_by: KB.operatorName() }).eq("id", ex.id));
@@ -5774,6 +5784,32 @@ function dmLock(){
 }
 const __lookupCustomerLock = lookupCustomer;
 lookupCustomer = async function(){ const r = await __lookupCustomerLock.apply(this, arguments); dmLock(); return r; };
+/* ---------- 📞 副番号（SQL 179）：電話番号で調べたら、副番号と「＋ 番号を追加」を出す。副番号で見つかったら、主の番号も出す ---------- */
+function paintSubPhones(){
+  const box = $("custInfo"); if(!box) return;
+  box.querySelectorAll(".subph").forEach(x => x.remove());
+  const c = curCustomer; if(!c || !c.id) return;
+  const typed = phoneNorm($("f_phone").value), ps = c.phones || [];
+  box.insertAdjacentHTML("afterbegin", `<div class="subph" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:13px;margin:0 0 6px">
+    ${c.phone && typed && typed !== c.phone ? `<span style="font-weight:800;color:#6b4fa0">📞 副番号で見つかりました（主の番号 ${esc(c.phone)}）</span>` : ""}
+    <span style="color:var(--sub);font-weight:700">副番号：</span>${ps.length ? ps.map(p => `<span style="border:1.5px solid var(--line);border-radius:99px;padding:1px 9px;font-weight:700">${esc(p)}</span>`).join("") : `<span style="color:var(--sub)">なし</span>`}
+    ${KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="addSubPhoneK()">＋ 番号を追加</button>` : ""}</div>`);
+}
+async function addSubPhoneK(){
+  const c = curCustomer; if(!c || !c.id) return;
+  if(!("phones" in c)){ toast("先に SQL 179（副番号）を実行してください"); return; }
+  const p = phoneNorm(prompt(`${c.name || "このお客さん"} に足す電話番号（海外は + から）`) || "");
+  if(digits(p).length < 6) return;
+  if(p === c.phone || (c.phones || []).includes(p)){ toast("この番号は、もう入っています"); return; }
+  const ex = await custByPhone(p, "id,name");
+  if(ex && ex.id !== c.id && !confirm(`この番号は「${ex.name || "名前なし"}」さんでも使われています。このまま足しますか？`)) return;
+  try{
+    const list = [...(c.phones || []), p];
+    q(await sb.from("kb_customers").update({ phones: list, updated_by: KB.operatorName() }).eq("id", c.id));
+    c.phones = list; paintSubPhones(); toast("📞 副番号を足しました");
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+{ const __lcSub = lookupCustomer; lookupCustomer = async function(){ const r = await __lcSub.apply(this, arguments); try{ paintSubPhones(); }catch(e){} return r; }; }
 const __renderDummyLock = renderDummy;
 renderDummy = function(){ const r = __renderDummyLock.apply(this, arguments); dmLock(); return r; };
 $("f_phone").addEventListener("input", () => { custPast = null; dmLock(); });   // 番号を打ちなおしたら、調べなおすまでロック
