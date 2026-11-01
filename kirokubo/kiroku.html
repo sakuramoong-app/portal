@@ -1309,7 +1309,7 @@ async function paintAreaInfo(){
   let html = "";
   if(hotels.length){
     html += `<details class="info" style="margin:0 0 6px"><summary style="cursor:pointer;font-weight:800">🏨 ${esc(area)}のホテル（${hotels.length}件・押すと地図）</summary>`
-      + hotels.map(h=>`<div style="font-size:12.5px;padding:2px 0">${h.store_status === "ok" ? "✅" : h.store_status === "ng" ? "🚫" : "・"} ${esc(h.hotel_name)}`
+      + hotels.map(h=>`<div style="font-size:12.5px;padding:2px 0">${h.store_status === "ok" ? "✅" : h.store_status === "ng" ? "🚫" : h.store_status === "far" ? "△" : "・"} ${esc(h.hotel_name)}`
         + ` <a href="${esc(mapLink(h))}" target="_blank" rel="noopener">📍地図</a>` + (h.note ? `<small style="color:var(--sub)"> ${esc(h.note)}</small>` : "") + `</div>`).join("")
       + `</details>`;
   }
@@ -4154,7 +4154,7 @@ function paintNewHotel(){
     <div class="row2" style="margin-top:6px">
       <div class="f"><label>ホテルの名前</label><input id="nh_name" value="${esc(name)}" maxlength="80"></div>
       <div class="f"><label>どう足す？</label><select id="nh_kind">
-        <option value="">足さない</option><option value="store_ok">✅ 店としてOK</option><option value="store_ng">🚫 店としてNG</option><option value="none">足すだけ（OK・NGは決めない）</option>
+        <option value="">足さない</option><option value="store_ok">✅ 店としてOK</option><option value="store_ng">🚫 店としてNG</option><option value="store_far">△ 遠いから微妙</option><option value="none">足すだけ（OK・NGは決めない）</option>
         ${c && c.prof_id ? `<option value="cast_ok">💗 ${esc(c.official_name || c.temp_name)}としてOK</option><option value="cast_ng">🙅 ${esc(c.official_name || c.temp_name)}としてNG</option>` : ""}</select></div>
     </div>
     <div class="f" style="margin-top:6px"><label>地図のURL　<a href="https://www.google.com/maps/search/?api=1&query=${q2}" target="_blank" rel="noopener">🔍 Googleマップで調べる</a>（開いたら「共有」→「リンクをコピー」して貼る）</label>
@@ -4169,7 +4169,7 @@ async function addHotelFromForm(){
   if(map && !/^https?:\/\//i.test(map)){ toast("地図のURLは https:// から始まるものを貼ってください"); return; }
   const c = M.casts.find(x=>x.id === $("f_cast").value);
   const row = { hotel_id: "h" + Date.now().toString(36), area, hotel_name: name, map_url: map,
-    store_status: kind === "store_ok" ? "ok" : kind === "store_ng" ? "ng" : "", note: "記録簿の受付で追加（" + KB.operatorName() + "）" };
+    store_status: kind === "store_ok" ? "ok" : kind === "store_ng" ? "ng" : kind === "store_far" ? "far" : "", note: "記録簿の受付で追加（" + KB.operatorName() + "）" };
   try{
     q(await sb.from("prof_hotels").insert(row));
     if((kind === "cast_ok" || kind === "cast_ng") && c && c.prof_id){

@@ -2327,7 +2327,7 @@ function paintHotelList(){
   const bg = document.getElementById("hotelBg"); if(!bg) return;
   const areas = [...new Set(pfHotels.map(h => h.area).filter(Boolean))];
   if(!hlArea || !areas.includes(hlArea)) hlArea = areas[0] || "";
-  const ST = { "": "（ふつう）", ok: "◎ お店としておすすめ", ng: "× お店としてNG" };
+  const ST = { "": "（ふつう）", ok: "◎ お店としておすすめ", far: "△ 遠いから微妙", ng: "× お店としてNG" };
   const ro = CAN_EDIT ? "" : "disabled";
   bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:820px;width:100%;max-height:90vh;overflow:auto;font-size:13.5px">
     <b style="font-size:16px">🏨 ホテル一覧</b>
