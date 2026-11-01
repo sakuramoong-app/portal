@@ -665,9 +665,10 @@ cardHtml = function(id, c){
       ${dis ? "" : `<button class="btn btn-ghost btn-sm" onclick="delItem('${id}','${kind}',${i})">🗑</button>`}</div>`).join("");
   const V = settleViewHtml(id, c), home = !done && !!cd.direct_home;
   // 精算済にする か 🏠 直帰 のどちらも押していない → 右の枠をピカピカ
-  const need = KB.CAN_EDIT && !done && !home;
+  const off = cd.status === "お茶" || cd.status === "欠勤";   // お茶・欠勤は、枠ぜんたいを色に（ピカピカはなし）
+  const need = KB.CAN_EDIT && !done && !home && !off;
   const cam = cd.camera_check || "";
-  return `<div class="card svc ${done ? "done" : ""}" id="card-${id}">
+  return `<div class="card svc ${done ? "done" : ""} ${cd.status === "お茶" ? "tea" : cd.status === "欠勤" ? "absent" : ""}" id="card-${id}">
     <h2>${esc(castName(id))}${cd.status === "お茶" ? `<span class="st tea">🟩 お茶</span>` : cd.status === "欠勤" ? `<span class="st absent">🟥 欠勤</span>` : ""}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : home ? "🏠 直帰" : "未精算"}</span>${done && (UNS || []).some(x => x.cast_id === id && x.biz_date === day && !x.done_on) ? `<span class="st" style="background:#FDE7E7;color:#c0392b;margin-left:4px">⚠️ 未精算あり</span>` : ""}
       ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
     <div class="svg2"><div class="svl">
@@ -726,6 +727,7 @@ async function setCamera(id, v){
 }
 
 document.head.insertAdjacentHTML("beforeend", `<style>
+  .card.svc.tea{background:#D6EFD7;border-color:#7FC583} .card.svc.absent{background:#F9D3DC;border-color:#E58AA0}   /* お茶＝緑・欠勤＝赤（記録簿の本日のキャストと同じ色） */
   .svr.need{border-radius:14px;padding:8px;animation:svrBlink 1.1s ease-in-out infinite;border:3px solid #FFD54A}
   @keyframes svrBlink{0%,100%{box-shadow:0 0 0 0 rgba(255,193,7,.0);background:#FFFDF3}50%{box-shadow:0 0 18px 4px rgba(255,193,7,.75);background:#FFF5C9}}
   .needmsg{font-weight:900;color:#B26A00;font-size:13.5px;margin:0 0 6px}

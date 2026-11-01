@@ -182,7 +182,7 @@ function render(){
   const ids = [...new Set(rows.map(r=>r.cast_id).filter(Boolean).concat(Object.keys(days)))];
   const first = id => { const r = rows.find(x=>x.cast_id === id && x.start_at); return r ? r.start_at : "9999"; };
   const kanaOf = id => { const c = M.casts.find(x=>x.id === id) || {}; return String(c.kana || c.official_name || c.temp_name || id); };
-  ids.sort(settleSortFn(kanaOf));   // 並び順（あいうえお順／出勤が早い順／退勤が早い順）。グループ分け：売上あり→売上なし→お茶→欠勤 は下でそのまま
+  ids.sort(settleSortFn(kanaOf));   // 並び順（あいうえお順／出勤が早い順／退勤が早い順）
   const cs = ids.map(id=>({ id, c: calcCast(id) }));
   const sum = cs.reduce((a, x)=>({ total: a.total + x.c.total, take: a.take + x.c.takeHome, drop: a.drop + x.c.drop, zappi: a.zappi + x.c.zappi, done: a.done + (x.c.cd.settled ? 1 : 0), shop: a.shop + x.c.shopDrop,
     pay: a.pay + x.c.reward + x.c.option, prov: a.prov + x.c.provisional, wh: a.wh + x.c.withholding, real: a.real + x.c.realDrop }), { total: 0, take: 0, drop: 0, zappi: 0, done: 0, shop: 0, pay: 0, prov: 0, wh: 0, real: 0 });
@@ -205,15 +205,8 @@ function render(){
     <div class="dayfig ${showMoney ? "" : "hide"}"><div class="h">📊 この日の数字（キャスト分・社長用）</div>
       ${[["総額", sum.total], ["キャスト報酬", sum.pay], ["暫定的な残額", sum.prov], ["【税務用】源泉徴収", sum.wh], ["実質的な店落ち", sum.real]].map(x=>`<div class="s">${x[0]}<b>${yen(x[1])}</b></div>`).join("")}</div>`;
   if(!cs.length){ $("list").innerHTML = `<div class="gate">この日（${esc(day)}）の受付はまだありません</div>`; return; }
-  // 売上がある子を上に。売上がない子は下に、お茶・欠勤はそれぞれまとめる
-  const grp = c => c.live.length ? 0 : c.cd.status === "お茶" ? 2 : c.cd.status === "欠勤" ? 3 : 1;
-  const GH = ["", "売上なし", "🟩 お茶", "🟥 欠勤"];
-  let h = "";
-  [0, 1, 2, 3].forEach(g => {
-    const l = cs.filter(x => grp(x.c) === g); if(!l.length) return;
-    if(g) h += `<div class="grph g${g}">${GH[g]}（${l.length}人）</div>`;
-    h += l.map(({ id, c })=>cardHtml(id, c)).join("");
-  });
+  // お茶・欠勤・売上なしも分けずに、選んだ並び順（ふつうはあいうえお順）でそのまま上から。お茶・欠勤は枠の色でわかる
+  const h = cs.map(({ id, c })=>cardHtml(id, c)).join("");
   $("list").innerHTML = h;
   // 回収明細・未精算の ↗ から：そのキャストの枠まで飛んで、少し光らせる（1回だけ）
   const jc = new URLSearchParams(location.search).get("c");
@@ -527,6 +520,6 @@ function jumpKana(k){
 init();
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=35"></script>
+<script src="unsettled.js?v=36"></script>
 </body>
 </html>
