@@ -738,3 +738,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 
 // 数字の欄の上でスクロールしても、数字は変えない（欄から外して、画面だけスクロールする）。精算ページ・記録簿の💴精算 共通
 document.addEventListener("wheel", e => { const t = e.target; if(t && t.matches && t.matches("input[type=number]") && document.activeElement === t) t.blur(); }, { passive: true, capture: true });
+// 数字の欄：クリックしたら中身をぜんぶ選ぶ → そのまま打つと入れかわる（「0」が残って 500 が 5000・50 にならない）。精算ページ・記録簿の💴精算 共通
+document.addEventListener("focusin", e => { const t = e.target; if(t && t.matches && t.matches("input[type=number]")) setTimeout(() => { try{ t.select(); }catch(err){} }, 0); });
+document.addEventListener("mouseup", e => { const t = e.target; if(t && t.matches && t.matches("input[type=number]") && document.activeElement === t && t.dataset.selOnce !== "1"){ t.dataset.selOnce = "1"; e.preventDefault(); } }, true);
+document.addEventListener("focusout", e => { const t = e.target; if(t && t.dataset) delete t.dataset.selOnce; });
