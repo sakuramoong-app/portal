@@ -4536,8 +4536,8 @@ function resCard(r){
   const payUrl = r.payment === "card" && (r.card_step || "unsent") === "unsent" ? `<a class="payurl" href="${PAY_ADMIN_URL}" target="_blank" rel="noopener" title="${esc(PAY_ADMIN_URL)}">💳 決済URL</a>` : "";
   // 1〜2行に：時間・お店・状態・場所・コース・総額（支払い）・電話・カードの状態・伝えた。ほかは「くわしく」にたたむ
   const nLog = logOf(r).length;
-  // 閉じていても、いちばん新しい備考を1つ見せる（状態を変えた自動のログはとばす）
-  const lastLog = logOf(r).slice().reverse().find(x => x.text && !/^(🔁|状態 →)/.test(String(x.text)));
+  // 閉じていても、新しい備考を2つまで見せる（状態・振込・3Pなどの自動のログはとばす）
+  const lastLogs = logOf(r).filter(x => x.text && !/^(🔁|状態 →|🏦|👥)/.test(String(x.text).trim())).slice(-2).reverse();
   const mates = partyMates(r);
   return `<div class="rescard ${cx ? "cx" : ""}" id="rc-${r.id}">
     <div class="rc-top">
@@ -4558,7 +4558,7 @@ function resCard(r){
     ${cardStep || payUrl ? `<div class="rc-2">${cardStep}${payUrl}</div>` : ""}
     ${trRow(r, ed)}
     ${r.dress && dressText(r.dress) ? `<div class="rc-dress">👗 ${esc(dressText(r.dress))}</div>` : ""}
-    <details class="rc-more" ${rcOpen.has(r.id) ? "open" : ""} ontoggle="rcToggle(${r.id},this.open)"><summary>くわしく（お客さん・場所・OP・備考${nLog ? " " + nLog + "件" : ""}）${lastLog ? `<div class="rc-last">📝 ${esc(lastLog.text)}<small>${esc(lastLog.by || "")} ${esc(whenShort(lastLog.at))}</small></div>` : ""}</summary>
+    <details class="rc-more" ${rcOpen.has(r.id) ? "open" : ""} ontoggle="rcToggle(${r.id},this.open)"><summary>くわしく（お客さん・場所・OP・備考${nLog ? " " + nLog + "件" : ""}）${lastLogs.map(l => `<div class="rc-last">📝 ${esc(String(l.text).trim())}<small>${esc(l.by || "")} ${esc(whenShort(l.at))}</small></div>`).join("")}</summary>
     <div class="rc-grid">
       <div class="rc-box"><div class="rc-h">💴 コース・料金</div>
         <div class="rc-row">${ed ? `<select onchange="qCourse(${r.id},this.value)">${prices.map(p=>`<option value="${esc(p.course)}" ${p.course === r.course ? "selected" : ""}>${esc(p.course)}${/^\d+$/.test(p.course) ? "分" : ""}</option>`).join("")}${prices.some(p=>p.course === r.course) ? "" : `<option selected>${esc(r.course || "")}</option>`}</select>` : esc(r.course)}
@@ -6042,6 +6042,6 @@ renderListTable = function(){
 };
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
-<script src="unsettled.js?v=31"></script>
+<script src="unsettled.js?v=32"></script>
 </body>
 </html>

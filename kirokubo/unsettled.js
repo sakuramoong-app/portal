@@ -735,3 +735,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .camchk .cb{font-family:inherit;font-weight:800;font-size:13px;border:2px solid #ddd;background:#fff;border-radius:99px;padding:4px 12px;cursor:pointer;color:#5C4B4F}
   .camchk .cb.ok.on{background:#E5F6EC;border-color:#2e8b57;color:#2e8b57} .camchk .cb.ng.on{background:#FDE7E7;border-color:#c0392b;color:#c0392b}
 </style>`);
+
+// 数字の欄の上でスクロールしても、数字は変えない（欄から外して、画面だけスクロールする）。精算ページ・記録簿の💴精算 共通
+document.addEventListener("wheel", e => { const t = e.target; if(t && t.matches && t.matches("input[type=number]") && document.activeElement === t) t.blur(); }, { passive: true, capture: true });
