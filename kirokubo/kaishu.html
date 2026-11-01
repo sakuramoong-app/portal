@@ -306,7 +306,7 @@ function paintDay(){
       <td class="l"><span class="mk day">✔${T.dayN}</span>　<span class="mk me">✔${T.meN}</span>${T.yetN + T.noneN ? `　<span class="mk none">■ 未回収 ${T.yetN + T.noneN}</span>` : ""}</td><td></td></tr>
   </table></div>
   <div class="leg">・回収サイン：<b class="mk day">✔ 当日回収</b>（黒）／<b class="mk me">✔ 店長が回収</b>（赤）。どちらも押していなければ <b class="mk none">■ 未回収</b>（そのまま社長に渡す）。もう一度押すと消えます<br>
-    ・封筒の中：数えた額を入れて、そろっているはずの額（店落ち − カード − 振込）と同じなら <b>💯 完璧回収</b>（自動）<br>
+    ・封筒の中：当日回収・店長が回収を押すと、精算で投函した額が自動で入ります。そろっているはずの額（店落ち − カード − 振込）と同じなら <b>💯 完璧回収</b>（自動）。額がちがったら手で入れなおす<br>
     ・交通費・プラスはキャッシュフローから出して、袋には「店落ち − カード」の額をそろえます　・精算ミスは精算画面で未精算・お釣りになっています。項目ごとに、処理したら ✓</div>`;
   h += `</div>`;
 
@@ -398,8 +398,8 @@ async function setState(cid, st){
    ・封筒には「店落ち − カード − 振込」がそろっているはず（交通費・プラスはキャッシュフローから足してそろえる）
    ・数えた額がそろっているはずの額と同じなら、自動で 💯 完璧回収（押し忘れがないように、ボタンはなし）
    ・kb_collections.collected（数えた額）・done（完璧回収。数えた額を保存したときに自動で入る）（SQL 171） ---------- */
-// 当日回収（✔黒）で精算済なら、精算画面の「実際に投函した額」から自動で入れる（交通費・プラスはキャッシュフローから足すので、精算ミスの分だけずれる）
-const countAuto = r => r.state === "day" && r.s && r.s.deposited != null ? r.amt + Number(r.s.diff || 0) : null;
+// 当日回収（✔黒）・店長が回収（✔赤）を押したら、精算画面の「実際に投函した額」から自動で入れる（額がちがったら手で入れなおす）（交通費・プラスはキャッシュフローから足すので、精算ミスの分だけずれる）
+const countAuto = r => (r.state === "day" || r.state === "me") && r.s && r.s.deposited != null ? r.amt + Number(r.s.diff || 0) : null;
 const countVal = r => r.cl.collected != null ? Number(r.cl.collected) : countAuto(r);
 // 領収書だけ投函（あとで回収が必要）
 const hasReceipt = r => (Array.isArray(r.cd.settle_log) ? r.cd.settle_log : []).some(l => l.kind === "receipt");
