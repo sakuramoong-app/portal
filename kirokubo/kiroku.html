@@ -296,6 +296,7 @@
   .rc-k{font-size:14px;white-space:nowrap;} .rc-k small{font-size:12px;color:var(--sub);} .rc-yen{color:#e5638c;font-size:15.5px;} .rc-top select{font-family:inherit;font-size:13px;padding:2px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;}
   .rc-more > summary{cursor:pointer;font-size:12.5px;font-weight:800;color:var(--sub);padding:4px 10px;list-style:none;} .rc-more > summary::before{content:"▶ ";font-size:10px;} .rc-more[open] > summary::before{content:"▼ ";}
   .rc-more[open] > summary{border-bottom:1.5px solid #F1E3E7;}
+  .rc-memo{flex:1 1 160px;min-width:0;background:#FFFBEA;border:1.5px solid #F2D27A;border-radius:10px;padding:5px 10px;color:var(--ink);font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default} .rc-memo i{font-style:normal;color:#C9A43A;margin:0 6px}
   .rc-last{margin:4px 0 2px;background:#FFFBEA;border:1.5px solid #F2D27A;border-radius:8px;padding:4px 10px;color:var(--ink);font-weight:700;font-size:13px;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden} .rc-last small{color:var(--sub);font-weight:600;font-size:11px;margin-left:8px} .rc-more[open] .rc-last{display:none}
   .rc-2{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:4px 10px;background:#F7F0FF;border-bottom:1.5px solid #EAD7DD;font-size:13px;} .rc-2::before{content:"💳 カード";font-size:12px;font-weight:800;color:#6b4fa0;}
   .rescard .rc-top .rc-time, .rescard .rc-top select.stsel{height:32px;box-sizing:border-box;margin:0;vertical-align:middle;}
@@ -4536,8 +4537,10 @@ function resCard(r){
   const payUrl = r.payment === "card" && (r.card_step || "unsent") === "unsent" ? `<a class="payurl" href="${PAY_ADMIN_URL}" target="_blank" rel="noopener" title="${esc(PAY_ADMIN_URL)}">💳 決済URL</a>` : "";
   // 1〜2行に：時間・お店・状態・場所・コース・総額（支払い）・電話・カードの状態・伝えた。ほかは「くわしく」にたたむ
   const nLog = logOf(r).length;
-  // 閉じていても、新しい備考を2つまで見せる（状態・振込・3Pなどの自動のログはとばす）
-  const lastLogs = logOf(r).filter(x => x.text && !/^(🔁|状態 →|🏦|👥)/.test(String(x.text).trim())).slice(-2).reverse();
+  // 閉じていても、書いた備考を「キャストOK」の右に出す（新しい順に2つまで。状態・振込・伝えた などの自動のログはとばす）
+  const AUTO_LOG = /^(🔁|状態 →|🏦|👥|キャストに伝えた|アウトコールあり|カード：|この場所の|ホテル・部屋 →|場所の種類 →|NG|🚫|⚠️|🚕|次回の交通費)/;
+  const lastLogs = logOf(r).filter(x => x.text && !AUTO_LOG.test(String(x.text).trim())).slice(-2).reverse();
+  const memoInline = lastLogs.length ? `<span class="rc-memo" title="${esc(lastLogs.map(l => String(l.text).trim() + "（" + (l.by || "") + " " + whenShort(l.at) + "）").join("\n"))}">📝 ${lastLogs.map(l => esc(String(l.text).trim())).join("<i>／</i>")}</span>` : `<span style="flex:1"></span>`;
   const mates = partyMates(r);
   return `<div class="rescard ${cx ? "cx" : ""}" id="rc-${r.id}">
     <div class="rc-top">
@@ -4552,13 +4555,13 @@ function resCard(r){
 
       ${mates.map(m => `<button type="button" class="rc-mate" onclick="rcJump(${m.id})">👥 ${esc(castName(m.cast_id))}の予約へ</button>`).join("")}
       ${(r.todos || []).filter(x => !x.done_at).map(x => `<button type="button" class="told rc-todo" onclick="event.stopPropagation();toggleTodo(${r.id},${(r.todos || []).indexOf(x)})">⏳ ${esc(x.text)}</button>`).join("")}
-      <span style="flex:1"></span>
+      ${memoInline}
       <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ 開く</button>
     </div>
     ${cardStep || payUrl ? `<div class="rc-2">${cardStep}${payUrl}</div>` : ""}
     ${trRow(r, ed)}
     ${r.dress && dressText(r.dress) ? `<div class="rc-dress">👗 ${esc(dressText(r.dress))}</div>` : ""}
-    <details class="rc-more" ${rcOpen.has(r.id) ? "open" : ""} ontoggle="rcToggle(${r.id},this.open)"><summary>くわしく（お客さん・場所・OP・備考${nLog ? " " + nLog + "件" : ""}）${lastLogs.map(l => `<div class="rc-last">📝 ${esc(String(l.text).trim())}<small>${esc(l.by || "")} ${esc(whenShort(l.at))}</small></div>`).join("")}</summary>
+    <details class="rc-more" ${rcOpen.has(r.id) ? "open" : ""} ontoggle="rcToggle(${r.id},this.open)"><summary>くわしく（お客さん・場所・OP・備考${nLog ? " " + nLog + "件" : ""}）</summary>
     <div class="rc-grid">
       <div class="rc-box"><div class="rc-h">💴 コース・料金</div>
         <div class="rc-row">${ed ? `<select onchange="qCourse(${r.id},this.value)">${prices.map(p=>`<option value="${esc(p.course)}" ${p.course === r.course ? "selected" : ""}>${esc(p.course)}${/^\d+$/.test(p.course) ? "分" : ""}</option>`).join("")}${prices.some(p=>p.course === r.course) ? "" : `<option selected>${esc(r.course || "")}</option>`}</select>` : esc(r.course)}
