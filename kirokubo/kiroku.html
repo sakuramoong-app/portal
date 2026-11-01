@@ -5857,9 +5857,9 @@ function paintSubPhones(){
     ${KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="addSubPhoneK()">＋ 番号を追加</button>` : ""}</div>`);
 }
 // 🔗 入電した番号（はじめて）を、前の番号のお客さんにつなぐ：メイン＝いまの番号、前のメイン番号は副番号へ
-async function linkOldPhone(){
+async function linkOldPhone(oldArg){
   const now = phoneNorm($("f_phone").value); if(digits(now).length < 6) return;
-  const old = phoneNorm(prompt("前の電話番号（そのお客さんが前に使っていた番号）") || "");
+  const old = phoneNorm(oldArg || prompt("前の電話番号（そのお客さんが前に使っていた番号）") || "");
   if(digits(old).length < 6) return;
   const c = await custByPhone(old, "*");
   if(!c){ toast("その番号のお客さんは見つかりませんでした"); return; }
@@ -5886,7 +5886,19 @@ async function addSubPhoneK(){
     c.phones = list; paintSubPhones(); toast("📞 副番号を足しました");
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
-{ const __lcSub = lookupCustomer; lookupCustomer = async function(){ const r = await __lcSub.apply(this, arguments); try{ paintSubPhones(); }catch(e){} return r; }; }
+{ const __lcSub = lookupCustomer; lookupCustomer = async function(){ const r = await __lcSub.apply(this, arguments); try{ paintSubPhones(); }catch(e){} try{ await paintSimilarPhones(); }catch(e){} return r; }; }
+// 🤔 見つからなかったとき：下8けたが同じ番号のお客さん（090↔080 の打ちまちがい・番号の変更など）を出す。同じ人なら「🔗 つなぐ」
+async function paintSimilarPhones(){
+  const now = digits(phoneNorm($("f_phone").value));
+  if(curCustomer || now.length < 10) return;
+  const last8 = now.slice(-8);
+  const l = (q(await sb.from("kb_customers").select("id,name,phone").like("phone", "%" + last8).neq("phone", now).limit(3)) || []);
+  if(!l.length || digits(phoneNorm($("f_phone").value)) !== now) return;
+  const mask = p => String(p).slice(0, -8) + "-" + String(p).slice(-8, -4) + "-" + String(p).slice(-4);
+  $("custInfo").insertAdjacentHTML("beforeend", `<div class="info" style="background:#FFF8E1;border:2px solid #FFB547;margin-top:6px">🤔 <b>下8けたが同じ番号のお客さんがいます</b>（最初の数字だけちがう：打ちまちがい・番号を変えた など）
+    ${l.map(c => `<div style="margin-top:4px">・<b>${esc(c.name || "名前なし")}</b>（${esc(mask(c.phone))}）${KB.CAN_EDIT ? ` <button type="button" class="btn btn-ghost btn-sm" onclick="linkOldPhone('${esc(c.phone)}')">🔗 同じ人ならつなぐ</button>` : ""}</div>`).join("")}
+    <div style="font-size:12px;color:var(--sub);margin-top:4px">つなぐと、メインの番号が今回の番号になり、前の番号は副番号に入ります。</div></div>`);
+}
 // 数字の欄（交通費・割引・延長など）：クリックしたら中身をぜんぶ選ぶ → そのまま打つと入れかわる（「0」のうしろに続いて 08000 にならない）
 document.addEventListener("focusin", e => { const t = e.target; if(t && t.matches && t.matches("#formBg input[type=number]")) setTimeout(() => { try{ t.select(); }catch(err){} }, 0); });
 // 数字の欄の上でスクロールしても、数字は変えない（欄から外して、画面だけスクロールする）
