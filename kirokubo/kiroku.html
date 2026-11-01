@@ -5843,6 +5843,8 @@ async function addSubPhoneK(){
 { const __lcSub = lookupCustomer; lookupCustomer = async function(){ const r = await __lcSub.apply(this, arguments); try{ paintSubPhones(); }catch(e){} return r; }; }
 // 数字の欄（交通費・割引・延長など）：クリックしたら中身をぜんぶ選ぶ → そのまま打つと入れかわる（「0」のうしろに続いて 08000 にならない）
 document.addEventListener("focusin", e => { const t = e.target; if(t && t.matches && t.matches("#formBg input[type=number]")) setTimeout(() => { try{ t.select(); }catch(err){} }, 0); });
+// 数字の欄の上でスクロールしても、数字は変えない（欄から外して、画面だけスクロールする）
+document.addEventListener("wheel", e => { const t = e.target; if(t && t.matches && t.matches("input[type=number]") && document.activeElement === t) t.blur(); }, { passive: true, capture: true });
 const __renderDummyLock = renderDummy;
 renderDummy = function(){ const r = __renderDummyLock.apply(this, arguments); dmLock(); return r; };
 $("f_phone").addEventListener("input", () => { custPast = null; dmLock(); });   // 番号を打ちなおしたら、調べなおすまでロック
