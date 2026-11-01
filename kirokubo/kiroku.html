@@ -3650,7 +3650,8 @@ function stColor(){ const el = $("f_status"); if(el) el.className = "stsel st " 
 // 本指名・店リピ：その予約より前に「終了」した予約だけで決める（今の予約・キャンセル・トビは数えない）
 function visitFrom(past, cid){
   if(past && past === custSeen) past = seenNorm();
-  const prev = (past || []).filter(p=>p.status === "done" && !(editing && p.id === editing.id));
+  const fd = ($("f_day") && $("f_day").value) || day;   // 予約の日より前だけ（台帳エクセルには、この日の利用そのものが入っていることがある）
+  const prev = (past || []).filter(p=>p.status === "done" && !(editing && p.id === editing.id) && p.biz_date && p.biz_date < fd);
   if(!prev.length) return "new";
   return cid && prev.some(p=>p.cast_id === cid) ? "honshi" : "repeat";
 }
@@ -3910,7 +3911,7 @@ document.addEventListener("pointerdown", e => { if(e.target && e.target.id === "
 /* ---------- 💗 本指名：前回その子を指名したのはいつか（記録簿＋台帳エクセル）。種別のボタンの横と、予約連絡の【名前】の行に ---------- */
 function lastNomiOf(cid){
   if(!cid || (!Array.isArray(custSeen) && !Array.isArray(custPast))) return "";
-  const l = seenNorm().filter(p => p.cast_id === cid && !["cancel", "tobi"].includes(p.status) && !(editing && p.id === editing.id) && p.biz_date)
+  const l = seenNorm().filter(p => p.cast_id === cid && !["cancel", "tobi"].includes(p.status) && !(editing && p.id === editing.id) && p.biz_date && p.biz_date < (($("f_day") && $("f_day").value) || day))
     .map(p => p.biz_date).sort();
   const d = l.pop(); return d ? d.replace(/^(\d{4})-(\d\d)-(\d\d)$/, (m, y, mo, da) => `${y}/${Number(mo)}/${Number(da)}`) : "";
 }
