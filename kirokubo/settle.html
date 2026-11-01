@@ -431,6 +431,24 @@ function copyDetail(id){
   navigator.clipboard.writeText(lines.join("\n")).then(()=>toast("📋 精算明細をコピーしました"), ()=>alert(lines.join("\n")));
 }
 
+// 👥 いっしょに使う（kb_live.js）：だれかが保存したら、静かに読みなおす（打っている間・窓を開いている間は待つ）
+let liveTimer = null;
+async function liveReload(){
+  clearTimeout(liveTimer);
+  const a = document.activeElement;
+  if(document.querySelector(".modal-bg.show") || (a && a !== document.body && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))){ liveTimer = setTimeout(liveReload, 3000); return; }
+  try{
+    const [rs, ds] = await Promise.all([
+      sb.from("kb_reservations").select("*").eq("biz_date", day).eq("deleted", false).order("start_at"),
+      sb.from("kb_cast_days").select("*").eq("biz_date", day),
+    ]);
+    rows = q(rs) || [];
+    days = {}; (q(ds) || []).forEach(d=>{ days[d.cast_id] = d; });
+    const y = window.scrollY; render(); window.scrollTo(0, y);
+  }catch(e){}
+}
+if(window.KBLive) KBLive.onChanged(() => { clearTimeout(liveTimer); liveTimer = setTimeout(liveReload, 800); });
+
 init();
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>

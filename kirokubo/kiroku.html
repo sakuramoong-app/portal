@@ -182,6 +182,7 @@
   .st.wait_guest,.st.wait_cast{background:#fff;color:#555;border:1.5px solid #cfc7ca;}
   .st.working{background:#EADCFB;color:#6c3fb5;}
   .st.moving{background:#D4F1F4;color:#0F7C8A;}
+  .st.arrive_call{background:#DDF3E4;color:#1E7A45;}
   .st.done{background:#E5E3E4;color:#777;}
   .st.cancel{background:#FFE0C2;color:#c25e00;}
   .st.tobi{background:#FFD0D0;color:#c62828;}
@@ -719,7 +720,8 @@
       <h3><span class="n">6</span>最終確認（お客さんに読み上げ）</h3>
       <div id="finalSummary" class="final"></div>
       <div class="row2" style="margin-top:10px">
-        <div class="f"><label>状態<span class="req">必須</span></label><select id="f_status" class="stsel st pick" onchange="stColor()"></select></div>
+        <div class="f"><label>状態<span class="req">必須</span></label><select id="f_status" class="stsel st pick" onchange="stColor();if($('f_status_at'))$('f_status_at').value=''"></select></div>
+        <div class="f"><label>⏰ この状態の時刻（あれば）<small style="font-weight:600;color:var(--sub)">　例：確認電話を1.5時間前に・ホテル入室待ちは何時。前日確認は前日の時刻</small></label><input type="time" id="f_status_at" step="300" style="max-width:150px"></div>
       </div>
       <div class="row2" style="display:none">
         <div></div>
@@ -773,7 +775,7 @@
 const { sb, q, esc, yen, toast } = KB;
 const $ = id => document.getElementById(id);
 const DOW = ["日","月","火","水","木","金","土"];
-const STATUS = { pre_call:"前日確認電話", pre_mail:"前日確認メール", hour_call:"1H前確認電話", hour_mail:"1H前確認メール", moving:"移動中", wait_guest:"客ホテル入室待ち", wait_cast:"キャストホテル入室待ち", working:"仕事中", done:"終了", wait_cast_reply:"キャスト返事待ち", wait_guest_reply:"お客様返事待ち", wait_foreign_call:"外国人1コール待ち", cancel:"キャンセル", tobi:"トビ", checking:"確認中（旧）", wait_hotel:"ホテル連絡待ち（旧）" };   // 並び：前日確認〜終了 → 返事待ち → キャンセル・トビ
+const STATUS = { pre_call:"前日確認電話", pre_mail:"前日確認メール", hour_call:"1H前確認電話", hour_mail:"1H前確認メール", moving:"移動中", arrive_call:"到着連絡", wait_guest:"客ホテル入室待ち", wait_cast:"キャストホテル入室待ち", working:"仕事中", done:"終了", wait_cast_reply:"キャスト返事待ち", wait_guest_reply:"お客様返事待ち", wait_foreign_call:"外国人1コール待ち", cancel:"キャンセル", tobi:"トビ", checking:"確認中（旧）", wait_hotel:"ホテル連絡待ち（旧）" };   // 並び：前日確認〜終了 → 返事待ち → キャンセル・トビ
 const STATUS_OLD = ["checking", "wait_hotel"];   // 今は選べない（前の予約のために残している）
 const VISIT = [["new","新規"],["repeat","店リピ"],["honshi","本指名"]];
 const FREE_SUFFIX = { "":"", free:"フリー", special_free:"特別フリー", event_free:"イベフリー" };
@@ -878,8 +880,8 @@ function renderList(){
 async function quickStatus(id, st){
   if(!KB.CAN_EDIT) return;
   try{
-    q(await sb.from("kb_reservations").update({ status: st, updated_by: KB.operatorName() }).eq("id", id));
-    const r = rows.find(x=>x.id === id); if(r){ r.status = st; r.updated_by = KB.operatorName(); r.updated_at = new Date().toISOString(); }
+    q(await sb.from("kb_reservations").update(Object.assign({ status: st, updated_by: KB.operatorName() }, (rows.find(x => x.id === id) || {}).status_at ? { status_at: null } : {})).eq("id", id));
+    const r = rows.find(x=>x.id === id); if(r){ r.status = st; if(r.status_at) r.status_at = null; r.updated_by = KB.operatorName(); r.updated_at = new Date().toISOString(); }
     toast("状態を「" + STATUS[st] + "」にしました"); renderList();
   }catch(e){ toast("変えられませんでした：" + (e.message || e)); loadDay(); }
 }
@@ -1998,6 +2000,7 @@ async function saveRes(){
       // 📱 スマホで保存したら「仮入力」。PCで（キャストに送ったか確かめて）保存すると取り入れる（SQL 155 のあと）
       ...(("phone_draft" in (rows[0] || editing || {})) || IS_PHONE() ? (IS_PHONE() ? { phone_draft: true, phone_draft_by: by, phone_draft_at: new Date().toISOString() } : { phone_draft: false }) : {}),
       status: $("f_status").value, confirm_call: $("f_confirm").value.trim(), note: $("f_note").value, updated_by: by,
+      ...formStatusAtPatch(),   // ⏰ この状態の時刻（SQL 182）
       ...(() => { const lg = statusLog(editing ? (rows.find(x => x.id === editing.id) || editing) : null, $("f_status").value, by); const all = editing ? lg : (lg || []).concat(formPendingNow()); return all && all.length ? { memo_log: all } : {}; })(),   // 備考に状態の経緯
     };
     if(editing) q(await sb.from("kb_reservations").update(row).eq("id", editing.id));
@@ -2888,7 +2891,7 @@ async function pushLog(id, text, extra){
 // 一覧から状態を変える（ログにも残す）
 quickStatus = async function(id, st){
   if(!KB.CAN_EDIT) return;
-  if(await pushLog(id, "状態 →「" + STATUS[st] + "」", { status: st })){ toast("状態を「" + STATUS[st] + "」にしました"); renderList(); if(editing && editing.id === id) renderFormLog(); }
+  if(await pushLog(id, "状態 →「" + STATUS[st] + "」", Object.assign({ status: st }, (rows.find(x => x.id === id) || {}).status_at ? { status_at: null } : {}))){ toast("状態を「" + STATUS[st] + "」にしました"); renderList(); if(editing && editing.id === id) renderFormLog(); }
 };
 // キャストに伝えた（切りかえ・ログにも残す）
 async function toggleNotified(id){
@@ -3505,8 +3508,8 @@ function addDays(ymd, n){ const d = new Date(ymd + "T12:00:00Z"); d.setUTCDate(d
 async function loadCallAlerts(){
   try{
     const today = KB.bizDateOf();
-    callAlertRows = q(await sb.from("kb_reservations").select("id,biz_date,start_at,end_at,area,cast_id,status,store_key")
-      .in("biz_date", [addDays(today, -1), today, addDays(today, 1)]).in("status", ["pre_call", "hour_call", "pre_mail", "hour_mail", "working"]).eq("deleted", false)) || [];
+    callAlertRows = q(await sb.from("kb_reservations").select("*")
+      .in("biz_date", [addDays(today, -1), today, addDays(today, 1)]).not("status", "in", "(done,cancel,tobi)").eq("deleted", false)) || [];   // ほかの状態は「⏰ 時刻」をすぎたかを見る（SQL 182）
   }catch(e){ callAlertRows = []; }
   renderCallAlerts();
 }
@@ -3517,10 +3520,17 @@ function renderCallAlerts(){
   callAlertRows.forEach(r=>{
     const st = r.start_at ? Date.parse(r.start_at) : null, en = r.end_at ? Date.parse(r.end_at) : null;
     if(r.status === "working"){ if(en && now >= en) outs.push(r); return; }   // ⏰ 終了時刻になった → アウトコールの確認
+    const sa = r.status_at ? Date.parse(r.status_at) : null;   // ⏰ この状態の時刻（SQL 182）
+    if(!["pre_call", "hour_call", "pre_mail", "hour_mail"].includes(r.status)){
+      if(sa && now >= sa && (!en || now < en)) items.push({ r, kind: "⏰ 「" + (STATUS[r.status] || r.status) + "」の時刻（" + hm(r.status_at) + "）" });
+      return;
+    }
     const how = /_mail$/.test(r.status) ? "メール" : "電話";   // 確認がメールで来るお客さん（SQL 180）
-    if(st && now >= st - 3600000 && now < st) items.push({ r, kind: "1時間前の確認" + how + "がまだ" });
+    const isHour = ["hour_call", "hour_mail"].includes(r.status);
+    const hourDue = isHour && sa ? sa : (st ? st - 3600000 : null);   // 1H前確認：時刻が入っていればその時刻から
+    if(st && now >= hourDue && now < st) items.push({ r, kind: (isHour && sa ? hm(r.status_at) + "の" : "1時間前の") + "確認" + how + "がまだ" });
     else if(["pre_call", "pre_mail"].includes(r.status) && (!st || now < st)){
-      const due = Date.parse(addDays(r.biz_date, -1) + "T20:15:00+09:00");
+      const due = sa || Date.parse(addDays(r.biz_date, -1) + "T20:15:00+09:00");   // 前日確認：時刻が入っていればその時刻
       if(now >= due) items.push({ r, kind: "前日の確認" + how + "がまだ" });
     }
   });
@@ -3529,7 +3539,7 @@ function renderCallAlerts(){
       <div class="outrow"><span><b>${md(r)}${r.start_at ? hm(r.start_at) : ""}〜${r.end_at ? hm(r.end_at) : ""}</b>　${esc(castName(r.cast_id))}　${esc(r.area || "")}</span>
         ${KB.CAN_EDIT ? `<button type="button" class="okbtn" onclick="outcallDone(${r.id},'${r.biz_date}')">📞 アウトコールきた（終了にする）</button>` : ""}
         <button type="button" onclick="openAlertRes(${r.id},'${r.biz_date}')">開く</button></div>`).join("")}</div>` : "")
-    + (items.length ? `<div class="callalert">🔔 確認電話が来ていない予約があります${items.map(({ r, kind })=>`
+    + (items.length ? `<div class="callalert">🔔 確認がまだ・時刻になった予約があります${items.map(({ r, kind })=>`
       <button type="button" onclick="openAlertRes(${r.id},'${r.biz_date}')"><b>${esc(kind)}</b>　${md(r)}${r.start_at ? hm(r.start_at) : "時間未定"}　${esc(castName(r.cast_id))}　<u>開く</u></button>`).join("")}</div>` : "");
   // 新しい「終了時刻」が出たら、ピッと鳴らす
   const fresh = outs.filter(r=>!beeped.has(r.id));
@@ -4549,8 +4559,8 @@ function resCard(r){
   const mates = partyMates(r);
   return `<div class="rescard ${cx ? "cx" : ""}" id="rc-${r.id}">
     <div class="rc-top">
-      ${stSel}
-      ${ed ? `<input type="time" class="rc-time" value="${hm(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>
+      <span class="stbox">${stSel}${statusAtChip(r, ed)}</span>
+      <small class="rc-lbl">開始</small>${ed ? `<input type="time" class="rc-time" value="${hm(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>
       ${r.phone_draft ? `<span class="rc-draft" title="スマホで仮入力。PCで開いて確かめると取り入れます">📱仮入力</span>` : ""}${r.dummy_name ? `<span class="rc-store">🎭${esc(r.dummy_name)}</span>` : ""}
       <span class="rc-k">📍<b>${esc(r.area || "エリアなし")}</b></span>
       <span class="rc-k">${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""}${r.extension_count ? "＋延長" + r.extension_count : ""}</span>
@@ -5974,6 +5984,58 @@ document.head.insertAdjacentHTML("beforeend", `<style>
     body:has(#formBg.show) a[title="ポータルに戻る"]{display:none !important}
   }
 </style>`);
+
+/* ---------- ⏰ この状態の時刻（SQL 182）：確認電話を1.5時間前に・ホテル入室待ちは何時 など
+   ・予約カードでは状態のすぐ右に、黄色い「⏰ 時刻」でくっつけて出す（開始時刻とまちがえないように）
+   ・確認電話・確認メールの赤い帯は、時刻が入っていればその時刻で出す。ほかの状態も、時刻をすぎたら帯に出す
+   ・状態を変えたら、時刻は消える ---------- */
+const ST_DONE = ["done", "cancel", "tobi", "working"];
+function statusAtIso(bd, st, v){
+  if(!v) return null;
+  const [h, m] = v.split(":").map(Number);
+  const base = /^pre_/.test(st) ? addDays(bd, -1) : bd;   // 前日確認は前日の時刻
+  const d = new Date(`${base}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00+09:00`);
+  if(h < 6) d.setTime(d.getTime() + 24 * 3600 * 1000);   // 朝6時より前は次の日（営業日の考え方）
+  return d.toISOString();
+}
+const sameTime = (a, b) => (a ? Date.parse(a) : 0) === (b ? Date.parse(b) : 0);
+function formStatusAtPatch(){
+  const v = $("f_status_at") ? $("f_status_at").value : "";
+  const hasCol = rows.some(x => "status_at" in x) || (editing && "status_at" in editing);
+  if(!hasCol && !v) return {};
+  const iso = statusAtIso(($("f_day") && $("f_day").value) || day, $("f_status").value, v);
+  const prev = editing ? editing.status_at : null;
+  return Object.assign({ status_at: iso }, sameTime(iso, prev) ? {} : { alert_hour_at: null, alert_pre_at: null });   // 時刻を変えたら、通知はその時刻で出しなおす
+}
+function statusAtChip(r, ed){
+  if(!("status_at" in r) || ST_DONE.includes(r.status)) return "";
+  if(!r.status_at) return ed ? `<button type="button" class="statadd" title="この状態の時刻を入れる（例：確認電話を1.5時間前に）" onclick="statAdd(this,${r.id})">⏰</button>` : "";
+  const over = Date.now() >= Date.parse(r.status_at);
+  return ed ? `<label class="statchip ${over ? "over" : ""}" title="この状態の時刻（空にすると消える）">⏰<input type="time" step="300" value="${hm(r.status_at)}" onchange="qStatusAt(${r.id},this.value)"></label>`
+    : `<span class="statchip ${over ? "over" : ""}">⏰ ${hm(r.status_at)}</span>`;
+}
+function statAdd(btn, id){
+  btn.outerHTML = `<label class="statchip">⏰<input type="time" step="300" id="statNew${id}" onchange="qStatusAt(${id},this.value)" onblur="if(!this.value)renderList()"></label>`;
+  const i = $("statNew" + id); if(i){ i.focus(); try{ i.showPicker(); }catch(e){} }
+}
+async function qStatusAt(id, v){
+  const r = rows.find(x => x.id === id); if(!r || !KB.CAN_EDIT) return;
+  const iso = statusAtIso(r.biz_date, r.status, v);
+  if(sameTime(iso, r.status_at)) return;
+  if(await pushLog(id, `⏰ 「${STATUS[r.status] || r.status}」の時刻 → ${v || "（なし）"}`, { status_at: iso, alert_hour_at: null, alert_pre_at: null })){ toast("時刻を保存しました"); renderList(); loadCallAlerts(); }
+}
+(function(){
+  const css = document.createElement("style");
+  css.textContent = `.stbox{display:inline-flex;align-items:center;gap:4px;padding-right:12px;margin-right:2px;border-right:2px dotted #E8D3DA}
+  .rc-lbl{font-size:11px;font-weight:800;color:var(--sub);margin-right:-4px}
+  .statchip{display:inline-flex;align-items:center;gap:2px;height:32px;box-sizing:border-box;background:#FFF1C9;border:1.5px solid #F2B705;color:#7a5600;border-radius:8px;padding:0 4px 0 7px;font-weight:800;font-size:13px;white-space:nowrap}
+  .statchip input{border:none;background:transparent;font-family:inherit;font-weight:800;font-size:13px;color:#7a5600;padding:0;width:78px}
+  .statchip.over{background:#FFE1E6;border-color:#E5486C;color:#B0213F;animation:livePulse 1.6s ease-in-out infinite} .statchip.over input{color:#B0213F}
+  .statadd{height:32px;width:32px;border:1.5px dashed #E6CF8A;background:#fff;border-radius:8px;cursor:pointer;font-size:14px;opacity:.55;padding:0} .statadd:hover{opacity:1;background:#FFF8E1}`;
+  document.head.appendChild(css);
+  const __openFormSA = openForm;
+  openForm = function(id){ const r = __openFormSA.apply(this, arguments); Promise.resolve(r).then(() => { if($("f_status_at")) $("f_status_at").value = editing && editing.status_at ? hm(editing.status_at) : ""; }); return r; };
+})();
 
 /* ---------- 🗺 地図のURLを開く（入っていなければ、登録されているホテルの地図） ---------- */
 function openMapUrl(){
