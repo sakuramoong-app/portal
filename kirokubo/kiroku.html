@@ -552,6 +552,7 @@
         <div style="display:flex;gap:6px"><input id="f_phone" type="tel" inputmode="tel" placeholder="09012345678" onchange="lookupCustomer()">
           <button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="lookupCustomer()">🔍 調べる</button></div></div></div>
       <div class="row1"><div class="f"><label>お客さんの名前<span class="req">必須</span></label><input id="f_name" maxlength="40" oninput="recalc()"></div></div>
+      <div class="row1"><div class="f"><label>メールアドレス（あれば）</label><input id="f_email" type="email" inputmode="email" maxlength="120" placeholder="例：xxxx@gmail.com"></div></div>
       <div id="custInfo"></div>
       <div class="f" style="margin-top:8px"><label>種別（新規・店リピ・本指名）<span class="req">必須</span></label><div class="chips" id="f_visit"></div></div>
       <div class="f" style="margin-top:8px"><label>お客様のこと（当てはまれば押す）</label><div class="chips" id="f_guest"></div></div>
@@ -928,7 +929,7 @@ function openForm(id){
   document.querySelectorAll("#formBg .miss").forEach(el=>el.classList.remove("miss"));
   const c = r.kb_customers || {};
   curCustomer = r.customer_id ? { id: r.customer_id, ...c } : null;
-  $("f_phone").value = c.phone || ""; $("f_name").value = c.name || ""; $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = "";
+  $("f_phone").value = c.phone || ""; $("f_name").value = c.name || ""; $("f_email").value = c.email || ""; $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = "";
   $("custInfo").innerHTML = "";
   onStore(r);
   onCast();
@@ -1632,9 +1633,11 @@ function checksForSave(){
 }
 
 /* ---------- お客さん ---------- */
-const digits = s => String(s||"").replace(/[^\d]/g, "");
+const digits = s => String(s||"").normalize("NFKC").replace(/[^\d]/g, "");
+// 電話番号：数字だけにする。「+81」（日本）は 0 から始まる形に、ほかの国の「+」「00」で始まる番号は「+」を残す
+const phoneNorm = s => { const t = String(s||"").normalize("NFKC").trim(), d = digits(t); if(!/^(\+|00)/.test(t)) return d; const n = t.startsWith("00") ? d.slice(2) : d; return n.startsWith("81") ? "0" + n.slice(2) : (n ? "+" + n : ""); };
 async function lookupCustomer(keepName){
-  const phone = digits($("f_phone").value);
+  const phone = phoneNorm($("f_phone").value);
   $("f_phone").value = phone;
   if(phone.length < 6){ curCustomer = null; custPast = null; custSeen = null; $("custInfo").innerHTML = ""; return; }
   try{
@@ -1642,6 +1645,7 @@ async function lookupCustomer(keepName){
     curCustomer = c || null;
     if(!c){ custPast = []; custSeen = []; $("custInfo").innerHTML = `<div class="info">🆕 はじめての電話番号です（保存すると新しいお客さんとして登録します）</div>`; if(!editing) setVisit("new"); return; }
     if(!keepName || !$("f_name").value) $("f_name").value = c.name || "";
+    if(!keepName || !$("f_email").value) $("f_email").value = c.email || "";   // メールは、受付で入れたものを消さない
     $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = c.ng_reason || c.note || "";
     // ダミーで行った子の確認（renderCastChecks）のため、多めに読む。履歴に出すのは新しい10件
     const pastAll = q(await sb.from("kb_reservations").select("id,biz_date,store_key,cast_id,dummy_name,course,status").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(200)) || [];
@@ -1944,13 +1948,14 @@ async function saveRes(){
   try{
     // お客さん（電話番号があれば探す・なければ作る）
     let customerId = curCustomer ? curCustomer.id : null;
-    const phone = digits($("f_phone").value), name = $("f_name").value.trim(), ng = $("f_ng").value === "1", cn = $("f_custnote").value.trim();
+    const phone = phoneNorm($("f_phone").value), name = $("f_name").value.trim(), ng = $("f_ng").value === "1", cn = $("f_custnote").value.trim();
     if(phone || name){
       if(!customerId && phone){
         const ex = q(await sb.from("kb_customers").select("id").eq("phone", phone).limit(1).maybeSingle());
         if(ex) customerId = ex.id;
       }
       const cu = { phone, name, ng, updated_by: by };
+      { const em = $("f_email").value.trim(); if(em) cu.email = em; }   // メールアドレス（入れたときだけ。消すのは顧客台帳で）
       if(ng) cu.ng_reason = cn; else if(cn) cu.note = cn;
       if(customerId) q(await sb.from("kb_customers").update(cu).eq("id", customerId));
       else customerId = q(await sb.from("kb_customers").insert(cu).select("id").single()).id;
@@ -4318,7 +4323,7 @@ hotelMapUrl = function(){ const m = $("f_map") ? $("f_map").value.trim() : ""; r
 // 予約を保存したら、その場所をお客さんの場所として覚える
 const __saveResP = saveRes;
 saveRes = async function(){
-  const phone = digits($("f_phone").value), area = $("f_area").value.trim(), address = $("f_address").value.trim();
+  const phone = phoneNorm($("f_phone").value), area = $("f_area").value.trim(), address = $("f_address").value.trim();
   const kind = $("f_place") ? $("f_place").value : "", map = $("f_map") ? $("f_map").value.trim() : "", st = $("f_status").value;
   await __saveResP();
   if($("formBg").classList.contains("show")) return;   // 保存できなかった

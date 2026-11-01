@@ -92,6 +92,8 @@
    ============================================================ */
 const { sb, q, esc, yen, toast } = KB;
 const $ = id => document.getElementById(id);
+// 電話番号：数字だけ。「+81」（日本）は 0 から始まる形に、ほかの国の「+」「00」で始まる番号は「+」を残す（記録簿の受付と同じ）
+const phoneNormC = s => { const t = String(s || "").normalize("NFKC").trim(), d = t.replace(/[^\d]/g, ""); if(!/^(\+|00)/.test(t)) return d; const n = t.startsWith("00") ? d.slice(2) : d; return n.startsWith("81") ? "0" + n.slice(2) : (n ? "+" + n : ""); };
 let M = { casts: [], stores: [] }, results = [], cur = null, filter = "all", timer = null;
 const STATUS = { done: "", cancel: "キャンセル", tobi: "トビ", flowed: "流れた" };
 const castLabel = id => { const c = M.casts.find(x=>x.id === id); return c ? (c.official_name || c.temp_name) : ""; };
@@ -257,7 +259,7 @@ function markText(m){
   return (out.length ? `<br><span class="mark">⚠️ ${esc(out.join("／"))}</span>` : "") + (chips.length ? "<br>" + chips.join(" ") : "");
 }
 async function saveCustomer(){
-  const patch = { name: $("c_name").value.trim(), phone: $("c_phone").value.replace(/\D/g, ""), email: $("c_email").value.trim(), ng: $("c_ng").value === "1", ng_reason: $("c_ngr").value.trim(), note: $("c_note").value, updated_by: KB.operatorName(), updated_at: new Date().toISOString() };
+  const patch = { name: $("c_name").value.trim(), phone: phoneNormC($("c_phone").value), email: $("c_email").value.trim(), ng: $("c_ng").value === "1", ng_reason: $("c_ngr").value.trim(), note: $("c_note").value, updated_by: KB.operatorName(), updated_at: new Date().toISOString() };
   if(patch.phone && patch.phone !== cur.phone){
     const ex = q(await sb.from("kb_customers").select("id,name").eq("phone", patch.phone).neq("id", cur.id).limit(1).maybeSingle());
     if(ex && !confirm(`この電話番号は「${ex.name || "名前なし"}」さんでも使われています。このまま保存しますか？`)) return;
@@ -313,7 +315,7 @@ async function custNgDecide(isNg){
   try{ q(await sb.from("kb_customers").update(u).eq("id", cur.id)); toast(isNg ? "⚠️ NG客にしました" : "NGではない、にしました"); openCustomer(cur.id); search(); }catch(e){ toast("できませんでした：" + (e.message || e)); }
 }
 async function newCustomer(){
-  const phone = (prompt("電話番号（数字だけ）") || "").replace(/\D/g, ""); if(!phone) return;
+  const phone = phoneNormC(prompt("電話番号（海外は + から）") || ""); if(!phone) return;
   const ex = q(await sb.from("kb_customers").select("id").eq("phone", phone).limit(1).maybeSingle());
   if(ex){ toast("この電話番号のお客さんは、もういます"); openCustomer(ex.id); return; }
   const name = (prompt("名前") || "").trim();
