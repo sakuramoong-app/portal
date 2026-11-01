@@ -37,8 +37,10 @@
   .flow .ref{font-size:12px;color:var(--sub);}
   .ex{width:100%;margin-top:6px;} .ex td{font-size:13px;padding:5px 6px;white-space:normal;}
   .ex input,.ex select{font-family:inherit;font-size:13px;padding:3px 6px;border:1.5px solid #ddd;border-radius:6px;max-width:100%;}
-  .hand{background:#00B0F0;border:3px solid #0A84C6;border-radius:14px;padding:10px 16px;margin-top:10px;}
-  .hand .k{font-weight:800;color:#08304d;} .hand .v{text-align:right;font-weight:900;font-size:32px;color:#E0001B;}
+  .hand{background:#FFF8D6;border:3px solid #F2C94C;border-radius:14px;padding:10px 16px;margin-top:10px;}   /* 社長に手渡し＝随時の回収合計（同じ枠の色） */
+  .sum .s.handbox{background:#FFF8D6;border:3px solid #F2C94C;}
+  .flow .handrow{background:#FFF8D6;border:3px solid #F2C94C;border-radius:10px;padding:6px 10px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;font-weight:900;grid-column:1 / -1;}
+  .hand .k{font-weight:800;color:#6b4e00;} .hand .v{text-align:right;font-weight:900;font-size:32px;color:#E0001B;}
   .chk{border:2.5px solid #2e8b57;background:#F0FBF4;border-radius:12px;padding:10px 14px;margin-top:10px;font-weight:900;display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
   .chk input{width:22px;height:22px;accent-color:#2e8b57;} .chk small{font-weight:700;color:var(--sub);}
   .leg{font-size:12px;color:var(--sub);margin-top:6px;line-height:1.7;}
@@ -283,7 +285,7 @@ function paintDay(){
   let h = D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "";
   h += `<div class="sum">
     <div class="s">想定店落ち 1日の粗利（F）<b>${yen(F)}</b></div>
-    <div class="s">随時の回収合計<b style="color:#E0001B">${yen(hand)}</b></div>
+    <div class="s handbox">🤝 随時の回収合計（＝社長に手渡し）<b style="color:#E0001B">${yen(hand)}</b></div>
     <div class="s">カード（D）<b>${yen(A.card)}</b></div>
     <div class="s">回収サイン<b><span class="mk day">✔${T.dayN}</span>　<span class="mk me">✔${T.meN}</span>　<span class="mk none">■${T.noneN}</span></b></div>
     <div class="s ${T.yetN ? "ng" : ""}">まだチェックしていない<b>${T.yetN}人</b></div>
@@ -329,7 +331,7 @@ function paintDay(){
       ${notColRows.map(r => `<span>− 未回収 <b class="mk none">■</b> ${esc(names[r.id] || r.id)}${r.state ? "" : "（まだチェックしていない）"}</span><span class="v">−${yen(r.amt)}</span>`).join("")}
       ${kikiPaid.map(x => `<span>＋ 🪙 キキララから払った日払い ${esc(staffNames[x.staff_id] || x.staff_id)}（回収金には残っている）</span><span class="v">＋${yen(x.day_paid)}</span>`).join("")}
       ${kikiRet.map(x => `<span>− 🪙 キキララへ返金 ${md(x.biz_date)}の ${esc(staffNames[x.staff_id] || x.staff_id)}</span><span class="v">−${yen(x.day_paid)}</span>`).join("")}
-      <span class="eq">＝ 随時の回収合計（今、社長に渡す額）</span><span class="v eq" style="color:#E0001B">${yen(hand)}</span>
+      <div class="handrow"><span>＝ 🤝 随時の回収合計（今、社長に渡す額）</span><span style="color:#E0001B;font-size:18px">${yen(hand)}</span></div>
     </div>
     <div class="flow" style="margin-top:12px">
       ${(() => { const cash = staffSum - kikiPaidSum + kikiRetSum;   // 回収金から出ていったお金：回収金から払った日払い＋キキララへの返金
