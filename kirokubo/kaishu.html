@@ -158,7 +158,15 @@ async function readRange(from, to){
     sb.from("kb_reservations").select(RESV_COLS).gte("biz_date", from).lt("biz_date", to).eq("deleted", false),
     sb.from("kb_staff_work").select("biz_date,staff_id,day_paid,paid,pay_source").gte("biz_date", from).lt("biz_date", to),
   ]);
-  R.cds = q(a) || []; R.resv = q(b) || []; R.staff = (c.error ? [] : (c.data || [])).filter(x => x.paid && x.pay_source === "drop" && Number(x.day_paid));
+  // 内勤日払い：想定店落ち（F）からは、どこから払ったか（回収金・キキララ）に関係なく全部引く（記録簿の「今日の店落ち」と同じ）
+  R.cds = q(a) || []; R.resv = q(b) || []; R.staff = (c.error ? [] : (c.data || [])).filter(x => x.paid && Number(x.day_paid));
+  // 🪙 キキララ：その期間に「キキララから払った」日払いと、その期間に「キキララへ返した」日払い（SQL 185）
+  R.kikiPaid = R.staff.filter(x => x.pay_source === "kikirara");
+  R.kikiRet = []; R.no185 = false;
+  try{
+    const kr = await sb.from("kb_staff_work").select("biz_date,staff_id,day_paid,kiki_returned_on,kiki_returned_by").eq("paid", true).eq("pay_source", "kikirara").gte("kiki_returned_on", from).lt("kiki_returned_on", to);
+    if(kr.error) R.no185 = true; else R.kikiRet = kr.data || [];
+  }catch(e){ R.no185 = true; }
   try{
     R.col = q(await sb.from("kb_collections").select("*").gte("biz_date", from).lt("biz_date", to)) || [];
     R.ho = q(await sb.from("kb_handovers").select("*").gte("biz_date", from).lt("biz_date", to)) || [];
@@ -237,8 +245,12 @@ function totalsFor(day, R, rows){
   const A = { shop: sum(all, r => r.shop), card: sum(all, r => r.card), tr: sum(all, r => r.tr), notCol: sum(all.filter(r => r.state === "none" || !r.state), r => r.amt), yetN: all.filter(r => !r.state).length };
   // 紙の回収明細と同じ：B（キャストの A の合計）＋振込 − C（内勤日払い）＝ F（店落ち粗利）。F − D（カード）− 振込 − E（経費）＝ 最終的に社長に渡す額
   const B = A.shop + tr, F = B - staffSum, fin = F - A.card - A.tr - tr - ex;
-  const hand = fin - A.notCol;   // 随時の回収合計（未回収 ■ を引いた、今渡す額）
-  return { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand, all };
+  // 🪙 キキララから払った日払いは、その日の回収金からは出ていない（回収金に残っている）→ 足す。
+  //    キキララへ返した日に、はじめてその日の回収金から引く
+  const kikiPaid = (R.kikiPaid || []).filter(x => x.biz_date === day), kikiPaidSum = sum(kikiPaid, x => Number(x.day_paid) || 0);
+  const kikiRet = (R.kikiRet || []).filter(x => x.kiki_returned_on === day), kikiRetSum = sum(kikiRet, x => Number(x.day_paid) || 0);
+  const hand = fin - A.notCol + kikiPaidSum - kikiRetSum;   // 随時の回収合計（未回収 ■ を引いた、今渡す額・実際のお金）
+  return { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand, all, kikiPaid, kikiPaidSum, kikiRet, kikiRetSum };
 }
 
 /* ---------- 1日ごと ---------- */
@@ -249,6 +261,9 @@ async function loadDay(){
   try{
     const R = await readRange(day, nextDay(day));
     if(day !== $("day").value || mode !== "day") return;   // とちゅうで日を変えた
+    // 🪙 キキララから払って、まだ返していない日払い（この日までの全部）
+    R.kikiOpen = [];
+    if(!R.no185){ try{ const ko = await sb.from("kb_staff_work").select("biz_date,staff_id,day_paid").eq("paid", true).eq("pay_source", "kikirara").is("kiki_returned_on", null).lte("biz_date", day).order("biz_date"); R.kikiOpen = ko.error ? [] : (ko.data || []).filter(x => Number(x.day_paid)); }catch(e){} }
     D = Object.assign(R, { day });
   }catch(e){ $("dayArea").innerHTML = `<div class="warn">読めませんでした：${esc(e.message || e)}</div>`; return; }
   paintDay();
@@ -256,7 +271,7 @@ async function loadDay(){
 function paintDay(){
   if(!D) return;
   const all = rowsFor(D.day, D), rows = all.filter(r => !place || r.place === place);
-  const { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand } = totalsFor(D.day, D, rows);
+  const { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand, kikiPaid, kikiPaidSum, kikiRet, kikiRetSum } = totalsFor(D.day, D, rows);
   const TRL = { wait: "振込待ち", owner: "社長の確認待ち", done: "✅ 振込処理完了" }, trLine = r => `${esc(names[r.cast_id] || "")} ${["cancel", "tobi"].includes(r.status) ? "キャンセル料" : "もらい忘れ"}（${TRL[r.transfer_status] || ""}）`;
   const ed = KB.CAN_EDIT && !D.no171, dt = new Date(D.day + "T12:00:00Z");
   let h = D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "";
@@ -294,7 +309,7 @@ function paintDay(){
     <div class="flow">
       <span>キャスト全員の店落ち（暫定的な残額＋雑費）の合計</span><span class="v">${yen(A.shop)}</span>
       ${tr ? `<span>＋ 振込（キャンセル料など）</span><span class="v">＋${yen(tr)}</span>` : ""}
-      ${staff.map(x => `<span>− 内勤日払い ${esc(staffNames[x.staff_id] || x.staff_id)}</span><span class="v">−${yen(x.day_paid)}</span>`).join("")}
+      ${staff.map(x => `<span>− 内勤日払い ${esc(staffNames[x.staff_id] || x.staff_id)}${x.pay_source === "kikirara" ? "（🪙 キキララから払った）" : ""}</span><span class="v">−${yen(x.day_paid)}</span>`).join("")}
       <span class="eq">＝ 想定店落ち 1日の粗利（F）</span><span class="v eq">${yen(F)}</span>
       <span>− クレジットカード総額（D）</span><span class="v">−${yen(A.card)}</span>
       ${rowsFor(D.day, D).filter(r => r.tr).map(r => `<span>− 🏦 振込（もらい忘れ）：${esc(names[r.id] || r.id)}</span><span class="v">−${yen(r.tr)}</span>`).join("")}
@@ -303,10 +318,13 @@ function paintDay(){
       <span>− 経費（E：キャッシュフローに補充）</span><span class="v">−${yen(ex)}</span>
       <span class="eq">＝ 全部回収したときに社長に渡す額</span><span class="v eq">${yen(fin)}</span>
       ${notColRows.map(r => `<span>− 未回収 <b class="mk none">■</b> ${esc(names[r.id] || r.id)}${r.state ? "" : "（まだチェックしていない）"}</span><span class="v">−${yen(r.amt)}</span>`).join("")}
+      ${kikiPaid.map(x => `<span>＋ 🪙 キキララから払った日払い ${esc(staffNames[x.staff_id] || x.staff_id)}（回収金には残っている）</span><span class="v">＋${yen(x.day_paid)}</span>`).join("")}
+      ${kikiRet.map(x => `<span>− 🪙 キキララへ返金 ${md(x.biz_date)}の ${esc(staffNames[x.staff_id] || x.staff_id)}</span><span class="v">−${yen(x.day_paid)}</span>`).join("")}
       <span class="eq">＝ 随時の回収合計（今、社長に渡す額）</span><span class="v eq" style="color:#E0001B">${yen(hand)}</span>
     </div>
     <div class="flow" style="margin-top:12px">
-      <span class="ref">当日現金回収金額合計（✔黒 ${yen(T.daySum)}${staffSum ? " − 内勤日払い " + yen(staffSum) : ""}）</span><span class="v ref">${yen(T.daySum - staffSum)}</span>
+      ${(() => { const cash = staffSum - kikiPaidSum + kikiRetSum;   // 回収金から出ていったお金：回収金から払った日払い＋キキララへの返金
+        return `<span class="ref">当日現金回収金額合計（✔黒 ${yen(T.daySum)}${cash ? " − 回収金から払った日払い・キキララへの返金 " + yen(cash) : ""}）</span><span class="v ref">${yen(T.daySum - cash)}</span>`; })()}
     </div></div>
   <div class="card"><h2>💼 経費（E：回収金からキャッシュフローに補充）</h2>
     <div class="leg" style="margin:0 0 6px">キャッシュフローが足りなくなったときに、回収金から補充した額を入れます。キャストの交通費は、キャッシュフローから出したものなので、ここには入れません。</div>
@@ -316,12 +334,28 @@ function paintDay(){
     <div class="leg" style="margin:0 0 6px">お店の口座に振り込まれた分です。カードと同じで、粗利には入りますが、回収金には入りません。</div>
     <table class="ex">${itemRows(ex2.filter(x => x.type === "transfer"), "transfer")}
       ${ed ? `<tr><td class="l" colspan="3"><button class="btn btn-ghost btn-sm" onclick="addExp('transfer')">＋ 振込を足す</button></td></tr>` : ""}</table>
+    <h2 style="margin-top:12px">🪙 キキララ（内勤日払いを両替金から払った分）</h2>
+    <div class="leg" style="margin:0 0 6px">記録簿の内勤日払いで「キキララ」にした分です。店落ち（F）からはもう引いてあります。回収金からキキララへ返したら「返金完了」を押すと、この日の回収金から引きます。</div>
+    ${D.no185 ? `<div class="warn">⚠️ 返金を記録するには、SQL 185 の実行が必要です。</div>` : `<table class="ex">
+      ${(D.kikiOpen || []).map(x => `<tr><td class="l">${md(x.biz_date)} ${esc(staffNames[x.staff_id] || x.staff_id)}<small style="color:#c0392b">（まだ返していない）</small></td><td>${num(x.day_paid)}</td>
+        <td class="l" style="white-space:nowrap">${ed ? `<button class="btn btn-primary btn-sm" onclick="kikiReturn('${x.biz_date}','${esc(x.staff_id)}',true)">返金完了</button>` : ""}</td></tr>`).join("")}
+      ${kikiRet.map(x => `<tr><td class="l">${md(x.biz_date)} ${esc(staffNames[x.staff_id] || x.staff_id)}<small style="color:#2e8b57">（✅ この日に返した${x.kiki_returned_by ? "・" + esc(x.kiki_returned_by) : ""}）</small></td><td>${num(x.day_paid)}</td>
+        <td class="l">${ed ? `<a class="j" href="javascript:void 0" onclick="kikiReturn('${x.biz_date}','${esc(x.staff_id)}',false)">取り消し</a>` : ""}</td></tr>`).join("")}
+      ${!(D.kikiOpen || []).length && !kikiRet.length ? `<tr><td class="l" colspan="3" style="color:var(--sub)">返していないキキララの日払いはありません</td></tr>` : ""}</table>`}
     <div class="hand"><div class="k">🤝 社長に手渡し（随時の回収合計・現金）</div><div class="v">${yen(hand)}</div></div>
     ${ho && ho.received_at && ho.received_amount != null && ho.received_amount !== hand ? `<div class="warn" style="margin-top:8px">受け取ったときは ${yen(ho.received_amount)} でした。そのあと ${sgn(hand - ho.received_amount)}円 変わっています（あとから回収した分など）。</div>` : ""}
     <div class="chk"><input type="checkbox" ${ho && ho.received_at ? "checked" : ""} ${KB.IS_OWNER && !D.no171 ? "" : "disabled"} onchange="setReceived(this.checked)"> 社長が受け取った
       <small>${ho && ho.received_at ? `${esc(ho.received_by)} ${when(ho.received_at)}（${yen(ho.received_amount ?? hand)}）` : "（社長のログインでだけ押せる・日時が残る）"}</small></div>
   </div></div>`;
   $("dayArea").innerHTML = h;
+}
+// 🪙 キキララへ返した（この日の回収金から返す）／取り消し（SQL 185）
+async function kikiReturn(bd, sid, on){
+  if(!KB.CAN_EDIT) return;
+  if(on && !confirm(`${md(bd)} の ${staffNames[sid] || sid} の日払いを、この日（${md(D.day)}）の回収金からキキララへ返しましたか？\n（この日の回収金から引きます）`)) return;
+  try{ q(await sb.from("kb_staff_work").update(on ? { kiki_returned_on: D.day, kiki_returned_by: KB.operatorName() } : { kiki_returned_on: null, kiki_returned_by: "" }).eq("biz_date", bd).eq("staff_id", sid)); toast(on ? "返金完了にしました" : "取り消しました"); }
+  catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+  loadDay();
 }
 async function saveCol(cid, patch, noReload){
   try{ q(await sb.from("kb_collections").upsert(Object.assign({ biz_date: D.day, cast_id: cid, updated_by: KB.operatorName(), updated_at: new Date().toISOString() }, patch), { onConflict: "biz_date,cast_id" })); }
