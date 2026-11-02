@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_live.js?v=1"></script><!-- いっしょに使う（保存の合図・入力中）。kb_common より前 -->
-<script src="kb_common.js?v=15"></script>
+<script src="kb_common.js?v=16"></script>
 <style>
   .daybar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
   .daybar input[type=date]{font-family:inherit;font-size:14px;padding:8px 12px;border:1.5px solid var(--line);border-radius:99px;background:#fff;color:var(--ink);}
@@ -118,6 +118,7 @@ function backOf(r){ return r.back_override != null ? r.back_override : (r.course
 function rulesOn(castId){ return M.rules.filter(r=>r.cast_id === castId && (r.valid_from || "2000-01-01") <= day && (!r.valid_to || r.valid_to > day)); }
 
 async function loadDay(){
+  if(KB.PRACTICE) $("day").value = KB.PRACTICE_DAY;   // 🧪 練習モードは練習の日だけ
   day = $("day").value; KB.rememberDay(day);
   $("list").innerHTML = `<div class="gate">読み込み中…</div>`;
   try{
@@ -475,10 +476,11 @@ async function loadSettleShifts(ymd){
   if(settleShifts[ymd]) return;
   settleShifts[ymd] = {};
   try{
-    const [y, m, d] = ymd.split("-").map(Number), dt = new Date(Date.UTC(y, m - 1, d)), dow = dt.getUTCDay();
+    const src = ymd === KB.PRACTICE_DAY ? KB.realBizDateOf() : ymd;   // 🧪 練習の日は、今日のシフトを出す
+    const [y, m, d] = src.split("-").map(Number), dt = new Date(Date.UTC(y, m - 1, d)), dow = dt.getUTCDay();
     dt.setUTCDate(dt.getUTCDate() + (dow === 0 ? -6 : 1 - dow));
     const rs = q(await sb.from("shift_weeks").select("cast_name,data").eq("wk", dt.toISOString().slice(0, 10))) || [];
-    rs.forEach(r => { const sh = r.data && r.data.shifts && r.data.shifts[ymd]; if(sh && sh.start != null && sh.end != null) settleShifts[ymd][r.cast_name] = { start: Number(sh.start), end: Number(sh.end) }; });
+    rs.forEach(r => { const sh = r.data && r.data.shifts && r.data.shifts[src]; if(sh && sh.start != null && sh.end != null) settleShifts[ymd][r.cast_name] = { start: Number(sh.start), end: Number(sh.end) }; });
   }catch(e){}
   if(settleSort !== "kana" && ymd === day) render();
 }

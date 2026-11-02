@@ -22,6 +22,59 @@
   }
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }, global: { headers: { "x-device-key": deviceKey() } } });
 
+  // 🧪 練習モード（?practice=1）：「練習の日」（2000-01-01）に入れる。本物の画面と同じ。1時間で自動で消える（SQL 204）
+  //   ・お客さんの情報・NG・場所・未精算・キャストの設定などは変えない（書いたふりだけ）。新しいお客さんは src='practice'
+  //   ・練習の日以外の予約などは書きかえない（update・delete は練習の日だけ）
+  //   ・練習でないときは、練習の日の予約・練習のお客さんを読まない（本番の画面・集計に出ない）
+  const PRACTICE_DAY = "2000-01-01";
+  const PRACTICE = new URLSearchParams(location.search).has("practice");
+  const DAY_TABLES = ["kb_reservations", "kb_cast_days", "kb_staff_work", "kb_day_notes", "kb_seat_logs"];
+  const PRACTICE_BLOCK = ["kb_cust_cast_ng", "kb_customer_places", "kb_unsettled", "kb_cust_history", "kb_envelope_checks", "kb_collections", "kb_handovers",
+    "master_casts", "kb_cast_rules", "kb_settings", "prof_settings", "kb_media_fees", "kb_hotels", "kb_secrets", "staff_accounts"];
+  function fakeQ(){
+    const p = Promise.resolve({ data: { id: 0 }, error: null });
+    const px = new Proxy(function(){}, { get(_, k){ if(k === "then") return p.then.bind(p); if(k === "catch") return p.catch.bind(p); if(k === "finally") return p.finally.bind(p); return () => px; } });
+    return px;
+  }
+  const toPractice = v => Array.isArray(v) ? v.map(toPractice) : (v && typeof v === "object" && "biz_date" in v ? Object.assign({}, v, { biz_date: PRACTICE_DAY }) : v);
+  const _from = sb.from.bind(sb);
+  sb.from = function(t){
+    const b = _from(t);
+    if(!PRACTICE){
+      if(DAY_TABLES.includes(t) || t === "kb_customers"){
+        const sel = b.select.bind(b);
+        b.select = (...a) => t === "kb_customers" ? sel(...a).neq("src", "practice") : sel(...a).neq("biz_date", PRACTICE_DAY);
+      }
+      return b;
+    }
+    if(PRACTICE_BLOCK.includes(t)){ ["insert", "update", "upsert", "delete"].forEach(k => { b[k] = () => fakeQ(); }); return b; }
+    if(t === "kb_customers"){
+      const ins = b.insert.bind(b);
+      b.insert = (v, o) => ins(Array.isArray(v) ? v.map(x => Object.assign({}, x, { src: "practice" })) : Object.assign({}, v, { src: "practice" }), o);
+      ["update", "upsert", "delete"].forEach(k => { b[k] = () => fakeQ(); });
+      return b;
+    }
+    if(DAY_TABLES.includes(t)){
+      const ins = b.insert.bind(b), ups = b.upsert.bind(b), upd = b.update.bind(b), del = b.delete.bind(b);
+      b.insert = (v, o) => ins(toPractice(v), o);
+      b.upsert = (v, o) => ups(toPractice(v), o);
+      b.update = (v, o) => upd(toPractice(v), o).eq("biz_date", PRACTICE_DAY);
+      b.delete = o => del(o).eq("biz_date", PRACTICE_DAY);
+    }
+    return b;
+  };
+  if(PRACTICE){
+    const _rpc = sb.rpc.bind(sb);
+    sb.rpc = (fn, args, o) => ["kb_set_cast_hotel", "kb_daicho_import", "kb_daicho_clear", "kb_xl_day_import", "kb_xl_uns_import"].includes(fn) ? fakeQ() : _rpc(fn, args, o);
+    document.addEventListener("DOMContentLoaded", () => {
+      const bar = document.createElement("div");
+      bar.style.cssText = "position:sticky;top:0;z-index:9000;background:#FFF1B8;border-bottom:2px solid #F2C94C;color:#6B5200;font-weight:800;font-size:14px;padding:8px 14px;text-align:center;line-height:1.6";
+      const off = location.pathname.split("/").pop() || "kiroku.html";
+      bar.innerHTML = `🧪 練習モード：ここで入れたものは本番には入りません。1時間で自動で消えます（お客さんの情報・NG・未精算は変わりません）　<a href="${off}" style="color:#B0213F">練習をやめる</a>`;
+      document.body.prepend(bar);
+    });
+  }
+
   function loginAt(s){
     try{
       const p = JSON.parse(decodeURIComponent(escape(atob(s.access_token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")))));
@@ -94,14 +147,16 @@
     t.textContent = m; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), 2400);
   }
   // 営業日（朝6時で切りかえ）。日本時間で計算
-  function bizDateOf(d){
+  function bizDateOf(d){ return PRACTICE ? PRACTICE_DAY : realBizDateOf(d); }   // 練習モードはいつも「練習の日」
+  function realBizDateOf(d){
     const j = new Date((d || new Date()).getTime() + 9*3600*1000);   // 日本時間の時刻を UTC の欄に入れて扱う
     if(j.getUTCHours() < 6) j.setUTCDate(j.getUTCDate() - 1);
     return j.toISOString().slice(0,10);
   }
   // 見ている日を、ページを行き来しても同じにする（記録簿・精算・回収明細）。同じタブの中だけ・6時間まで
-  function rememberDay(d){ try{ if(/^\d{4}-\d{2}-\d{2}$/.test(d || "")) sessionStorage.setItem("kbDay", JSON.stringify({ d, at: Date.now() })); }catch(e){} }
+  function rememberDay(d){ if(PRACTICE) return; try{ if(/^\d{4}-\d{2}-\d{2}$/.test(d || "")) sessionStorage.setItem("kbDay", JSON.stringify({ d, at: Date.now() })); }catch(e){} }
   function startDay(){
+    if(PRACTICE) return PRACTICE_DAY;
     const u = new URLSearchParams(location.search).get("d");
     if(/^\d{4}-\d{2}-\d{2}$/.test(u || "")) return u;
     try{ const s = JSON.parse(sessionStorage.getItem("kbDay") || "null"); if(s && s.d && Date.now() - s.at < 6 * 3600 * 1000) return s.d; }catch(e){}
@@ -109,12 +164,14 @@
   }
   // ページの上の切りかえ
   function nav(active){
-    const all = [["kiroku.html","🆕 新しい記録簿（ためし中）"],["reception.html","🧾 受付"],["settle.html","💴 精算"],["kaishu.html","📦 回収明細"],["index.html","📒 キャスト台帳"],["customers.html","👥 顧客台帳"],["stats.html","📈 集計"],["backup.html","💾 バックアップ"]];
+    // 練習モードは、記録簿と精算だけ（練習のまま行き来する）
+    if(PRACTICE) return `<nav class="kbnav">${[["kiroku.html","📒 記録簿（練習）"],["settle.html","💴 精算（練習）"]].map(([h,l])=>`<a href="${h}?practice=1" class="${h===active?"on":""}">${l}</a>`).join("")}</nav>`;
+    const all = [["kiroku.html","📒 記録簿"],["reception.html","🧾 受付"],["settle.html","💴 精算"],["kaishu.html","📦 回収明細"],["index.html","📒 キャスト台帳"],["customers.html","👥 顧客台帳"],["stats.html","📈 集計"],["backup.html","💾 バックアップ"]];
     const items = IS_BOSS ? all : all.filter(([h])=>h === "index.html" || (STAFF_OPEN && STAFF_PAGES.includes(h)));   // 店長・社長は全部、ほかの内勤はキャスト台帳だけ
     // スマホでは、スマホで開けるページだけ（session_guard.js と同じ：受付・精算・キャスト台帳。回収明細は店長・社長）
     const phone = /iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent) || matchMedia("(max-width:640px)").matches;
     const shown = phone ? items.filter(([h]) => ["kiroku.html", "settle.html", "index.html"].includes(h) || (h === "kaishu.html" && IS_BOSS)) : items;
-    return `<nav class="kbnav">${shown.map(([h,l])=>`<a href="${h}" target="_blank" rel="opener" class="${h===active?"on":""}">${l}</a>`).join("")}</nav>`;
+    return `<nav class="kbnav">${shown.map(([h,l])=>`<a href="${h}" target="_blank" rel="opener" class="${h===active?"on":""}">${l}</a>`).join("")}<a href="kiroku.html?practice=1" target="_blank" rel="opener">🧪 練習</a></nav>`;
   }
   function wipBanner(){
     return `<div class="wip">🚧 <b>作成中です。触らないでください。</b><br><span>${CAN_EDIT
@@ -165,7 +222,7 @@
     });
   }
 
-  window.KB = { sb, staffSession, deviceStatus, operatorName, CAN_EDIT, MANAGER_NAME, IS_OWNER, OWNER_NAME, q, esc, yen, toast, bizDateOf, rememberDay, startDay, nav, wipBanner, closeOnBackdrop, passGate };
+  window.KB = { sb, staffSession, deviceStatus, operatorName, CAN_EDIT, MANAGER_NAME, IS_OWNER, OWNER_NAME, q, esc, yen, toast, bizDateOf, realBizDateOf, rememberDay, startDay, nav, wipBanner, closeOnBackdrop, passGate, PRACTICE, PRACTICE_DAY };
 })();
 
 /* ---------- ⬆ 上に戻るボタン（記録簿のページ共通）：ある程度下までスクロールしたら右下に出る。

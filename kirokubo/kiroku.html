@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_live.js?v=1"></script><!-- いっしょに使う（保存の合図・入力中）。kb_common より前 -->
-<script src="kb_common.js?v=15"></script>
+<script src="kb_common.js?v=16"></script>
 <style>
   /* ===== 見やすさ重視（文字は大きめ・枠は少なめ・色は状態と注意だけ） ===== */
   body{font-size:14.5px;}
@@ -1009,10 +1009,11 @@ function weekKeyOfYmd(s){
 }
 async function loadShifts(ymd){
   if(shiftCache[ymd]) return shiftCache[ymd];
-  const rows = q(await sb.from("shift_weeks").select("cast_name,data").eq("wk", weekKeyOfYmd(ymd))) || [];
+  const src = ymd === KB.PRACTICE_DAY ? KB.realBizDateOf() : ymd;   // 🧪 練習の日は、今日のシフトを出す
+  const rows = q(await sb.from("shift_weeks").select("cast_name,data").eq("wk", weekKeyOfYmd(src))) || [];
   const out = {};
   rows.forEach(r=>{
-    const sh = r.data && r.data.shifts && r.data.shifts[ymd];
+    const sh = r.data && r.data.shifts && r.data.shifts[src];
     // 内勤が受理（確認通知）したシフトだけ。サクラシフトでは 受理 → 入力待ち → 内勤入力中 → 確定 と進む（媒体へ入れ終わると確定）。
     // 変更の申請中・入力中・変更確定も、受理したことがあるので出す。出さないのは「未提出」「提出済み（まだ受理していない）」だけ
     if(!["input_waiting", "inputting", "confirmed", "change_requested", "change_inputting", "change_confirmed"].includes(r.data && r.data.status)) return;
@@ -4776,7 +4777,7 @@ function paintDayLabel(){
   el.innerHTML = `<b class="dmd">${d.getUTCMonth() + 1}/${d.getUTCDate()}</b><b class="dwk ${w === 0 ? "sun" : w === 6 ? "sat" : ""}">(${"日月火水木金土"[w]})</b>` + (day === KB.bizDateOf() ? `<span class="dtoday">今日</span>` : "");
 }
 const __loadDayDL = loadDay;
-loadDay = async function(){ day = $("day").value; paintDayLabel(); await __loadDayDL(); paintDayLabel(); };
+loadDay = async function(){ if(KB.PRACTICE) $("day").value = KB.PRACTICE_DAY; day = $("day").value; paintDayLabel(); await __loadDayDL(); paintDayLabel(); };
 
 /* ============================================================
    2026/10/20：受付画面の整理（支払いはふつうの選ぶ欄／ビジホの確認／キャストへの連絡はLINEで一言）
