@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>特例の候補│サクラG</title>
+<link rel="icon" type="image/png" href="../favicon.png?v=3">
+<link rel="stylesheet" href="kb.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
+<script src="kb_common.js?v=16"></script>
+<style>
+  body{font-size:14.5px;}
+  .wrap{max-width:980px;}
+  .box{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;}
+  .lead{font-size:13px;color:var(--sub);line-height:1.7;margin-bottom:8px;}
+  .cast{font-size:16px;font-weight:800;color:var(--pink-deep);margin-bottom:6px;}
+  .src{font-size:12.5px;color:#5C4B4F;background:#FBF4F6;border-radius:10px;padding:6px 10px;margin-bottom:8px;line-height:1.7;white-space:pre-wrap;}
+  .src mark{background:#FFE58A;border-radius:4px;padding:0 2px;}
+  .cand{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1.5px solid var(--line);border-radius:12px;margin-bottom:6px;}
+  .cand.on{background:#EEF9F2;border-color:#9AD39A;}
+  .cand input[type=checkbox]{width:20px;height:20px;margin-top:2px;flex:none;}
+  .cand .t{flex:1;min-width:0;line-height:1.7;}
+  .cand small{color:var(--sub);}
+  .warn{color:#B0213F;font-weight:700;font-size:12.5px;}
+  .have{font-size:12.5px;color:#1f7a55;margin-bottom:6px;}
+  .num{width:90px;font-family:inherit;font-size:14px;padding:3px 6px;border:1.5px solid var(--line);border-radius:8px;}
+  .bar{position:sticky;bottom:0;background:#fff;border-top:2px solid var(--line);padding:10px 14px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<!-- キャスト台帳の特記事項・NG・メモの文から、計算に入れる特例（バックの上乗せ・雑費なし・交通費バック・指名料）の候補を出す。
+     チェックしたものだけ、キャスト台帳の「バック・条件を変える」と同じ RPC（kb_change_terms）で、ヒアリングの記録とセットで入れる。店長・社長だけ -->
+<div class="wrap">
+  <header class="kbh"><h1>✅ 特例の候補（特記事項から）</h1></header>
+  <div id="gate" class="gate">読み込み中…</div>
+  <div id="main" style="display:none">
+    <div class="box"><p class="lead">キャスト台帳の<b>特記事項・NG・メモ</b>に書いてある「＋○円」「雑費なし」「交通費バック」などから、受付で自動で計算できる<b>特例の候補</b>を出しました。<br>
+      <b>入れるものだけチェック</b>して、下の「チェックしたものを入れる」を押してください。金額や分数は直せます。<br>
+      もう入っている特例と同じものは出していません。<span class="warn">赤い注意</span>があるものは、アプリでは条件を全部は付けられないので、よく見てから選んでください。</p>
+      <label style="font-size:13px"><input type="checkbox" id="showAll" onchange="render()"> 候補がないキャストも出す</label></div>
+    <div id="list"></div>
+  </div>
+</div>
+<div class="bar" id="bar" style="display:none"><span id="cnt">0 件チェック</span><button class="btn btn-primary" id="save" onclick="save()">✅ チェックしたものを入れる</button></div>
+<script>
+const { sb, q, esc, toast } = KB;
+const $ = id => document.getElementById(id);
+let casts = [], rules = [], stores = [], C = [];   // C：候補 [{cid, kind, params, note, hit, warn, on}]
+const DOW = { "日": 0, "月": 1, "火": 2, "水": 3, "木": 4, "金": 5, "土": 6 };
+const DOWL = "日月火水木金土";
+const STORE_RE = [[/逆\s*(AF|ＡＦ|アナル)|逆AF倶楽部/, "gyakuanal"], [/極門|ゴクモン/, "gokumon"], [/キューティ|ＣＣ|\bCC\b/, "cutie"], [/エイティ|(^|[^\d])18(?!\d)/, "eighteen"],
+  [/ピーチ|五反田/, "peachmoon"], [/ドレス/, "dressgarden"], [/錦糸町/, "lana_kinshi"], [/鶯谷/, "lana_uguisu"], [/サクラ|池袋/, "sakuramoon"]];
+const nk = s => String(s || "").normalize("NFKC");
+const yenN = s => Number(String(s).replace(/[,，]/g, "")) || 0;
+const storeLabel = k => (stores.find(s => s.key === k) || {}).label || k;
+
+async function init(){
+  if(!(await KB.staffSession()) || !KB.CAN_EDIT){ $("gate").textContent = "ポータルから開いてください（店長・社長だけ・登録した端末から開けます）"; return; }
+  try{
+    const [c, r, s] = await Promise.all([
+      sb.from("master_casts").select("id,official_name,temp_name,shift_name,status,special_notes,ng_notes,note").order("id"),
+      sb.from("kb_cast_rules").select("*").eq("active", true),
+      sb.from("master_stores").select("*").order("sort")]);
+    casts = (q(c) || []).filter(x => !["left"].includes(x.status)); rules = q(r) || []; stores = q(s) || [];
+  }catch(e){ $("gate").textContent = "読めませんでした：" + (e.message || e); return; }
+  build();
+  $("gate").style.display = "none"; $("main").style.display = ""; $("bar").style.display = "";
+  render();
+}
+const nameOf = c => c.official_name || c.temp_name || c.shift_name || c.id;
+// もう入っている特例と同じか
+function exists(cid, kind, params){
+  return rules.some(r => r.cast_id === cid && r.kind === kind && (!r.valid_to || r.valid_to > new Date().toISOString().slice(0, 10)) && JSON.stringify(sortObj(r.params || {})) === JSON.stringify(sortObj(params)));
+}
+function sortObj(o){ const x = {}; Object.keys(o).sort().forEach(k => { x[k] = Array.isArray(o[k]) ? [...o[k]].sort() : o[k]; }); return x; }
+function build(){
+  C = [];
+  casts.forEach(c => {
+    const text = [c.special_notes, c.ng_notes, c.note].filter(Boolean).join("\n");
+    if(!text.trim()) return;
+    // 文の区切り：。・改行・全角スペース・【（全角スペースは NFKC で半角になるので、先に分ける）
+    text.split(/[。\n　]|(?=【)/).map(s => nk(s).trim()).filter(Boolean).forEach(seg => {
+      const add = (kind, params, note, warn) => { if(!exists(c.id, kind, params) && !C.some(x => x.cid === c.id && x.kind === kind && JSON.stringify(x.params) === JSON.stringify(params))) C.push({ cid: c.id, kind, params, note, hit: seg, warn: warn || "", on: false }); };
+      // 雑費なし（曜日）
+      if(/雑費\s*(なし|無し|無|0円|ゼロ)/.test(seg)){
+        const before = seg.split(/雑費/)[0]; const days = [...new Set([...before].filter(ch => ch in DOW).map(ch => DOW[ch]))].sort();
+        add("zappi_exempt", { days: days.length ? days : [0, 1, 2, 3, 4, 5, 6] }, (days.length ? days.map(d => DOWL[d]).join("・") + "は" : "") + "雑費なし",
+            days.length ? "" : "曜日が書いていないので、毎日にしました");
+      }
+      // 交通費バック
+      if(/交通費/.test(seg) && /バック/.test(seg)){
+        const m = seg.match(/([\d,，]{3,})\s*円\s*バック/);
+        const cond = /以上|以下|場合|往復|片道/.test(seg) ? "条件（「5000円以上の場合」など）はアプリでは付けられません。受付で毎回この金額がバックになります" : "";
+        if(/全額|全バック|全部/.test(seg)) add("transport_back", { rate: 1 }, "交通費は全額バック", cond);
+        else if(/半額/.test(seg)) add("transport_back", { rate: 0.5 }, "交通費は半額バック", cond);
+        else if(m) add("transport_back", { amount: yenN(m[1]) }, "交通費から " + m[1] + "円バック", cond);
+      }
+      // バックの上乗せ（＋○円）
+      for(const m of seg.matchAll(/[+＋]\s*([\d,，]{3,})\s*円/g)){
+        if(/交通費/.test(seg.slice(Math.max(0, m.index - 12), m.index))) continue;
+        const amount = yenN(m[1]); if(amount < 100 || amount > 30000) continue;
+        const p = { amount }; const why = [];
+        const mm = seg.match(/(\d{2,3})\s*分\s*以上/); if(mm){ p.min_minutes = Number(mm[1]); why.push(mm[1] + "分以上"); }
+        const st = STORE_RE.find(([re]) => re.test(seg)); if(st){ p.store = st[1]; why.push(storeLabel(st[1])); }
+        let warn = "";
+        if(/本指|本指名/.test(seg)) warn = "「本指名のときだけ」はアプリでは付けられません（本指名でなくても上乗せされます）";
+        else if(/泊/.test(seg)) warn = "「お泊りのときだけ」はアプリでは付けられません";
+        else if(/ランク|SS|★/.test(seg) && !mm && !st) warn = "ランクの話かもしれません。よく見てください";
+        add("back_add", p, (why.length ? why.join("・") + "は" : "") + "バック＋" + amount.toLocaleString() + "円", warn);
+      }
+      // 指名料
+      const nm = seg.match(/指名料\s*([\d,，]{4,})/); if(nm) add("nomination_fee", { amount: yenN(nm[1]) }, "指名料 " + nm[1] + "円", "");
+    });
+  });
+}
+const KIND = { back_add: "バックの上乗せ", zappi_exempt: "雑費なし", transport_back: "交通費バック", nomination_fee: "指名料" };
+function render(){
+  const all = $("showAll").checked;
+  const byCast = casts.map(c => ({ c, list: C.map((x, i) => Object.assign({ i }, x)).filter(x => x.cid === c.id), have: rules.filter(r => r.cast_id === c.id) }))
+    .filter(g => g.list.length || (all && [g.c.special_notes, g.c.ng_notes].some(Boolean)));
+  $("list").innerHTML = byCast.map(({ c, list, have }) => {
+    let src = esc([c.special_notes, c.ng_notes, c.note].filter(Boolean).join("\n"));
+    list.forEach(x => { const h = esc(x.hit); if(h && src.includes(h)) src = src.split(h).join(`<mark>${h}</mark>`); });
+    return `<div class="box"><div class="cast">${esc(nameOf(c))}</div>
+      ${have.length ? `<div class="have">✔ もう入っている特例：${have.map(r => esc(KIND[r.kind] || r.kind) + "（" + esc(r.note || "") + "）").join("、")}</div>` : ""}
+      <div class="src">${src || "（特記事項なし）"}</div>
+      ${list.map(x => `<div class="cand ${x.on ? "on" : ""}"><input type="checkbox" ${x.on ? "checked" : ""} onchange="C[${x.i}].on=this.checked;render()">
+        <div class="t"><b>${esc(KIND[x.kind])}</b>：${esc(x.note)}
+          ${x.kind === "back_add" ? `<br><small>金額 <input class="num" type="number" step="500" value="${x.params.amount}" onchange="C[${x.i}].params.amount=Number(this.value)||0">円
+            ／ 何分以上 <input class="num" type="number" step="10" value="${x.params.min_minutes || ""}" placeholder="なし" onchange="if(Number(this.value))C[${x.i}].params.min_minutes=Number(this.value);else delete C[${x.i}].params.min_minutes">
+            ／ どの店 <select onchange="if(this.value)C[${x.i}].params.store=this.value;else delete C[${x.i}].params.store"><option value="">どこでも</option>${stores.map(s => `<option value="${s.key}" ${x.params.store === s.key ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select></small>` : ""}
+          ${x.kind === "transport_back" && x.params.amount != null ? `<br><small>金額 <input class="num" type="number" step="500" value="${x.params.amount}" onchange="C[${x.i}].params.amount=Number(this.value)||0">円</small>` : ""}
+          ${x.warn ? `<div class="warn">⚠️ ${esc(x.warn)}</div>` : ""}
+          <div><small>もとの文：${esc(x.hit)}</small></div></div></div>`).join("") || `<div class="lead">候補はありません</div>`}</div>`;
+  }).join("") || `<div class="box lead">候補はありませんでした。</div>`;
+  $("cnt").textContent = C.filter(x => x.on).length + " 件チェック";
+}
+async function save(){
+  const on = C.filter(x => x.on); if(!on.length){ toast("チェックした候補がありません"); return; }
+  if(!confirm(on.length + " 件の特例を入れます（今日から）。よろしいですか？")) return;
+  $("save").disabled = true;
+  const today = KB.realBizDateOf ? KB.realBizDateOf() : KB.bizDateOf(), by = KB.operatorName();
+  let ok = 0; const errs = [];
+  for(const cid of [...new Set(on.map(x => x.cid))]){
+    const mine = on.filter(x => x.cid === cid);
+    const add_rules = mine.map(x => {
+      const p = Object.assign({}, x.params);
+      const why = [];
+      if(x.kind === "back_add"){ if(p.min_minutes) why.push(p.min_minutes + "分以上"); if(p.store) why.push(storeLabel(p.store)); }
+      const note = x.kind === "back_add" ? (why.length ? why.join("・") + "は" : "") + "バック＋" + Number(p.amount).toLocaleString() + "円" : x.note;
+      return { kind: x.kind, params: p, note };
+    });
+    const p = { cast_id: cid, effective: today, by, ranks: {}, add_rules, end_rules: [],
+      hearing_text: "台帳の特記事項から特例にした（" + by + "が確認）：" + mine.map(x => x.hit).join(" / ").slice(0, 400) };
+    try{ const r = q(await sb.rpc("kb_change_terms", { p })); if(r && r.error) errs.push(nameOf(casts.find(c => c.id === cid)) + "：" + r.error); else ok += mine.length; }
+    catch(e){ errs.push(nameOf(casts.find(c => c.id === cid)) + "：" + (e.message || e)); }
+  }
+  $("save").disabled = false;
+  if(errs.length) alert("入れられなかったもの：\n" + errs.join("\n"));
+  toast(ok + " 件の特例を入れました🌸");
+  rules = q(await sb.from("kb_cast_rules").select("*").eq("active", true)) || rules;
+  build(); render();
+}
+init();
+</script>
+</body>
+</html>
