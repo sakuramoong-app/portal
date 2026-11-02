@@ -171,7 +171,7 @@
     // スマホでは、スマホで開けるページだけ（session_guard.js と同じ：受付・精算・キャスト台帳。回収明細は店長・社長）
     const phone = /iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent) || matchMedia("(max-width:640px)").matches;
     const shown = phone ? items.filter(([h]) => ["kiroku.html", "settle.html", "index.html"].includes(h) || (h === "kaishu.html" && IS_BOSS)) : items;
-    return `<nav class="kbnav">${shown.map(([h,l])=>`<a href="${h}" target="_blank" rel="opener" class="${h===active?"on":""}">${l}</a>`).join("")}<a href="kiroku.html?practice=1" target="_blank" rel="opener">🧪 練習</a></nav>`;
+    return `<nav class="kbnav">${shown.map(([h,l])=>`<a href="${h}" target="_blank" rel="opener" class="${h===active?"on":""}">${l}</a>`).join("")}<a href="kiroku.html?practice=1" target="_blank" rel="opener">🧪 練習</a><a href="../guide.html" target="_blank" rel="opener">📖 使い方</a></nav>`;
   }
   function wipBanner(){
     return `<div class="wip">🚧 <b>作成中です。触らないでください。</b><br><span>${CAN_EDIT

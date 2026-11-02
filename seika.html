@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="icon" type="image/png" href="favicon.png?v=3">
+<!-- 業務アプリの成果報告。claude.ai の成果報告（QPgYvLZnHTmJ2kdfdMCJSn）と同じ中身。ポータルの MENU から開く -->
+<title>業務アプリ成果報告│サクラG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<style>
+/* layout: one-column report; a row of big figures first (the effort), then what was built, before/after, cost, roadmap */
+:root{
+  --bg:#FBF6F8; --card:#FFFFFF; --ink:#33282E; --sub:#76666E; --line:#EEDCE3;
+  --rose:#C9466F; --rose-soft:#FCE6EE; --night:#2E2A4A; --night-soft:#ECEAF7; --ok:#1F7A55; --ok-soft:#E3F5EC;
+  --display:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif;
+  --body:"Noto Sans JP","Hiragino Sans","Yu Gothic",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#1C171A; --card:#262024; --ink:#F3EAEE; --sub:#B8A8B0; --line:#3D3238;
+  --rose:#F28AAD; --rose-soft:#3A2530; --night:#C9C3F5; --night-soft:#2A2740; --ok:#8FDDB6; --ok-soft:#173226; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#1C171A; --card:#262024; --ink:#F3EAEE; --sub:#B8A8B0; --line:#3D3238;
+  --rose:#F28AAD; --rose-soft:#3A2530; --night:#C9C3F5; --night-soft:#2A2740; --ok:#8FDDB6; --ok-soft:#173226; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15.5px;line-height:1.8;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 56px}
+.wrap{max-width:820px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1,h2,h3{font-family:var(--display);margin:0;line-height:1.4;text-wrap:balance}
+h1{font-size:clamp(26px,6vw,36px);font-weight:900}
+h1 span{color:var(--rose)}
+.meta{color:var(--sub);font-size:14px}
+p{margin:0}
+.lead{font-size:16px;max-width:62ch}
+h2{font-size:21px;font-weight:900;padding-top:6px}
+.figs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.fig{background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:14px 14px 12px;min-width:0}
+.fig b{display:block;font-family:var(--display);font-weight:900;font-size:clamp(26px,5vw,34px);line-height:1.15;font-variant-numeric:tabular-nums;color:var(--ink)}
+.fig b small{font-size:15px;font-weight:700;margin-left:2px}
+.fig span{font-size:13px;color:var(--sub);line-height:1.5;display:block;margin-top:4px}
+.fig.night{background:var(--night-soft);border-color:transparent}
+.fig.night b{color:var(--night)}
+.note{font-size:13px;color:var(--sub)}
+.apps{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.app{background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;min-width:0}
+.app h3{font-size:16px;font-weight:900;margin-bottom:2px}
+.app p{font-size:14px;color:var(--sub);line-height:1.7}
+.app.main{grid-column:1/-1;border-color:var(--rose);background:var(--rose-soft)}
+.app.main p{color:var(--ink)}
+.tw{overflow-x:auto;border-radius:14px;border:1.5px solid var(--line);background:var(--card)}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:14.5px}
+th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-family:var(--display);font-weight:900;background:var(--rose-soft);white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td:first-child{font-weight:700;white-space:nowrap}
+td.after{color:var(--ok);font-weight:700}
+.cost{background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:6px}
+.cost .big{font-family:var(--display);font-weight:900;font-size:clamp(24px,5vw,30px);color:var(--rose)}
+ul{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:6px}
+.hard{display:grid;grid-template-columns:1fr;gap:10px}
+.hard div{border-left:4px solid var(--rose);background:var(--card);border-radius:0 12px 12px 0;padding:10px 14px}
+.hard b{display:block;font-family:var(--display);font-size:16px}
+.close{background:var(--ok-soft);border-radius:16px;padding:16px 18px;font-weight:500}
+@media (max-width:640px){.figs{grid-template-columns:1fr 1fr}.apps{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <div class="meta">2026年11月3日　作成：きゃ</div>
+    <h1>サクラG 業務アプリ<br><span>成果報告</span></h1>
+    <p class="lead">2026年5月から、お店の仕事をエクセルと手作業からアプリに移してきました。11月3日から新しい記録簿が本番で動き、受付・精算・シフト・公式HP・キャスト管理が1つにつながりました。</p>
+  </header>
+
+  <section class="cost" style="gap:10px">
+    <h2 style="padding-top:0">いちばん伝えたいこと</h2>
+    <p><b>このアプリは、ほとんどを勤務時間の外で作りました。</b>営業が終わったあとの夜中や休みの日に、お店の仕事のしくみを1つずつ考え、作って、本番でためして、うまくいかなければ直す、をくり返してきました。直して出した回数は946回、そのうち461回（約半分）は深夜0〜6時です。</p>
+    <p><b>開発会社に頼めば約1,000万円〜かかる規模のものを、AI（Claude）の月額 約3,500円だけで作りました。</b>5月から半年で約2万円（ほかに少しの追加料金）です。データベース（Supabase）とアプリを置く場所（GitHub）は無料プランの範囲で動かしています。</p>
+    <p><b>内勤の手作業が大きく減りました。</b>エクセル・ブラウザ・LINE を行ったり来たりすることがほとんどなくなり、「次に何を見ればいいか」を考えなくても、ボタン1つでその画面にとべるようにしました。</p>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>かけた時間と作業の量</h2>
+    <div class="figs">
+      <div class="fig"><b>5.5<small>か月</small></b><span>2026年5月16日〜11月3日</span></div>
+      <div class="fig"><b>96<small>日以上</small></b><span>アプリを直して本番に出した日（朝6時までの夜中は前の日として数えた）。考えた・ためした・相談しただけの日は入っていない</span></div>
+      <div class="fig"><b>946<small>回</small></b><span>アプリを直して本番に出した回数（はじめの版・試作もふくむ）</span></div>
+      <div class="fig"><b>約6.5<small>万行</small></b><span>書いたプログラムの量（画面 約4.4万行・データベース 約2.1万行）</span></div>
+      <div class="fig night"><b>461<small>回</small></b><span>そのうち深夜0〜6時に出した回数（49%）。営業のあとに作業していたため</span></div>
+      <div class="fig night"><b>394<small>回</small></b><span>新しい記録簿だけで直して出した回数（10/10〜11/3の25日間）</span></div>
+      <div class="fig"><b>6<small>つ</small></b><span>作ったアプリの数（＋公式HP自動反映）</span></div>
+      <div class="fig"><b>約820<small>時間</small></b><span>作業した時間の目安（その日の最初に出した時刻〜最後に出した時刻の合計。出す前の作業は入っていない）</span></div>
+    </div>
+    <p class="note">数字は、アプリを直して出すたびに残る記録（git）から数えました。しくみを考えた時間、エクセルを調べた時間、本番でためした時間、出す前にやめた作業は記録に残らないので、実際にかけた時間はこれより多いです。</p>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>作ったもの</h2>
+    <div class="apps">
+      <div class="app main"><h3>📒 記録簿</h3><p>受付・精算・回収明細・集計・顧客台帳・キャスト台帳。台帳エクセルのお客さん 21,442人・利用 55,906件を取りこみ、店NG 62人・キャストNG 667件を受付で自動で知らせます。</p></div>
+      <div class="app"><h3>🚪 ポータル</h3><p>全部のアプリの入口。内勤ごとの Google ログインで、だれがどこまで見られるかを分けています。</p></div>
+      <div class="app"><h3>📅 サクラシフト</h3><p>キャストがシフトを出して、内勤が受理。受理すると記録簿と公式HPに自動で入ります。</p></div>
+      <div class="app"><h3>🌐 公式HP自動反映</h3><p>7店舗の公式HPに、シフトを自動で入れます。</p></div>
+      <div class="app"><h3>📝 キャストプロフ</h3><p>キャストのプロフィール・確認フォーム・写真の受け取り。</p></div>
+      <div class="app"><h3>🏠 在籍作成ルーム</h3><p>新人さんの在籍作成を、キャストと内勤で進める場所。</p></div>
+      <div class="app"><h3>🗓️ 内勤カレンダー</h3><p>内勤のシフト。退勤時刻をもとに、各アプリを自動でログアウトします。</p></div>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>内勤の仕事がどれだけ減ったか</h2>
+    <div class="tw"><table>
+      <tr><th>作業</th><th>今まで（電話などで止まらなければ）</th><th>これから</th></tr>
+      <tr><td>シフトを公式HPの全店舗に入れる</td><td>キャスト1人につき 約5分<br><small class="note">例：毎週30人なら 約2.5時間</small></td><td class="after">受理を押すだけ。記録簿と公式HP 7店舗に自動で入る</td></tr>
+      <tr><td>新人さんの在籍作成</td><td>写真のトリミング・ロゴ入れ 約15分<br>公式HPに入れる 約20分<br>媒体に反映 約20分<br><small class="note">1人あたり 約55分</small></td><td class="after">在籍作成ルームと登録の道具で、まとめて進められる</td></tr>
+      <tr><td>精算</td><td>キャスト1人につき 2〜3分（スクロールで探す・未精算を確かめる・LINE でスクショを送る）<br><small class="note">例：1日15人なら 30〜45分</small></td><td class="after">一覧から選ぶだけ。未精算も自動で出る</td></tr>
+      <tr><td>毎日のエクセルのコピー</td><td>毎日 3〜5分（Dropbox への保存も）<br><small class="note">1か月で 約1.5〜2.5時間</small></td><td class="after">毎朝6:30に自動でバックアップ</td></tr>
+      <tr><td>受付でのホテル・住所さがし</td><td>記録簿・台帳・Google を行ったり来たり</td><td class="after">ホテル・住所・地図のURLを登録しておけるので、コピペがほとんどいらない</td></tr>
+      <tr><td>NG客・バック・料金の確認</td><td>台帳エクセルとバック一覧を目で探して手で計算</td><td class="after">コース料金・バック・キャスト情報・お客さん情報を自動で出して計算</td></tr>
+    </table></div>
+    <p class="note">時間は、内勤が実際にかかっていた時間のだいたいの目安です。</p>
+    <h3 style="font-size:17px;margin-top:6px">時間では測れない、楽になったこと</h3>
+    <ul>
+      <li><b>行ったり来たりがなくなった</b>：ブラウザやエクセルを行き来することが減り、ボタン1つで見るべき画面にとべる。「次に何を見ればいいか」を考えなくていい</li>
+      <li><b>エクセルの限界をこえた</b>：エクセルを便利にしようとすると固まってしまい、もう天井だった。アプリにして、速く快適になった。重いエクセルのために、ハイスペックなPCを買う必要もなくなった</li>
+      <li><b>行けるキャストがすぐわかる</b>：絞りこみで、条件に合うキャストをすぐ探せる</li>
+      <li><b>ダミー指名のわずらわしさが減った</b>：18エイティーン・極門のキャストの当てはまり具合を自動で出す</li>
+      <li><b>キャストが今どこにいるか一目でわかる</b>：待機・仕事中・移動中が画面でわかる</li>
+    </ul>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>お店で変わったこと</h2>
+    <div class="tw"><table>
+      <tr><th>仕事</th><th>今まで</th><th>これから</th></tr>
+      <tr><td>シフトの入力</td><td>内勤が記録簿・HPに手で入れる</td><td class="after">キャストアップがあれば手入力 0</td></tr>
+      <tr><td>NG客の確認</td><td>台帳エクセルを目で探す</td><td class="after">電話番号・似た名前で自動で警告。店NGは受付できない</td></tr>
+      <tr><td>確認電話</td><td>時間を覚えておく</td><td class="after">時間になるとメールが届く</td></tr>
+      <tr><td>バック・報酬の計算</td><td>エクセルで手計算</td><td class="after">ランクと特例から自動。変えた理由（ヒアリング）も残る</td></tr>
+      <tr><td>精算の証拠</td><td>LINE の写真</td><td class="after">写真を精算の画面に保存（2か月で自動で消える）</td></tr>
+      <tr><td>データの保存</td><td>毎日エクセルをコピーして Dropbox へ</td><td class="after">毎朝6:30に自動でバックアップ（鍵つき）</td></tr>
+      <tr><td>お客さん情報の管理</td><td>エクセルを開ければだれでも見られる</td><td class="after">登録したお店の端末だけ・内勤ごとのログイン・退勤後は自動ログアウト</td></tr>
+      <tr><td>練習</td><td>本番でいきなり</td><td class="after">本物と同じ画面の練習モード（1時間で消える）</td></tr>
+    </table></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>お金の比べ</h2>
+    <div class="tw"><table>
+      <tr><th></th><th>開発会社に頼んだ場合（目安）</th><th>今回</th></tr>
+      <tr><td>作る費用</td><td>少なく見ても 10人月以上・<b>約1,000万円〜</b></td><td class="after">AI（Claude）月額 約3,500円 × 半年 ＝ <b>約2万円</b>（＋少しの追加料金）</td></tr>
+      <tr><td>毎月の費用</td><td>保守・サーバー代が別にかかる</td><td class="after">データベース・置き場所は無料プランの範囲</td></tr>
+      <tr><td>直すまでの早さ</td><td>見積もり・発注・待ち</td><td class="after">気づいたその日に直して出せる（946回）</td></tr>
+    </table></div>
+    <p class="note">目安は見積もりではありません。開発会社の一般的な単価（エンジニア1人・1か月で80〜120万円）と、ログイン・権限・端末の制限・バックアップまで入った6つのアプリという規模から出しました。</p>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>見えないところで大変だったこと</h2>
+    <div class="hard">
+      <div><b>NG客を1人も取りこぼさない</b>5万5千行の台帳エクセルは、書き方が人によってばらばらでした。電話の欄の「※出禁」だけの行や「↑同一人物」の書き方まで読み分けて、取りこみの前と後で人数を数えて合わせました。</div>
+      <div><b>お金の記録を消さない・ずらさない</b>記録は消さずに残し、バックや条件は「だれが・いつ・どのヒアリングで」変えたかを必ず残すしくみにしました。</div>
+      <div><b>お金をかけずに安全に</b>無料のサービスの範囲で、毎朝の自動バックアップ・端末のロック・内勤ごとのログインを作りました。</div>
+      <div><b>営業を止めずに切りかえ</b>閉店後の夜中に、テストのデータを消し、台帳を入れなおし、数を確かめて本番に切りかえました。</div>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>これから</h2>
+    <ul>
+      <li>キャッシュフロー・キキララ入出金表をアプリに（今はエクセル）</li>
+      <li>集計を11月からアプリの数字に切りかえ、店舗×媒体の集計を追加</li>
+      <li>自社の WEB予約ページ（予約が記録簿に直接届く）</li>
+      <li>キャストが自分の予約を見られる画面、内勤のタスク管理</li>
+    </ul>
+  </section>
+</div>
+</body>
+</html>
