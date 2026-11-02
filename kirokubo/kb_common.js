@@ -79,7 +79,7 @@
   const OWNER_NAME = "社長", IS_OWNER = GOOGLE && CLAIM.staff_role === "owner";   // 共通アカウントでは、社長にはなれない（Googleだけ）
   // 🔑 切りかえ（本番）のスイッチ：true にすると、内勤（Googleの内勤・共通アカウントの すや など）も 受付・精算・顧客台帳 を開けて直せる
   //    回収明細・集計・バックアップ・台帳の取りこみ・端末の登録は、ずっと店長・社長だけ
-  const STAFF_OPEN = false;
+  const STAFF_OPEN = true;
   const STAFF_PAGES = ["kiroku.html", "settle.html", "customers.html"];
   const PAGE = location.pathname.split("/").pop() || "index.html";
   const IS_BOSS = GOOGLE && ["manager", "owner"].includes(CLAIM.staff_role);
