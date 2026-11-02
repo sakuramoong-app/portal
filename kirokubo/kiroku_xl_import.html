@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>記録簿エクセルの取りこみ│サクラG</title>
+<link rel="icon" type="image/png" href="../favicon.png?v=3">
+<link rel="stylesheet" href="kb.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
+<script src="kb_common.js?v=15"></script>
+<style>
+  body{font-size:14.5px;}
+  .wrap{max-width:760px;}
+  .box{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;}
+  .box h2{font-size:16px;color:var(--pink-deep);margin-bottom:8px;}
+  .lead{font-size:13px;color:var(--sub);line-height:1.7;margin-bottom:8px;}
+  .ok{color:#1f9d6b;font-weight:800;} .ng{color:#d9534f;font-weight:800;}
+  .bar{height:12px;background:#F6E3EA;border-radius:99px;overflow:hidden;margin:8px 0;} .bar > div{height:100%;background:var(--pink);width:0;transition:width .3s;}
+  table{border-collapse:collapse;font-size:13px;} td{padding:3px 10px 3px 0;}
+  select,input[type=date]{font-family:inherit;font-size:14px;padding:4px 8px;border:1.5px solid var(--line);border-radius:8px;}
+</style>
+</head>
+<body>
+<!-- 記録簿エクセル（1か月）を、このPCで変換した JSON（kiroku_YYYYMM.json）から新しい記録簿に入れる（SQL 203）。
+     お客さんの情報はこのページには入っていない（選んだファイルから読むだけ）。店長・社長だけ・登録した端末から。 -->
+<div class="wrap">
+  <header class="kbh"><h1>📥 記録簿エクセルの取りこみ</h1></header>
+  <div id="gate" class="gate">読み込み中…</div>
+  <div id="main" style="display:none">
+    <div class="box">
+      <h2>① ファイルを選ぶ</h2>
+      <p class="lead">Claude が作った <b>kiroku_YYYYMM.json</b> を選んでください（記録簿エクセルを、このPCの中で取りこみ用の形にしたものです）。</p>
+      <input type="file" id="file" accept=".json,application/json">
+      <div id="sum" style="margin-top:8px"></div>
+    </div>
+    <div class="box" id="mapBox" style="display:none">
+      <h2>② 内勤の名前</h2>
+      <p class="lead">エクセルの日払いの名前が、だれなのかを選んでください。</p>
+      <table id="mapT"></table>
+    </div>
+    <div class="box" id="runBox" style="display:none">
+      <h2>③ 取りこむ</h2>
+      <p class="lead">日付を選ぶと、その日だけ入れます（ためしの1日）。空なら全部の日と、まだ終わっていない未精算を入れます。<br>
+        同じ日をもう一度入れると、その日のエクセルの分を消して入れなおします。手で入れた予約は消えません。</p>
+      <div style="margin-bottom:8px">日付：<input type="date" id="only"> <small class="lead">（空＝全部）</small></div>
+      <button class="btn btn-primary" id="go" onclick="run()">📥 取りこむ</button>
+      <div class="bar"><div id="fill"></div></div>
+      <div id="prog" class="lead"></div>
+      <div id="res"></div>
+    </div>
+  </div>
+</div>
+<script>
+const { sb, q, esc, toast } = KB;
+const $ = id => document.getElementById(id);
+let J = null;
+const STAFF = [["", "（入れない）"], ["kya", "きゃ"], ["suya", "すや"], ["ran", "らん"], ["kami", "かみ"], ["waka", "わか"]];
+const GUESS = { "蘭子": "ran", "上川": "kami", "若林": "waka" };
+async function init(){
+  if(!(await KB.staffSession()) || !KB.IS_BOSS){ $("gate").textContent = "ポータルから開いてください（店長・社長だけ・登録した端末から開けます）"; return; }
+  $("gate").style.display = "none"; $("main").style.display = "";
+}
+$("file").addEventListener("change", async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{ J = JSON.parse(await f.text()); if(!J || !Array.isArray(J.days) || !/^xl\d{6}$/.test(J.src || "")) throw new Error("形がちがいます"); }
+  catch(err){ $("sum").innerHTML = `<span class="ng">読めませんでした：${esc(err.message || err)}</span>`; J = null; return; }
+  const res = J.days.flatMap(d => d.res || []);
+  const cnt = fn => res.filter(fn).length;
+  const sum = (arr, k) => arr.reduce((a, x) => a + (Number(x[k]) || 0), 0);
+  const done = res.filter(r => r.status === "done");
+  $("sum").innerHTML = `<table>
+    <tr><td>月</td><td><b>${esc(J.month)}</b>（${J.days.length}日分）</td></tr>
+    <tr><td>予約</td><td><b>${res.length.toLocaleString()}</b> 件（終了 ${done.length}・キャンセル ${cnt(r => r.status === "cancel")}・トビ ${cnt(r => r.status === "tobi")}）</td></tr>
+    <tr><td>総額（終了の分）</td><td>${sum(done, "total").toLocaleString()} 円</td></tr>
+    <tr><td>キャスト報酬（終了の分）</td><td>${sum(done, "back").toLocaleString()} 円</td></tr>
+    <tr><td>雑費</td><td>${J.days.reduce((a, d) => a + sum(d.casts || [], "zappi"), 0).toLocaleString()} 円</td></tr>
+    <tr><td>内勤の日払い</td><td>${J.days.reduce((a, d) => a + sum(d.staff || [], "pay"), 0).toLocaleString()} 円</td></tr>
+    <tr><td>お店がわからない予約</td><td>${cnt(r => !r.store)} 件</td></tr>
+    <tr><td>まだ終わっていない未精算</td><td>${(J.uns || []).length} 件</td></tr></table>`;
+  const names = [...new Set(J.days.flatMap(d => (d.staff || []).map(s => s.nm)))];
+  $("mapT").innerHTML = names.map((n, i) => `<tr><td><b>${esc(n)}</b></td><td><select id="mp${i}" data-nm="${esc(n)}">${STAFF.map(([v, l]) => `<option value="${v}" ${GUESS[n] === v ? "selected" : ""}>${l}</option>`).join("")}</select></td></tr>`).join("") || `<tr><td>日払いはありません</td></tr>`;
+  $("mapBox").style.display = ""; $("runBox").style.display = "";
+});
+async function run(){
+  if(!J) return;
+  const only = $("only").value;
+  const days = only ? J.days.filter(d => d.d === only) : J.days;
+  if(!days.length){ toast("その日はファイルにありません"); return; }
+  const map = {}; document.querySelectorAll("#mapT select").forEach(s => { if(s.value) map[s.dataset.nm] = s.value; });
+  if(!confirm(only ? `${only} の1日分を取りこみます。よろしいですか？` : `${J.month} の ${days.length}日分と、まだ終わっていない未精算を取りこみます。よろしいですか？`)) return;
+  $("go").disabled = true; $("res").innerHTML = "";
+  const tot = { res: 0, newCustomers: 0, castDays: 0, staff: 0, missStore: 0 }, missCast = new Set(), missStaff = new Set(), by = KB.operatorName();
+  for(let i = 0; i < days.length; i++){
+    let ok = false, err = "";
+    for(let t = 0; t < 3 && !ok; t++){
+      try{ const r = q(await sb.rpc("kb_xl_day_import", { p_src: J.src, p_day: days[i], p_staffmap: map, p_by: by }));
+        Object.keys(tot).forEach(k => tot[k] += r[k] || 0); (r.missCast || []).forEach(x => missCast.add(x)); (r.missStaff || []).forEach(x => missStaff.add(x)); ok = true; }
+      catch(e){ err = e.message || String(e); await new Promise(r => setTimeout(r, 1500)); }
+    }
+    if(!ok){ $("res").innerHTML = `<span class="ng">${esc(days[i].d)} で止まりました：${esc(err)}<br>（SQL 203 は実行ずみ？）もう一度「取りこむ」を押すと、その日から入れなおせます。</span>`; $("go").disabled = false; return; }
+    $("fill").style.width = Math.round((i + 1) / days.length * 100) + "%";
+    $("prog").textContent = `${days[i].d}　${i + 1} / ${days.length} 日`;
+  }
+  let uns = null;
+  if(!only){ try{ uns = q(await sb.rpc("kb_xl_uns_import", { p_src: J.src, p_rows: J.uns || [], p_by: by })); (uns.missCast || []).forEach(x => missCast.add(x)); }catch(e){ uns = { err: e.message || String(e) }; } }
+  $("res").innerHTML = `<div class="ok">✅ 取りこみが終わりました</div><table>
+    <tr><td>予約</td><td>${tot.res.toLocaleString()} 件</td></tr>
+    <tr><td>新しく作ったお客さん</td><td>${tot.newCustomers} 人</td></tr>
+    <tr><td>キャストのその日（精算済）</td><td>${tot.castDays} 件</td></tr>
+    <tr><td>内勤の日払い</td><td>${tot.staff} 件</td></tr>
+    ${uns ? `<tr><td>未精算</td><td>${uns.err ? `<span class="ng">${esc(uns.err)}</span>` : uns.uns + " 件"}</td></tr>` : ""}
+    <tr><td>お店がわからず入れなかった予約</td><td>${tot.missStore ? `<span class="ng">${tot.missStore} 件</span>` : "0"}</td></tr>
+    <tr><td>見つからなかったキャスト</td><td>${missCast.size ? `<span class="ng">${[...missCast].map(esc).join("、")}</span>（予約は入れて、備考に名前を残しました）` : "なし"}</td></tr>
+    <tr><td>入れなかった内勤</td><td>${missStaff.size ? [...missStaff].map(esc).join("、") : "なし"}</td></tr></table>
+    <p class="lead" style="margin-top:8px">📒 <a href="kiroku.html">記録簿</a> でその日を開いて、エクセルと見くらべてください。</p>`;
+  $("go").disabled = false;
+}
+init();
+</script>
+</body>
+</html>
