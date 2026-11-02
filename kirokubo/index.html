@@ -666,7 +666,8 @@ function termsKindFields(){
   const F = {
     transport_back: `<div class="f"><label>どれだけバック？</label><select id="tk_rate" onchange="$('tk_tamt_wrap').style.display=this.value==='amount'?'':'none'">
                        <option value="1">全額</option><option value="0.5">半額</option><option value="amount">金額を決める</option></select></div>
-                     <div class="f" id="tk_tamt_wrap" style="display:none"><label>バックする金額（円）</label><input id="tk_tamt" type="number" min="0" step="100"></div>`,
+                     <div class="f" id="tk_tamt_wrap" style="display:none"><label>バックする金額（円）</label><input id="tk_tamt" type="number" min="0" step="100"></div>
+                     <div class="f"><label>交通費が何円以上のときだけ？（空ならいつでも）</label><input id="tk_tmin" type="number" min="0" step="500"></div>`,
     back_add: `<div class="f"><label>上乗せの金額（円）</label><input id="tk_amount" type="number" min="0" step="500"></div>
                <div class="f"><label>何分以上のとき（空ならいつも）</label><input id="tk_min" type="number" min="0" step="30"></div>
                <div class="f"><label>どの店のとき（空ならどこでも）</label><select id="tk_store"><option value="">どこでも</option>${stores.map(s=>`<option value="${s.key}">${esc(s.label)}</option>`).join("")}</select></div>`,
@@ -688,6 +689,7 @@ function termsAddRule(){
     // 全額（rate 1）・半額（rate 0.5）・金額を決める（amount 円）
     if($("tk_rate").value === "amount"){ if(!num("tk_tamt")){ toast("バックする金額を入れてください"); return; } params = { amount: num("tk_tamt") }; }
     else params = { rate: Number($("tk_rate").value) };
+    if(num("tk_tmin")) params.min_transport = num("tk_tmin");   // 交通費が○円以上のときだけ（受付・精算で見る）
   }
   if(k === "back_add"){ if(!num("tk_amount")){ toast("上乗せの金額を入れてください"); return; }
     params = { amount: num("tk_amount") }; if(num("tk_min")) params.min_minutes = num("tk_min"); if($("tk_store").value) params.store = $("tk_store").value; }
