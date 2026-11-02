@@ -194,10 +194,7 @@
     <div class="foot">
       <div id="expiryInfo"></div>
       <button id="logoutBtn">ログアウト</button>
-      <a href="iken.html" target="_blank" rel="noopener" style="font-size:13px;font-weight:800;color:#e5638c;text-decoration:none;margin-top:4px;">📮 意見箱（アプリへの意見・要望）<span id="fbBadge" style="display:none;margin-left:6px;background:#E05260;color:#fff;border-radius:99px;padding:1px 8px;font-size:12px;"></span></a>
-      <a href="newcast.html" target="_blank" rel="noopener" style="font-size:13px;font-weight:800;color:#e5638c;text-decoration:none;">🆕 新人が入ったら（内勤の作業）</a>
-      <a href="card15.html" target="_blank" rel="noopener" style="font-size:13px;font-weight:800;color:#e5638c;text-decoration:none;">💳 カード15%計算</a>
-      <a href="worklog.html" target="_blank" rel="noopener" style="font-size:12px;font-weight:700;color:var(--text2);text-decoration:none;">🛠 店長作業ログ</a>
+      <a href="newcast.html" target="_blank" rel="noopener" style="font-size:13px;font-weight:800;color:#e5638c;text-decoration:none;margin-top:4px;">🆕 新人が入ったら（内勤の作業）</a>
       <!-- テスト中のページ（店長「きゃ」のときだけ出す。登録した端末でしか開けないかを確かめる用） -->
       <div id="testLinks" style="display:none;margin-top:10px;padding:10px 14px;border:1.5px dashed #e5638c;border-radius:14px;font-size:13px;line-height:2;text-align:left;">
         <b style="color:#e5638c;">🧪 テスト中（店長・社長だけ）</b><br>
@@ -372,6 +369,12 @@
       url: "https://sakuramoong-app.github.io/sakura-newcast/staff.html" },
     { key: "kiroku", name: "記録簿",         icon: "📒", color: "--peach",
       url: "https://sakuramoong-app.github.io/portal/kirokubo/kiroku.html" },
+    { key: "guide",  name: "記録簿の使い方", icon: "📖", color: "--lemon",
+      url: "https://sakuramoong-app.github.io/portal/guide.html" },
+    { key: "iken",   name: "意見箱",         icon: "📮", color: "--pink",
+      url: "https://sakuramoong-app.github.io/portal/iken.html" },
+    { key: "worklog", name: "店長作業ログ",  icon: "🛠️", color: "--sky",
+      url: "https://sakuramoong-app.github.io/portal/worklog.html" },
   ];
 
   const ring = document.getElementById("ring");
@@ -380,6 +383,7 @@
   function renderRing() {
     const css = getComputedStyle(document.documentElement);
     const n = APPS.length;
+    if (n > 6) ring.style.setProperty("--btn", "clamp(54px, 15vw, 70px)");   // 数が多いときは丸を少し小さく（名前が重ならないように）
     APPS.forEach((a, i) => {
       // 12時の位置から時計回りに、等分した角度に置く
       const angle = (-90 + (360 / n) * i) * Math.PI / 180;
@@ -391,7 +395,8 @@
       el.style.setProperty("--y", `calc(var(--size) * ${(Math.sin(angle) * r / 100).toFixed(4)})`);
       el.style.setProperty("--c", `var(${a.color})`);
       el.style.setProperty("--cs", css.getPropertyValue(a.color + "-deep").trim() + "66");
-      el.innerHTML = `<span class="circle">${a.icon}</span><span class="name">${a.name}</span>`;
+      el.innerHTML = `<span class="circle">${a.icon}</span><span class="name">${a.name}</span>`
+        + (a.key === "iken" ? `<span id="fbBadge" style="display:none;background:#E05260;color:#fff;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:800;"></span>` : "");   // 意見箱の未読（きゃのとき）
       el.addEventListener("click", (e) => { e.stopPropagation(); openApp(a, el); });
       ring.appendChild(el);
     });

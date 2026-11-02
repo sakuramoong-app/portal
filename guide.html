@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="icon" type="image/png" href="favicon.png?v=3">
+<!-- 記録簿の使い方（内勤向け）。claude.ai のお知らせ（CkkyyxTtmRcaWTMeCn2Spw）と同じ中身。ポータルの MENU から開く -->
+<title>記録簿の使い方│サクラG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<style>
+/* layout: one column like a staff-room notice board; tab switch 内勤 / 社長; colored chips copy the app's own warning colors */
+:root{
+  --bg:#FBF6F8; --card:#FFFFFF; --ink:#3A2F35; --sub:#76666E; --line:#EFDCE3;
+  --pink:#D9547F; --pink-soft:#FDE7EF;
+  --ng:#B3263A; --ng-bg:#FFE8EC; --ng-line:#F09AAA;
+  --cng:#9A5A00; --cng-bg:#FFF4E2; --cng-line:#F2B35C;
+  --memo:#7A5C00; --memo-bg:#FFF8D6; --memo-line:#E8C24A;
+  --info:#1E5E99; --info-bg:#E8F2FC; --info-line:#9CC6EE;
+  --ok:#1F7A55; --ok-bg:#E3F5EC; --no:#9A8F94; --no-bg:#F3EEF0;
+  --display:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif;
+  --body:"Noto Sans JP","Hiragino Sans","Yu Gothic",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#1D181B; --card:#272024; --ink:#F2E9ED; --sub:#B9A9B1; --line:#3E333A;
+  --pink:#F28AAD; --pink-soft:#3A2630;
+  --ng:#FF9AA8; --ng-bg:#3D1F25; --ng-line:#7A3442;
+  --cng:#F5C27A; --cng-bg:#3A2C17; --cng-line:#6E5222;
+  --memo:#F0D77A; --memo-bg:#36301A; --memo-line:#6B5B22;
+  --info:#9CCBF5; --info-bg:#1C2B3A; --info-line:#2F4D6B;
+  --ok:#8FDDB6; --ok-bg:#183327; --no:#8E8288; --no-bg:#2E272B; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#1D181B; --card:#272024; --ink:#F2E9ED; --sub:#B9A9B1; --line:#3E333A;
+  --pink:#F28AAD; --pink-soft:#3A2630;
+  --ng:#FF9AA8; --ng-bg:#3D1F25; --ng-line:#7A3442;
+  --cng:#F5C27A; --cng-bg:#3A2C17; --cng-line:#6E5222;
+  --memo:#F0D77A; --memo-bg:#36301A; --memo-line:#6B5B22;
+  --info:#9CCBF5; --info-bg:#1C2B3A; --info-line:#2F4D6B;
+  --ok:#8FDDB6; --ok-bg:#183327; --no:#8E8288; --no-bg:#2E272B; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15.5px;line-height:1.8;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;line-height:1.4}
+h1{font-size:clamp(24px,6vw,32px);font-weight:900;color:var(--pink)}
+.date{font-size:13px;color:var(--sub);letter-spacing:.04em}
+.lead{margin:6px 0 0;color:var(--sub)}
+.tabs{display:flex;gap:8px;position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:8px}
+.tabs a{flex:1;text-align:center;text-decoration:none;font-family:var(--display);font-weight:900;font-size:17px;padding:10px 8px;border-radius:999px;border:2px solid var(--line);color:var(--sub);background:var(--card)}
+.tabs a[aria-current="page"]{background:var(--pink);border-color:var(--pink);color:#fff}
+.tabs a:focus-visible{outline:3px solid var(--info-line);outline-offset:2px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+section.card{background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:18px 18px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+section.card h2{font-size:20px;font-weight:900;display:flex;align-items:center;gap:8px}
+section.card h2 .ic{font-size:22px}
+p{margin:0}
+ul{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:4px}
+b.em{color:var(--pink)}
+.big{background:var(--pink-soft);border-radius:14px;padding:12px 14px;font-weight:700}
+.steps{list-style:none;padding:0;counter-reset:s;gap:8px}
+.steps li{counter-increment:s;display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:start}
+.steps li::before{content:counter(s);width:30px;height:30px;border-radius:50%;background:var(--pink);color:#fff;font-family:var(--display);font-weight:900;display:grid;place-items:center;font-size:15px;margin-top:1px}
+.chip{border-radius:12px;padding:8px 12px;border:1.5px solid;font-weight:700;font-size:14.5px}
+.chip small{display:block;font-weight:500;color:var(--sub);font-size:13px}
+.c-ng{background:var(--ng-bg);border-color:var(--ng-line);color:var(--ng)}
+.c-cng{background:var(--cng-bg);border-color:var(--cng-line);color:var(--cng)}
+.c-memo{background:var(--memo-bg);border-color:var(--memo-line);color:var(--memo)}
+.c-info{background:var(--info-bg);border-color:var(--info-line);color:var(--info)}
+.legend{display:grid;gap:8px}
+.tw{overflow-x:auto;border-radius:12px;border:1.5px solid var(--line)}
+table{border-collapse:collapse;width:100%;min-width:520px;font-size:14px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:center;vertical-align:middle}
+th{background:var(--pink-soft);font-family:var(--display);font-weight:900;white-space:nowrap}
+td:first-child,th:first-child{text-align:left;font-weight:700;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+.y{display:inline-block;background:var(--ok-bg);color:var(--ok);border-radius:8px;padding:1px 8px;font-weight:700;font-size:13px}
+.n{display:inline-block;background:var(--no-bg);color:var(--no);border-radius:8px;padding:1px 8px;font-weight:700;font-size:13px}
+.note{font-size:13px;color:var(--sub)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.two > div{min-width:0}
+.box{border:1.5px dashed var(--line);border-radius:14px;padding:10px 12px}
+.box h3{font-size:15px;margin-bottom:4px}
+.url{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;background:var(--pink-soft);border-radius:8px;padding:2px 8px;word-break:break-all}
+.lock{display:flex;gap:12px;align-items:center;background:var(--info-bg);border:1.5px solid var(--info-line);border-radius:14px;padding:12px 14px;color:var(--info);font-weight:700}
+.lock .t{font-family:var(--display);font-size:30px;font-weight:900;line-height:1;white-space:nowrap}
+@media (max-width:560px){.two{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:no-preference){.tabs a{transition:background .15s,color .15s}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="date">2026年11月3日（火）から</div>
+    <h1>📒 新しい記録簿のお知らせ（内勤のみなさんへ）</h1>
+    <p class="lead">11/3 から、記録簿は<b>アプリだけ</b>で使います。エクセルの記録簿には書きません。</p>
+  </header>
+
+
+
+  <!-- ===================== 内勤 ===================== -->
+  <div id="v-naikin" class="wrap" style="gap:18px">
+
+    <section class="card">
+      <h2><span class="ic">🌸</span>記録簿アプリ、解禁します</h2>
+      <p class="big">今日から、ポータルは全員、教えてもらった<b>自分の Google アカウント</b>でログインしてください。</p>
+      <p>新しい記録簿は、直感で使えると思います。入れ忘れが出ないしくみになっているので、安心して使ってみてください。</p>
+      <ul>
+        <li>シフトアプリから出されたシフトは、記録簿に<b>自動で入ります</b>。キャストアップがある限り、シフトの手入力は<b>0</b>になりました</li>
+        <li>確認電話は、時間になると<b>メールが来る</b>ようになりました</li>
+        <li>エクセルの記録簿に入れてあった<b>キャストごとの備考・シフトの特記事項・本日のお知らせは、うつしていません</b>。手があいた時に、11月分（12月も入れた記憶がある人は12月も）をエクセルから手で入れてください</li>
+        <li>不安な人は、記録簿の上のタブの<b>「🧪 練習」</b>で練習できます。本物と同じ画面（今日のキャストの枠）で受付・精算をためせます。入れたものは本番には入らず、<b>1時間で自動で消えます</b>。お客さんの情報・NG・未精算も変わりません</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2><span class="ic">📝</span>しばらくの間、お願いしたいこと</h2>
+      <ol class="steps">
+        <li><span><b>11月の予約は、まだアプリに入っていません。</b>手があいた時に、エクセルの11月の記録簿を見ながら、アプリに手で入れてください</span></li>
+        <li><span><b>キャストのバック・顧客台帳</b>は、しばらくの間エクセルも開いて、合っているか確かめてください。ちがっていたら修正をお願いします</span></li>
+        <li><span><b>エクセルのコピー・Dropbox の作業は 11/3 までです。</b>昼1の「当月ファイルのエクセル（記録簿・台帳など）を Dドライブにコピー」と「Dropbox にエクセルをアップロード」は、<b>11/3 まで</b>やってください。<b>11/4 からはしなくて大丈夫です</b>（記録簿のデータは毎朝自動でバックアップされます）。ただし、当月ファイルのエクセルの中身を変えた時は、Dドライブにもコピーしておいてください</span></li>
+        <li><span><b>キャッシュフロー・キキララ入出金表は、今までどおりエクセル</b>で入れてください（アプリにするまで、まだ時間がかかります）。この2つは<b>11/4 からも毎日 Dドライブにコピー</b>、キャッシュフローは<b>15日と月末に Dropbox に入れる</b>のも今までどおり続けてください</span></li>
+        <li><span><b>精算の時は、お金の写真を必ず残してください。</b>送られてきた写真を精算の画面に貼りつけるか、回収の時にスマホで 記録簿 → 精算 → そのキャストの「📷 写真をとる」で撮ってください（スマホのアルバムには残りません）</span></li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2><span class="ic">🔑</span>入り方</h2>
+      <ol class="steps">
+        <li><span>ポータルを開く <span class="url">sakuramoong-app.github.io/portal/</span></span></li>
+        <li><span><b>「Googleでログイン」</b>を押して、自分の Gmail で入る</span></li>
+        <li><span>まんなかの丸いメニュー → <b>📒 記録簿</b></span></li>
+      </ol>
+      <p class="note">上のタブ（受付・精算・顧客台帳…）は、押すと新しいタブで開きます。ほかの人が入れた予約や精算は、自分の画面にも自動で出ます。</p>
+    </section>
+
+    <section class="card">
+      <h2><span class="ic">☎️</span>受付は、この順番で</h2>
+      <ol class="steps">
+        <li><span><b>電話番号</b>を入れる → これまでの利用・NG・メモが出ます</span></li>
+        <li><span><b>店舗</b>を選ぶ。<b class="em">ダミー店か、それ以外か</b>がいちばん大事です。ダミー店のときは、番号と店舗を入れると選ぶものが出てきます</span></li>
+        <li><span><b>名前も必ず入れる</b>。似た名前のお客さんがいると知らせが出ます（番号を変えてくる店NGの人を見つけるため）</span></li>
+        <li><span>キャスト・時間・コースなどを入れて保存</span></li>
+      </ol>
+      <p class="big">慣れないうちは、まず電話番号 → 店舗。この順番に慣れてください。</p>
+      <p class="chip c-info">👥 予約を取る時は、<b>顧客台帳も見に行くくせ</b>をつけてください。受付の画面の「👥 顧客台帳で開く」から、これまでの利用・キャストNG・メモを全部見られます。</p>
+    </section>
+
+    <section class="card">
+      <h2><span class="ic">🚦</span>受付で出る知らせの色</h2>
+      <div class="legend">
+        <div class="chip c-ng">⚠️ 店NG（出禁）<small>このお客さんは受けません。保存できません。</small></div>
+        <div class="chip c-cng">🙅 キャストNG<small>そのキャストには付けません。ほかのキャストなら受けられます。</small></div>
+        <div class="chip c-memo">📝 お客さんメモ<small>エクセル台帳の電話の欄の文字（「こっちから電話かけないで」など）や、⚠️注意の言葉もここに出ます。</small></div>
+        <div class="chip c-info">📒 エクセルの台帳も確認してください<small>はじめての番号・似た番号・似た名前のとき。番号を変えたと言っている、様子があやしいときは、キャストを行かせる前にエクセルの台帳も見てください。</small></div>
+      </div>
+      <p>NG がまちがいだったときは、受付の画面の<b>「NGを外す（まちがいだった）」</b>でその場で外せます（スマホでも）。</p>
+      <p class="note">エクセルの台帳は「見て確かめる用」です。お客さんのことは、アプリの顧客台帳に書きます。</p>
+    </section>
+
+    <section class="card">
+      <h2><span class="ic">✨</span>エクセルの時から変わったこと</h2>
+      <ul>
+        <li>「NG客」は<b>「店NG」</b>と<b>「キャストNG」</b>の2つの呼び方になりました</li>
+        <li><b>新規・店リピ・本指名</b>は、これまでの利用から自動で決まります</li>
+        <li><b>確認電話</b>：「⏰ この状態の時刻」を入れると、その時刻に受付の画面の上に赤い帯が出て、通知メールも届きます。入れなければ、いつもの時刻（1時間前など）に出ます</li>
+        <li>キャストのバック・報酬は自動で計算します（手で直すこともできます）</li>
+        <li>出勤時間は、サクラシフトから自動で入ります</li>
+        <li>細かいデータは、みなさんに直してもらう前提で、あえて完璧にはしていません。「この条件はチェックボックスがいい」「これは表示だけでいい」「NG がまちがって付いている → 外す」など、気づいたら直してください</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2><span class="ic">💴</span>精算</h2>
+      <ul>
+        <li>キャストから送られてきた写真は、<b>精算の画面にコピーして貼りつけ</b>ます</li>
+        <li>スマホなら、精算の画面でそのキャストを開いて<b>カメラ</b>を押すと、その場で撮れます。写真は自分のスマホには残らず、アプリにそのまま保存されます</li>
+        <li>領収書がある時は、必ず封筒に同封してください</li>
+      </ul>
+      <div class="two">
+        <div class="box"><h3>👛 日払い</h3><p>エクセルの記録簿で入れていたのと同じ内容を入れます。<b>キキララから取った／回収金から取った</b> → <b>「払った」にチェック</b>。日払いは PC で入れます。</p></div>
+        <div class="box"><h3>🕒 遅刻・早退・欠勤</h3><p>キャストごとの枠の<b>「勤怠」</b>から、または<b>「今いない」の名前を押して</b>登録します。</p></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2><span class="ic">📱</span>スマホで受付するとき</h2>
+      <div class="lock"><span class="t">1分</span><span>さわらないと<b>1分でロック</b>がかかります。キャストや近くの人に画面を見られないためです。開けるときは、ロックの合言葉を入れます。</span></div>
+      <ul>
+        <li>スマホで開けるのは、<b>ポータル・受付・精算・キャスト台帳</b>、内勤カレンダー、在籍作成ルームです</li>
+        <li>スマホでは、かな検索・今日の数字・日払いはかくれています（画面を見やすくするため）</li>
+        <li>顧客台帳のページはスマホでは開けません。NG を外すのは受付の画面でできます</li>
+        <li>キャストのいる場所では、画面を出しっぱなしにしないでください</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2><span class="ic">👀</span>だれが・どの端末で・何を見られるか</h2>
+      <div class="tw"><table>
+        <tr><th>ページ</th><th>内勤</th><th>店長</th><th>社長</th></tr>
+        <tr><td>受付・精算</td><td><span class="y">PC・スマホ</span></td><td><span class="y">PC・スマホ</span></td><td><span class="y">PC・スマホ</span></td></tr>
+        <tr><td>顧客台帳</td><td><span class="y">PC</span></td><td><span class="y">PC</span></td><td><span class="y">PC</span></td></tr>
+        <tr><td>キャスト台帳</td><td><span class="y">見るだけ</span></td><td><span class="y">直せる</span></td><td><span class="y">直せる</span></td></tr>
+        <tr><td>回収明細</td><td><span class="n">見られない</span></td><td><span class="y">PC・スマホ＋合言葉</span></td><td><span class="y">PC・スマホ＋合言葉</span></td></tr>
+        <tr><td>集計・バックアップ</td><td><span class="n">見られない</span></td><td><span class="y">PC＋合言葉</span></td><td><span class="y">PC＋合言葉</span></td></tr>
+      </table></div>
+      <p class="note">お客さんの情報があるページは、<b>登録したお店の端末</b>でしか開けません。家のスマホ・PC では開けません。</p>
+    </section>
+
+    <section class="card">
+      <h2><span class="ic">🚪</span>自動ログアウト</h2>
+      <p>内勤カレンダーの<b>退勤時刻の5分後</b>に、自動でログアウトします。退勤の5分前から「まもなくログアウト」と出るので、まだ作業する時は<b>「30分のばす」</b>を押してください。</p>
+    </section>
+
+    <section class="card">
+      <h2><span class="ic">🆘</span>こまったとき</h2>
+      <ul>
+        <li><b>「登録した端末ではありません」と出た</b> → ブラウザのデータを消した・シークレットウィンドウ・ちがうブラウザ（Chrome と Edge）が原因です。店長に連絡してください</li>
+        <li><b>NG がまちがっている</b> → 受付の画面で「NGを外す（まちがいだった）」</li>
+        <li><b>お客さんのデータが少しちがう</b> → 気づいた人が直してOKです</li>
+        <li><b>操作がこわい</b> → 上のタブの「🧪 練習」で、何回でも練習できます（黄色い帯が出ている間は練習です）</li>
+      </ul>
+    </section>
+  </div>
+
+</div>
+</body>
+</html>
