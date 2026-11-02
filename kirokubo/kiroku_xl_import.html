@@ -58,7 +58,7 @@ let J = null;
 const STAFF = [["", "（入れない）"], ["kya", "きゃ"], ["suya", "すや"], ["ran", "らん"], ["kami", "かみ"], ["waka", "わか"]];
 const GUESS = { "蘭子": "ran", "上川": "kami", "若林": "waka" };
 async function init(){
-  if(!(await KB.staffSession()) || !KB.IS_BOSS){ $("gate").textContent = "ポータルから開いてください（店長・社長だけ・登録した端末から開けます）"; return; }
+  if(!(await KB.staffSession()) || !KB.CAN_EDIT){   // このページは STAFF_PAGES にないので、CAN_EDIT ＝ 店長・社長 $("gate").textContent = "ポータルから開いてください（店長・社長だけ・登録した端末から開けます）"; return; }
   $("gate").style.display = "none"; $("main").style.display = "";
 }
 $("file").addEventListener("change", async e => {
