@@ -705,6 +705,7 @@ cardHtml = function(id, c){
     <div class="camchk"><span>📹 投函を監視カメラで確認した？</span>
       ${[["ok", "◎ 確認した"], ["ng", "× 確認していない"]].map(([v, l]) => `<button type="button" class="cb ${v} ${cam === v ? "on" : ""}" ${KB.CAN_EDIT ? "" : "disabled"} onclick="setCamera('${id}','${cam === v ? "" : v}')">${l}</button>`).join("")}</div>
     ${KB.CAN_EDIT && !done ? `<div class="ptime">🕒 実際に投函した時刻 <input type="time" value="${ptVal[id] || ""}" onchange="ptVal['${id}']=this.value"><small>カメラのアーカイブで見た時刻。空なら「精算済にする」を押した時刻</small></div>` : ""}
+    ${photoBox(id)}
     ${V.past}
     <div class="acts">
       ${KB.CAN_EDIT ? `<select id="pl-${id}" class="plsel" style="background-color:${PLACE_COLOR[cd.settle_place || PLACES[0]] || "#fff"}" ${done ? "disabled" : ""}
@@ -754,3 +755,88 @@ document.addEventListener("wheel", e => { const t = e.target; if(t && t.matches 
 document.addEventListener("focusin", e => { const t = e.target; if(t && t.matches && t.matches("input[type=number]")) setTimeout(() => { try{ t.select(); }catch(err){} }, 0); });
 document.addEventListener("mouseup", e => { const t = e.target; if(t && t.matches && t.matches("input[type=number]") && document.activeElement === t && t.dataset.selOnce !== "1"){ t.dataset.selOnce = "1"; e.preventDefault(); } }, true);
 document.addEventListener("focusout", e => { const t = e.target; if(t && t.dataset) delete t.dataset.selOnce; });
+
+/* ---------- 📷 精算の写真（投函・回収のときのお金・領収書）。SQL 196：settle-photos／<営業日>/<キャストid>/<時刻>_<ランダム>.jpg
+   ・スマホ：「📷 写真をとる」でそのままカメラ（スマホのアルバムには残らない）
+   ・PC：枠をクリックして Ctrl＋V（スマホで撮った写真をコピーして貼る）／「🖼 写真を選ぶ」
+   ・入れる前に小さくする（長い辺 1600px・JPEG）。2か月より前は、毎朝のロボット（kb-backup）が消す ---------- */
+const PH_BUCKET = "settle-photos";
+const phCache = {};   // "営業日|キャスト" → [{ name, url }] ／ null＝読みこみ中
+const phKey = id => day + "|" + id;
+function photoBox(id){
+  const k = phKey(id);
+  if(!(k in phCache)){ phCache[k] = null; setTimeout(() => phLoad(id), 0); }
+  const list = phCache[k] || [], ed = KB.CAN_EDIT;
+  return `<div class="phbox" id="ph-${id}" ${ed ? `tabindex="0" onpaste="phPaste(event,'${id}')"` : ""}>
+    <div class="phh">📷 お金・領収書の写真 <small>${phCache[k] === null ? "読みこみ中…" : list.length ? list.length + "枚" : "まだありません"}</small></div>
+    ${list.length ? `<div class="phthumbs">${list.map(p => `<span class="pht"><a href="${p.url}" target="_blank" rel="noopener"><img src="${p.url}" alt="写真" loading="lazy"></a>${ed ? `<button type="button" class="phdel" title="この写真を消す" onclick="phDel('${id}','${p.name}')">×</button>` : ""}</span>`).join("")}</div>` : ""}
+    ${ed ? `<div class="phbtns"><label class="btn btn-ghost btn-sm">📷 写真をとる<input type="file" accept="image/*" capture="environment" hidden onchange="phFiles(this,'${id}')"></label>
+      <label class="btn btn-ghost btn-sm">🖼 写真を選ぶ<input type="file" accept="image/*" multiple hidden onchange="phFiles(this,'${id}')"></label>
+      <small class="phhint">PCは、この枠をクリックしてから Ctrl＋V で貼り付けられます</small></div>` : ""}
+  </div>`;
+}
+function phRepaint(id){ const el = document.getElementById("ph-" + id); if(el) el.outerHTML = photoBox(id); }
+async function phLoad(id){
+  const k = phKey(id), dir = day + "/" + id;
+  try{
+    const r = await sb.storage.from(PH_BUCKET).list(dir, { limit: 100, sortBy: { column: "name", order: "asc" } });
+    if(r.error) throw r.error;
+    const files = (r.data || []).filter(f => f.name && !f.name.startsWith("."));
+    let list = [];
+    if(files.length){
+      const s = await sb.storage.from(PH_BUCKET).createSignedUrls(files.map(f => dir + "/" + f.name), 3600);
+      if(s.error) throw s.error;
+      list = files.map((f, i) => ({ name: f.name, url: (s.data[i] || {}).signedUrl })).filter(p => p.url);
+    }
+    phCache[k] = list;
+  }catch(e){ phCache[k] = []; }
+  phRepaint(id);
+}
+// 小さくして JPEG に（長い辺 1600px）
+async function phShrink(file){
+  const img = await new Promise((ok, ng) => { const im = new Image(); im.onload = () => ok(im); im.onerror = ng; im.src = URL.createObjectURL(file); });
+  const s = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(img.src);
+  return await new Promise(ok => c.toBlob(ok, "image/jpeg", 0.8));
+}
+async function phUpload(id, files){
+  if(!KB.CAN_EDIT || !files.length) return;
+  toast("📷 写真を入れています…");
+  let n = 0;
+  for(const f of files){
+    if(!/^image\//.test(f.type || "")) continue;
+    try{
+      const blob = await phShrink(f), rnd = Math.random().toString(36).slice(2, 8);
+      const r = await sb.storage.from(PH_BUCKET).upload(`${day}/${id}/${Date.now()}_${rnd}.jpg`, blob, { contentType: "image/jpeg", upsert: false });
+      if(r.error) throw r.error;
+      n++;
+    }catch(e){ toast("写真を入れられませんでした：" + (e.message || e) + "（SQL 196 は実行ずみ？）"); }
+  }
+  if(n) toast(`📷 ${n}枚 入れました`);
+  delete phCache[phKey(id)]; phRepaint(id);
+}
+function phFiles(input, id){ const fs = [...(input.files || [])]; input.value = ""; phUpload(id, fs); }
+function phPaste(e, id){
+  const fs = [...((e.clipboardData && e.clipboardData.items) || [])].filter(it => it.kind === "file" && /^image\//.test(it.type)).map(it => it.getAsFile()).filter(Boolean);
+  if(!fs.length) return;
+  e.preventDefault(); phUpload(id, fs);
+}
+async function phDel(id, name){
+  if(!confirm("この写真を消しますか？")) return;
+  const r = await sb.storage.from(PH_BUCKET).remove([`${day}/${id}/${name}`]);
+  if(r.error){ toast("消せませんでした：" + r.error.message); return; }
+  delete phCache[phKey(id)]; phRepaint(id);
+}
+(function(){
+  const css = document.createElement("style");
+  css.textContent = `.phbox{border:1.5px dashed #FFC2D1;border-radius:14px;padding:8px 10px;margin:8px 0;background:#FFFBFD;outline:none}
+  .phbox:focus{border-style:solid;border-color:#e5638c;box-shadow:0 0 0 3px #FFE4EC}
+  .phh{font-weight:800;font-size:13px;color:#5C4B4F} .phh small{color:#9C8B8F;font-weight:700;margin-left:6px}
+  .phthumbs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+  .pht{position:relative;display:inline-block} .pht img{width:84px;height:84px;object-fit:cover;border-radius:10px;border:1.5px solid #F1E3E7;display:block}
+  .phdel{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:none;background:#E5486C;color:#fff;font-weight:900;cursor:pointer;line-height:22px;padding:0}
+  .phbtns{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px} .phbtns label{cursor:pointer} .phhint{color:#9C8B8F;font-size:11.5px}
+  .is-phone .phhint{display:none}`;
+  document.head.appendChild(css);
+})();
