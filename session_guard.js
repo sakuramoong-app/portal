@@ -2,7 +2,7 @@
    session_guard.js … 内勤の退勤時刻で自動ログアウト（2026/10/22〜）
    ------------------------------------------------------------
    ポータルで選んだ担当（currentOperator）の、内勤カレンダーのシフト（naikin_shifts の "20-5" など）を見て、
-   退勤時刻＋15分 になったら、このPCのログインを切る（ほかのPC・スマホのログインはそのまま）。
+   退勤時刻＋5分 になったら、このPCのログインを切る（ほかのPC・スマホのログインはそのまま）。
    ・10分前から下に「まもなくログアウト」と出す →「30分のばす」で延長できる（何回でも）
    ・その日にシフトがない（社長・休みの日の作業など）→ 今までどおりログインから20時間（各アプリのしくみ）
    ・シフトが終わってからログインしなおした人は、そのログインでは切らない（20時間のまま）
@@ -21,7 +21,7 @@
   const OFF_KEY = "sessionGuardOff";   // "1"：この端末は退勤で切らない（店長の家のPC。端末登録のページで合言葉を入れて押す）
   const APP_SESSION_KEYS = ["portalStaffSession", "naikinSession", "naikinSessionExp", "profPortalSession", "roomPortalSession"];
   const STAFF_IDS = { "きゃ": "kya", "すや": "suya", "らん": "ran", "かみ": "kami", "わか": "waka" };
-  const AFTER_MIN = 15, WARN_MIN = 10, EXTEND_MIN = 30, BEFORE_START_H = 3;
+  const AFTER_MIN = 5, WARN_MIN = 10, EXTEND_MIN = 30, BEFORE_START_H = 3;
   const MIN = 60 * 1000;
 
   const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
@@ -84,7 +84,7 @@
     if (op === "きゃ" && lsGet(OFF_KEY) === "1") return null;
     const list = await shiftsOf(staffId, s.access_token);
     const now = Date.now(), loginAt = loginAtMs(s.access_token);
-    // いま入っているシフト（始まる3時間前〜退勤＋15分・延長ぶん）
+    // いま入っているシフト（始まる3時間前〜退勤＋5分・延長ぶん）
     const cur = list.filter(it => now >= it.start - BEFORE_START_H * 3600e3 && now <= limitOf(op, it)).sort((a, b) => a.end - b.end)[0];
     if (cur) return { op, it: cur, at: limitOf(op, cur) };
     // シフト中にログインしていて、そのシフトが終わった → すぐ切る
