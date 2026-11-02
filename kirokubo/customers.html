@@ -70,7 +70,7 @@
         <div class="search"><input id="q" placeholder="電話番号（下3けたからでも）か名前で探す" oninput="debounceSearch()" autocomplete="off"></div>
         <div class="flt">
           <button class="chip on" data-f="all" onclick="setFilter('all')">ぜんぶ</button>
-          <button class="chip" data-f="ng" onclick="setFilter('ng')">⚠️ NG客</button>
+          <button class="chip" data-f="ng" onclick="setFilter('ng')">⚠️ 店NG</button>
           <button class="chip" data-f="cng" onclick="setFilter('cng')">🙅 キャストNGあり</button>
           <button class="btn btn-ghost btn-sm edit-only" onclick="newCustomer()">＋ お客さんを足す</button>
         </div>
@@ -84,7 +84,7 @@
 <script>
 /* ============================================================
    👥 顧客台帳
-   ・電話番号（下3けたからでも）か名前で探す。NG客・キャストNGありで絞れる
+   ・電話番号（下3けたからでも）か名前で探す。店NG・キャストNGありで絞れる
    ・1人ずつ：名前・電話・NG（理由）・メモ・キャストごとのNG・よく使う場所・利用の履歴・数字
    ・履歴＝新しい記録簿の予約 ＋ 台帳エクセルから取りこんだ過去の利用（kb_cust_history）
      台帳エクセルで目立たせてあったところ（赤い文字・塗りつぶし）と備考も、そのまま目立たせて出す
@@ -131,7 +131,7 @@ async function search(){
 function paintList(){
   const list = results.filter(r=>filter === "all" || (filter === "ng" && r.ng) || (filter === "cng" && r.cast_ng > 0));
   $("list").innerHTML = list.length ? list.map(r=>`<div class="li ${cur && cur.id === r.id ? "on" : ""}" onclick="openCustomer(${r.id})">
-      <div class="nm">${esc(r.name || "（名前なし）")}${r.ng ? '<span class="badge b-ng">⚠️ NG客</span>' : ""}${r.cast_ng ? `<span class="badge b-cng">🙅 キャストNG ${r.cast_ng}</span>` : ""}</div>
+      <div class="nm">${esc(r.name || "（名前なし）")}${r.ng ? '<span class="badge b-ng">⚠️ 店NG</span>' : ""}${r.cast_ng ? `<span class="badge b-cng">🙅 キャストNG ${r.cast_ng}</span>` : ""}</div>
       <div class="sub">📞 ${esc(fmtPhone(r.phone))}　${r.visits ? `${r.visits}回・最後 ${md(r.last_date)}・合計 ${yen(r.total)}` : "まだ利用なし"}</div></div>`).join("")
     : `<div class="empty">見つかりません</div>`;
 }
@@ -182,8 +182,8 @@ function paintDetail(){
   $("detail").innerHTML = `
     <h2>${esc(c.name || "（名前なし）")} <small style="font-size:13px;color:var(--sub)">📞 ${esc(fmtPhone(c.phone))}</small></h2>
     ${c.ng && c.ng_ask ? `<div class="ngbox" style="background:#FFF8E1;border-color:#F5B400;color:#6b4e00">🤔 <b>出禁・店NG？</b>（台帳エクセルの備考から見分けました。条件つきの書き方なので、内勤が決めてください）<br>${esc(c.ng_reason || "")}
-        ${KB.CAN_EDIT ? `<div style="margin-top:6px"><button class="btn btn-danger btn-sm" onclick="custNgDecide(true)">⚠️ NG客（受けない）</button> <button class="btn btn-ghost btn-sm" onclick="custNgDecide(false)">NGではない</button></div>` : ""}</div>`
-      : c.ng ? `<div class="ngbox">⚠️ NG客：${esc(c.ng_reason || "理由なし")}</div>` : ""}
+        ${KB.CAN_EDIT ? `<div style="margin-top:6px"><button class="btn btn-danger btn-sm" onclick="custNgDecide(true)">⚠️ 店NG（受けない）</button> <button class="btn btn-ghost btn-sm" onclick="custNgDecide(false)">NGではない</button></div>` : ""}</div>`
+      : c.ng ? `<div class="ngbox">⚠️ 店NG：${esc(c.ng_reason || "理由なし")}</div>` : ""}
     ${c._ngs.length ? `<div class="ngbox" style="background:#FFF4E5;border-color:#FFB547;color:#A35A00;margin-top:6px">🙅 キャストNG：${c._ngs.map(n=>esc(n.cast_id ? castLabel(n.cast_id) : n.cast_name) + (n.reason ? "（" + esc(n.reason) + "）" : "")).join("、")}</div>` : ""}
     <div class="csec"><div class="stats">
       <div class="c"><div class="k">利用回数</div><div class="v">${done.length}回</div></div>
@@ -202,7 +202,7 @@ function paintDetail(){
       <div class="f" style="margin-top:6px"><label>副番号（番号が変わった・2つ以上持っている）</label><div id="c_subs" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${subPhonesHtmlC(c, ed)}</div></div>
       <div class="f" style="margin-top:6px"><label>メール（WEB予約・外国人のお客さん）</label><input id="c_email" value="${esc(c.email || "")}" maxlength="200" ${ed}></div>
       <div class="f2" style="margin-top:6px">
-        <div class="f"><label>NG客</label><select id="c_ng" ${ed}><option value="0">NGではない</option><option value="1" ${c.ng ? "selected" : ""}>⚠️ NG客</option></select></div>
+        <div class="f"><label>店NG</label><select id="c_ng" ${ed}><option value="0">NGではない</option><option value="1" ${c.ng ? "selected" : ""}>⚠️ 店NG</option></select></div>
         <div class="f"><label>NGの理由</label><input id="c_ngr" value="${esc(c.ng_reason)}" maxlength="200" ${ed}></div>
       </div>
       <div class="f" style="margin-top:6px"><label>メモ（好み・注意など）</label><textarea id="c_note" ${ed}>${esc(c.note)}</textarea></div>
@@ -352,7 +352,7 @@ async function castNgOk(id){
 }
 async function custNgDecide(isNg){
   const u = isNg ? { ng_ask: false, ng_ask_done: true } : { ng: false, ng_ask: false, ng_ask_done: true };
-  try{ q(await sb.from("kb_customers").update(u).eq("id", cur.id)); toast(isNg ? "⚠️ NG客にしました" : "NGではない、にしました"); openCustomer(cur.id); search(); }catch(e){ toast("できませんでした：" + (e.message || e)); }
+  try{ q(await sb.from("kb_customers").update(u).eq("id", cur.id)); toast(isNg ? "⚠️ 店NGにしました" : "NGではない、にしました"); openCustomer(cur.id); search(); }catch(e){ toast("できませんでした：" + (e.message || e)); }
 }
 async function newCustomer(){
   const phone = phoneNormC(prompt("電話番号（海外は + から）") || ""); if(!phone) return;

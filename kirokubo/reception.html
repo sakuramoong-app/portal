@@ -177,10 +177,10 @@
 
     <!-- ===== あとで書くこと（仕事が終わってからでOK） ===== -->
     <details id="laterBox" style="margin-top:14px;background:#FAF7F8;border-radius:12px;padding:8px 12px">
-      <summary style="cursor:pointer;font-weight:800;font-size:13.5px">📝 あとで書くこと（NG客・お客さんメモ・媒体・備考など）</summary>
+      <summary style="cursor:pointer;font-weight:800;font-size:13.5px">📝 あとで書くこと（店NG・お客さんメモ・媒体・備考など）</summary>
       <div class="grid2" style="margin-top:8px">
-        <div class="f"><label>NG客</label>
-          <select id="f_ng"><option value="0">NGではない</option><option value="1">⚠️ NG客</option></select></div>
+        <div class="f"><label>店NG</label>
+          <select id="f_ng"><option value="0">NGではない</option><option value="1">⚠️ 店NG</option></select></div>
         <div class="f"><label>NGの理由・お客さんメモ</label><input id="f_custnote" maxlength="200"></div>
         <div class="f"><label>確認電話のメモ</label><input id="f_confirm" maxlength="60" placeholder="例：前日OK・1H前OK"></div>
       </div>
@@ -336,7 +336,7 @@ function openForm(id){
   // キャストに伝えたか
   $("f_notified").checked = !!r.cast_notified_at;
   $("notifiedInfo").textContent = r.cast_notified_at ? (r.cast_notified_by || "") + " " + new Date(r.cast_notified_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
-  // あとで書くこと：NG客・メモ・備考が入っていれば開いておく
+  // あとで書くこと：店NG・メモ・備考が入っていれば開いておく
   $("laterBox").open = !!((r.kb_customers && r.kb_customers.ng) || r.note || r.confirm_call);
   $("f_free").value = r.free_kind || "";
   $("f_ext").value = r.extension_count || 0; $("f_date").value = r.date_count || 0;
@@ -747,7 +747,7 @@ async function lookupCustomer(keepName){
     $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = c.ng_reason || c.note || "";
     const past = q(await sb.from("kb_reservations").select("biz_date,store_key,cast_id,dummy_name,course,status").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(10)) || [];
     const casts = [...new Set(past.map(p=>castName(p.cast_id)))];
-    $("custInfo").innerHTML = (c.ng ? `<div class="warn">⚠️ NG客です：${esc(c.ng_reason||"理由なし")}</div>` : "") +
+    $("custInfo").innerHTML = (c.ng ? `<div class="warn">⚠️ 店NGです：${esc(c.ng_reason||"理由なし")}</div>` : "") +
       `<div class="hist">これまで ${past.length}件${past.length>=10?"以上":""}（新しい順）：${past.map(p=>`${p.biz_date.slice(5).replace("-","/")} ${esc(storeLabel(p.store_key))} ${p.dummy_name ? "🎭" + esc(p.dummy_name) + "→" : ""}${esc(castName(p.cast_id))} ${esc(p.course)}${p.status==="cancel"?"(キャンセル)":p.status==="tobi"?"(トビ)":""}`).join("、") || "なし"}<br>
        指名したことのあるキャスト：${casts.map(esc).join("、") || "なし"}<br>※ 台帳（エクセル）の過去データは、あとで入れます</div>`;
     if(!editing){

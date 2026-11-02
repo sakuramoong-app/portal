@@ -273,7 +273,7 @@
   .movebox .movenow{display:block;width:100%;margin-top:3px;font-family:inherit;font-size:12px;padding:3px 6px;border:1.5px solid #9ED8DF;border-radius:6px;}
   /* 有料オプションの一覧を直す（店長） */
   .optadm{display:flex;gap:6px;align-items:center;padding:4px 0;border-bottom:1px dashed var(--line);} .optadm input{font-family:inherit;font-size:13px;padding:5px 8px;border:1.5px solid var(--line);border-radius:8px;} .optadm .l{flex:1;} .optadm .p,.optadm .b{width:90px;text-align:right;}
-  /* 一覧でそのまま直す（ホテル・種類・NG客・次回の交通費）／リストにないホテル */
+  /* 一覧でそのまま直す（ホテル・種類・店NG・次回の交通費）／リストにないホテル */
   .inl{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;} .inl select,.inl input{font-family:inherit;font-size:12px;padding:3px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;} .inl input{min-width:120px;flex:1;}
   .inl .mini{font-family:inherit;font-size:11.5px;font-weight:800;padding:2px 8px;border:1.5px solid var(--line);border-radius:99px;background:#fff;color:var(--sub);cursor:pointer;} .inl .mini.ng{background:#FFE8EC;border-color:#F09AAA;color:#B0213F;}
   .newhotel{background:#FFF8E6;border:2px dashed #FFB547;border-radius:12px;padding:8px 10px;margin:6px 0;font-size:13.5px;}
@@ -748,8 +748,8 @@
     <details id="laterBox" style="background:#FAF7F8;border-radius:14px;padding:10px 14px">
       <summary style="cursor:pointer;font-weight:800;font-size:14px">🚫 NG登録</summary>
       <div class="row2" style="margin-top:8px">
-        <div class="f"><label>NG客</label>
-          <select id="f_ng"><option value="0">NGではない</option><option value="1">⚠️ NG客</option></select></div>
+        <div class="f"><label>店NG</label>
+          <select id="f_ng"><option value="0">NGではない</option><option value="1">⚠️ 店NG</option></select></div>
         <div class="f"><label>NGの理由・お客さんメモ</label><input id="f_custnote" maxlength="200"></div>
       </div>
       <input type="hidden" id="f_confirm"><textarea id="f_note" style="display:none"></textarea><!-- 前のメモは消さずに残すだけ（書くのは備考へ） -->
@@ -918,7 +918,7 @@ function openForm(id){
   // キャストに伝えたか
   $("f_notified").checked = !!r.cast_notified_at;
   $("notifiedInfo").textContent = r.cast_notified_at ? (r.cast_notified_by || "") + " " + new Date(r.cast_notified_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
-  // あとで書くこと：NG客・メモ・備考が入っていれば開いておく
+  // あとで書くこと：店NG・メモ・備考が入っていれば開いておく
   $("laterBox").open = !!(r.kb_customers && r.kb_customers.ng);
   $("f_free").value = r.free_kind || "";
   $("f_ext").value = r.extension_count || 0; $("f_date").value = r.date_count || 0;
@@ -1653,7 +1653,7 @@ async function lookupCustomer(keepName){
     const c = await custByPhone(phone, "*");
     curCustomer = c || null;
     if(!c){ custPast = []; custSeen = []; $("custInfo").innerHTML = `<div class="info">🆕 はじめての電話番号です（保存すると新しいお客さんとして登録します）</div>
-      <div class="xlwarn">📒 似た名前のお客さんがいる・番号を変えたと言っている・様子があやしいときは、<b>キャストを行かせる前に、エクセルの台帳も確認してください</b>（NG客かもしれません）</div>`; if(!editing) setVisit("new"); return; }
+      <div class="xlwarn">📒 似た名前のお客さんがいる・番号を変えたと言っている・様子があやしいときは、<b>キャストを行かせる前に、エクセルの台帳も確認してください</b>（店NGかもしれません）</div>`; if(!editing) setVisit("new"); return; }
     if(!keepName || !$("f_name").value) $("f_name").value = c.name || "";
     if(!keepName || !$("f_email").value) $("f_email").value = c.email || "";   // メールは、受付で入れたものを消さない
     $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = c.ng_reason || c.note || "";
@@ -1674,11 +1674,11 @@ async function lookupCustomer(keepName){
     const past = seenAll.slice(0, 10);
     const casts = [...new Set(seenAll.filter(p => !["cancel", "tobi"].includes(p.status)).map(p => p.cast_id ? castName(p.cast_id) : p.cast_raw).filter(Boolean))];
     $("custInfo").innerHTML = (c.ng && c.ng_ask ? `<div class="ngask">🤔 <b>出禁・店NG？</b>（台帳エクセルの備考から見分けました。条件つきの書き方なので、内勤が決めてください）<div class="q">${esc(c.ng_reason || "")}</div>
-        <button type="button" class="btn btn-danger btn-sm" onclick="custNgDecide(${c.id},true)">⚠️ NG客（受けない）</button>
+        <button type="button" class="btn btn-danger btn-sm" onclick="custNgDecide(${c.id},true)">⚠️ 店NG（受けない）</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="custNgDecide(${c.id},false)">NGではない（受けてOK）</button></div>`
-      : c.ng ? `<div class="warn">⚠️ NG客です：${esc(c.ng_reason||"理由なし")}
+      : c.ng ? `<div class="warn">⚠️ 店NGです：${esc(c.ng_reason||"理由なし")}
           <div style="margin-top:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="custNgReason(${c.id})">✏️ 理由を直す</button>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="if(confirm('NG客を外しますか？（まちがいだったとき）'))custNgDecide(${c.id},false)">NGを外す（まちがいだった）</button></div></div>` : "") +
+          <button type="button" class="btn btn-ghost btn-sm" onclick="if(confirm('店NGを外しますか？（まちがいだったとき）'))custNgDecide(${c.id},false)">NGを外す（まちがいだった）</button></div></div>` : "") +
       // 履歴は1回ずつ1行で、大きめ・濃いめに（受付でいちばん大事なので）
       `<div class="custhist"><div class="ch-head">📋 これまで ${seenAll.length}件${xl.length ? `（うち台帳エクセル ${xl.length}件）` : ""}${seenAll.length > 10 ? "（新しい10件）" : ""}</div>
         ${past.map(p => { const x = p.status === "cancel" ? "キャンセル" : p.status === "tobi" ? "トビ" : "";
@@ -1949,10 +1949,10 @@ async function saveRes(){
   if(miss.length){ toast("⚠️ まだ入っていない必須の項目：" + miss.map(x=>x[0]).join("・")); markMissing(miss); return; }
   const waiting = String($("f_status").value).startsWith("wait_");
   const ck = checksForSave();
-  // 出禁・店NGのお客さんは受けない（NGが解除になったら「NG客」を「NGではない」に直してから）
+  // 出禁・店NGのお客さんは受けない（NGが解除になったら「店NG」を「NGではない」に直してから）
   if(!cancelLike && curCustomer && curCustomer.ng && curCustomer.ng_ask){ toast("🤔 このお客さんが出禁・店NGか、先に決めてください（お客さんの欄のボタン）"); $("custInfo").scrollIntoView({ block: "center" }); return; }
-  // 止めるのは「新しい予約」で「もともとNG客」のお客さんだけ。終わった予約などを開いて、今回 NG客 にする（記録する）のは保存できる
-  if(!cancelLike && !editing && $("f_ng").value === "1" && curCustomer && curCustomer.ng){ toast("🚫 出禁・店NGのお客さんです。受けられません（解除なら、お客さんの「NG客」を直してから）"); $("custInfo").scrollIntoView({ block: "center" }); return; }
+  // 止めるのは「新しい予約」で「もともと店NG」のお客さんだけ。終わった予約などを開いて、今回 店NG にする（記録する）のは保存できる
+  if(!cancelLike && !editing && $("f_ng").value === "1" && curCustomer && curCustomer.ng){ toast("🚫 出禁・店NGのお客さんです。受けられません（解除なら、お客さんの「店NG」を直してから）"); $("custInfo").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.longNg){ toast("🚫 このキャストでは受けられません（赤い枠の理由を見てください）"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.missAnnounce){ toast("📣 お客様に案内することに、まだチェックがついていません"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.missConfirm && !waiting){ toast("✅ キャストに確認してから受けるものがあります。確認したらチェック、まだなら状態を「キャスト返事待ち」に"); $("castChecks").scrollIntoView({ block: "center" }); return; }
@@ -4208,7 +4208,7 @@ lookupCustomer = async function(keepName){
   }
 };
 
-/* ---------- 本日のキャスト一覧で、予約を開かずに直す（ホテル・部屋番号・場所の種類・NG客・次回の交通費） ---------- */
+/* ---------- 本日のキャスト一覧で、予約を開かずに直す（ホテル・部屋番号・場所の種類・店NG・次回の交通費） ---------- */
 function placeCell(r){
   if(!KB.CAN_EDIT) return r.address ? `<br><small>${esc((PLACE[r.place_kind] ? PLACE[r.place_kind] + " " : "") + r.address)}</small>` : "";
   return `<div class="inl" onclick="event.stopPropagation()">
@@ -4223,7 +4223,7 @@ function custCell(r){
   const c = r.kb_customers || {};
   if(!r.customer_id || !KB.CAN_EDIT) return c.ng ? `<br><small style="color:#B0213F">⚠️ NG：${esc(c.ng_reason || "")}</small>` : "";
   return `<div class="inl" onclick="event.stopPropagation()">
-    <button type="button" class="mini ${c.ng ? "ng" : ""}" onclick="custNg(${r.id})">${c.ng ? "⚠️ NG客：" + esc(c.ng_reason || "理由なし") : "🚫 NGにする"}</button>
+    <button type="button" class="mini ${c.ng ? "ng" : ""}" onclick="custNg(${r.id})">${c.ng ? "⚠️ 店NG：" + esc(c.ng_reason || "理由なし") : "🚫 店NGにする"}</button>
     <button type="button" class="mini" onclick="custNextFee(${r.id})">🚕 次回の交通費${c.next_transport != null ? "：" + yen(c.next_transport) : ""}</button></div>`;
 }
 async function updCustomer(id, patch, msg){
@@ -4239,13 +4239,13 @@ function custNg(id){
   if(c.ng){
     const v = prompt("NGの理由を直す（空にして OK を押すと、NGを外します）", c.ng_reason || "");
     if(v === null) return;
-    if(!v.trim()) updCustomer(id, { ng: false, ng_reason: "" }, "NG客を外した");
+    if(!v.trim()) updCustomer(id, { ng: false, ng_reason: "" }, "店NGを外した");
     else updCustomer(id, { ng_reason: v.trim() }, "NGの理由 → " + v.trim());
     return;
   }
   const v = prompt("このお客さんをNGにします。理由は？（例：キャストから「怖かった」と連絡）", "");
   if(v === null) return;
-  updCustomer(id, { ng: true, ng_reason: v.trim() || "理由なし" }, "NG客にした：" + (v.trim() || "理由なし"));
+  updCustomer(id, { ng: true, ng_reason: v.trim() || "理由なし" }, "店NGにした：" + (v.trim() || "理由なし"));
 }
 function custNextFee(id){
   const r = rows.find(x=>x.id === id), c = (r && r.kb_customers) || {};
@@ -4417,7 +4417,7 @@ custCell = function(r){
   if(!r.customer_id || !KB.CAN_EDIT) return c.ng ? `<br><small style="color:#B0213F">⚠️ NG：${esc(c.ng_reason || "")}</small>` : "";
   const p = placeOf(r);
   return `<div class="inl" onclick="event.stopPropagation()">
-    <button type="button" class="mini ${c.ng ? "ng" : ""}" onclick="custNg(${r.id})">${c.ng ? "⚠️ NG客：" + esc(c.ng_reason || "理由なし") : "🚫 NGにする"}</button>
+    <button type="button" class="mini ${c.ng ? "ng" : ""}" onclick="custNg(${r.id})">${c.ng ? "⚠️ 店NG：" + esc(c.ng_reason || "理由なし") : "🚫 店NGにする"}</button>
     <button type="button" class="mini" onclick="custNextFee(${r.id})">🚕 この場所の次回の交通費${p && p.next_transport != null ? "：" + yen(p.next_transport) + (p.next_note ? "<small>（" + esc(p.next_note) + "）</small>" : "") : ""}</button></div>`;
 };
 custNextFee = function(id){
@@ -5044,7 +5044,7 @@ async function checkOldNomi(){
   oldNomi = found; custCastNg = ng;
   if(changed) renderCastChecks(M.casts.find(x=>x.id === $("f_cast").value));
 }
-// 🤔 要確認のNG（SQL 162）を内勤が決める（キャストNG：残す＝NG／消す＝関係ない。NG客：NGのまま／NGを外す）
+// 🤔 要確認のNG（SQL 162）を内勤が決める（キャストNG：残す＝NG／消す＝関係ない。店NG：NGのまま／NGを外す）
 async function castNgDecide(id, isNg){
   const by = KB.operatorName();
   try{
@@ -5065,7 +5065,7 @@ async function custNgDecide(id, isNg){
     q(await sb.from("kb_customers").update(u).eq("id", id));
     if(curCustomer && curCustomer.id === id) Object.assign(curCustomer, u);
     $("f_ng").value = isNg ? "1" : "0";
-    toast(isNg ? `⚠️ NG客にしました（${by}）` : `NGではない、にしました（${by}）`);
+    toast(isNg ? `⚠️ 店NGにしました（${by}）` : `NGではない、にしました（${by}）`);
     lookupCustomer(true);
   }catch(e){ toast("できませんでした：" + (e.message || e)); }
 }
@@ -5080,7 +5080,7 @@ async function castNgUndo(id){
   castNgDecide(id, false);
 }
 async function custNgReason(id){
-  const v = prompt("NG客の理由（直して OK）", (curCustomer && curCustomer.ng_reason) || ""); if(v === null) return;
+  const v = prompt("店NGの理由（直して OK）", (curCustomer && curCustomer.ng_reason) || ""); if(v === null) return;
   try{ q(await sb.from("kb_customers").update({ ng_reason: v.trim() }).eq("id", id)); if(curCustomer) curCustomer.ng_reason = v.trim(); toast("理由を直しました"); lookupCustomer(true); }
   catch(e){ toast("できませんでした：" + (e.message || e)); }
 }
@@ -5907,7 +5907,7 @@ async function paintSimilarPhones(){
 }
 
 /* ---------- 🔎 似た名前のお客さん：お客さんの名前を入れたら、ちがう番号で同じ・似た名前のお客さんがいないか探す
-   いれば「エクセルの台帳も確認してください」と出す（NG客が番号を変えて電話してくることがあるので） ---------- */
+   いれば「エクセルの台帳も確認してください」と出す（店NGが番号を変えて電話してくることがあるので） ---------- */
 let nameChkTimer = null, nameChkSeq = 0;
 function nameKey(s){ return String(s || "").normalize("NFKC").replace(/\s|　|さん$|様$|さま$|くん$/g, "").trim(); }
 async function paintSimilarNames(){
@@ -5921,7 +5921,7 @@ async function paintSimilarNames(){
   if(!l.length){ box.innerHTML = ""; return; }
   l.sort((a, b) => (b.ng ? 1 : 0) - (a.ng ? 1 : 0));
   const ngN = l.filter(c => c.ng).length;
-  box.innerHTML = `<div class="xlwarn ${ngN ? "ng" : ""}">🔎 <b>似た名前のお客さんが${l.length >= 8 ? "たくさん" : " " + l.length + "人"}います${ngN ? `（うち ⚠️NG客 ${ngN}人）` : ""}</b>
+  box.innerHTML = `<div class="xlwarn ${ngN ? "ng" : ""}">🔎 <b>似た名前のお客さんが${l.length >= 8 ? "たくさん" : " " + l.length + "人"}います${ngN ? `（うち ⚠️店NG ${ngN}人）` : ""}</b>
     ${l.slice(0, 6).map(c => `<div>・${c.ng ? "⚠️" : ""}<b>${esc(c.name || "")}</b>（番号の下4けた ${esc(String(c.phone || "").slice(-4) || "なし")}）</div>`).join("")}
     <div style="margin-top:4px">同じ人かもしれないときは、<b>キャストを行かせる前に、エクセルの台帳も確認してください</b></div></div>`;
 }

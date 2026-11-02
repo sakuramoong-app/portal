@@ -89,7 +89,7 @@ async function run(){
   }
   $("res").innerHTML = `<div class="ok">✅ 取りこみが終わりました</div><table>
     <tr><td>過去の利用</td><td>${tot.rows.toLocaleString()} 件</td></tr><tr><td>新しく作ったお客さん</td><td>${tot.newCustomers.toLocaleString()} 人</td></tr>
-    <tr><td>NG客にした</td><td>${tot.ngCustomers} 人</td></tr><tr><td>キャストNG</td><td>${tot.castNg} 件</td></tr></table>
+    <tr><td>店NGにした</td><td>${tot.ngCustomers} 人</td></tr><tr><td>キャストNG</td><td>${tot.castNg} 件</td></tr></table>
     <p class="lead" style="margin-top:8px">👥 <a href="customers.html">顧客台帳</a> で、電話番号で探して確かめてください。</p>`;
   $("go").disabled = false;
 }
