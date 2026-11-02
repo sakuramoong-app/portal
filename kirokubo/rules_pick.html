@@ -91,10 +91,18 @@ function build(){
       // 交通費バック
       if(/交通費/.test(seg) && /バック/.test(seg)){
         const m = seg.match(/([\d,，]{3,})\s*円\s*バック/);
-        const cond = /以上|以下|場合|往復|片道/.test(seg) ? "条件（「5000円以上の場合」など）はアプリでは付けられません。受付で毎回この金額がバックになります" : "";
-        if(/全額|全バック|全部/.test(seg)) add("transport_back", { rate: 1 }, "交通費は全額バック", cond);
-        else if(/半額/.test(seg)) add("transport_back", { rate: 0.5 }, "交通費は半額バック", cond);
-        else if(m) add("transport_back", { amount: yenN(m[1]) }, "交通費から " + m[1] + "円バック", cond);
+        const mn = seg.match(/([\d,，]{3,})\s*円\s*以上/);   // 交通費が○円以上のときだけ（min_transport）
+        const minP = mn ? { min_transport: yenN(mn[1]) } : {}, minT = mn ? "交通費が" + mn[1] + "円以上のときだけ、" : "";
+        const cond = [/自力|往復|片道/.test(seg) ? "「自力で往復したとき」などは、アプリでは見分けられません。ちがうときは精算で直してください" : "",
+                      /以下/.test(seg) ? "「○円以下」の条件は付けられません" : ""].filter(Boolean).join("。");
+        if(/全額|全バック|全部/.test(seg)) add("transport_back", Object.assign({ rate: 1 }, minP), minT + "交通費は全額バック", cond);
+        else if(/半額/.test(seg)) add("transport_back", Object.assign({ rate: 0.5 }, minP), minT + "交通費は半額バック", cond);
+        else if(m) add("transport_back", Object.assign({ amount: yenN(m[1]) }, minP), minT + "交通費から " + m[1] + "円バック", cond);
+      }
+      // ○○分NG・○○はNG（受付で見せるメモ）
+      if(/\d+\s*分\s*NG/.test(seg)){
+        const t = seg.replace(/^【[^】]*】/, "").trim().slice(0, 80);
+        add("memo", { text: t }, t, "");
       }
       // バックの上乗せ（＋○円）
       for(const m of seg.matchAll(/[+＋]\s*([\d,，]{3,})\s*円/g)){
@@ -114,7 +122,7 @@ function build(){
     });
   });
 }
-const KIND = { back_add: "バックの上乗せ", zappi_exempt: "雑費なし", transport_back: "交通費バック", nomination_fee: "指名料" };
+const KIND = { back_add: "バックの上乗せ", zappi_exempt: "雑費なし", transport_back: "交通費バック", nomination_fee: "指名料", memo: "そのほか（受付で表示だけ）" };
 function render(){
   const all = $("showAll").checked;
   const byCast = casts.map(c => ({ c, list: C.map((x, i) => Object.assign({ i }, x)).filter(x => x.cid === c.id), have: rules.filter(r => r.cast_id === c.id) }))
@@ -131,6 +139,8 @@ function render(){
             ／ 何分以上 <input class="num" type="number" step="10" value="${x.params.min_minutes || ""}" placeholder="なし" onchange="if(Number(this.value))C[${x.i}].params.min_minutes=Number(this.value);else delete C[${x.i}].params.min_minutes">
             ／ どの店 <select onchange="if(this.value)C[${x.i}].params.store=this.value;else delete C[${x.i}].params.store"><option value="">どこでも</option>${stores.map(s => `<option value="${s.key}" ${x.params.store === s.key ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select></small>` : ""}
           ${x.kind === "transport_back" && x.params.amount != null ? `<br><small>金額 <input class="num" type="number" step="500" value="${x.params.amount}" onchange="C[${x.i}].params.amount=Number(this.value)||0">円</small>` : ""}
+          ${x.kind === "memo" ? `<br><small>受付で出す文 <input style="width:100%;max-width:520px;font-family:inherit;font-size:14px;padding:3px 6px;border:1.5px solid var(--line);border-radius:8px" value="${esc(x.params.text)}" onchange="C[${x.i}].params.text=this.value.trim();C[${x.i}].note=this.value.trim()"></small>` : ""}
+          ${x.kind === "transport_back" ? `<br><small>交通費が <input class="num" type="number" step="500" value="${x.params.min_transport || ""}" placeholder="いつでも" onchange="if(Number(this.value))C[${x.i}].params.min_transport=Number(this.value);else delete C[${x.i}].params.min_transport"> 円以上のときだけ</small>` : ""}
           ${x.warn ? `<div class="warn">⚠️ ${esc(x.warn)}</div>` : ""}
           <div><small>もとの文：${esc(x.hit)}</small></div></div></div>`).join("") || `<div class="lead">候補はありません</div>`}</div>`;
   }).join("") || `<div class="box lead">候補はありませんでした。</div>`;
@@ -148,7 +158,10 @@ async function save(){
       const p = Object.assign({}, x.params);
       const why = [];
       if(x.kind === "back_add"){ if(p.min_minutes) why.push(p.min_minutes + "分以上"); if(p.store) why.push(storeLabel(p.store)); }
-      const note = x.kind === "back_add" ? (why.length ? why.join("・") + "は" : "") + "バック＋" + Number(p.amount).toLocaleString() + "円" : x.note;
+      const note = x.kind === "back_add" ? (why.length ? why.join("・") + "は" : "") + "バック＋" + Number(p.amount).toLocaleString() + "円"
+        : x.kind === "transport_back" ? (p.min_transport ? "交通費が" + Number(p.min_transport).toLocaleString() + "円以上のときだけ、" : "")
+            + (p.rate === 1 ? "交通費は全額バック" : p.rate === 0.5 ? "交通費は半額バック" : "交通費から " + Number(p.amount).toLocaleString() + "円バック")
+        : x.note;
       return { kind: x.kind, params: p, note };
     });
     const p = { cast_id: cid, effective: today, by, ranks: {}, add_rules, end_rules: [],

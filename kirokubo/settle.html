@@ -148,6 +148,7 @@ function calcCast(castId){
   rulesOn(castId).filter(x=>x.kind === "transport_back").forEach(x=>{
     live.forEach(r=>{
       const t = r.transport || 0; if(!t) return;
+      if(x.params && x.params.min_transport && t < Number(x.params.min_transport)) return;   // 交通費が○円以上のときだけ
       const v = x.params && x.params.amount != null ? Math.min(Number(x.params.amount) || 0, t) : Math.round(t * (Number(x.params && x.params.rate) || 0));
       if(v){ transportBack += v; }
     });
