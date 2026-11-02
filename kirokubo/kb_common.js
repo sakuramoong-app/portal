@@ -35,7 +35,7 @@
     if(!s || !isStaffSession(s)) return null;   // 共通アカウント、または内勤の一覧のGoogleアカウント（SQL 192）
     if(Date.now() >= (loginAt(s) + 20*3600) * 1000) return null;
     // 作成中は、店長（きゃ）だけが開ける（キャスト台帳は別：ほかの内勤も見られる）。回収明細は社長も。画面の上での分け方
-    if(!CAN_EDIT && !IS_OWNER){ managerBlock(); return null; }   // 店長・社長は全部見られて直せる
+    if(!IS_BOSS && !(STAFF_OPEN && STAFF_PAGES.includes(PAGE))){ managerBlock(); return null; }   // 店長・社長は全部見られて直せる
     // 「登録した端末だけ」が ON で、この端末が登録されていない → 見せない（端末の登録ページは別）
     if(!(opts && opts.skipDevice)){
       const st = await deviceStatus();
@@ -77,7 +77,13 @@
   function operatorName(){ if(GOOGLE) return CLAIM.staff_name || ""; try{ return localStorage.getItem("currentOperator") || ""; }catch(e){ return ""; } }
   // 店長（きゃ）と社長のときだけ直せる。Googleで入った人は、内勤の一覧の役わり（店長・社長）で決まる
   const OWNER_NAME = "社長", IS_OWNER = GOOGLE && CLAIM.staff_role === "owner";   // 共通アカウントでは、社長にはなれない（Googleだけ）
-  const CAN_EDIT = GOOGLE && ["manager", "owner"].includes(CLAIM.staff_role);   // 店長・社長はGoogleで入ったときだけ（共通アカウントでは、きゃ・社長は選べない）
+  // 🔑 切りかえ（本番）のスイッチ：true にすると、内勤（Googleの内勤・共通アカウントの すや など）も 受付・精算・顧客台帳 を開けて直せる
+  //    回収明細・集計・バックアップ・台帳の取りこみ・端末の登録は、ずっと店長・社長だけ
+  const STAFF_OPEN = false;
+  const STAFF_PAGES = ["kiroku.html", "settle.html", "customers.html"];
+  const PAGE = location.pathname.split("/").pop() || "index.html";
+  const IS_BOSS = GOOGLE && ["manager", "owner"].includes(CLAIM.staff_role);
+  const CAN_EDIT = IS_BOSS || (STAFF_OPEN && STAFF_PAGES.includes(PAGE));   // 店長・社長はGoogleで入ったときだけ（共通アカウントでは、きゃ・社長は選べない）
 
   function q(res){ if(res.error) throw res.error; return res.data; }
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -104,10 +110,10 @@
   // ページの上の切りかえ
   function nav(active){
     const all = [["kiroku.html","🆕 新しい記録簿（ためし中）"],["reception.html","🧾 受付"],["settle.html","💴 精算"],["kaishu.html","📦 回収明細"],["index.html","📒 キャスト台帳"],["customers.html","👥 顧客台帳"],["stats.html","📈 集計"],["backup.html","💾 バックアップ"]];
-    const items = CAN_EDIT || IS_OWNER ? all : all.filter(([h])=>h === "index.html");   // 店長・社長は全部、ほかの内勤はキャスト台帳だけ
+    const items = IS_BOSS ? all : all.filter(([h])=>h === "index.html" || (STAFF_OPEN && STAFF_PAGES.includes(h)));   // 店長・社長は全部、ほかの内勤はキャスト台帳だけ
     // スマホでは、スマホで開けるページだけ（session_guard.js と同じ：受付・精算・キャスト台帳。回収明細は店長・社長）
     const phone = /iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent) || matchMedia("(max-width:640px)").matches;
-    const shown = phone ? items.filter(([h]) => ["kiroku.html", "settle.html", "index.html"].includes(h) || (h === "kaishu.html" && (CAN_EDIT || IS_OWNER))) : items;
+    const shown = phone ? items.filter(([h]) => ["kiroku.html", "settle.html", "index.html"].includes(h) || (h === "kaishu.html" && IS_BOSS)) : items;
     return `<nav class="kbnav">${shown.map(([h,l])=>`<a href="${h}" class="${h===active?"on":""}">${l}</a>`).join("")}</nav>`;
   }
   function wipBanner(){
