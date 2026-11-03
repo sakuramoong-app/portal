@@ -229,6 +229,18 @@
   .callalert .sntext{display:block;font-weight:500;font-size:12.5px;color:#556;white-space:pre-wrap;margin-top:2px;}
   .callalert .snset{display:inline-block;width:auto;float:right;margin:0;padding:3px 10px;font-size:12.5px;}
   .snsetonly{text-align:right;margin:2px 0;} .snsetonly button{font-family:inherit;font-size:12.5px;font-weight:700;background:#fff;border:1.5px solid var(--line);border-radius:99px;padding:3px 10px;cursor:pointer;color:var(--sub);}
+  #ntfBox{position:fixed;left:12px;bottom:104px;z-index:955;font-family:inherit;}
+  #ntfBox .ntfopen{background:#fff;border:1.5px solid #8FB0EE;color:#2B4C8C;border-radius:99px;padding:7px 12px;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(43,76,140,.18);}
+  #ntfBox.open{width:min(340px,calc(100vw - 24px));background:#fff;border:2px solid #8FB0EE;border-radius:14px;box-shadow:0 8px 24px rgba(43,76,140,.25);}
+  #ntfBox .ntfhd{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;font-weight:800;color:#2B4C8C;border-bottom:1.5px solid #DCE6FA;font-size:14px;}
+  #ntfBox .ntfhd button{font-family:inherit;font-size:12.5px;font-weight:800;background:#EEF4FF;border:1px solid #BCD0F5;border-radius:99px;padding:3px 10px;margin-left:4px;cursor:pointer;color:#2B4C8C;}
+  #ntfBox .ntflist{max-height:42vh;overflow-y:auto;padding:4px 8px 8px;}
+  #ntfBox .ntfrow{padding:6px 4px;border-bottom:1px dashed #DCE6FA;font-size:13.5px;font-weight:700;color:#23375e;} #ntfBox .ntfrow.go{cursor:pointer;} #ntfBox .ntfrow.go:hover{background:#F5F8FF;}
+  #ntfBox .ntfrow small{display:block;font-size:11.5px;color:#7a86a0;font-weight:600;}
+  .snsetonly button{margin-left:6px;}
+  .tpled{background:#FFF8E8;border:1.5px solid #F2D49A;border-radius:12px;padding:10px;margin:8px 0;} .tpled textarea,.tpled input{width:100%;font-family:inherit;}
+  .tplsc{font-size:14.5px;margin:12px 0 4px;color:#7a4a5a;border-bottom:1.5px solid var(--line);padding-bottom:2px;}
+  .tplrow{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--line);} .tplrow small{display:block;font-size:12px;color:var(--sub);white-space:pre-wrap;max-height:4.8em;overflow:hidden;} .tplrow span{white-space:nowrap;}
   .snrow{display:grid;grid-template-columns:1fr 1fr;gap:6px;border:1.5px solid var(--line);border-radius:10px;padding:8px;margin-bottom:8px;} .snrow select{grid-column:1/-1;} .snrow textarea{font-family:inherit;font-size:13px;} .snrow label{font-size:13px;font-weight:700;}
   table.board tr.before > th{background:#F1ECFB;color:#6c5896;font-size:12px;} table.board tr.gone > th{background:#F2F2F2;color:#999;}
   table.board tr.gone td{background:#FAFAFA;}
@@ -3667,18 +3679,68 @@ function renderCallAlerts(){
         <button type="button" onclick="openAlertRes(${r.id},'${r.biz_date}')">開く</button></div>`).join("")}</div>` : "")
     + (items.length ? `<div class="callalert">🔔 確認がまだ・時刻になった予約があります${items.map(({ r, kind })=>`
       <button type="button" onclick="jumpToRes(${r.id},'${r.biz_date}')"><b>${esc(kind)}</b>　${md(r)}${r.start_at ? hm(r.start_at) : "時間未定"}　${esc(castName(r.cast_id))}　<u>📍 予約へとぶ</u>　<u onclick="event.stopPropagation();openAlertRes(${r.id},'${r.biz_date}')">開く</u></button>`).join("")}</div>` : "");
-  // 新しい「終了時刻」が出たら、ピッと鳴らす
-  const fresh = outs.filter(r=>!beeped.has(r.id));
-  if(fresh.length){ fresh.forEach(r=>beeped.add(r.id)); beep(); }
+  // 新しく出たら、種類ごとの音を鳴らして、🔔 通知の小窓に出す
+  outs.filter(r=>!beeped.has("o" + r.id)).forEach(r=>{ beeped.add("o" + r.id);
+    notify("outcall", `⏰ 終了時刻 ${r.end_at ? hm(r.end_at) : ""}　${castName(r.cast_id)}：アウトコールの確認`, `jumpToRes(${r.id},'${r.biz_date}')`); });
+  items.filter(({ r, kind })=>!beeped.has("c" + r.id + kind)).forEach(({ r, kind })=>{ beeped.add("c" + r.id + kind);
+    notify("call", `🔔 ${kind}　${r.start_at ? hm(r.start_at) : ""} ${castName(r.cast_id)}`, `jumpToRes(${r.id},'${r.biz_date}')`); });
 }
 const beeped = new Set();
-function beep(){
+
+/* ---------- 🔊 通知の音（種類ごとに選べる・この端末だけ）と 🔔 通知の小窓（なんで鳴ったか） ---------- */
+const NTF_KINDS = {
+  outcall: { label: "⏰ 終了時刻（アウトコールの確認）", def: "pipi" },
+  call:    { label: "🔔 確認電話がまだ・状態の時刻になった", def: "none" },
+  in:      { label: "🌅 出勤の時間", def: "chime" },
+  out:     { label: "🌙 退勤の時間", def: "pon" },
+};
+const SOUNDS = {
+  pipi:   { label: "ピピッ（高い2回）", notes: [[880, 0], [880, .35]] },
+  triple: { label: "ピピピ（3回）",     notes: [[1046, 0], [1046, .22], [1046, .44]] },
+  chime:  { label: "ピンポーン",         notes: [[784, 0, .5], [622, .45, .7]] },
+  pon:    { label: "ポーン（低い）",     notes: [[440, 0, .8]] },
+  up:     { label: "ピロリン（上がる）", notes: [[660, 0], [880, .16], [1175, .32]] },
+  none:   { label: "鳴らさない",         notes: [] },
+};
+function soundPrefs(){ try{ return JSON.parse(localStorage.getItem("kbSounds") || "{}") || {}; }catch(e){ return {}; } }
+function soundOf(kind){ const p = soundPrefs()[kind]; return SOUNDS[p] ? p : (NTF_KINDS[kind] || {}).def || "pipi"; }
+function playSound(id){
+  const s = SOUNDS[id]; if(!s || !s.notes.length) return;
   try{
     const a = new (window.AudioContext || window.webkitAudioContext)();
-    [0, 0.35].forEach(t=>{ const o = a.createOscillator(), g = a.createGain(); o.frequency.value = 880; o.connect(g); g.connect(a.destination);
-      g.gain.setValueAtTime(0.2, a.currentTime + t); g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + t + 0.3); o.start(a.currentTime + t); o.stop(a.currentTime + t + 0.3); });
+    s.notes.forEach(([f, t, len])=>{ len = len || .3; const o = a.createOscillator(), g = a.createGain(); o.frequency.value = f; o.connect(g); g.connect(a.destination);
+      g.gain.setValueAtTime(0.2, a.currentTime + t); g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + t + len); o.start(a.currentTime + t); o.stop(a.currentTime + t + len); });
   }catch(e){}
 }
+function beep(){ playSound("pipi"); }
+const ntfLog = [];
+function notify(kind, text, jump){
+  ntfLog.unshift({ kind, text, jump: jump || "", at: new Date() }); if(ntfLog.length > 30) ntfLog.length = 30;
+  if(!notify.q){ notify.q = true; setTimeout(()=>{ notify.q = false; playSound(soundOf(kind)); }, 50); }   // 一度にたくさん出ても、音は1回
+  renderNtfBox(true);
+}
+function renderNtfBox(open){
+  let el = $("ntfBox");
+  if(!el){ el = document.createElement("div"); el.id = "ntfBox"; document.body.appendChild(el); }
+  if(open) el.classList.add("open");
+  const hhmm = d => String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  el.innerHTML = el.classList.contains("open")
+    ? `<div class="ntfhd">🔔 通知（新しい順）<span><button type="button" onclick="openSoundSet()">🔊 音</button><button type="button" onclick="$('ntfBox').classList.remove('open');renderNtfBox()">×</button></span></div>
+       <div class="ntflist">${ntfLog.length ? ntfLog.map(n=>`<div class="ntfrow${n.jump ? " go" : ""}" ${n.jump ? `onclick="${esc(n.jump)}"` : ""}><small>${hhmm(n.at)}・${esc(SOUNDS[soundOf(n.kind)].label)}</small>${esc(n.text)}</div>`).join("") : `<div class="ntfrow">まだ通知はありません</div>`}</div>`
+    : `<button type="button" class="ntfopen" onclick="renderNtfBox(true)">🔔${ntfLog.length ? " " + ntfLog.length : ""}</button>`;
+}
+function openSoundSet(){
+  let bg = $("sndBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "sndBg"; bg.className = "modal-bg"; document.body.appendChild(bg); KB.closeOnBackdrop(bg, () => bg.classList.remove("show")); }
+  bg.innerHTML = `<div class="modal" style="max-width:560px"><button class="x" onclick="$('sndBg').classList.remove('show')">×</button>
+    <h2>🔊 通知の音</h2>
+    <p style="font-size:12.5px;color:var(--sub);line-height:1.6;margin:0 0 8px">どの知らせで、どの音が鳴るかの一覧です。この端末（このPC・スマホ）だけの設定です。<br>鳴ったときは、右下の 🔔 小窓に何の通知かが出ます。</p>
+    <table class="list"><tr><th>通知</th><th>音</th><th></th></tr>${Object.entries(NTF_KINDS).map(([k, v])=>`<tr><td>${esc(v.label)}</td>
+      <td><select onchange="setSound('${k}',this.value)">${Object.entries(SOUNDS).map(([id, s])=>`<option value="${id}" ${soundOf(k) === id ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select></td>
+      <td><button type="button" class="btn btn-ghost btn-sm" onclick="playSound(soundOf('${k}'))">▶ 試す</button></td></tr>`).join("")}</table></div>`;
+  bg.classList.add("show");
+}
+function setSound(kind, id){ const p = soundPrefs(); p[kind] = id; try{ localStorage.setItem("kbSounds", JSON.stringify(p)); }catch(e){} playSound(id); renderNtfBox(); }
 // アウトコールがきた → 予約を「終了」に・キャストは仕事していたエリアの「待機中」へ
 async function outcallDone(id, bd){
   if(!KB.CAN_EDIT) return;
@@ -3720,12 +3782,12 @@ loadCallAlerts(); setInterval(loadCallAlerts, 120000);
 
 /* ---------- 🔔 出勤・退勤の通知（SQL 209）
    今日のシフトの出勤時間・退勤時間になったら、上に出す。「済」で消える（内勤みんな同じ）。
-   文は kb_settings 'shift_notice' = { in, out, casts: { cast_id: { in, out, off_in, off_out } } }
-   {名前} {時間} を、その子の名前・時間に置きかえる ---------- */
+   kb_settings 'shift_notice' = { casts: { cast_id: { off_in, off_out } } }（通知しない子）。送る文は 📝 テンプレ（別） ---------- */
 let shiftNoticeDays = {}, shiftNoticeShifts = {};
 function shiftNoticeSet(){ const v = M.set && M.set.shift_notice; return Object.assign({ in: "", out: "", casts: {} }, v && typeof v === "object" ? v : {}); }
 async function loadShiftNotices(){
-  if(KB.PRACTICE || !M.casts) return;
+  if(!M.casts) return;
+  if(KB.PRACTICE){ renderShiftNotices(); return; }   // 練習の日は、テンプレ・音のボタンだけ
   try{
     const today = KB.bizDateOf();
     const [sh, cd] = await Promise.all([loadShifts(today), sb.from("kb_cast_days").select("cast_id,status,shift_start_ov,shift_end_ov,notice_in_at,notice_out_at").eq("biz_date", today)]);
@@ -3733,11 +3795,6 @@ async function loadShiftNotices(){
     shiftNoticeDays = {}; (cd.error ? [] : (cd.data || [])).forEach(x=>{ shiftNoticeDays[x.cast_id] = x; });
   }catch(e){ shiftNoticeShifts = {}; }
   renderShiftNotices();
-}
-function shiftNoticeText(kind, c, h){
-  const set = shiftNoticeSet(), own = (set.casts || {})[c.id] || {};
-  const t = String(own[kind] || set[kind] || "");
-  return t.replace(/\{名前\}/g, c.official_name || c.temp_name || "").replace(/{時間}/g, lateHM(Math.round(h * 60)));
 }
 function shiftNoticeItems(){
   const today = KB.bizDateOf(), base = Date.parse(today + "T00:00:00+09:00"), now = Date.now(), set = shiftNoticeSet(), items = [];
@@ -3756,19 +3813,65 @@ function renderShiftNotices(){
   const el = $("shiftAlerts"); if(!el || !M.casts) return;
   const items = shiftNoticeItems();
   el.innerHTML = items.length ? `<div class="callalert shiftn">🔔 出勤・退勤の時間です
-      <button type="button" class="snset" onclick="openShiftNoticeSet()">⚙️ 通知の文</button>${items.map(({ c, kind, h })=>{
-      const t = shiftNoticeText(kind, c, h);
-      return `<div class="outrow"><span><b>${kind === "in" ? "🌅 出勤" : "🌙 退勤"} ${esc(lateHM(Math.round(h * 60)))}</b>　${esc(c.official_name || c.temp_name)}${t ? `<small class="sntext">${esc(t)}</small>` : ""}</span>
-        ${t ? `<button type="button" onclick="copyShiftNotice('${kind}','${c.id}',${h})">📋 文をコピー</button>` : ""}
+      <button type="button" class="snset" onclick="openShiftNoticeSet()">⚙️ 通知しない子</button>${items.map(({ c, kind, h })=>{
+      return `<div class="outrow"><span><b>${kind === "in" ? "🌅 出勤" : "🌙 退勤"} ${esc(lateHM(Math.round(h * 60)))}</b>　${esc(c.official_name || c.temp_name)}</span>
+        <button type="button" onclick="openTplBox(null,'${c.id}')">📝 テンプレ</button>
         <button type="button" onclick="jumpToCast('${c.id}')">枠へ</button>
         ${KB.CAN_EDIT ? `<button type="button" class="okbtn" onclick="shiftNoticeDone('${kind}','${c.id}')">✓ 済</button>` : ""}</div>`; }).join("")}</div>`
-    : KB.PRACTICE ? "" : `<div class="snsetonly"><button type="button" onclick="openShiftNoticeSet()">🔔 出勤・退勤の通知の文</button></div>`;
-  const fresh = items.filter(x=>!shiftBeeped.has(x.kind + x.c.id));
-  if(fresh.length){ fresh.forEach(x=>shiftBeeped.add(x.kind + x.c.id)); beep(); }
+    : "";
+  el.insertAdjacentHTML("afterbegin", `<div class="snsetonly"><button type="button" onclick="openTplBox()">📝 テンプレ（送る文）</button>${KB.PRACTICE ? "" : `<button type="button" onclick="openShiftNoticeSet()">🔔 出勤・退勤の通知</button>`}<button type="button" onclick="openSoundSet()">🔊 通知の音</button></div>`);
+  items.filter(x=>!shiftBeeped.has(x.kind + x.c.id)).forEach(x=>{ shiftBeeped.add(x.kind + x.c.id);
+    notify(x.kind, `${x.kind === "in" ? "🌅 出勤" : "🌙 退勤"}の時間 ${lateHM(Math.round(x.h * 60))}　${x.c.official_name || x.c.temp_name}`, `jumpToCast('${x.c.id}')`); });
 }
-function copyShiftNotice(kind, cid, h){
-  const c = M.casts.find(x=>x.id === cid); if(!c) return;
-  navigator.clipboard.writeText(shiftNoticeText(kind, c, h)).then(()=>toast("📋 " + (kind === "in" ? "出勤" : "退勤") + "の文をコピーしました"));
+
+/* ---------- 📝 テンプレ（いろいろな場面で送る文を、自由に登録してコピー）
+   kb_settings 'msg_templates' = [{ id, scene, title, text }]。{名前} {時間} は、えらんだキャスト・今の時刻に ---------- */
+function tplList(){ const v = M.set && M.set.msg_templates; return Array.isArray(v) ? v : []; }
+function tplFill(t, cid){
+  if(cid == null) cid = $("tpl_cast") ? $("tpl_cast").value : ""; const c = M.casts.find(x=>x.id === cid), d = new Date();
+  return String(t || "").replace(/\{名前\}/g, c ? (c.official_name || c.temp_name) : "{名前}").replace(/\{時間\}/g, lateHM(d.getHours() * 60 + d.getMinutes()));
+}
+function openTplBox(editId, castId){
+  let bg = $("tplBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "tplBg"; bg.className = "modal-bg"; document.body.appendChild(bg); KB.closeOnBackdrop(bg, () => bg.classList.remove("show")); }
+  const keepCast = castId || ($("tpl_cast") ? $("tpl_cast").value : ""), list = tplList(), scenes = [...new Set(list.map(t=>t.scene || "そのほか"))];
+  const ed = editId === "new" ? { id: "", scene: "", title: "", text: "" } : list.find(t=>t.id === editId);
+  bg.innerHTML = `<div class="modal" style="max-width:680px"><button class="x" onclick="$('tplBg').classList.remove('show')">×</button>
+    <h2>📝 テンプレ（送る文）</h2>
+    <div class="f" style="margin:6px 0"><label>だれに送る？（{名前} がこの子の名前になります）</label>
+      <select id="tpl_cast" onchange="openTplBox()"><option value="">（えらばない）</option>${M.casts.map(c=>`<option value="${c.id}" ${c.id === keepCast ? "selected" : ""}>${esc(c.official_name || c.temp_name)}</option>`).join("")}</select></div>
+    ${ed ? `<div class="tpled"><div class="f"><label>場面（まとめる見出し）</label><input id="tpl_scene" list="tplScenes" value="${esc(ed.scene)}" placeholder="例：出勤前 / 退勤 / 遅刻 / お客さん"><datalist id="tplScenes">${scenes.map(s=>`<option value="${esc(s)}">`).join("")}</datalist></div>
+      <div class="f"><label>名前（ボタンに出る）</label><input id="tpl_title" value="${esc(ed.title)}" placeholder="例：美咲 退勤のお礼"></div>
+      <div class="f"><label>文</label><textarea id="tpl_text" rows="5" placeholder="{名前}さん、お疲れさまでした！…">${esc(ed.text)}</textarea></div>
+      <button type="button" class="btn btn-primary btn-sm" onclick="saveTpl('${esc(ed.id)}')">保存</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="openTplBox()">やめる</button>
+      ${ed.id ? `<button type="button" class="btn btn-ghost btn-sm" style="float:right" onclick="delTpl('${esc(ed.id)}')">消す</button>` : ""}</div>` : ""}
+    ${scenes.length ? scenes.map(s=>`<h3 class="tplsc">${esc(s)}</h3>${list.filter(t=>(t.scene || "そのほか") === s).map(t=>`<div class="tplrow">
+        <div><b>${esc(t.title || "（名前なし）")}</b><small>${esc(tplFill(t.text, keepCast))}</small></div>
+        <span><button type="button" class="btn btn-primary btn-sm" onclick="copyTpl('${esc(t.id)}')">📋 コピー</button>
+        ${KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openTplBox('${esc(t.id)}')">直す</button>` : ""}</span></div>`).join("")}`).join("")
+      : `<p style="color:var(--sub)">まだテンプレがありません。「＋ テンプレを足す」から登録してください。</p>`}
+    ${KB.CAN_EDIT && !ed ? `<button type="button" class="btn btn-ghost" style="margin-top:10px;width:100%" onclick="openTplBox('new')">＋ テンプレを足す</button>` : ""}</div>`;
+  bg.classList.add("show");
+}
+function copyTpl(id){ const t = tplList().find(x=>x.id === id); if(!t) return; navigator.clipboard.writeText(tplFill(t.text)).then(()=>toast("📋 「" + (t.title || "テンプレ") + "」をコピーしました")); }
+async function saveTplList(list){
+  try{
+    q(await sb.from("kb_settings").upsert({ key: "msg_templates", value: list, note: "📝 テンプレ（受付の 📝 テンプレ）" }));
+    M.set.msg_templates = list; return true;
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); return false; }
+}
+async function saveTpl(id){
+  if(!KB.CAN_EDIT) return;
+  const t = { id: id || ("t" + Date.now()), scene: $("tpl_scene").value.trim(), title: $("tpl_title").value.trim(), text: $("tpl_text").value };
+  if(!t.text.trim()){ toast("文を入れてください"); return; }
+  const list = tplList().filter(x=>x.id !== t.id); const i = tplList().findIndex(x=>x.id === t.id);
+  if(i >= 0) list.splice(i, 0, t); else list.push(t);
+  if(await saveTplList(list)){ toast("保存しました"); openTplBox(); }
+}
+async function delTpl(id){
+  if(!KB.CAN_EDIT || !confirm("このテンプレを消しますか？")) return;
+  if(await saveTplList(tplList().filter(x=>x.id !== id))){ toast("消しました"); openTplBox(); }
 }
 async function shiftNoticeDone(kind, cid){
   if(!KB.CAN_EDIT) return;
@@ -3780,27 +3883,22 @@ async function shiftNoticeDone(kind, cid){
     renderShiftNotices();
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
-// ⚙️ 通知の文：ふつうの文と、キャストごとの文（その子だけちがう文・通知しない）
+// 🔔 出勤・退勤の通知：通知しないキャストだけ決める（送る文は 📝 テンプレ）
 function snRowHtml(cid, o){
   const ro = KB.CAN_EDIT ? "" : "disabled";
   return `<div class="snrow">
       <select class="sn-c" ${ro}><option value="">（キャストをえらぶ）</option>${M.casts.map(c=>`<option value="${c.id}" ${c.id === cid ? "selected" : ""}>${esc(c.official_name || c.temp_name)}</option>`).join("")}</select>
-      <textarea class="sn-in" rows="2" placeholder="出勤の文（空ならふつうの文）" ${ro}>${esc(o.in || "")}</textarea>
-      <textarea class="sn-out" rows="2" placeholder="退勤の文（空ならふつうの文）" ${ro}>${esc(o.out || "")}</textarea>
       <label><input type="checkbox" class="sn-offin" ${o.off_in ? "checked" : ""} ${ro}> 出勤は通知しない</label>
       <label><input type="checkbox" class="sn-offout" ${o.off_out ? "checked" : ""} ${ro}> 退勤は通知しない</label></div>`;
 }
 function openShiftNoticeSet(){
   let bg = $("snBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "snBg"; bg.className = "modal-bg"; document.body.appendChild(bg); KB.closeOnBackdrop(bg, () => bg.classList.remove("show")); }
-  const set = shiftNoticeSet(), ro = KB.CAN_EDIT ? "" : "disabled";
-  bg.innerHTML = `<div class="modal" style="max-width:720px"><button class="x" onclick="$('snBg').classList.remove('show')">×</button>
-    <h2>⚙️ 出勤・退勤の通知の文</h2>
-    <p style="font-size:12.5px;color:var(--sub);line-height:1.6;margin:0 0 8px">シフトの時間になると、受付の上に出ます。文は「📋 文をコピー」で LINE などに貼れます。<br>{名前} {時間} と書くと、その子の名前・時間になります。文が空なら、知らせだけ出ます。</p>
-    <div class="f"><label>🌅 出勤のふつうの文</label><textarea id="sn_in" rows="2" ${ro}>${esc(set.in || "")}</textarea></div>
-    <div class="f"><label>🌙 退勤のふつうの文</label><textarea id="sn_out" rows="2" ${ro}>${esc(set.out || "")}</textarea></div>
-    <h3 style="margin:12px 0 6px;font-size:15px">👤 キャストごと（その子だけ文を変える・通知しない）</h3>
-    <div id="snRows">${Object.entries(set.casts || {}).map(([cid, o])=>snRowHtml(cid, o)).join("")}${snRowHtml("", {})}</div>
+  const set = shiftNoticeSet();
+  bg.innerHTML = `<div class="modal" style="max-width:620px"><button class="x" onclick="$('snBg').classList.remove('show')">×</button>
+    <h2>🔔 出勤・退勤の通知</h2>
+    <p style="font-size:12.5px;color:var(--sub);line-height:1.6;margin:0 0 8px">シフトの出勤時間・退勤時間になると、受付の上に出ます（欠勤の子は出ません）。<br>送る文は「📝 テンプレ」に登録してください（通知の「📝 テンプレ」から、その子をえらんだ状態で開けます）。<br>ここでは、通知しないキャストだけ決めます。</p>
+    <div id="snRows">${Object.entries(set.casts || {}).filter(([, o])=>o.off_in || o.off_out).map(([cid, o])=>snRowHtml(cid, o)).join("")}${snRowHtml("", {})}</div>
     ${KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="$('snRows').insertAdjacentHTML('beforeend', snRowHtml('', {}))">＋ キャストを足す</button>
     <button type="button" class="btn btn-primary" style="margin-top:10px;width:100%" onclick="saveShiftNoticeSet()">保存</button>` : ""}</div>`;
   bg.classList.add("show");
@@ -3810,19 +3908,19 @@ async function saveShiftNoticeSet(){
   const casts = {};
   document.querySelectorAll("#snRows .snrow").forEach(r=>{
     const cid = r.querySelector(".sn-c").value; if(!cid) return;
-    const o = { in: r.querySelector(".sn-in").value.trim(), out: r.querySelector(".sn-out").value.trim(), off_in: r.querySelector(".sn-offin").checked, off_out: r.querySelector(".sn-offout").checked };
-    if(o.in || o.out || o.off_in || o.off_out) casts[cid] = o;
+    const o = { off_in: r.querySelector(".sn-offin").checked, off_out: r.querySelector(".sn-offout").checked };
+    if(o.off_in || o.off_out) casts[cid] = o;
   });
-  const value = { in: $("sn_in").value.trim(), out: $("sn_out").value.trim(), casts };
+  const value = { casts };
   try{
-    q(await sb.from("kb_settings").upsert({ key: "shift_notice", value, note: "🔔 出勤・退勤の通知の文（受付の ⚙️ 通知の文）" }));
+    q(await sb.from("kb_settings").upsert({ key: "shift_notice", value, note: "🔔 出勤・退勤の通知（通知しないキャスト）" }));
     M.set.shift_notice = value; $("snBg").classList.remove("show"); toast("保存しました"); renderShiftNotices();
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
 setInterval(loadShiftNotices, 120000); setInterval(renderShiftNotices, 30000);
 const __loadDayA = loadDay;
 let shiftNoticeFirst = true;
-loadDay = async function(){ await __loadDayA(); renderCallAlerts(); if(shiftNoticeFirst){ shiftNoticeFirst = false; loadShiftNotices(); } };
+loadDay = async function(){ await __loadDayA(); renderCallAlerts(); if(shiftNoticeFirst){ shiftNoticeFirst = false; loadShiftNotices(); renderNtfBox(); } };
 
 /* ---------- 💳 カード決済の進み具合（本日のキャスト一覧で、プルダウンで変える） ---------- */
 const CARD_STEP = [["unsent", "💳 URL未送信"], ["sent", "📨 URL送信済み"], ["paid", "✅ 決済済み"]];
