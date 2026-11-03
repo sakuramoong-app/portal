@@ -1639,7 +1639,8 @@ function checksForSave(){
 /* ---------- お客さん ---------- */
 const digits = s => String(s||"").normalize("NFKC").replace(/[^\d]/g, "");
 // 電話番号：数字だけにする。「+81」（日本）は 0 から始まる形に、ほかの国の「+」「00」で始まる番号は「+」を残す
-const phoneNorm = s => { const t = String(s||"").normalize("NFKC").trim(), d = digits(t); if(!/^(\+|00)/.test(t)) return d; const n = t.startsWith("00") ? d.slice(2) : d; return n.startsWith("81") ? "0" + n.slice(2) : (n ? "+" + n : ""); };
+const phoneNorm = s => { const t = String(s||"").normalize("NFKC").trim(), d = digits(t); if(/^0+$/.test(d) && d.length <= 4) return d;   // 「00」＝電話番号不明は、そのまま残す（国番号の00とまちがえない）
+  if(!/^(\+|00)/.test(t)) return d; const n = t.startsWith("00") ? d.slice(2) : d; return n.startsWith("81") ? "0" + n.slice(2) : (n ? "+" + n : ""); };
 // 電話番号でお客さんを探す：主の番号 → 副番号（SQL 179。まだなら主の番号だけ）
 async function custByPhone(phone, cols){
   const a = q(await sb.from("kb_customers").select(cols).eq("phone", phone).order("id").limit(1).maybeSingle());
