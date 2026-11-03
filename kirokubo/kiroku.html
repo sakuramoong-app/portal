@@ -6219,6 +6219,16 @@ function livePaint(){
   renderList = function(){ const r = __renderListLive.apply(this, arguments); livePaint(); return r; };
 })();
 
+/* ---------- 🎨 本日のキャスト一覧：キャストごとの枠を2色で交互に（見分けやすく。2026/11/4） ---------- */
+document.head.insertAdjacentHTML("beforeend", `<style>
+  #list > .cblock.cb-a{border:2px solid #F3B6CB;border-left:8px solid #E5638C;}
+  #list > .cblock.cb-b{border:2px solid #A9CDEE;border-left:8px solid #4A8FD6;}
+</style>`);
+{ const __renderListAlt = renderList;
+  renderList = function(){ const r = __renderListAlt.apply(this, arguments);
+    document.querySelectorAll("#list > .cblock").forEach((el, i) => { el.classList.toggle("cb-a", i % 2 === 0); el.classList.toggle("cb-b", i % 2 === 1); });
+    return r; }; }
+
 
 /* ---------- 本日のキャスト：お茶・欠勤の子は、あいうえお順（ほかの並び順も）から外して、いちばん下の別枠へ ---------- */
 const __sortRowsTea = sortRows;
