@@ -233,6 +233,8 @@
   .snchip{display:inline-flex;align-items:center;gap:4px;background:#fff;border:1.5px solid #BCD0F5;border-radius:99px;padding:2px 4px 2px 10px;font-size:13px;color:#23375e;} .snchip.out{border-color:#C9B8EE;background:#FAF7FF;}
   .snchip b{cursor:pointer;font-weight:800;} .callalert .snchip button{display:inline-block;width:auto;margin:0;padding:2px 8px;font-size:12px;border-radius:99px;}
   .tplkinds{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 4px;font-size:13px;font-weight:800;color:var(--sub);} .tplkinds button{font-family:inherit;font-size:13px;font-weight:800;background:#fff;border:1.5px solid var(--line);border-radius:99px;padding:4px 12px;cursor:pointer;color:#5C4B4F;} .tplkinds button.on{background:#FFE3EC;border-color:#F09AAA;color:#B0213F;}
+  .ntfset{border:1.5px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:8px;} .ntfset-hd{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:4px;} .ntfset-hd b{flex:1 1 220px;} .ntfset-hd label{font-size:13px;font-weight:700;}
+  .ntfset-row{display:flex;gap:6px;align-items:center;margin-top:4px;} .ntfset-row label{width:78px;font-size:12.5px;color:var(--sub);font-weight:700;flex:none;} .ntfset-row input{flex:1;font-family:inherit;font-size:13px;}
   #ntfBox{position:fixed;left:12px;bottom:104px;z-index:955;font-family:inherit;}
   #ntfBox .ntfopen{background:#fff;border:1.5px solid #8FB0EE;color:#2B4C8C;border-radius:99px;padding:7px 12px;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(43,76,140,.18);}
   #ntfBox.open{width:min(300px,calc(100vw - 24px));background:#fff;border:2px solid #8FB0EE;border-radius:14px;box-shadow:0 8px 24px rgba(43,76,140,.25);}
@@ -3664,16 +3666,16 @@ function renderCallAlerts(){
     if(r.status === "working"){ if(en && now >= en) outs.push(r); return; }   // ⏰ 終了時刻になった → アウトコールの確認
     const sa = r.status_at ? Date.parse(r.status_at) : null;   // ⏰ この状態の時刻（SQL 182）
     if(!["pre_call", "hour_call", "pre_mail", "hour_mail"].includes(r.status)){
-      if(sa && now >= sa && (!en || now < en)) items.push({ r, kind: "⏰ 「" + (STATUS[r.status] || r.status) + "」の時刻（" + hm(r.status_at) + "）" });
+      if(sa && now >= sa && (!en || now < en)) items.push({ r, k: "status", kind: "⏰ 「" + (STATUS[r.status] || r.status) + "」の時刻（" + hm(r.status_at) + "）" });
       return;
     }
     const how = /_mail$/.test(r.status) ? "メール" : "電話";   // 確認がメールで来るお客さん（SQL 180）
     const isHour = ["hour_call", "hour_mail"].includes(r.status);
     const hourDue = isHour && sa ? sa : (st ? st - 3600000 : null);   // 1H前確認：時刻が入っていればその時刻から
-    if(st && now >= hourDue && now < st) items.push({ r, kind: (isHour && sa ? hm(r.status_at) + "の" : "1時間前の") + "確認" + how + "がまだ" });
+    if(st && now >= hourDue && now < st) items.push({ r, k: "hour", how, kind: (isHour && sa ? hm(r.status_at) + "の" : "1時間前の") + "確認" + how + "がまだ" });
     else if(["pre_call", "pre_mail"].includes(r.status) && (!st || now < st)){
       const due = sa || Date.parse(addDays(r.biz_date, -1) + "T20:15:00+09:00");   // 前日確認：時刻が入っていればその時刻
-      if(now >= due) items.push({ r, kind: "前日の確認" + how + "がまだ" });
+      if(now >= due) items.push({ r, k: "pre", how, kind: "前日の確認" + how + "がまだ" });
     }
   });
   const md = r => r.biz_date !== day ? esc(r.biz_date.slice(5).replace("-", "/")) + " " : "";
@@ -3683,20 +3685,25 @@ function renderCallAlerts(){
         <button type="button" onclick="openAlertRes(${r.id},'${r.biz_date}')">開く</button></div>`).join("")}</div>` : "")
     + (items.length ? `<div class="callalert">🔔 確認がまだ・時刻になった予約があります${items.map(({ r, kind })=>`
       <button type="button" onclick="jumpToRes(${r.id},'${r.biz_date}')"><b>${esc(kind)}</b>　${md(r)}${r.start_at ? hm(r.start_at) : "時間未定"}　${esc(castName(r.cast_id))}　<u>📍 予約へとぶ</u>　<u onclick="event.stopPropagation();openAlertRes(${r.id},'${r.biz_date}')">開く</u></button>`).join("")}</div>` : "");
-  // 新しく出たら、種類ごとの音を鳴らして、🔔 通知の小窓に出す
+  // 新しく出たら、種類ごとの音・声を鳴らして、🔔 通知の小窓に出す
   outs.filter(r=>!beeped.has("o" + r.id)).forEach(r=>{ beeped.add("o" + r.id);
-    notify("outcall", `⏰ 終了時刻 ${r.end_at ? hm(r.end_at) : ""}　${castName(r.cast_id)}：アウトコールの確認`, `jumpToRes(${r.id},'${r.biz_date}')`); });
-  items.filter(({ r, kind })=>!beeped.has("c" + r.id + kind)).forEach(({ r, kind })=>{ beeped.add("c" + r.id + kind);
-    notify("call", `🔔 ${kind}　${r.start_at ? hm(r.start_at) : ""} ${castName(r.cast_id)}`, `jumpToRes(${r.id},'${r.biz_date}')`); });
+    notify("outcall", { 名前: castName(r.cast_id), 時間: r.end_at ? hm(r.end_at) : "" }, `jumpToRes(${r.id},'${r.biz_date}')`); });
+  items.filter(({ r, kind })=>!beeped.has("c" + r.id + kind)).forEach(({ r, k, how, kind })=>{ beeped.add("c" + r.id + kind);
+    notify(k, { 名前: castName(r.cast_id), 時間: r.start_at ? hm(r.start_at) : "", 状態: STATUS[r.status] || r.status, 方法: how || "" }, `jumpToRes(${r.id},'${r.biz_date}')`); });
 }
 const beeped = new Set();
 
-/* ---------- 🔊 通知の音（種類ごとに選べる・この端末だけ）と 🔔 通知の小窓（なんで鳴ったか） ---------- */
+/* ---------- 🔔 通知の設定：通知ごとに「表示する文」「音」「🗣 声で読む」
+   表示する文・読む文は内勤みんな同じ（kb_settings 'ntf_texts' = { 種類: { text, say } }）
+   音・声のオン/オフは、この端末だけ（localStorage kbSounds / kbVoice）
+   文の中の {名前} {時間} {状態} {方法} を置きかえる ---------- */
 const NTF_KINDS = {
-  outcall: { label: "⏰ 終了時刻（アウトコールの確認）", def: "pipi" },
-  call:    { label: "🔔 確認電話がまだ・状態の時刻になった", def: "none" },
-  in:      { label: "🌅 出勤の時間", def: "chime" },
-  out:     { label: "🌙 退勤の時間", def: "pon" },
+  outcall: { label: "⏰ 終了時刻（アウトコールの確認）", def: "pipi",  voice: true,  text: "⏰ {名前}　アウトコールの確認（{時間} 終了）", say: "{名前}さん、アウトコールの確認です" },
+  hour:    { label: "🔔 1時間前の確認がまだ",          def: "none",  voice: false, text: "🔔 {名前}　1時間前の確認{方法}がまだ（{時間}〜）", say: "{名前}さん、1時間前の確認です" },
+  pre:     { label: "🔔 前日の確認がまだ",             def: "none",  voice: false, text: "🔔 {名前}　前日の確認{方法}がまだ（{時間}〜）", say: "{名前}さん、前日の確認です" },
+  status:  { label: "⏰ 状態の時刻になった",           def: "none",  voice: false, text: "⏰ {名前}　「{状態}」の時刻（{時間}〜の予約）", say: "{名前}さん、{状態}の時刻です" },
+  in:      { label: "🌅 出勤の時間",                   def: "chime", voice: false, text: "🌅 {名前}　出勤の時間（{時間}）", say: "{名前}さん、出勤の時間です" },
+  out:     { label: "🌙 退勤の時間",                   def: "pon",   voice: false, text: "🌙 {名前}　退勤の時間（{時間}）", say: "{名前}さん、退勤の時間です" },
 };
 const SOUNDS = {
   pipi:   { label: "ピピッ（高い2回）", notes: [[880, 0], [880, .35]] },
@@ -3706,8 +3713,14 @@ const SOUNDS = {
   up:     { label: "ピロリン（上がる）", notes: [[660, 0], [880, .16], [1175, .32]] },
   none:   { label: "鳴らさない",         notes: [] },
 };
-function soundPrefs(){ try{ return JSON.parse(localStorage.getItem("kbSounds") || "{}") || {}; }catch(e){ return {}; } }
-function soundOf(kind){ const p = soundPrefs()[kind]; return SOUNDS[p] ? p : (NTF_KINDS[kind] || {}).def || "pipi"; }
+function lsGet(key){ try{ return JSON.parse(localStorage.getItem(key) || "{}") || {}; }catch(e){ return {}; } }
+function lsSet(key, v){ try{ localStorage.setItem(key, JSON.stringify(v)); }catch(e){} }
+function soundOf(kind){ const p = lsGet("kbSounds")[kind]; return SOUNDS[p] ? p : (NTF_KINDS[kind] || {}).def || "pipi"; }
+function voiceOn(kind){ const p = lsGet("kbVoice")[kind]; return p == null ? !!(NTF_KINDS[kind] || {}).voice : !!p; }
+function ntfTexts(){ const v = M.set && M.set.ntf_texts; return v && typeof v === "object" ? v : {}; }
+function ntfFill(t, vars){ return String(t || "").replace(/\{(名前|時間|状態|方法)\}/g, (m, k)=>vars && vars[k] != null ? vars[k] : ""); }
+function ntfText(kind, vars){ return ntfFill((ntfTexts()[kind] || {}).text || (NTF_KINDS[kind] || {}).text || "{名前}", vars); }
+function ntfSay(kind, vars){ return ntfFill((ntfTexts()[kind] || {}).say || (NTF_KINDS[kind] || {}).say || "", vars); }
 function playSound(id){
   const s = SOUNDS[id]; if(!s || !s.notes.length) return;
   try{
@@ -3717,10 +3730,28 @@ function playSound(id){
   }catch(e){}
 }
 function beep(){ playSound("pipi"); }
+// 🗣 声で読む（ブラウザの読み上げ。Edge なら「Nanami」などの自然な声）
+function jaVoice(){
+  const vs = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
+  const ja = vs.filter(v=>/^ja/i.test(v.lang));
+  return ja.find(v=>/Nanami|Natural|Online/i.test(v.name)) || ja.find(v=>/Google/i.test(v.name)) || ja[0] || null;
+}
+function speak(text){
+  if(!text || !window.speechSynthesis) return;
+  try{ const u = new SpeechSynthesisUtterance(text); u.lang = "ja-JP"; const v = jaVoice(); if(v) u.voice = v; u.rate = 1.05; speechSynthesis.speak(u); }catch(e){}
+}
 const ntfLog = [];
-function notify(kind, text, jump){
+function notify(kind, vars, jump){
+  const text = ntfText(kind, vars);
   ntfLog.unshift({ kind, text, jump: jump || "", at: new Date() }); if(ntfLog.length > 30) ntfLog.length = 30;
-  if(!notify.q){ notify.q = true; setTimeout(()=>{ notify.q = false; playSound(soundOf(kind)); }, 50); }   // 一度にたくさん出ても、音は1回
+  (notify.batch = notify.batch || []).push({ kind, vars });
+  if(!notify.q){ notify.q = true; setTimeout(()=>{   // 一度にたくさん出ても、音は1回・声は3件まで
+    const b = notify.batch; notify.batch = []; notify.q = false;
+    playSound(soundOf(b[0].kind));
+    const says = b.filter(x=>voiceOn(x.kind));
+    says.slice(0, 3).forEach(x=>speak(ntfSay(x.kind, x.vars)));
+    if(says.length > 3) speak("ほか" + (says.length - 3) + "件");
+  }, 50); }
   renderNtfBox(true);
   clearTimeout(notify.t); notify.t = setTimeout(()=>{ const b = $("ntfBox"); if(b && !b.matches(":hover")){ b.classList.remove("open"); renderNtfBox(); } }, 30000);   // 30秒で小さい 🔔 にもどる（押せばまた見られる）
 }
@@ -3730,22 +3761,54 @@ function renderNtfBox(open){
   if(open) el.classList.add("open");
   const hhmm = d => String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
   el.innerHTML = el.classList.contains("open")
-    ? `<div class="ntfhd">🔔 通知（新しい順）<span><button type="button" onclick="openSoundSet()">🔊 音</button><button type="button" onclick="$('ntfBox').classList.remove('open');renderNtfBox()">×</button></span></div>
-       <div class="ntflist">${ntfLog.length ? ntfLog.map(n=>`<div class="ntfrow${n.jump ? " go" : ""}" ${n.jump ? `onclick="${esc(n.jump)}"` : ""}><small>${hhmm(n.at)}・${esc(SOUNDS[soundOf(n.kind)].label)}</small>${esc(n.text)}</div>`).join("") : `<div class="ntfrow">まだ通知はありません</div>`}</div>`
+    ? `<div class="ntfhd">🔔 通知（新しい順）<span><button type="button" onclick="openSoundSet()">⚙️ 設定</button><button type="button" onclick="$('ntfBox').classList.remove('open');renderNtfBox()">×</button></span></div>
+       <div class="ntflist">${ntfLog.length ? ntfLog.map(n=>`<div class="ntfrow${n.jump ? " go" : ""}" ${n.jump ? `onclick="${esc(n.jump)}"` : ""}><small>${hhmm(n.at)}・${esc(SOUNDS[soundOf(n.kind)].label)}${voiceOn(n.kind) ? "・🗣" : ""}</small>${esc(n.text)}</div>`).join("") : `<div class="ntfrow">まだ通知はありません</div>`}</div>`
     : `<button type="button" class="ntfopen" onclick="renderNtfBox(true)">🔔${ntfLog.length ? " " + ntfLog.length : ""}</button>`;
 }
+const NTF_SAMPLE = { 名前: "さくら", 時間: "21:00", 状態: "移動中", 方法: "電話" };
 function openSoundSet(){
   let bg = $("sndBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "sndBg"; bg.className = "modal-bg"; document.body.appendChild(bg); KB.closeOnBackdrop(bg, () => bg.classList.remove("show")); }
-  bg.innerHTML = `<div class="modal" style="max-width:560px"><button class="x" onclick="$('sndBg').classList.remove('show')">×</button>
-    <h2>🔊 通知の音</h2>
-    <p style="font-size:12.5px;color:var(--sub);line-height:1.6;margin:0 0 8px">どの知らせで、どの音が鳴るかの一覧です。この端末（このPC・スマホ）だけの設定です。<br>鳴ったときは、右下の 🔔 小窓に何の通知かが出ます。</p>
-    <table class="list"><tr><th>通知</th><th>音</th><th></th></tr>${Object.entries(NTF_KINDS).map(([k, v])=>`<tr><td>${esc(v.label)}</td>
-      <td><select onchange="setSound('${k}',this.value)">${Object.entries(SOUNDS).map(([id, s])=>`<option value="${id}" ${soundOf(k) === id ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select></td>
-      <td><button type="button" class="btn btn-ghost btn-sm" onclick="playSound(soundOf('${k}'))">▶ 試す</button></td></tr>`).join("")}</table></div>`;
+  const tx = ntfTexts(), ro = KB.CAN_EDIT ? "" : "disabled";
+  bg.innerHTML = `<div class="modal" style="max-width:760px"><button class="x" onclick="$('sndBg').classList.remove('show')">×</button>
+    <h2>🔔 通知の設定（表示する文・音・声）</h2>
+    <p style="font-size:12.5px;color:var(--sub);line-height:1.6;margin:0 0 8px">鳴ったときは、左下の 🔔 小窓に「表示する文」が出ます。🗣 にチェックすると「読む文」を声で読みます。<br>
+      {名前} {時間} {状態} {方法} は、その予約・その子のものになります。文が空なら、はじめの文（うすい字）になります。<br>
+      <b>音・声</b>はこの端末（このPC・スマホ）だけ。<b>文</b>は内勤みんな同じです（下の「文を保存」）。</p>
+    ${Object.entries(NTF_KINDS).map(([k, v])=>`<div class="ntfset" data-k="${k}">
+      <div class="ntfset-hd"><b>${esc(v.label)}</b>
+        <select onchange="setSound('${k}',this.value)">${Object.entries(SOUNDS).map(([id, s])=>`<option value="${id}" ${soundOf(k) === id ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select>
+        <label><input type="checkbox" ${voiceOn(k) ? "checked" : ""} onchange="setVoice('${k}',this.checked)"> 🗣 声で読む</label>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="testNtf('${k}')">▶ 試す</button></div>
+      <div class="ntfset-row"><label>表示する文</label><input class="nt-text" value="${esc((tx[k] || {}).text || "")}" placeholder="${esc(v.text)}" ${ro}></div>
+      <div class="ntfset-row"><label>読む文</label><input class="nt-say" value="${esc((tx[k] || {}).say || "")}" placeholder="${esc(v.say)}" ${ro}></div></div>`).join("")}
+    ${KB.CAN_EDIT ? `<button type="button" class="btn btn-primary" style="margin-top:6px;width:100%" onclick="saveNtfTexts()">文を保存（内勤みんなに）</button>` : ""}
+    ${window.speechSynthesis ? "" : `<p class="warn">この端末のブラウザは、声で読むことができません。</p>`}</div>`;
   bg.classList.add("show");
 }
-function setSound(kind, id){ const p = soundPrefs(); p[kind] = id; try{ localStorage.setItem("kbSounds", JSON.stringify(p)); }catch(e){} playSound(id); renderNtfBox(); }
+function setSound(kind, id){ const p = lsGet("kbSounds"); p[kind] = id; lsSet("kbSounds", p); playSound(id); renderNtfBox(); }
+function setVoice(kind, on){ const p = lsGet("kbVoice"); p[kind] = !!on; lsSet("kbVoice", p); if(on) speak(ntfSay(kind, NTF_SAMPLE)); renderNtfBox(); }
+// ▶ 試す：いま入れている文で（保存前でも）
+function testNtf(kind){
+  const box = document.querySelector(`#sndBg .ntfset[data-k="${kind}"]`), v = NTF_KINDS[kind];
+  const say = ntfFill((box && box.querySelector(".nt-say").value.trim()) || (ntfTexts()[kind] || {}).say || v.say, NTF_SAMPLE);
+  playSound(soundOf(kind));
+  if(voiceOn(kind)) setTimeout(()=>speak(say), 600);
+  toast(ntfFill((box && box.querySelector(".nt-text").value.trim()) || (ntfTexts()[kind] || {}).text || v.text, NTF_SAMPLE));
+}
+async function saveNtfTexts(){
+  if(!KB.CAN_EDIT) return;
+  const value = {};
+  document.querySelectorAll("#sndBg .ntfset").forEach(b=>{
+    const text = b.querySelector(".nt-text").value.trim(), say = b.querySelector(".nt-say").value.trim();
+    if(text || say) value[b.dataset.k] = { text, say };
+  });
+  try{
+    q(await sb.from("kb_settings").upsert({ key: "ntf_texts", value, note: "🔔 通知の表示する文・読む文（受付の 通知の設定）" }));
+    M.set.ntf_texts = value; toast("文を保存しました"); renderNtfBox();
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+if(window.speechSynthesis) speechSynthesis.getVoices();   // 声の一覧を先に読みこませておく
 // アウトコールがきた → 予約を「終了」に・キャストは仕事していたエリアの「待機中」へ
 async function outcallDone(id, bd){
   if(!KB.CAN_EDIT) return;
@@ -3821,9 +3884,9 @@ function renderShiftNotices(){
   el.innerHTML = items.length ? `<div class="callalert shiftn">🔔 出勤・退勤（時間から60分だけ出ます）<button type="button" class="snset" onclick="openShiftNoticeSet()">⚙️ 通知しない子</button>
       <div class="snchips">${items.map(({ c, kind, h })=>`<span class="snchip ${kind}"><b onclick="jumpToCast('${c.id}')">${kind === "in" ? "🌅" : "🌙"}${esc(lateHM(Math.round(h * 60)))} ${esc(c.official_name || c.temp_name)}</b><button type="button" title="テンプレ" onclick="openTplBox(null,'${c.id}','${kind === "in" ? "出勤" : "退勤"}')">📝</button>${KB.CAN_EDIT ? `<button type="button" class="okbtn" title="済" onclick="shiftNoticeDone('${kind}','${c.id}')">✓済</button>` : ""}</span>`).join("")}</div></div>`
     : "";
-  el.insertAdjacentHTML("afterbegin", `<div class="snsetonly"><button type="button" onclick="openTplBox()">📝 テンプレ（送る文）</button>${KB.PRACTICE ? "" : `<button type="button" onclick="openShiftNoticeSet()">🔔 出勤・退勤の通知</button>`}<button type="button" onclick="openSoundSet()">🔊 通知の音</button></div>`);
+  el.insertAdjacentHTML("afterbegin", `<div class="snsetonly"><button type="button" onclick="openTplBox()">📝 テンプレ（送る文）</button>${KB.PRACTICE ? "" : `<button type="button" onclick="openShiftNoticeSet()">🔔 出勤・退勤の通知</button>`}<button type="button" onclick="openSoundSet()">🔊 通知の設定（文・音・声）</button></div>`);
   items.filter(x=>!shiftBeeped.has(x.kind + x.c.id)).forEach(x=>{ shiftBeeped.add(x.kind + x.c.id);
-    notify(x.kind, `${x.kind === "in" ? "🌅 出勤" : "🌙 退勤"}の時間 ${lateHM(Math.round(x.h * 60))}　${x.c.official_name || x.c.temp_name}`, `jumpToCast('${x.c.id}')`); });
+    notify(x.kind, { 名前: x.c.official_name || x.c.temp_name, 時間: lateHM(Math.round(x.h * 60)) }, `jumpToCast('${x.c.id}')`); });
 }
 
 /* ---------- 📝 テンプレ（いろいろな場面で送る文を、自由に登録してコピー）
