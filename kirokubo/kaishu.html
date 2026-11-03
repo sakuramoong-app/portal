@@ -202,7 +202,7 @@ function rowsFor(day, R){
       card = Number(s.cardPaid || 0); tr = Number(s.transferPaid || 0);
     } else {
       shop = mine.reduce((a, r) => a + (Number(r.total) || 0) - backOf(r), 0) + zappiOf(id, day, cd, mine);   // 雑費も入れる（精算と同じ）
-      card = mine.filter(r => r.payment === "card" || r.payment === "card_paid").reduce((a, r) => a + (Number(r.total) || 0), 0);
+      card = mine.reduce((a, r) => a + ((r.payment === "card" || r.payment === "card_paid") ? (Number(r.total) || 0) : (Number(r.card_total) || 0)), 0);   // 現金＋カードはカードの分だけ
       tr = mine.filter(r => r.transfer_status && Number(r.transfer_amount)).reduce((a, r) => a + (Number(r.transfer_amount) || 0), 0);
       exact = false;
     }

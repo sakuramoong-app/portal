@@ -705,7 +705,8 @@
     <div class="step">
       <h3><span class="n">4</span>総額のご案内</h3>
       <div class="row1"><div class="f"><label>支払い方法<span class="req">必須</span></label><div id="f_payChips" style="display:none"></div>
-        <select id="f_pay" style="max-width:220px" onchange="recalc()"><option value="">（選ぶ）</option><option value="cash">現金</option><option value="card">カード（×1.15）</option></select></div></div>
+        <select id="f_pay" style="max-width:220px" onchange="recalc()"><option value="">（選ぶ）</option><option value="cash">現金</option><option value="card">カード（×1.15）</option><option value="split">現金＋カード（分けて払う）</option></select>
+        <span id="splitWrap" style="display:none;font-size:13px;font-weight:700;margin-left:6px">カードで払う分（手数料の前）<input id="f_cardpart" type="number" min="0" step="500" style="width:110px" oninput="recalc()">円</span></div></div>
       <div class="calc" id="calc"></div>
       <details id="backDet" class="calc" style="margin-top:8px"><summary style="cursor:pointer;font-weight:800;font-size:14px">💗 キャストの報酬<span id="backSum"></span>（受付では見なくてOK）</summary><div id="calcBack"></div></details>
     </div>
@@ -940,7 +941,9 @@ function openForm(id){
   setRadio("f_afw", r.af_wish || ""); setRadio("f_rafw", r.rev_af_wish || "");
   $("optDetails").open = false;
   $("f_transport").value = r.transport || 0; $("f_discount").value = r.discount || 0; $("f_discnote").value = r.discount_note || "";
-  $("f_pay").value = id ? (r.payment === "card_paid" ? "card" : (r.payment || "cash")) : ""; $("f_confirm").value = r.confirm_call || ""; $("f_note").value = r.note || "";
+  $("f_pay").value = id ? (r.payment === "card_paid" ? "card" : r.payment === "cash" && Number(r.card_total) > 0 ? "split" : (r.payment || "cash")) : "";
+  if($("f_cardpart")) $("f_cardpart").value = id && r.payment === "cash" && Number(r.card_total) > 0 ? Math.round(Number(r.card_total) / ((M.set.card || {}).rate || 1.15)) : "";
+  $("f_confirm").value = r.confirm_call || ""; $("f_note").value = r.note || "";
   visit = id ? (r.visit_kind || "new") : ""; mediaSel = (r.media || []).slice();
   document.querySelectorAll("#formBg .miss").forEach(el=>el.classList.remove("miss"));
   const c = r.kb_customers || {};
@@ -1805,7 +1808,11 @@ function calc(){
   let total = price + admission + nomination + ext*extSet.price + date*dateSet.price + transport + optionTotal - discount;
   const pay = $("f_pay").value;
   const cardRate = (M.set.card || {}).rate || 1.15;
-  if(pay && pay !== "cash"){ total = Math.round(total * cardRate); }
+  // 現金＋カード（分けて払う）：カードで払う分にだけ手数料（×1.15）をのせる。キャストが受け取るのは現金の分だけ 2026/11/4
+  let splitCard = 0;
+  if($("splitWrap")) $("splitWrap").style.display = pay === "split" ? "" : "none";
+  if(pay === "split"){ const base = Math.min(total, Math.max(0, Number($("f_cardpart") ? $("f_cardpart").value : 0) || 0)); splitCard = Math.round(base * cardRate); total = total - base + splitCard; }
+  else if(pay && pay !== "cash"){ total = Math.round(total * cardRate); }
   // バック：店舗のグループのランク（特別フリー・イベフリーは「イベ」のランク）＋コース＋（本指／フリー…）
   let courseBack = 0, rank = "", key = "", backMissing = null;
   if(cast){
@@ -1842,7 +1849,7 @@ function calc(){
     });
   }
   return { store, g, course, price, nomination, admission, extFee: ext*extSet.price, dateFee: date*dateSet.price, opts, optionTotal,
-           optionBack, transport, discount, total, pay, courseBack, extra, why, rank, ext, date, free, backMissing };
+           optionBack, transport, discount, total, pay, splitCard, courseBack, extra, why, rank, ext, date, free, backMissing };
 }
 
 let last = null;
@@ -1922,7 +1929,12 @@ ${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st||"--:--"}〜$
 【${{ love: "ホテル", biz: "ホテル", home: "自宅" }[$("f_place").value] || "ホテル・自宅"}】${$("f_area").value} ${$("f_address").value}${(() => { try{ return $("f_place").value === "biz" ? "\n【ビジホ】" + bizText(bizState) : ""; }catch(e){ return ""; } })()}${hotelMapUrl() ? "\n【地図】" + hotelMapUrl() : ""}
 【バック有OP】${backOps}
 【バック無OP】${noBackOps}${$("f_castnote") && $("f_castnote").value.trim() ? "\n【特記事項】" + $("f_castnote").value.trim() : ""}
-${c.pay === "cash"
+${c.pay === "split"
+  ? `【料金総額】${c.total.toLocaleString("ja-JP")}円（現金 ${(c.total - (c.splitCard || 0)).toLocaleString("ja-JP")}円＋カード ${(c.splitCard || 0).toLocaleString("ja-JP")}円）
+※現金の ${(c.total - (c.splitCard || 0)).toLocaleString("ja-JP")}円は、お会いして最初にいただいてください（カードの分は決済URLで払っていただきます）
+部屋内ではキャストさん及びお客様どちらもお風呂やトイレにも貴重品を肌身離さず持ち歩くよう心がけてください。
+【お金を盗られる事件が実際にありました。気を付けましょう】`
+  : c.pay === "cash"
   ? `【料金総額】${c.total.toLocaleString("ja-JP")}円
 
 ※【盗難・料金貰い忘れ対策】料金はお会いして最初にいただいてください。
@@ -1963,7 +1975,7 @@ function netReply(){
 ■キャスト：${who}
 ■コース：${c.course}${/^\d+$/.test(c.course) ? "分" : ""}${c.ext ? "（延長" + c.ext * 30 + "分）" : ""}
 ■ご利用場所：${place || "（未定）"}${ops ? "\n■オプション：" + ops : ""}
-■料金総額：${c.total.toLocaleString("ja-JP")}円（${c.pay === "cash" ? "現金" : "カード"}）
+■料金総額：${c.total.toLocaleString("ja-JP")}円（${c.pay === "cash" ? "現金" : c.pay === "split" ? "現金＋カード" : "カード"}）
 
 ご不明な点やご変更がございましたら、お気軽にお電話ください。
 当日はどうぞよろしくお願いいたします。
@@ -2057,7 +2069,8 @@ async function saveRes(){
       ...(HAS_EXT_ORDERS ? { ext_orders: extOrders } : {}),
       base_price: c.price, admission: c.admission, nomination_fee: c.nomination, extension_fee: c.extFee + c.dateFee,
       transport: c.transport, option_total: c.optionTotal, discount: c.discount, discount_note: $("f_discnote").value.trim(),
-      total: c.total, payment: c.pay === "card" && editing && (editing.card_step === "paid" || editing.payment === "card_paid") ? "card_paid" : c.pay, card_total: c.pay === "cash" ? 0 : c.total,
+      // 現金＋カードは、支払いは「現金」のまま、カードの分（手数料こみ）を card_total に入れる（精算・回収明細でカードとして引く）
+      total: c.total, payment: c.pay === "split" ? "cash" : c.pay === "card" && editing && (editing.card_step === "paid" || editing.payment === "card_paid") ? "card_paid" : c.pay, card_total: c.pay === "cash" ? 0 : c.pay === "split" ? (c.splitCard || 0) : c.total,
       course_back: c.courseBack, option_back: c.optionBack, extra_back: c.extra,
       back_override: ovRaw === "" ? null : Number(ovRaw),
       ...(("back_override_note" in (rows[0] || editing || {})) || ovRaw !== "" ? { back_override_note: ovRaw === "" ? "" : backOvNote.trim() } : {}),
@@ -2591,8 +2604,13 @@ renderTL = function(){ __renderTL(); renderBoard(); };
 const PLACES = ["池袋", "鶯谷", "五反田", "回収"];
 function calcCast(castId){
   const all = rows.filter(r=>r.cast_id === castId);
-  const live = all.filter(r=>r.status !== "cancel" && r.status !== "tobi");
+  const allLive = all.filter(r=>r.status !== "cancel" && r.status !== "tobi");
   const cd = castDays[castId] || {};
+  // ② 先精算のあとの追加分：前の精算（①…）に入った予約は数えない（unsettled.js の kbSnapParts・kbPartIds）2026/11/4
+  const prevParts = !cd.settled && typeof kbSnapParts === "function" ? kbSnapParts(cd) : [];
+  const doneIds = prevParts.length ? kbPartIds(cd, all, prevParts) : new Set();
+  const live = allLive.filter(r=>!doneIds.has(r.id));
+  const prevSum = k=>prevParts.reduce((a, p)=>a + (Number(p[k]) || 0), 0);
   // 報酬：手で直した報酬があればそれ（OP込みの金額として扱う）
   let reward = 0, option = 0;
   live.forEach(r=>{
@@ -2613,16 +2631,19 @@ function calcCast(castId){
   // 雑費（自動・免除の曜日・手で直したとき）
   const dow = new Date(day + "T12:00:00Z").getUTCDay();
   const exempt = rulesOn(castId).some(x=>x.kind === "zappi_exempt" && (x.params.days || []).includes(dow));
-  const zappiAuto = exempt ? 0 : Math.min(3000, Math.floor((reward + option) / 10500) * 500);
-  const zappi = cd.zappi_override != null ? cd.zappi_override : zappiAuto;
+  const zFull = rr=>{ let a = 0; rr.forEach(r=>{ a += r.back_override != null ? r.back_override : (r.course_back || 0) + (r.extra_back || 0) + (r.option_back || 0); }); return Math.min(3000, Math.floor(a / 10500) * 500); };
+  // 雑費は1日まとめて計算して、前の精算で払った分を引く（②だけで計算すると多くなったり少なくなったりするので）
+  const zappiAuto = exempt ? 0 : (prevParts.length ? Math.max(0, zFull(allLive) - prevSum("zappi")) : Math.min(3000, Math.floor((reward + option) / 10500) * 500));
+  const zappi = cd.zappi_override != null ? Math.max(0, cd.zappi_override - prevSum("zappi")) : zappiAuto;
   const plusItems = Array.isArray(cd.plus_items) ? cd.plus_items : [];
   const minusItems = Array.isArray(cd.minus_items) ? cd.minus_items : [];
-  const plus = plusItems.reduce((a, b)=>a + (Number(b.amount) || 0), 0);
-  const minus = minusItems.reduce((a, b)=>a + (Number(b.amount) || 0), 0);
+  const plus = Math.max(0, plusItems.reduce((a, b)=>a + (Number(b.amount) || 0), 0) - prevSum("plus"));     // ②：前の精算で払ったプラス・マイナスは引く
+  const minus = Math.max(0, minusItems.reduce((a, b)=>a + (Number(b.amount) || 0), 0) - prevSum("minus"));
   const takeHome = reward + option + transportBack + plus - zappi - minus;
   const total = live.reduce((a, r)=>a + (r.total || 0), 0);
   // カードは予約の1時間前までに決済URLで先に払ってもらう（現金はキャストに入らない）。「カード」「カード精算済」どちらも引く
-  const cardPaid = live.filter(r=>r.payment === "card" || r.payment === "card_paid").reduce((a, r)=>a + (r.total || 0), 0);
+  // 現金＋カード（分けて払う）の予約は、カードの分（card_total）だけ引く 2026/11/4
+  const cardPaid = live.reduce((a, r)=>a + ((r.payment === "card" || r.payment === "card_paid") ? (r.total || 0) : (Number(r.card_total) || 0)), 0);
   const cardUnconfirmed = live.filter(r=>r.payment === "card").length;
   // 🏦 振込（SQL 173）：あとで振り込んでもらう分は、カードと同じでキャストの手元にない
   const trList = live.filter(r=>r.transfer_status && Number(r.transfer_amount)), transferPaid = trList.reduce((a, r)=>a + (Number(r.transfer_amount) || 0), 0), trIds = trList.map(r=>r.id);
@@ -2633,7 +2654,7 @@ function calcCast(castId){
   const realDrop = provisional - withholding;           // 実質的な店落ち（暫定残額 − 源泉）
   const deposited = cd.deposited != null ? cd.deposited : null;
   const diff = deposited != null ? deposited - drop : null;   // マイナス＝未精算／プラス＝お釣り
-  return { transferPaid, trIds, all, live, cd, reward, option, transportBack, why, exempt, zappiAuto, zappi, plusItems, minusItems, plus, minus, takeHome, total, cardPaid, cardUnconfirmed, drop, withholding, provisional, shopDrop, realDrop, deposited, diff };
+  return { partNo: prevParts.length + 1, prevParts, allLive, transferPaid, trIds, all, live, cd, reward, option, transportBack, why, exempt, zappiAuto, zappi, plusItems, minusItems, plus, minus, takeHome, total, cardPaid, cardUnconfirmed, drop, withholding, provisional, shopDrop, realDrop, deposited, diff };
 }
 
 function cardHtml(id, c){
@@ -3555,7 +3576,7 @@ renderListTable = function(){
         const st = boardState(x), col = boardCol(x, st), gk = goneKind(x.cd);
         const sub = `${x.shift ? "出勤 " + tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) + (x.shiftOrig ? "（予定 " + tlLabel(x.shiftOrig.start) + "〜" + tlLabel(x.shiftOrig.end) + "）" : "") : "シフトなし"}・${STATE[st]}${st !== "gone" && col ? "（" + col + "）" : gk ? "（" + gk + "）" : ""}`;
         const cls = st === "gone" ? (gk === "お茶" ? "tea" : gk === "欠勤" ? "absent" : "away") : "";
-        return block("【" + esc(castLabel(x)) + "】", esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart) : [], x.c ? x.c.id : "", cls);
+        return block("【" + esc(castLabel(x)) + "】" + (x.c && typeof kbPendingAfterSettle === "function" && kbPendingAfterSettle(x.cd, rows.filter(r=>r.cast_id === x.c.id)).length ? `<span class="part2chip" title="精算済のあとで予約がふえました。💴 精算で②の精算をしてください">⚠️ ②の精算がまだ</span>` : ""), esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart) : [], x.c ? x.c.id : "", cls);
       }).join("") : `<div class="gate">${mode === "freeNow" ? "今すぐ行けるキャストはいません" : mode === "booked" ? "予約があるキャストはいません" : "この日のキャストがいません"}</div>`) + cancelSection();
 };
 
@@ -4692,7 +4713,7 @@ function resCard(r, i){
       ${r.phone_draft ? `<span class="rc-draft" title="スマホで仮入力。PCで開いて確かめると取り入れます">📱仮入力</span>` : ""}${r.dummy_name ? `<span class="rc-store">🎭${esc(r.dummy_name)}</span>` : ""}
       <span class="rc-k">📍<b>${esc(r.area || "エリアなし")}</b></span>
       <span class="rc-k">${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""}${r.extension_count ? "＋延長" + r.extension_count : ""}</span>
-      <span class="rc-k">総額 <b class="rc-yen">${yen(r.total)}</b><small>（${esc(PAY_LABEL[r.payment] || "")}）</small></span>
+      <span class="rc-k">総額 <b class="rc-yen">${yen(r.total)}</b><small>（${r.payment === "cash" && Number(r.card_total) > 0 ? "現金＋カード " + yen(Number(r.card_total)) : esc(PAY_LABEL[r.payment] || "")}）</small></span>
       <span class="rc-k">👤<b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${digits(c.phone || "").length >= 6 ? ` <span class="tel">📞${esc(c.phone)}</span>` : ` <span class="rc-nophone">📞番号まだ</span>`}</span>
       ${told}
 
@@ -4746,7 +4767,7 @@ renderListTable = function(){
         const st = boardState(x), col = boardCol(x, st), gk = goneKind(x.cd);
         const sub = `${x.shift ? "出勤 " + tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) + (x.shiftOrig ? "（予定 " + tlLabel(x.shiftOrig.start) + "〜" + tlLabel(x.shiftOrig.end) + "）" : "") : "シフトなし"}・${STATE[st]}${st !== "gone" && col ? "（" + col + "）" : gk ? "（" + gk + "）" : ""}`;
         const cls = st === "gone" ? (gk === "お茶" ? "tea" : gk === "欠勤" ? "absent" : "away") : "";
-        return block("【" + esc(castLabel(x)) + "】", esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart) : [], x.c ? x.c.id : "", cls);
+        return block("【" + esc(castLabel(x)) + "】" + (x.c && typeof kbPendingAfterSettle === "function" && kbPendingAfterSettle(x.cd, rows.filter(r=>r.cast_id === x.c.id)).length ? `<span class="part2chip" title="精算済のあとで予約がふえました。💴 精算で②の精算をしてください">⚠️ ②の精算がまだ</span>` : ""), esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart) : [], x.c ? x.c.id : "", cls);
       }).join("") : `<div class="gate">${mode === "freeNow" ? "今すぐ行けるキャストはいません" : mode === "booked" ? "予約があるキャストはいません" : "この日のキャストがいません"}</div>`)
     + cancelSection();
 };
@@ -6355,6 +6376,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .rescard.rcn4{border-left:6px solid #A6CDF0;} .rescard.rcn4 .rc-no{background:#E4F0FB;color:#2F6699;border-color:#A6CDF0;}
   .rescard.rcn5{border-left:6px solid #C5B5F0;} .rescard.rcn5 .rc-no{background:#EEE9FC;color:#6650A8;border-color:#C5B5F0;}
   .rescard.rcn6{border-left:6px solid #EFD98A;} .rescard.rcn6 .rc-no{background:#FCF5D8;color:#8A6D12;border-color:#EFD98A;}
+  .part2chip{background:#FFF4E5;border:1.5px solid #FFB547;color:#8a4b00;border-radius:99px;padding:1px 9px;font-size:12px;font-weight:800;margin-left:6px;animation:livePulse 1.6s ease-in-out infinite}
   .rc-no{font-weight:900;font-size:12.5px;border-radius:99px;padding:1px 9px;border:1.5px solid;white-space:nowrap;align-self:center;}
   /* 今どこに誰が：横の線をはっきり（行の区切り） */
   table.board tr > th, table.board tr > td{border-bottom:3px solid #D9C7CF !important;}
@@ -6385,6 +6407,6 @@ renderListTable = function(){
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 <script src="kb_cal.js?v=1"></script>
-<script src="unsettled.js?v=39"></script>
+<script src="unsettled.js?v=40"></script>
 </body>
 </html>

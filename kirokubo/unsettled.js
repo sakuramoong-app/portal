@@ -17,6 +17,46 @@ const unsSel = {};         // cast_id → Set（今日いっしょに精算す�
 const UNS_ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ", UNS_DAYS = 60;
 const unsMd = d => { const p = String(d || "").split("-"); return p.length === 3 ? Number(p[1]) + "/" + Number(p[2]) : ""; };
 const unsCD = () => (typeof castDays !== "undefined" ? castDays : days);
+
+/* ---------- ② 先精算のあとの追加の精算（2026/11/4）
+   ・精算済にしたとき、その精算に入れた予約（resIds）を覚えておく。いくつか精算したら settle_snapshot.parts に①②…が並び、上の数字は合計
+   ・精算済のあとで予約がふえたら「②の精算をはじめる」→ ふえた予約だけで計算して、もう一度精算済に（回収明細・集計は ①＋② の合計）
+   ・前の版の精算（resIds がない）は、精算した時刻より前に作った予約を ① とみなす ---------- */
+const PART_SUM_KEYS = ["reward", "option", "transportBack", "plus", "zappi", "minus", "takeHome", "total", "cardPaid", "drop", "withholding", "shopDrop", "realDrop", "deposited", "transferPaid", "due"];
+const PART_MARK = "①②③④⑤⑥";
+function kbSnapParts(cd){ const s = cd && cd.settle_snapshot; if(!s) return []; if(Array.isArray(s.parts)) return s.parts; return cd.settled ? [s] : []; }
+function kbPartIds(cd, all, parts){
+  const ids = new Set();
+  (parts || kbSnapParts(cd)).forEach(p => {
+    if(Array.isArray(p.resIds)) p.resIds.forEach(i => ids.add(i));
+    else { const at = p.at || cd.settled_at; all.forEach(r => { if(!at || !r.created_at || String(r.created_at) <= String(at)) ids.add(r.id); }); }
+  });
+  return ids;
+}
+function kbSumParts(parts){
+  const s = { parts };
+  PART_SUM_KEYS.forEach(k => { const vals = parts.map(p => p[k]).filter(v => v != null); s[k] = vals.length ? vals.reduce((a, v) => a + (Number(v) || 0), 0) : null; });
+  const last = parts[parts.length - 1] || {};
+  ["by", "at", "paidOn"].forEach(k => { if(last[k] != null) s[k] = last[k]; });
+  s.uns = parts.flatMap(p => p.uns || []); s.trIds = parts.flatMap(p => p.trIds || []); s.resIds = parts.flatMap(p => p.resIds || []);
+  return s;
+}
+// 精算済なのに、そのあとでふえた予約（キャンセル・トビは数えない）
+function kbPendingAfterSettle(cd, all){
+  if(!cd || !cd.settled) return [];
+  const ids = kbPartIds(cd, all);
+  return all.filter(r => r.status !== "cancel" && r.status !== "tobi" && !ids.has(r.id));
+}
+async function startNextPart(id){
+  const cd = unsCD()[id] || {}, all = (typeof rows !== "undefined" ? rows : []).filter(r => r.cast_id === id);
+  const pend = kbPendingAfterSettle(cd, all); if(!pend.length){ toast("ふえた予約はありません"); return; }
+  const parts = kbSnapParts(cd).map(p => Array.isArray(p.resIds) ? p : Object.assign({}, p, { resIds: [...kbPartIds(cd, all, [p])] }));
+  const mk = PART_MARK[parts.length] || "次";
+  if(!confirm(`${castName(id)}：精算済のあとでふえた予約 ${pend.length}件を「${mk}」として精算します。よろしいですか？\n（前の精算はそのまま残ります）`)) return;
+  const logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).concat([{ at: new Date().toISOString(), by: KB.operatorName(), text: `「${mk}」の精算をはじめました（ふえた予約 ${pend.length}件）` }]);
+  await saveDay(id, Object.assign({ settled: false, settled_at: null, deposited: null, settle_snapshot: { parts } }, HAS_SLOG ? { settle_log: logs } : {}));
+  await unsLoad();
+}
 function unsRedraw(id){
   if(typeof refreshCastSettle === "function"){ if(id) refreshCastSettle(id); }
   else if(typeof render === "function") render();
@@ -174,7 +214,7 @@ settle = async function(id){
   const c = calcCast(id), sel = unsSel[id] || new Set(), open = unsOpen(id), picked = open.filter(x => sel.has(x.key));
   const add = picked.reduce((a, x) => a + x.amount, 0), due = c.drop + add;
   const diff = c.deposited != null ? c.deposited - due : null;   // −＝足りない（未精算）／＋＝多い（お釣り）
-  const msg = castName(id) + " を精算済にしますか？\n手取り " + yen(c.takeHome) + "／当日の投函額 " + yen(c.drop)
+  const msg = castName(id) + (c.partNo > 1 ? "（" + (PART_MARK[c.partNo - 1] || c.partNo) + " の精算）" : "") + " を精算済にしますか？\n手取り " + yen(c.takeHome) + "／当日の投函額 " + yen(c.drop)
     + (picked.length ? "\n＋ 未精算 " + picked.length + "件（" + yen(add) + "）→ 合計 " + yen(due) : "")
     + (diff ? "\n投函した額 " + yen(c.deposited) + " → " + (diff < 0 ? "未精算 " + yen(-diff) : "お釣り " + yen(diff)) + " を未精算に入れます" : "");
   if(!confirm(msg)) return;
@@ -185,6 +225,9 @@ settle = async function(id){
                  takeHome: c.takeHome, total: c.total, cardPaid: c.cardPaid, drop: c.drop, withholding: c.withholding,
                  shopDrop: c.shopDrop, realDrop: c.realDrop, deposited: c.deposited, diff, by, at, transferPaid: c.transferPaid || 0, trIds: c.trIds || [],
                  uns: picked.map((x, i) => ({ kind: x.kind, date: x.date, amount: x.amount, id: x.raw.id || null, label: labels[i] })), due };
+  // ② この精算に入れた予約を覚える。前の精算（①…）があれば、合計した数字にして parts に並べる
+  snap.resIds = c.live.map(r => r.id); snap.part = (c.partNo || 1);
+  const finalSnap = c.prevParts && c.prevParts.length ? kbSumParts(c.prevParts.concat([snap])) : snap;
   try{
     for(const x of picked){
       const txt = `${unsMd(day)}の精算で、この日の${x.kind === "day" ? "精算" : "未精算（" + x.what + "）"}をいっしょに精算しました（合計 ${yen(due)}・${place}）`;
@@ -201,11 +244,31 @@ settle = async function(id){
   }catch(e){ toast("未精算を保存できませんでした：" + (e.message || e)); return; }
   const cd = unsCD()[id] || {}, logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).slice();
   logs.push({ at, by, kind: "settle", place, amount: c.deposited != null ? c.deposited : null, cam: cd.camera_check || "", text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") });
-  await saveDay(id, Object.assign({ settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: snap }, HAS_SLOG ? { settle_log: logs } : {}, HAS_170 ? { direct_home: false } : {}));
+  await saveDay(id, Object.assign({ settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: finalSnap }, HAS_SLOG ? { settle_log: logs } : {}, HAS_170 ? { direct_home: false } : {}));
   delete unsSel[id]; delete ptVal[id]; await unsLoad();
 };
+// ② 最後の精算（②など）だけ取り消す：その精算でいっしょに精算した未精算をまだにもどし、その精算で自動で入れた未精算は消す
+async function unsettleLastPart(id, cd, s){
+  const parts = s.parts.slice(), last = parts.pop(), mk = PART_MARK[parts.length] || "最後";
+  if(!confirm(`${castName(id)} の「${mk}」の精算を取り消しますか？\n（前の精算はそのまま残ります）`)) return;
+  const by = KB.operatorName();
+  try{
+    for(const x of (last.uns || [])){
+      if(x.kind === "day") await unsLogOther(x.date, id, `${unsMd(day)}の「${mk}」の精算を取り消したので、この日の精算もまだにもどしました`, { settled: false, settled_at: null, settle_snapshot: null });
+      else if(x.id && UNS !== null) q(await sb.from("kb_unsettled").update({ done_on: null, done_by: "", done_at: null }).eq("id", x.id));
+    }
+    if(UNS !== null && last.at) q(await sb.from("kb_unsettled").delete().eq("cast_id", id).eq("biz_date", day).eq("source", "auto").is("done_on", null).gte("created_at", last.at));
+  }catch(e){ toast("未精算をもどせませんでした：" + (e.message || e)); return; }
+  const logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).concat([{ at: new Date().toISOString(), by, text: `「${mk}」の精算を取り消しました（前の精算はそのまま）` }]);
+  const prev = parts[parts.length - 1] || {};
+  await saveDay(id, Object.assign({ settled: true, settled_at: prev.at || cd.settled_at, settle_snapshot: kbSumParts(parts) }, HAS_SLOG ? { settle_log: logs } : {}));
+  await unsLoad();
+}
 // 精算済をもどす：この日にいっしょに精算した未精算もまだにもどす。この日の精算で自動で入れた未精算は消す
 unsettle = async function(id){
+  // ② ①②…と何回か精算していたら、最後の精算だけ取り消す（前の精算はそのまま）2026/11/4
+  { const cd0 = unsCD()[id] || {}, s0 = cd0.settle_snapshot || {};
+    if(Array.isArray(s0.parts) && s0.parts.length > 1) return unsettleLastPart(id, cd0, s0); }
   if(!confirm(castName(id) + " の精算済をもどしますか？（この日にいっしょに精算した未精算も、まだにもどります）")) return;
   const by = KB.operatorName(), cd = unsCD()[id] || {}, snapU = ((cd.settle_snapshot || {}).uns) || [];
   try{
@@ -611,6 +674,10 @@ function settleViewHtml(id, c){
   const P = settleParts(id), cd = c.cd, done = !!cd.settled;
   const R = (k, v, cls) => `<div class="r ${cls || ""}"><span>${esc(k)}</span><b>${esc(v)}</b></div>`;
   let h = "";
+  // ② 精算済のあとでふえた予約 → 「②の精算をはじめる」。②の精算中は、前の精算を上に出す（2026/11/4）
+  { const pend = done ? kbPendingAfterSettle(cd, c.all || []) : [], nParts = kbSnapParts(cd).length;
+    if(pend.length) h += `<div class="part2warn">⚠️ 精算済のあとで予約が <b>${pend.length}件</b>ふえました（${pend.map(r => typeof hm === "function" ? hm(r.start_at) : "").join("・")}）${KB.CAN_EDIT ? `<button type="button" class="btn btn-primary btn-sm" onclick="startNextPart('${id}')">➕ ${PART_MARK[nParts] || "次"}の精算をはじめる</button>` : ""}</div>`;
+    if(!done && c.partNo > 1) h += `<div class="part2info">${PART_MARK[c.partNo - 1]} の精算（ふえた予約だけで計算しています）　前の精算：${(c.prevParts || []).map((p, i) => PART_MARK[i] + " 投函 " + yen(p.drop || 0)).join("・")}</div>`; }
   P.res.forEach(r => {
     h += `<div class="job ${r.off ? "off" : ""}"><span class="no">${r.no}本目</span><span>${esc(r.head)}</span>${r.off ? `<span style="margin-left:auto">${r.st === "cancel" ? "キャンセル" : "トビ"}</span>` : ""}</div>`;
     if(r.off) return;
@@ -840,3 +907,9 @@ async function phDel(id, name){
   .is-phone .phhint{display:none}`;
   document.head.appendChild(css);
 })();
+
+/* ② の精算の知らせ（2026/11/4） */
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .part2warn{background:#FFF4E5;border:2px solid #FFB547;color:#8a4b00;border-radius:12px;padding:8px 12px;margin:0 0 10px;font-weight:800;font-size:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .part2info{background:#EEF6FF;border:2px solid #A6CDF0;color:#2F6699;border-radius:12px;padding:8px 12px;margin:0 0 10px;font-weight:800;font-size:13.5px}
+</style>`);

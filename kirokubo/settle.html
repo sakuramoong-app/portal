@@ -135,8 +135,13 @@ async function loadDay(){
 // キャスト1人分の計算
 function calcCast(castId){
   const all = rows.filter(r=>r.cast_id === castId);
-  const live = all.filter(r=>r.status !== "cancel" && r.status !== "tobi");
+  const allLive = all.filter(r=>r.status !== "cancel" && r.status !== "tobi");
   const cd = days[castId] || {};
+  // ② 先精算のあとの追加分：前の精算（①…）に入った予約は数えない（unsettled.js の kbSnapParts・kbPartIds）2026/11/4
+  const prevParts = !cd.settled && typeof kbSnapParts === "function" ? kbSnapParts(cd) : [];
+  const doneIds = prevParts.length ? kbPartIds(cd, all, prevParts) : new Set();
+  const live = allLive.filter(r=>!doneIds.has(r.id));
+  const prevSum = k=>prevParts.reduce((a, p)=>a + (Number(p[k]) || 0), 0);
   // 報酬：手で直した報酬があればそれ（OP込みの金額として扱う）
   let reward = 0, option = 0;
   live.forEach(r=>{
@@ -157,16 +162,19 @@ function calcCast(castId){
   // 雑費（自動・免除の曜日・手で直したとき）
   const dow = new Date(day + "T12:00:00Z").getUTCDay();
   const exempt = rulesOn(castId).some(x=>x.kind === "zappi_exempt" && (x.params.days || []).includes(dow));
-  const zappiAuto = exempt ? 0 : Math.min(3000, Math.floor((reward + option) / 10500) * 500);
-  const zappi = cd.zappi_override != null ? cd.zappi_override : zappiAuto;
+  const zFull = rr=>{ let a = 0; rr.forEach(r=>{ a += r.back_override != null ? r.back_override : (r.course_back || 0) + (r.extra_back || 0) + (r.option_back || 0); }); return Math.min(3000, Math.floor(a / 10500) * 500); };
+  // 雑費は1日まとめて計算して、前の精算で払った分を引く（②だけで計算すると多くなったり少なくなったりするので）
+  const zappiAuto = exempt ? 0 : (prevParts.length ? Math.max(0, zFull(allLive) - prevSum("zappi")) : Math.min(3000, Math.floor((reward + option) / 10500) * 500));
+  const zappi = cd.zappi_override != null ? Math.max(0, cd.zappi_override - prevSum("zappi")) : zappiAuto;
   const plusItems = Array.isArray(cd.plus_items) ? cd.plus_items : [];
   const minusItems = Array.isArray(cd.minus_items) ? cd.minus_items : [];
-  const plus = plusItems.reduce((a, b)=>a + (Number(b.amount) || 0), 0);
-  const minus = minusItems.reduce((a, b)=>a + (Number(b.amount) || 0), 0);
+  const plus = Math.max(0, plusItems.reduce((a, b)=>a + (Number(b.amount) || 0), 0) - prevSum("plus"));     // ②：前の精算で払ったプラス・マイナスは引く
+  const minus = Math.max(0, minusItems.reduce((a, b)=>a + (Number(b.amount) || 0), 0) - prevSum("minus"));
   const takeHome = reward + option + transportBack + plus - zappi - minus;
   const total = live.reduce((a, r)=>a + (r.total || 0), 0);
   // カードは予約の1時間前までに決済URLで先に払ってもらう（現金はキャストに入らない）。「カード」「カード精算済」どちらも引く
-  const cardPaid = live.filter(r=>r.payment === "card" || r.payment === "card_paid").reduce((a, r)=>a + (r.total || 0), 0);
+  // 現金＋カード（分けて払う）の予約は、カードの分（card_total）だけ引く 2026/11/4
+  const cardPaid = live.reduce((a, r)=>a + ((r.payment === "card" || r.payment === "card_paid") ? (r.total || 0) : (Number(r.card_total) || 0)), 0);
   const cardUnconfirmed = live.filter(r=>r.payment === "card").length;
   // 🏦 振込（SQL 173）：あとで振り込んでもらう分は、カードと同じでキャストの手元にない
   const trList = live.filter(r=>r.transfer_status && Number(r.transfer_amount)), transferPaid = trList.reduce((a, r)=>a + (Number(r.transfer_amount) || 0), 0), trIds = trList.map(r=>r.id);
@@ -177,7 +185,7 @@ function calcCast(castId){
   const realDrop = provisional - withholding;           // 実質的な店落ち（暫定残額 − 源泉）
   const deposited = cd.deposited != null ? cd.deposited : null;
   const diff = deposited != null ? deposited - drop : null;   // マイナス＝未精算／プラス＝お釣り
-  return { transferPaid, trIds, all, live, cd, reward, option, transportBack, why, exempt, zappiAuto, zappi, plusItems, minusItems, plus, minus, takeHome, total, cardPaid, cardUnconfirmed, drop, withholding, provisional, shopDrop, realDrop, deposited, diff };
+  return { partNo: prevParts.length + 1, prevParts, allLive, transferPaid, trIds, all, live, cd, reward, option, transportBack, why, exempt, zappiAuto, zappi, plusItems, minusItems, plus, minus, takeHome, total, cardPaid, cardUnconfirmed, drop, withholding, provisional, shopDrop, realDrop, deposited, diff };
 }
 
 function render(){
@@ -535,6 +543,6 @@ init();
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 <script src="kb_cal.js?v=1"></script>
-<script src="unsettled.js?v=39"></script>
+<script src="unsettled.js?v=40"></script>
 </body>
 </html>
