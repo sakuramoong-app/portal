@@ -57,6 +57,32 @@ async function startNextPart(id){
   await saveDay(id, Object.assign({ settled: false, settled_at: null, deposited: null, settle_snapshot: { parts } }, HAS_SLOG ? { settle_log: logs } : {}));
   await unsLoad();
 }
+/* ---------- ✅ 精算する予約を選ぶ（予約①〜⑥にチェック。2026/11/4）
+   ・チェックはさいしょから入っている。チェックを外した予約は、今日は精算しない（あとで未精算として精算できる）
+   ・精算済にした予約はグレー。そのあとでふえた予約には、またチェックが入る ---------- */
+const settleSkip = {};   // "営業日|キャストID" → 今日は精算しない予約の id の Set
+function settlePick(id, rid, on){
+  const k = day + "|" + id, s = settleSkip[k] = settleSkip[k] || new Set();
+  if(on) s.delete(rid); else s.add(rid);
+  unsRedraw(id);
+}
+function resPickHtml(id, c){
+  const cd = c.cd || {}, all = (c.all || []).filter(r => r.status !== "cancel" && r.status !== "tobi").sort((a, b) => String(a.start_at).localeCompare(String(b.start_at)));
+  if(!all.length) return "";
+  const parts = kbSnapParts(cd), ids = parts.length ? kbPartIds(cd, c.all, parts) : new Set();
+  const partOf = rid => { for(let i = 0; i < parts.length; i++){ const p = parts[i]; if(Array.isArray(p.resIds) ? p.resIds.includes(rid) : ids.has(rid)) return i; } return -1; };
+  const skip = settleSkip[day + "|" + id] || new Set(), ed = KB.CAN_EDIT;
+  const t = r => typeof hm === "function" ? hm(r.start_at) : "";
+  const rowsH = all.map((r, i) => {
+    const no = "予約" + ("①②③④⑤⑥⑦⑧⑨⑩"[i] || "(" + (i + 1) + ")"), pi = partOf(r.id);
+    const txt = `<b>${no}</b> ${esc(t(r))} ${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""} ${yen(r.total || 0)}${r.payment !== "cash" ? "（カード）" : Number(r.card_total) > 0 ? "（現金＋カード）" : ""}`;
+    if(pi >= 0) return `<label class="rp done"><input type="checkbox" checked disabled> ${txt}<span class="rpst">✅ ${PART_MARK[pi] || ""}で精算済</span></label>`;
+    return `<label class="rp ${skip.has(r.id) ? "skip" : ""}"><input type="checkbox" ${skip.has(r.id) ? "" : "checked"} ${ed ? "" : "disabled"} onchange="settlePick('${id}',${r.id},this.checked)"> ${txt}${skip.has(r.id) ? `<span class="rpst">今日は精算しない（あとで未精算に）</span>` : ""}</label>`;
+  }).join("");
+  const pend = all.filter(r => partOf(r.id) < 0);
+  const head = parts.length && pend.length ? `「${PART_MARK[parts.length] || "次"}」の精算：チェックした予約だけ精算します` : pend.length ? "チェックした予約だけ精算します（外した予約は、今日は精算しない＝あとで未精算に）" : "全部の予約を精算済にしました";
+  return `<div class="rpick"><div class="rph">✅ 精算する予約　<small>${head}</small></div>${rowsH}</div>`;
+}
 function unsRedraw(id){
   if(typeof refreshCastSettle === "function"){ if(id) refreshCastSettle(id); }
   else if(typeof render === "function") render();
@@ -94,7 +120,7 @@ async function unsLoad(){
       const list = byDay[d];
       [...new Set(list.filter(x => !["cancel", "tobi"].includes(x.status)).map(x => x.cast_id))].forEach(cid => {
         const cd = cds.find(x => x.biz_date === d && x.cast_id === cid);
-        if(cd && cd.settled) return;
+        if(cd && cd.settled && !kbPendingAfterSettle(cd, list.filter(x => x.cast_id === cid)).length) return;   // 精算済でも、のこした予約（今日は精算しない）があれば未精算
         try{ const c = unsCalcDay(d, cid, list, cd); UNSD.push({ date: d, cid, c, cd: cd || null }); }catch(e){}
       });
     });
@@ -233,7 +259,10 @@ settle = async function(id){
       const txt = `${unsMd(day)}の精算で、この日の${x.kind === "day" ? "精算" : "未精算（" + x.what + "）"}をいっしょに精算しました（合計 ${yen(due)}・${place}）`;
       if(x.kind === "day"){
         const s2 = Object.assign({}, { reward: x.raw.c.reward, option: x.raw.c.option, takeHome: x.raw.c.takeHome, total: x.raw.c.total, cardPaid: x.raw.c.cardPaid, drop: x.raw.c.drop, zappi: x.raw.c.zappi }, { paidOn: day, by, at });
-        await unsLogOther(x.date, id, txt, { settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: s2 }, { at, kind: "late", place, amount: x.amount, cam: camNow });
+        // ② その日の前の精算（①…）があれば合わせる（のこした予約だけを、あとで精算したとき）
+        s2.resIds = (x.raw.c.live || []).map(r => r.id); s2.shopDrop = x.raw.c.shopDrop; s2.transferPaid = x.raw.c.transferPaid || 0;
+        const s2all = (x.raw.c.prevParts || []).length ? kbSumParts(x.raw.c.prevParts.concat([s2])) : s2;
+        await unsLogOther(x.date, id, txt, { settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: s2all }, { at, kind: "late", place, amount: x.amount, cam: camNow });
       } else {
         q(await sb.from("kb_unsettled").update({ done_on: day, done_by: by, done_at: at }).eq("id", x.raw.id));
         await unsLogOther(x.date, id, txt, null, { at, kind: "late", place, amount: x.amount, cam: camNow });
@@ -245,7 +274,7 @@ settle = async function(id){
   const cd = unsCD()[id] || {}, logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).slice();
   logs.push({ at, by, kind: "settle", place, amount: c.deposited != null ? c.deposited : null, cam: cd.camera_check || "", text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") });
   await saveDay(id, Object.assign({ settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: finalSnap }, HAS_SLOG ? { settle_log: logs } : {}, HAS_170 ? { direct_home: false } : {}));
-  delete unsSel[id]; delete ptVal[id]; await unsLoad();
+  delete unsSel[id]; delete ptVal[id]; delete settleSkip[day + "|" + id]; await unsLoad();   // チェックを外した予約は、のこり（未精算）として次に出る
 };
 // ② 最後の精算（②など）だけ取り消す：その精算でいっしょに精算した未精算をまだにもどし、その精算で自動で入れた未精算は消す
 async function unsettleLastPart(id, cd, s){
@@ -343,7 +372,9 @@ async function unsOnlySettle(cid){
       const txt = `${unsMd(day)}に、この日の${x.kind === "day" ? "精算" : "未精算（" + x.what + "）"}を精算しました（未精算だけの精算・合計 ${yen(sum)}・${place}）`;
       if(x.kind === "day"){
         const s2 = { reward: x.raw.c.reward, option: x.raw.c.option, takeHome: x.raw.c.takeHome, total: x.raw.c.total, cardPaid: x.raw.c.cardPaid, drop: x.raw.c.drop, zappi: x.raw.c.zappi, paidOn: day, by, at, only: true };   // only＝未精算だけの個別精算
-        await unsLogOther(x.date, cid, txt, { settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: s2 }, { at, kind: "late", place, amount: x.amount, cam });
+        s2.resIds = (x.raw.c.live || []).map(r => r.id); s2.shopDrop = x.raw.c.shopDrop; s2.transferPaid = x.raw.c.transferPaid || 0;   // ② 前の精算と合わせる
+        const s2all = (x.raw.c.prevParts || []).length ? kbSumParts(x.raw.c.prevParts.concat([s2])) : s2;
+        await unsLogOther(x.date, cid, txt, { settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: s2all }, { at, kind: "late", place, amount: x.amount, cam });
       } else {
         q(await sb.from("kb_unsettled").update({ done_on: day, done_by: by, done_at: at }).eq("id", x.raw.id));
         await unsLogOther(x.date, cid, txt, null, { at, kind: "late", place, amount: x.amount, cam });
@@ -676,7 +707,7 @@ function settleViewHtml(id, c){
   let h = "";
   // ② 精算済のあとでふえた予約 → 「②の精算をはじめる」。②の精算中は、前の精算を上に出す（2026/11/4）
   { const pend = done ? kbPendingAfterSettle(cd, c.all || []) : [], nParts = kbSnapParts(cd).length;
-    if(pend.length) h += `<div class="part2warn">⚠️ 精算済のあとで予約が <b>${pend.length}件</b>ふえました（${pend.map(r => typeof hm === "function" ? hm(r.start_at) : "").join("・")}）${KB.CAN_EDIT ? `<button type="button" class="btn btn-primary btn-sm" onclick="startNextPart('${id}')">➕ ${PART_MARK[nParts] || "次"}の精算をはじめる</button>` : ""}</div>`;
+    if(pend.length) h += `<div class="part2warn">⚠️ 精算済のあとで予約が <b>${pend.length}件</b>ふえました（${pend.map(r => typeof hm === "function" ? hm(r.start_at) : "").join("・")}）　→ 上の「✅ 精算する予約」でチェックして、「${PART_MARK[nParts] || "次"}」として精算済にしてください</div>`;
     if(!done && c.partNo > 1) h += `<div class="part2info">${PART_MARK[c.partNo - 1]} の精算（ふえた予約だけで計算しています）　前の精算：${(c.prevParts || []).map((p, i) => PART_MARK[i] + " 投函 " + yen(p.drop || 0)).join("・")}</div>`; }
   P.res.forEach(r => {
     h += `<div class="job ${r.off ? "off" : ""}"><span class="no">${r.no}本目</span><span>${esc(r.head)}</span>${r.off ? `<span style="margin-left:auto">${r.st === "cancel" ? "キャンセル" : "トビ"}</span>` : ""}</div>`;
@@ -732,7 +763,9 @@ function shopAllToggle(){
 }
 const svOpen = new Set();   // 開いているアコーディオン（描きなおしても閉じない）
 cardHtml = function(id, c){
-  const cd = c.cd, done = !!cd.settled, dis = (!KB.CAN_EDIT || done) ? "disabled" : "";
+  // 精算済でも、そのあとでふえた予約があれば「まだ」（ふえた予約だけ精算できる）2026/11/4
+  const pendAll = kbPendingAfterSettle(c.cd, c.all || []);
+  const cd = c.cd, done = !!cd.settled && !pendAll.length, dis = (!KB.CAN_EDIT || done) ? "disabled" : "";
   // プラスは「交通費／チャージ」から選ぶ（前に手で書いたものは、そのまま選べる）
   const PLUS_KINDS = ["交通費", "チャージ"];
   const items = (list, kind)=> list.map((x, i)=>`<div class="it">${kind === "plus"
@@ -748,6 +781,7 @@ cardHtml = function(id, c){
   return `<div class="card svc ${done ? "done" : ""} ${cd.status === "お茶" ? "tea" : cd.status === "欠勤" ? "absent" : ""}" id="card-${id}">
     <h2>${esc(castName(id))}${cd.status === "お茶" ? `<span class="st tea">🟩 お茶</span>` : cd.status === "欠勤" ? `<span class="st absent">🟥 欠勤</span>` : ""}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : home ? "🏠 直帰" : "未精算"}</span>${done && (UNS || []).some(x => x.cast_id === id && x.biz_date === day && !x.done_on) ? `<span class="st" style="background:#FDE7E7;color:#c0392b;margin-left:4px">⚠️ 未精算あり</span>` : ""}
       ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
+    ${resPickHtml(id, c)}
     <div class="svg2"><div class="svl">
     <details class="svf" ${svOpen.has(id) ? "open" : ""} ontoggle="this.open ? svOpen.add('${id}') : svOpen.delete('${id}')">
     <summary>🧾 精算の中身（1本目〜精算メモに書くこと）<small>${V.due < 0 ? "お店から渡す" : "投函"} ${yen(Math.abs(V.due))}</small></summary>
@@ -912,4 +946,12 @@ async function phDel(id, name){
 document.head.insertAdjacentHTML("beforeend", `<style>
   .part2warn{background:#FFF4E5;border:2px solid #FFB547;color:#8a4b00;border-radius:12px;padding:8px 12px;margin:0 0 10px;font-weight:800;font-size:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   .part2info{background:#EEF6FF;border:2px solid #A6CDF0;color:#2F6699;border-radius:12px;padding:8px 12px;margin:0 0 10px;font-weight:800;font-size:13.5px}
+</style>`);
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .rpick{border:2px solid #F4A3BE;background:#FFFBFC;border-radius:14px;padding:8px 12px;margin:0 0 10px}
+  .rpick .rph{font-weight:900;color:#B2456B;margin-bottom:4px} .rpick .rph small{font-weight:700;color:#8a6b75}
+  .rpick .rp{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 2px;font-size:14px;cursor:pointer}
+  .rpick .rp input{width:18px;height:18px}
+  .rpick .rp.done{opacity:.5;cursor:default} .rpick .rp.skip{opacity:.75}
+  .rpick .rpst{font-size:12px;font-weight:800;color:#8a6b75;background:#F3EEF0;border-radius:99px;padding:1px 8px}
 </style>`);
