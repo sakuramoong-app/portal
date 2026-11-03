@@ -195,3 +195,32 @@
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") tick(); });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
 })();
+
+/* ============================================================
+   🌙 ダークモード（全部の内勤アプリ共通。2026/11/4）
+   ・右下の 🌙／☀️ で切りかえ。この端末（ブラウザ）に覚える（ポータル・記録簿・サクラシフトなど、同じ場所のアプリは全部同じ設定）
+   ・画面の色をまとめて反転して暗くする。写真・動画は反転しない
+   ============================================================ */
+(function(){
+  if (window.__kbDark) return; window.__kbDark = true;
+  const KEY = "kbDarkMode";
+  const get = () => { try { return localStorage.getItem(KEY) === "1"; } catch (e) { return false; } };
+  const css = document.createElement("style");
+  css.textContent = `
+    html.kb-dark{filter:invert(.9) hue-rotate(180deg);background:#111;}
+    html.kb-dark img, html.kb-dark video, html.kb-dark canvas, html.kb-dark iframe, html.kb-dark .kb-dark-keep{filter:invert(1) hue-rotate(180deg);}
+    #kbDarkBtn{position:fixed;left:12px;bottom:58px;z-index:9400;width:40px;height:40px;border-radius:50%;border:1.5px solid #ffc2d1;background:#fff;font-size:18px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;padding:0;}
+    @media print{ html.kb-dark{filter:none} #kbDarkBtn{display:none} }`;
+  (document.head || document.documentElement).appendChild(css);
+  const apply = on => { document.documentElement.classList.toggle("kb-dark", on); const b = document.getElementById("kbDarkBtn"); if (b) { b.textContent = on ? "☀️" : "🌙"; b.title = on ? "明るい画面にする" : "暗い画面（ダークモード）にする"; } };
+  apply(get());   // 読みこんですぐ（まぶしい一瞬をなくす）
+  const addBtn = () => {
+    if (document.getElementById("kbDarkBtn")) return;
+    const b = document.createElement("button"); b.id = "kbDarkBtn"; b.type = "button";
+    b.addEventListener("click", () => { const on = !document.documentElement.classList.contains("kb-dark"); try { localStorage.setItem(KEY, on ? "1" : "0"); } catch (e) {} apply(on); });
+    document.body.appendChild(b); apply(get());
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addBtn); else addBtn();
+  // ほかのタブで切りかえたら、こちらもそろえる
+  window.addEventListener("storage", e => { if (e.key === KEY) apply(get()); });
+})();
