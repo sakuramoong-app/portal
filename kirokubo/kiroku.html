@@ -1669,9 +1669,15 @@ async function lookupCustomer(keepName){
     //   → 数えない・出さない（本指名と判断されないように）。台帳のデータは変えない
     const pk = s => String(s || "").normalize("NFKC").replace(/\s/g, "");
     //   また、同じ日・同じキャスト・同じお店の予約が記録簿にあれば、それも同じ利用（11/1・11/2 は台帳エクセルと記録簿の両方に書いてある。2026/11/3）
-    const dupOf = x => x.cast_id && (
-      pastAll.some(r => r.biz_date === x.biz_date && r.cast_id === x.cast_id && r.store_key === x.store_key) ||
-      (Number(x.total) > 0 && pk(x.place) && pastAll.some(r => r.cast_id === x.cast_id && r.store_key === x.store_key && Number(r.total) === Number(x.total) && pk(r.address) === pk(x.place))));
+    //   記録簿の予約1件につき、台帳の行は1件だけ（同じ日に2回来たお客さんの2回目を消さないように）
+    const usedRes = new Set();
+    const dupOf = x => {
+      if(!x.cast_id) return false;
+      let r = pastAll.find(r => !usedRes.has(r.id) && r.biz_date === x.biz_date && r.cast_id === x.cast_id && r.store_key === x.store_key);
+      if(!r && Number(x.total) > 0 && pk(x.place)) r = pastAll.find(r => !usedRes.has(r.id) && r.cast_id === x.cast_id && r.store_key === x.store_key && Number(r.total) === Number(x.total) && pk(r.address) === pk(x.place));
+      if(r){ usedRes.add(r.id); return true; }
+      return false;
+    };
     xl = xl.filter(x => !dupOf(x));
     custSeen = pastAll.concat(xl).sort((a, b) => String(b.biz_date).localeCompare(String(a.biz_date)));
     const seenAll = custSeen;

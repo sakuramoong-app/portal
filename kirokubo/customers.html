@@ -163,11 +163,14 @@ function rowsOf(c){
   // 台帳エクセルの行が、記録簿の予約と キャスト・お店・総額・場所 まで同じなら、同じ利用を2回書いたもの（日付の打ちまちがいがあっても）
   //   → 出さない・数えない（記録簿の受付と同じ）。キャストNG・備考がある行だけは、消えないように出す（利用の数には入れない）
   const pk = s => String(s || "").normalize("NFKC").replace(/\s/g, "");
+  // 同じ日・同じキャスト・同じお店の予約が記録簿にあっても、同じ利用（11/1・11/2 は両方に書いてある。受付と同じ。2026/11/3）
+  //   記録簿の予約1件につき、台帳の行は1件だけ（同じ日に2回来たお客さんの2回目を消さないように）
+  const usedRes = new Set();
   const b2 = b.filter((x, i) => {
     const h = c._hist[i];
-    // 同じ日・同じキャスト・同じお店の予約が記録簿にあっても、同じ利用（11/1・11/2 は両方に書いてある。受付と同じ。2026/11/3）
-    const dup = h.cast_id && (c._res.some(r => r.biz_date === h.biz_date && r.cast_id === h.cast_id && r.store_key === h.store_key) ||
-      (Number(h.total) > 0 && pk(h.place) && c._res.some(r => r.cast_id === h.cast_id && r.store_key === h.store_key && Number(r.total) === Number(h.total) && pk(r.address) === pk(h.place))));
+    let r = h.cast_id ? c._res.find(r => !usedRes.has(r.id) && r.biz_date === h.biz_date && r.cast_id === h.cast_id && r.store_key === h.store_key) : null;
+    if(!r && h.cast_id && Number(h.total) > 0 && pk(h.place)) r = c._res.find(r => !usedRes.has(r.id) && r.cast_id === h.cast_id && r.store_key === h.store_key && Number(r.total) === Number(h.total) && pk(r.address) === pk(h.place));
+    const dup = !!r; if(r) usedRes.add(r.id);
     if(!dup) return true;
     if(!h.cast_ng && !h.memo) return false;
     x.status = "dup"; x.dupNote = true; return true;
