@@ -3567,7 +3567,7 @@ function renderCallAlerts(){
         ${KB.CAN_EDIT ? `<button type="button" class="okbtn" onclick="outcallDone(${r.id},'${r.biz_date}')">📞 アウトコールきた（終了にする）</button>` : ""}
         <button type="button" onclick="openAlertRes(${r.id},'${r.biz_date}')">開く</button></div>`).join("")}</div>` : "")
     + (items.length ? `<div class="callalert">🔔 確認がまだ・時刻になった予約があります${items.map(({ r, kind })=>`
-      <button type="button" onclick="openAlertRes(${r.id},'${r.biz_date}')"><b>${esc(kind)}</b>　${md(r)}${r.start_at ? hm(r.start_at) : "時間未定"}　${esc(castName(r.cast_id))}　<u>開く</u></button>`).join("")}</div>` : "");
+      <button type="button" onclick="jumpToRes(${r.id},'${r.biz_date}')"><b>${esc(kind)}</b>　${md(r)}${r.start_at ? hm(r.start_at) : "時間未定"}　${esc(castName(r.cast_id))}　<u>📍 予約へとぶ</u>　<u onclick="event.stopPropagation();openAlertRes(${r.id},'${r.biz_date}')">開く</u></button>`).join("")}</div>` : "");
   // 新しい「終了時刻」が出たら、ピッと鳴らす
   const fresh = outs.filter(r=>!beeped.has(r.id));
   if(fresh.length){ fresh.forEach(r=>beeped.add(r.id)); beep(); }
@@ -3606,6 +3606,16 @@ function jumpToCast(cid){
 async function openAlertRes(id, bd){
   if(bd !== day){ $("day").value = bd; await loadDay(); }
   const r = rows.find(x=>x.id === id); if(r) openForm(id);
+}
+// 🔔 確認電話などの知らせ → 本日のキャスト一覧の、その予約のカードへとぶ（光らせる）。カードがなければ、その子の枠へ
+async function jumpToRes(id, bd){
+  if(bd !== day){ $("day").value = bd; await loadDay(); }
+  const r = rows.find(x=>x.id === id); if(!r){ toast("予約が見つかりません"); return; }
+  if($("viewTL") && $("viewTL").style.display !== "none") showView("list");
+  const el = $("rc-" + id);
+  if(!el){ if(r.cast_id) jumpToCast(r.cast_id); return; }
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
+  el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
 }
 loadCallAlerts(); setInterval(loadCallAlerts, 120000);
 const __loadDayA = loadDay;
