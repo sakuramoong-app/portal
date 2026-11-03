@@ -1896,11 +1896,9 @@ function buildMsg(c){
   const noBackOps = c.opts.filter(o=>!(o.back>0)).map(o=>o.label + (o.qty>1?"×"+o.qty:"")).join("・") || "なし";
   // 店名はエリアを伏せる（「五反田逆アナル倶楽部」を見て、行く場所をまちがえる子がいるので。2026/11/3）
   const storeNoArea = k => storeLabel(k).replace(/[（(]?(池袋|五反田|鶯谷|錦糸町|渋谷|新宿|上野|秋葉原|大塚|巣鴨)[）)]?/g, "").trim() || storeLabel(k);
-  // 前回：本指名はそのキャストの前回、店リピはお店の前回（この予約の日より前・キャンセル／トビは数えない）
-  const ymdJ = s => { const [y, m, dd] = String(s).slice(0, 10).split("-"); return y ? `${y}/${Number(m)}/${Number(dd)}` : ""; };
-  const prevOf = cid => (custSeen || []).filter(p => p.biz_date && p.biz_date < day && !["cancel", "tobi"].includes(p.status) && (!cid || p.cast_id === cid)).map(p => p.biz_date).sort().pop();
-  const prev = visit === "honshi" ? prevOf($("f_cast").value) : visit === "repeat" ? prevOf(null) : "";
-  const visitTxt = ((VISIT.find(v=>v[0]===visit) || [])[1] || "") + (prev ? "（前回 " + ymdJ(prev) + "）" : "");
+  // 本指名のときだけ、そのキャストを前回指名した日（受付の「本指名」の横と同じ lastNomiOf）。新規・店リピは日付なし
+  const prev = visit === "honshi" ? lastNomiOf($("f_cast").value) : "";
+  const visitTxt = ((VISIT.find(v=>v[0]===visit) || [])[1] || "") + (prev ? "（前回 " + prev + "）" : "");
   $("msg").value =
 `お疲れ様です
 ご予約いただきました！
