@@ -324,18 +324,20 @@ function unsSelfDay(){
     .filter(cid => !(cds[cid] || {}).settled)
     .map(cid => { let c = null; try{ c = calcCast(cid); }catch(e){} return c ? { cid, date: day, amount: c.drop } : null; }).filter(Boolean);
 }
+const unsOpenSet = new Set();   // 未精算のキャスト：開いているキャスト
 function unsListHtml(){
   const self = unsSelfDay();
   const ids = [...new Set(UNSD.map(x => x.cid).concat((UNS || []).filter(x => !x.done_on).map(x => x.cast_id), self.map(x => x.cid)))].sort((a, b) => castName(a).localeCompare(castName(b), "ja"));
   const casts = (M.casts || []).filter(c => c.status !== "left").sort((a, b) => castName(a.id).localeCompare(castName(b.id), "ja"));
   return `<div class="uhd">📒 未精算のキャスト（${ids.length}人）<small>前の${UNS_DAYS}日の、精算していない日と、投函が合わなかった分</small></div>
-    ${ids.length ? ids.map(cid => { const l = unsOpen(cid), me = self.filter(x => x.cid === cid), sum = l.concat(me).reduce((a, x) => a + x.amount, 0);
-      return `<div class="unsc"><div class="uh">★ <b>${esc(castName(cid))}</b>　のこり <b class="${sum >= 0 ? "neg" : "pos"}">${sum >= 0 ? "未精算 " + yen(sum) : "お店から渡す " + yen(-sum)}</b>（${l.length + me.length}件）</div>
+    ${ids.length ? '<div class="unsgrid">' + ids.map(cid => { const l = unsOpen(cid), me = self.filter(x => x.cid === cid), sum = l.concat(me).reduce((a, x) => a + x.amount, 0);
+      // キャストごとに1行にまとめる（押すと中身が開く）。チェック中のものがあれば開いたまま 2026/11/4
+      return `<details class="unsc" ${(unsOnly[cid] || new Set()).size || unsOpenSet.has(cid) ? "open" : ""} ontoggle="this.open ? unsOpenSet.add('${cid}') : unsOpenSet.delete('${cid}')"><summary class="uh"><b>${esc(castName(cid))}</b><span class="${sum >= 0 ? "neg" : "pos"}">${sum >= 0 ? "未精算 " + yen(sum) : "渡す " + yen(-sum)}</span><small>${l.length + me.length}件</small></summary>
         ${me.map(x => `<div class="ur"><b class="ab">・</b> <b>${unsMd(x.date)}</b>（${esc(castName(cid))}）${x.amount >= 0 ? "未精算 " + yen(x.amount) : "お店から渡す " + yen(-x.amount)}　<small style="color:#c0392b">今見ている日・まだ精算していない（この日の枠で精算）</small></div>`).join("")}
         ${l.map((x, i) => `<div class="ur">${KB.CAN_EDIT ? `<input type="checkbox" ${(unsOnly[cid] || new Set()).has(x.key) ? "checked" : ""} onchange="unsOnlyToggle('${cid}','${x.key}',this.checked)" title="未精算だけを、今日精算する">` : ""}<b class="ab">${UNS_ABC[i] || i + 1}</b> <b>${unsMd(x.date)}</b>（${esc(castName(cid))}）<span class="${x.amount >= 0 ? "neg" : "pos"}">${esc(x.what)}</span>${unsJump(x.date, cid)}
           ${x.kind === "entry" && x.raw.source === "manual" ? `<small>手で入れた・${esc(x.raw.created_by || "")}</small>` : ""}
           ${KB.CAN_EDIT && x.kind === "entry" ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="unsDel(${x.raw.id})">🗑</button>` : ""}</div>`).join("")}
-        ${unsOnlyFoot(cid, l)}</div>`; }).join("")
+        ${unsOnlyFoot(cid, l)}</details>`; }).join("") + '</div>'
     : `<div class="hint2">未精算はありません 🎉</div>`}
     ${KB.CAN_EDIT && UNS !== null ? `<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:800;font-size:13px">＋ 未精算を手で足す（エクセルの頃の分など）</summary>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px">
@@ -460,7 +462,10 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .ut{margin-top:6px;font-weight:700} .due{display:inline-block;background:#00B0F0;border:2px solid #0A84C6;border-radius:10px;padding:2px 10px;color:#E0001B;font-size:18px;font-weight:900}
   .due.give{background:#E3F1FF;border-color:#2f7fd0;color:#2f7fd0}
   .uhd{font-weight:900;font-size:15px;color:#5b3fa6;margin-bottom:6px} .uhd small{font-weight:600;font-size:11.5px;color:#8a7f99;margin-left:6px}
-  .unsc{background:#fff;border:1.5px solid #E4DDF2;border-radius:12px;padding:8px 12px;margin-bottom:8px} .unsc .uh{font-size:14px;margin-bottom:2px}
+  .unsgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px;align-items:start}
+  .unsc{background:#fff;border:1.5px solid #E4DDF2;border-radius:10px;padding:4px 10px}
+  .unsc .uh{font-size:13.5px;cursor:pointer;display:flex;gap:8px;align-items:center;list-style:none;padding:2px 0} .unsc .uh::-webkit-details-marker{display:none}
+  .unsc .uh::before{content:"▸";color:#B9A8EC} .unsc[open] .uh::before{content:"▾"} .unsc .uh small{margin-left:auto;color:#8a7b82} .unsc[open]{grid-column:1/-1}
   .slog{background:#FFFCEB;border:1.5px solid #F2D27A;border-radius:12px;padding:8px 10px;margin:8px 0;font-size:13px}
   .slog > b{color:#8a6d00;margin-right:8px} .slog .sl{background:#fff;border:1px solid #F2D27A;border-radius:8px;padding:5px 8px;margin-top:5px}
   .slog .sw{font-weight:900;color:#5C4B4F;margin-right:4px} .sladd{margin-top:8px} .sladd summary{cursor:pointer;font-weight:800;font-size:12.5px;color:#8a6d00}

@@ -5109,6 +5109,7 @@ function paintStaffPay(){
       <td><select onchange="spSet(${i},'src',this.value)"><option value="">--</option>${Object.entries(PAY_SRC).map(([k, l])=>`<option value="${k}" ${r.src === k ? "selected" : ""}>${l}</option>`).join("")}</select></td>
       <td><input value="${esc(r.note)}" maxlength="100" style="width:120px" onchange="spSet(${i},'note',this.value)"></td>
       <td><button type="button" class="btn btn-primary btn-sm" onclick="spSave(${i})">保存</button></td></tr>`; }).join("")}</table></div>
+    ${KB.IS_BOSS ? "" : `<div class="warn" style="margin-top:6px;font-weight:800">👛 自分の日払いは、自分で入れて「払った」にしてください（ほかの人の日払いは見えません）</div>`}
     <div class="hist" style="margin-top:4px">日払い＝時間×時給（30分きざみ）。金額を手で直すこともできます。「払った」にしたら、どこから払ったか（その日の回収金／キキララ）も選んで保存してください。払った分は、集計の店落ちから引きます。</div>`
     : `<div class="hist">この日の時給の内勤はいません（時給の表：kb_staff_rates）</div>`;
 }
@@ -6430,6 +6431,6 @@ renderListTable = function(){
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 <script src="kb_cal.js?v=1"></script>
-<script src="unsettled.js?v=41"></script>
+<script src="unsettled.js?v=42"></script>
 </body>
 </html>
