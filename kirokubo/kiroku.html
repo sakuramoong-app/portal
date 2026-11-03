@@ -3714,15 +3714,20 @@ loadDay = async function(){ await __loadDayA(); renderCallAlerts(); };
 
 /* ---------- 💳 カード決済の進み具合（本日のキャスト一覧で、プルダウンで変える） ---------- */
 const CARD_STEP = [["unsent", "💳 URL未送信"], ["sent", "📨 URL送信済み"], ["paid", "✅ 決済済み"]];
+// 現金＋カード（分けて払う）の予約：支払いは「現金」のまま、カードの分（card_total）がある
+const isSplitPay = r => !!r && r.payment === "cash" && Number(r.card_total) > 0;
 function cardSel(r){
-  if(r.payment === "cash" || !("card_step" in r)) return "";
+  if((r.payment === "cash" && !isSplitPay(r)) || !("card_step" in r)) return "";
   const cur = r.card_step || (r.payment === "card_paid" ? "paid" : "unsent");
-  if(!KB.CAN_EDIT) return `<br><span class="cardst ${cur}">${(CARD_STEP.find(x=>x[0] === cur) || [])[1] || ""}</span>`;
-  return `<br><select class="cardst ${cur}" onclick="event.stopPropagation()" onchange="setCardStep(${r.id},this.value)">${CARD_STEP.map(([v, l])=>`<option value="${v}" ${cur === v ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+  const amt = isSplitPay(r) ? `<span class="cardamt">💳 カード決済 ${yen(Number(r.card_total))}</span> ` : "";   // 現金＋カードは、カードで払う額を出す
+  if(!KB.CAN_EDIT) return `<br>${amt}<span class="cardst ${cur}">${(CARD_STEP.find(x=>x[0] === cur) || [])[1] || ""}</span>`;
+  return `<br>${amt}<select class="cardst ${cur}" onclick="event.stopPropagation()" onchange="setCardStep(${r.id},this.value)">${CARD_STEP.map(([v, l])=>`<option value="${v}" ${cur === v ? "selected" : ""}>${l}</option>`).join("")}</select>`;
 }
 async function setCardStep(id, v){
   const l = (CARD_STEP.find(x=>x[0] === v) || [])[1] || v;
-  const rr = rows.find(x=>x.id === id), pay = v === "paid" ? "card_paid" : (rr && rr.payment === "card_paid" ? "card" : null);   // 決済済み＝カード精算済（精算で使う）
+  const rr = rows.find(x=>x.id === id);
+  // 決済済み＝カード精算済（精算で使う）。現金＋カードは、支払いは「現金」のまま（カードの分は card_total）
+  const pay = isSplitPay(rr) ? null : v === "paid" ? "card_paid" : (rr && rr.payment === "card_paid" ? "card" : null);
   if(await pushLog(id, "カード：" + l, Object.assign({ card_step: v }, pay ? { payment: pay } : {}))){ toast("カード：" + l); renderList(); }
 }
 
@@ -3998,7 +4003,7 @@ $("f_address").addEventListener("change", () => {
     if(d.length <= 2){ h = +d; m = 0; } else if(d.length === 3){ h = +d.slice(0, 1); m = +d.slice(1); } else { h = +d.slice(0, 2); m = +d.slice(2, 4); }
     if(m > 59) m = 59; if(h > 29) return String(v); return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0"); };
   const conv = root => (root || document).querySelectorAll('input[type="time"]').forEach(el => {
-    const v = el.value; el.type = "text"; el.value = v; el.dataset.tm = "1"; el.placeholder = "--:--"; el.title = "数字だけで入れられます（1240 → 12:40）"; el.style.textAlign = "center"; el.inputMode = "numeric"; el.autocomplete = "off";
+    const v = el.getAttribute("value") || el.value; el.type = "text"; el.value = v;   // 27:00 は時刻の欄では消えるので、書いた値（value）から読む el.dataset.tm = "1"; el.placeholder = "--:--"; el.title = "数字だけで入れられます（1240 → 12:40）"; el.style.textAlign = "center"; el.inputMode = "numeric"; el.autocomplete = "off";
     if(!el.style.width) el.style.width = "84px"; });
   conv();
   new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if(n.nodeType === 1){ if(n.matches && n.matches('input[type="time"]')) conv(n.parentNode); else if(n.querySelector && n.querySelector('input[type="time"]')) conv(n); } }))).observe(document.body, { childList: true, subtree: true });
@@ -4697,8 +4702,8 @@ function resCard(r, i){
     : `<button class="told" onclick="toggleNotified(${r.id})" title="キャストに伝えたら押す">⚠️ キャストまだ</button>`;
   const ops = (r.options || []).filter(o=>!["af", "gyakuaf"].includes(o.code)).map(o=>o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・");
   const afw = [r.af_wish === "yes" ? "AF" : "", r.rev_af_wish === "yes" ? "逆AF" : ""].filter(Boolean).join("・");
-  const cardStep = r.payment !== "cash" ? cardSel(r).replace(/^<br>/, "") : "";
-  const payUrl = r.payment === "card" && (r.card_step || "unsent") === "unsent" ? `<a class="payurl" href="${PAY_ADMIN_URL}" target="_blank" rel="noopener" title="${esc(PAY_ADMIN_URL)}">💳 決済URL</a>` : "";
+  const cardStep = r.payment !== "cash" || isSplitPay(r) ? cardSel(r).replace(/^<br>/, "") : "";
+  const payUrl = (r.payment === "card" || isSplitPay(r)) && (r.card_step || "unsent") === "unsent" ? `<a class="payurl" href="${PAY_ADMIN_URL}" target="_blank" rel="noopener" title="${esc(PAY_ADMIN_URL)}">💳 決済URL</a>` : "";
   // 1〜2行に：時間・お店・状態・場所・コース・総額（支払い）・電話・カードの状態・伝えた。ほかは「くわしく」にたたむ
   const nLog = logOf(r).length;
   // 閉じていても、備考を「キャストOK」の右に出す（新しい順に2つまで。登録時の状態など自動のログも出す）
@@ -6376,6 +6381,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .rescard.rcn4{border-left:6px solid #A6CDF0;} .rescard.rcn4 .rc-no{background:#E4F0FB;color:#2F6699;border-color:#A6CDF0;}
   .rescard.rcn5{border-left:6px solid #C5B5F0;} .rescard.rcn5 .rc-no{background:#EEE9FC;color:#6650A8;border-color:#C5B5F0;}
   .rescard.rcn6{border-left:6px solid #EFD98A;} .rescard.rcn6 .rc-no{background:#FCF5D8;color:#8A6D12;border-color:#EFD98A;}
+  .cardamt{display:inline-block;background:#E4F0FB;border:1.5px solid #A6CDF0;color:#2F6699;border-radius:99px;padding:1px 9px;font-size:12px;font-weight:800;margin-right:4px}
   .part2chip{background:#FFF4E5;border:1.5px solid #FFB547;color:#8a4b00;border-radius:99px;padding:1px 9px;font-size:12px;font-weight:800;margin-left:6px;animation:livePulse 1.6s ease-in-out infinite}
   .rc-no{font-weight:900;font-size:12.5px;border-radius:99px;padding:1px 9px;border:1.5px solid;white-space:nowrap;align-self:center;}
   /* 今どこに誰が：横の線をはっきり（行の区切り） */

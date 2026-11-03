@@ -207,7 +207,10 @@
   const get = () => { try { return localStorage.getItem(KEY) === "1"; } catch (e) { return false; } };
   const css = document.createElement("style");
   css.textContent = `
-    html.kb-dark{filter:invert(.9) hue-rotate(180deg);background:#111;}
+    html.kb-dark{filter:invert(.93) hue-rotate(180deg) contrast(1.18) saturate(1.2);background:#111;}
+    /* 暗いときは、うすい文字・うすい線を濃く（見えにくくならないように） */
+    html.kb-dark body{color:#2a1f25;}
+    html.kb-dark small, html.kb-dark .lead, html.kb-dark .note, html.kb-dark .hint2, html.kb-dark .hist{opacity:1 !important;filter:brightness(.7);}
     html.kb-dark img, html.kb-dark video, html.kb-dark canvas, html.kb-dark iframe, html.kb-dark .kb-dark-keep{filter:invert(1) hue-rotate(180deg);}
     #kbDarkBtn{position:fixed;left:12px;bottom:58px;z-index:9400;width:40px;height:40px;border-radius:50%;border:1.5px solid #ffc2d1;background:#fff;font-size:18px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;padding:0;}
     @media print{ html.kb-dark{filter:none} #kbDarkBtn{display:none} }`;
