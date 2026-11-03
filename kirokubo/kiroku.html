@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="kb.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
-<script src="kb_live.js?v=1"></script><!-- いっしょに使う（保存の合図・入力中）。kb_common より前 -->
+<script src="kb_live.js?v=2"></script><!-- いっしょに使う（保存の合図・入力中）。kb_common より前 -->
 <script src="kb_common.js?v=18"></script>
 <style>
   /* ===== 見やすさ重視（文字は大きめ・枠は少なめ・色は状態と注意だけ） ===== */
@@ -6156,10 +6156,12 @@ function livePaint(){
     const btn = document.querySelector("#rc-" + p.rid + " .rc-open");
     if(btn) btn.insertAdjacentHTML("beforebegin", `<span class="rc-live">✏️ ${esc(p.by)}さん入力中</span>`);
   });
-  const label = p => { if(p.rid === "new") return "新しい予約"; const r = rows.find(x => String(x.id) === p.rid); return r ? hm(r.start_at) + " " + castName(r.cast_id) : "予約"; };
+  // 何を入力中か：相手の画面の「店・時間・キャスト・お客さんの名前」（p.info）があればそれを出す
+  const label = p => { const head = p.rid === "new" ? "新しい予約" : (r => r ? hm(r.start_at) + " " + castName(r.cast_id) : "予約")(rows.find(x => String(x.id) === p.rid)); return p.info ? head + "：" + p.info : head; };
   let bar = $("liveBar");
   if(!bar){ bar = document.createElement("div"); bar.id = "liveBar"; document.body.appendChild(bar); }
-  bar.innerHTML = list.length ? "✏️ 入力中：" + list.map(p => `<b>${esc(p.by)}</b>（${esc(label(p))}）`).join("、") : "";
+  // 押すと、その予約のカードへとぶ（新しい予約は、まだカードがないので中身だけ）
+  bar.innerHTML = list.length ? "✏️ 入力中：" + list.map(p => `<span class="lb-item" ${p.rid !== "new" ? `onclick="jumpToRes(${Number(p.rid)},day)" title="押すとこの予約へとぶ"` : ""}><b>${esc(p.by)}</b>（${esc(label(p))}）</span>`).join("、") : "";
   bar.style.display = list.length ? "" : "none";
   const w = $("liveWarn");
   if(w){
@@ -6173,6 +6175,7 @@ function livePaint(){
   css.textContent = `.rc-live{background:#FFF1C9;border:1.5px solid #F2B705;color:#7a5600;border-radius:99px;padding:3px 10px;font-size:12.5px;font-weight:800;white-space:nowrap;animation:livePulse 1.6s ease-in-out infinite}
   @keyframes livePulse{50%{opacity:.55}}
   #liveBar{position:fixed;right:12px;bottom:12px;z-index:950;background:#FFF8E1;border:2px solid #F2B705;color:#5a4000;border-radius:99px;padding:7px 14px;font-size:13px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.12);max-width:60vw}
+  #liveBar .lb-item[onclick]{cursor:pointer;text-decoration:underline dotted;}
   #liveWarn{background:#FFF1C9;border:2px solid #F2B705;color:#7a5600;border-radius:12px;padding:8px 12px;margin:0 0 10px;font-weight:800;font-size:13.5px}`;
   document.head.appendChild(css);
   const t = $("formTitle"); if(t) t.insertAdjacentHTML("afterend", `<div id="liveWarn" style="display:none"></div>`);
@@ -6183,6 +6186,11 @@ function livePaint(){
   openForm = function(id){ const r = __openFormLive.apply(this, arguments); Promise.resolve(r).then(() => { KBLive.setEditing(editing ? editing.id : "new"); livePaint(); }); return r; };
   // 閉じたら「入力中」を消す（×・キャンセル・外を押す・保存、どれで閉じても）
   new MutationObserver(() => { if(!$("formBg").classList.contains("show")) KBLive.setEditing(null); }).observe($("formBg"), { attributes: true, attributeFilter: ["class"] });
+  // 入力中の中身（店・時間・キャスト・お客さんの名前）をほかの人の右下に出す。電話番号は出さない
+  const selText = id => { const s = $(id); return s && s.selectedIndex > 0 ? (s.options[s.selectedIndex].text || "").replace(/（.*$/, "").trim() : ""; };
+  const formInfo = () => [selText("f_store"), ($("f_start") || {}).value || "", selText("f_cast"), (($("f_name") || {}).value || "").trim() && (($("f_name").value || "").trim() + "様")].filter(Boolean).join("・");
+  const sendInfo = () => { if($("formBg").classList.contains("show") && KBLive.setInfo) KBLive.setInfo(formInfo()); };
+  $("formBg").addEventListener("input", sendInfo); $("formBg").addEventListener("change", sendInfo);
   const __renderListLive = renderList;
   renderList = function(){ const r = __renderListLive.apply(this, arguments); livePaint(); return r; };
 })();

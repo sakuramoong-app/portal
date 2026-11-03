@@ -8,7 +8,7 @@
 (function(){
   const tabId = Math.random().toString(36).slice(2) + Date.now().toString(36);
   const changedCbs = [], presenceCbs = [];
-  let ch = null, ready = false, editing = null, sendTimer = null, others = [];
+  let ch = null, ready = false, editing = null, sendTimer = null, others = [], info = "", infoTimer = null;   // info：入力中の予約のかんたんな中身（店・時間・キャスト・名前）
 
   // 保存（kb_ の表への書きこみ）を見はる。読むだけ・rpc は数えない
   const of = window.fetch.bind(window);
@@ -29,7 +29,7 @@
 
   function track(){
     if(!ch || !ready) return;
-    ch.track({ tab: tabId, by: who(), rid: editing, page: location.pathname.split("/").pop(), at: Date.now() }).catch(() => {});
+    ch.track({ tab: tabId, by: who(), rid: editing, info, page: location.pathname.split("/").pop(), at: Date.now() }).catch(() => {});
   }
   function readPresence(){
     const st = ch.presenceState(), list = [];
@@ -57,7 +57,8 @@
   window.KBLive = {
     onChanged: f => changedCbs.push(f),
     onPresence: f => presenceCbs.push(f),
-    setEditing(rid){ editing = rid == null ? null : String(rid); track(); },
+    setEditing(rid){ editing = rid == null ? null : String(rid); info = ""; track(); },
+    setInfo(s){ s = String(s || "").slice(0, 80); if(s === info) return; info = s; clearTimeout(infoTimer); infoTimer = setTimeout(track, 1500); },
     others: () => others,
   };
 })();
