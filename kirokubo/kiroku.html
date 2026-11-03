@@ -955,7 +955,7 @@ function onStore(r){
   const store = $("f_store").value, g = storeGroup(store);
   const list = M.prices.filter(p=>p.store_key===store);
   const keep = (r && r.course) || $("f_course").value;
-  $("f_course").innerHTML = `<option value="">（コースを選ぶ）</option>` + list.map(p=>`<option value="${esc(p.course)}">${esc(p.course)}${/^\d+$/.test(p.course)?"分":""}　${yen(p.price)}${p.note?"（"+esc(p.note)+"）":""}</option>`).join("");
+  $("f_course").innerHTML = `<option value="">（コースを選ぶ）</option>` + list.map(p=>`<option value="${esc(p.course)}">${esc(p.course)}${/^\d+$/.test(p.course)?"分" + (Number(p.course) >= 60 ? "（" + (Math.round(Number(p.course) / 6) / 10) + "時間）" : ""):""}　${yen(p.price)}${p.note?"（"+esc(p.note)+"）":""}</option>`).join("");
   if(keep && list.some(p=>p.course===keep)) $("f_course").value = keep;
   // オプション
   const sel = (r && r.options) || [];
