@@ -236,6 +236,11 @@
   .ntfset{border:1.5px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:8px;} .ntfset-hd{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:4px;} .ntfset-hd b{flex:1 1 220px;} .ntfset-hd label{font-size:13px;font-weight:700;}
   .ntfset-row{display:flex;gap:6px;align-items:center;margin-top:4px;} .ntfset-row label{width:78px;font-size:12.5px;color:var(--sub);font-weight:700;flex:none;} .ntfset-row input{flex:1;font-family:inherit;font-size:13px;}
   .cndays{display:inline-flex;gap:2px;flex-wrap:wrap;} .cndays label{font-size:12px;font-weight:700;border:1px solid var(--line);border-radius:6px;padding:1px 4px;} .cndays input{margin:0 2px 0 0;}
+  .dayalarms{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0 8px;}
+  .dachip{display:inline-flex;align-items:center;gap:4px;background:#FFF4E5;border:1.5px solid #FFB547;border-radius:99px;padding:3px 6px 3px 10px;font-size:13.5px;font-weight:700;color:#7a4300;} .dachip.past{opacity:.55;} .dachip small{font-weight:600;color:#9a6a2a;}
+  .dachip button{border:none;background:#fff;border-radius:99px;width:22px;height:22px;cursor:pointer;font-weight:800;color:#a35a00;}
+  .daadd{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:13px;font-weight:700;color:var(--sub);} .daadd input{font-family:inherit;font-size:13px;padding:4px 8px;border:1.5px solid var(--line);border-radius:8px;} #da_time{width:64px;} #da_text{width:220px;max-width:60vw;}
+  .daadd button{font-family:inherit;font-size:13px;font-weight:800;background:#fff;border:1.5px solid #FFB547;color:#a35a00;border-radius:99px;padding:4px 12px;cursor:pointer;}
   #ntfBox{position:fixed;left:12px;bottom:104px;z-index:955;font-family:inherit;}
   #ntfBox .ntfopen{background:#fff;border:1.5px solid #8FB0EE;color:#2B4C8C;border-radius:99px;padding:7px 12px;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(43,76,140,.18);}
   #ntfBox.open{width:min(300px,calc(100vw - 24px));background:#fff;border:2px solid #8FB0EE;border-radius:14px;box-shadow:0 8px 24px rgba(43,76,140,.25);}
@@ -435,6 +440,7 @@
     <div id="callAlerts"></div>
     <div id="shiftAlerts"></div>
     <div class="notice"><textarea id="notice" placeholder="📢 本日のお知らせ（ここに書くと赤く大きく出ます）" onchange="saveNotice()"></textarea></div>
+    <div class="dayalarms" id="dayAlarms"></div>
     <!-- 📊 今日の数字（内勤用・ふだんはしまっておく） -->
     <details class="fold" id="todayBox"><summary>📊 今日の数字</summary><div class="todaygrid" id="todayGrid"></div></details>
     <!-- 💴 内勤の日払い（その日の分） -->
@@ -3706,6 +3712,7 @@ const NTF_KINDS = {
   in:      { label: "🌅 出勤の時間",                   def: "chime", voice: false, text: "🌅 {名前}　出勤の時間（{時間}）", say: "{名前}さん、出勤の時間です" },
   out:     { label: "🌙 退勤の時間",                   def: "pon",   voice: false, text: "🌙 {名前}　退勤の時間（{時間}）", say: "{名前}さん、退勤の時間です" },
   notice:  { label: "📢 本日のお知らせ（書きかわった・まだ見ていない）", def: "up", voice: true, text: "📢 お知らせ（{名前}）：{内容}", say: "本日のお知らせです。{内容}" },
+  alarm:   { label: "⏰ 時刻アラート（お知らせの下で足したもの）", def: "triple", voice: true, text: "⏰ {時間}　{内容}（{名前}）", say: "{時間}です。{内容}" },
 };
 const SOUNDS = {
   pipi:   { label: "ピピッ（高い2回）", notes: [[880, 0], [880, .35]] },
@@ -3747,6 +3754,12 @@ function checkCustomNtfs(){
     if(due == null || fired[key] || now < due || now > due + 10 * 60000) return;   // 時刻から10分のあいだに開いていれば出す
     fired[key] = 1; notify("c:" + c.id, { 時間: c.time }, "");
   });
+  dayAlarms().filter(a=>a.bd === bd).forEach(a=>{   // ⏰ 時刻アラート（その日だけ・1回）
+    const due = customDue(a, bd), key = bd + "|a" + a.id;
+    if(due == null || fired[key] || now < due || now > due + 10 * 60000) return;
+    fired[key] = 1; notify("alarm", { 時間: a.now ? "お知らせ" : lateHM(Math.round((due - Date.parse(bd + "T00:00:00+09:00")) / 60000)), 内容: a.text, 名前: a.by || "" }, `document.getElementById('dayAlarms').scrollIntoView({block:'center',behavior:'smooth'})`);
+    renderDayAlarms();
+  });
   Object.keys(fired).forEach(k=>{ if(k.slice(0, 10) < bd) delete fired[k]; });   // 前の日の印は消す
   lsSet("kbFired", fired);
 }
@@ -3763,8 +3776,49 @@ async function checkNotice(){
     if(!text || (r.updated_by && r.updated_by === KB.operatorName() && seen.bd === bd)) return;   // 消された・自分で書いた
     notify("notice", { 名前: r.updated_by || "", 内容: text.length > 120 ? text.slice(0, 120) + "…" : text }, `document.getElementById('notice').scrollIntoView({block:'center',behavior:'smooth'})`);
   }catch(e){}
+  loadDayAlarms();
 }
 setInterval(checkNotice, 60000);
+/* ---------- ⏰ 時刻アラート：お知らせの下で「この時刻に鳴らす」を足す（その日だけ・内勤みんなの画面で1回）
+   kb_settings 'day_alarms' = [{ id, bd（営業日）, time: "21:00"（深夜は 25:00 / 1:00）, text, by }]。前の日のものは保存のときに消す ---------- */
+function dayAlarms(){ const v = M.set && M.set.day_alarms; return Array.isArray(v) ? v : []; }
+async function loadDayAlarms(){
+  try{ const r = q(await sb.from("kb_settings").select("value").eq("key", "day_alarms").maybeSingle()); M.set.day_alarms = r && Array.isArray(r.value) ? r.value : []; }catch(e){}
+  renderDayAlarms();
+}
+function renderDayAlarms(){
+  const el = $("dayAlarms"); if(!el || !M.casts) return;
+  const base = Date.parse(day + "T00:00:00+09:00"), now = Date.now();
+  const list = dayAlarms().filter(a=>a.bd === day).map(a=>({ a, due: customDue(a, day) })).sort((x, y)=>x.due - y.due);
+  el.innerHTML = list.map(({ a, due })=>`<span class="dachip${due && now > due ? " past" : ""}">⏰ <b>${esc(lateHM(Math.round((due - base) / 60000)))}</b> ${esc(a.text)}${a.by ? `<small>（${esc(a.by)}）</small>` : ""}${a.now ? " <small>（すぐ）</small>" : ""}${due && now > due ? " <small>鳴った</small>" : ""}
+      ${KB.CAN_EDIT ? `<button type="button" title="消す" onclick="delDayAlarm('${esc(a.id)}')">×</button>` : ""}</span>`).join("")
+    + (KB.CAN_EDIT ? `<span class="daadd"><label><input type="checkbox" id="da_use" checked onchange="$('da_time').disabled = !this.checked"> ⏰ 時刻を指定する</label><input id="da_time" placeholder="21:00" inputmode="numeric"><input id="da_text" placeholder="鳴らす内容（例：〇〇さんに電話）" onkeydown="if(event.key==='Enter')addDayAlarm()"><button type="button" onclick="addDayAlarm()">🔔 アラートを足す</button></span>` : "");
+}
+async function addDayAlarm(){
+  if(!KB.CAN_EDIT) return;
+  const use = $("da_use").checked, nowJ = new Date(Date.now() + 9 * 3600000);   // 時刻を指定しない → いま（すぐ鳴る）
+  const time = use ? $("da_time").value.trim().normalize("NFKC").replace(/^(\d{1,2})(\d{2})$/, "$1:$2")
+                   : String(nowJ.getUTCHours()).padStart(2, "0") + ":" + String(nowJ.getUTCMinutes()).padStart(2, "0");
+  const text = $("da_text").value.trim();
+  if(!/^\d{1,2}:\d{2}$/.test(time)){ toast("時刻は 21:00 のように入れてください"); return; }
+  if(!use && day !== KB.bizDateOf()){ toast("「すぐ鳴らす」は今日の画面でだけ使えます"); return; }
+  if(!text){ toast("鳴らす内容を入れてください"); return; }
+  await saveDayAlarms(list => list.concat([{ id: "a" + Date.now(), bd: day, time, text, now: !use, by: KB.operatorName() }]));
+  if(!use) setTimeout(checkCustomNtfs, 300);
+}
+async function delDayAlarm(id){
+  if(!KB.CAN_EDIT || !confirm("この時刻アラートを消しますか？")) return;
+  await saveDayAlarms(list => list.filter(a=>a.id !== id));
+}
+async function saveDayAlarms(change){
+  try{
+    const r = q(await sb.from("kb_settings").select("value").eq("key", "day_alarms").maybeSingle());   // ほかの人が足した分も消さないように、最新を読んでから
+    const today = KB.realBizDateOf(), list = change((r && Array.isArray(r.value) ? r.value : []).filter(a=>a.bd >= today || a.bd === KB.PRACTICE_DAY));
+    q(await sb.from("kb_settings").upsert({ key: "day_alarms", value: list, note: "⏰ 時刻アラート（受付のお知らせの下）" }));
+    M.set.day_alarms = list; toast("保存しました"); renderDayAlarms();
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+setInterval(renderDayAlarms, 60000);
 function playSound(id){
   const s = SOUNDS[id]; if(!s || !s.notes.length) return;
   try{
