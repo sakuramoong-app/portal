@@ -712,7 +712,14 @@ async function saveTerms(){
   else { p.hearing_text = $("t_htext").value.trim(); if(p.hearing_text.length < 5){ toast("ヒアリング内容を書いてください（ないと変えられません）"); $("t_htext").focus(); return; } }
   RANK_KEYS.forEach(([g])=>{ const el = $("t_r_" + g); if(el.value.trim() !== el.dataset.was) p.ranks[g] = el.value.trim(); });
   document.querySelectorAll(".t_end:checked").forEach(x=>p.end_rules.push(Number(x.value)));
-  if(!Object.keys(p.ranks).length && !p.add_rules.length && !p.end_rules.length){ toast("変える内容がありません"); return; }
+  // ランクは同じで「いつから」だけ直したいとき（例：B が 11/3 からになっていて、11/1 の予約が前のランクで計算される）
+  //   → 今のランクを、選んだ日からのランクとして入れなおす（ランクの履歴に1行ふえるだけ）
+  if(!Object.keys(p.ranks).length && !p.add_rules.length && !p.end_rules.length){
+    const cur = {}; RANK_KEYS.forEach(([g])=>{ const v = $("t_r_" + g).value.trim(); if(v) cur[g] = v; });
+    if(!Object.keys(cur).length){ toast("変える内容がありません"); return; }
+    if(!confirm(`ランクは今と同じです。\n${p.effective} からのランクとして入れなおしますか？（この日より後の予約は、このランクで計算されます）`)) return;
+    p.ranks = cur;
+  }
   if($("t_note").value.trim() && !confirm("「条件を足す」の欄に書いたまま、まだ足していません。このまま保存しますか？")) return;
   $("t_save").disabled = true;
   try{
