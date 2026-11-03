@@ -1908,7 +1908,7 @@ ${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st||"--:--"}〜$
 【店名】${storeNoArea(c.store)}
 【名前】${$("f_name").value || "お客"}様 ${visitTxt}
 【コース】${c.course}${/^\d+$/.test(c.course)?"分":""}${c.free?"（"+FREE_SUFFIX[c.free]+"）":""}${c.ext?"＋延長"+c.ext*30+"分":""}
-【${{ love: "ホテル", biz: "ホテル", home: "自宅" }[$("f_place").value] || "ホテル・自宅"}】${$("f_area").value} ${$("f_address").value}${hotelMapUrl() ? "\n【地図】" + hotelMapUrl() : ""}
+【${{ love: "ホテル", biz: "ホテル", home: "自宅" }[$("f_place").value] || "ホテル・自宅"}】${$("f_area").value} ${$("f_address").value}${(() => { try{ return $("f_place").value === "biz" ? "\n【ビジホ】" + bizText(bizState) : ""; }catch(e){ return ""; } })()}${hotelMapUrl() ? "\n【地図】" + hotelMapUrl() : ""}
 【バック有OP】${backOps}
 【バック無OP】${noBackOps}${$("f_castnote") && $("f_castnote").value.trim() ? "\n【特記事項】" + $("f_castnote").value.trim() : ""}
 ${c.pay === "cash"
@@ -4817,20 +4817,24 @@ renderPayChips = function(){};   // 支払い方法は、ボタンではなく�
 
 /* ---------- 🏢 ビジホの確認：2名部屋で取っている？ → 取っていなければ 下迎え？・キャストが使うタオル あり／なし（必ず） ---------- */
 let bizState = { twin: "", pickup: "", towel: "" };
-const BIZ_Q = [["twin", "2名部屋で取っている？", [["yes", "取っている"], ["no", "取っていない"]]],
-  ["pickup", "下迎え？", [["yes", "下迎え"], ["no", "下迎えではない"]]],
-  ["towel", "キャストが使うタオル", [["yes", "ある"], ["no", "ない"]]]];
-function bizNeed(){ return bizState.twin === "no" ? ["twin", "pickup", "towel"] : ["twin"]; }
+// 2026/11/3：どの問いにも「不明」。2名部屋でもタオルは聞く。選んだあとも全部の問いを出したまま。キャストへの LINE の文にも出す
+const BIZ_Q = [["twin", "2名部屋で取っている？", [["yes", "取っている"], ["no", "取っていない"], ["unknown", "不明"]]],
+  ["pickup", "下迎え？", [["yes", "下迎え"], ["no", "下迎えではない"], ["unknown", "不明"]]],
+  ["towel", "キャストが使うタオル", [["yes", "ある"], ["no", "ない"], ["unknown", "不明"]]]];
+function bizNeed(){ return bizState.twin === "yes" ? ["twin", "towel"] : ["twin", "pickup", "towel"]; }   // 2名部屋なら下迎えは聞かなくていい
 function bizMissing(){ return !!($("f_place") && $("f_place").value === "biz" && bizNeed().some(k=>!bizState[k])); }
-function bizText(b){ return b.twin === "yes" ? "2名部屋" : "1名部屋・" + (b.pickup === "yes" ? "下迎え" : "下迎えではない") + "・タオル" + (b.towel === "yes" ? "あり" : "なし"); }
+function bizText(b){
+  const yn = (v, y, n) => v === "yes" ? y : v === "no" ? n : v === "unknown" ? "不明" : "未確認";
+  return [b.twin === "yes" ? "2名部屋" : b.twin === "no" ? "1名部屋" : "部屋：" + yn(b.twin), b.twin !== "yes" ? "下迎え：" + yn(b.pickup, "あり", "なし") : "", "タオル：" + yn(b.towel, "あり", "なし")].filter(Boolean).join("・");
+}
 function paintBiz(){
   const el = $("bizBox"); if(!el) return;
   if(!$("f_place") || $("f_place").value !== "biz"){ el.innerHTML = ""; return; }
   const need = bizNeed();
-  el.innerHTML = `<div class="bizbox"><div class="bh">🏢 ビジホの確認（必ず聞く）</div>` + BIZ_Q.filter(x=>need.includes(x[0])).map(([k, label, opts])=>
-    `<div class="bq ${bizState[k] ? "" : "miss"}"><span>${label}</span>${opts.map(([v, l])=>`<button type="button" class="ynp ${bizState[k] === v ? "on" : ""}" onclick="setBiz('${k}','${v}')">${l}</button>`).join("")}</div>`).join("") + `</div>`;
+  el.innerHTML = `<div class="bizbox"><div class="bh">🏢 ビジホの確認（必ず聞く）</div>` + BIZ_Q.map(([k, label, opts])=>
+    `<div class="bq ${bizState[k] || !need.includes(k) ? "" : "miss"}" ${need.includes(k) ? "" : 'style="opacity:.55"'}><span>${label}${need.includes(k) ? "" : "（2名部屋なので聞かなくてOK）"}</span>${opts.map(([v, l])=>`<button type="button" class="ynp ${bizState[k] === v ? "on" : ""}" onclick="setBiz('${k}','${v}')">${l}</button>`).join("")}</div>`).join("") + `</div>`;
 }
-function setBiz(k, v){ bizState[k] = v; if(k === "twin" && v === "yes"){ bizState.pickup = ""; bizState.towel = ""; } paintBiz(); }
+function setBiz(k, v){ bizState[k] = v; paintBiz(); if(typeof recalc === "function" && $("f_store").value) recalc(); }
 const __checkNewHotelB = checkNewHotel;
 checkNewHotel = function(){ __checkNewHotelB(); paintBiz(); };
 const __openFormB = openForm;
