@@ -229,12 +229,16 @@
   .callalert .sntext{display:block;font-weight:500;font-size:12.5px;color:#556;white-space:pre-wrap;margin-top:2px;}
   .callalert .snset{display:inline-block;width:auto;float:right;margin:0;padding:3px 10px;font-size:12.5px;}
   .snsetonly{text-align:right;margin:2px 0;} .snsetonly button{font-family:inherit;font-size:12.5px;font-weight:700;background:#fff;border:1.5px solid var(--line);border-radius:99px;padding:3px 10px;cursor:pointer;color:var(--sub);}
+  .snchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+  .snchip{display:inline-flex;align-items:center;gap:4px;background:#fff;border:1.5px solid #BCD0F5;border-radius:99px;padding:2px 4px 2px 10px;font-size:13px;color:#23375e;} .snchip.out{border-color:#C9B8EE;background:#FAF7FF;}
+  .snchip b{cursor:pointer;font-weight:800;} .callalert .snchip button{display:inline-block;width:auto;margin:0;padding:2px 8px;font-size:12px;border-radius:99px;}
+  .tplkinds{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 4px;font-size:13px;font-weight:800;color:var(--sub);} .tplkinds button{font-family:inherit;font-size:13px;font-weight:800;background:#fff;border:1.5px solid var(--line);border-radius:99px;padding:4px 12px;cursor:pointer;color:#5C4B4F;} .tplkinds button.on{background:#FFE3EC;border-color:#F09AAA;color:#B0213F;}
   #ntfBox{position:fixed;left:12px;bottom:104px;z-index:955;font-family:inherit;}
   #ntfBox .ntfopen{background:#fff;border:1.5px solid #8FB0EE;color:#2B4C8C;border-radius:99px;padding:7px 12px;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(43,76,140,.18);}
-  #ntfBox.open{width:min(340px,calc(100vw - 24px));background:#fff;border:2px solid #8FB0EE;border-radius:14px;box-shadow:0 8px 24px rgba(43,76,140,.25);}
+  #ntfBox.open{width:min(300px,calc(100vw - 24px));background:#fff;border:2px solid #8FB0EE;border-radius:14px;box-shadow:0 8px 24px rgba(43,76,140,.25);}
   #ntfBox .ntfhd{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;font-weight:800;color:#2B4C8C;border-bottom:1.5px solid #DCE6FA;font-size:14px;}
   #ntfBox .ntfhd button{font-family:inherit;font-size:12.5px;font-weight:800;background:#EEF4FF;border:1px solid #BCD0F5;border-radius:99px;padding:3px 10px;margin-left:4px;cursor:pointer;color:#2B4C8C;}
-  #ntfBox .ntflist{max-height:42vh;overflow-y:auto;padding:4px 8px 8px;}
+  #ntfBox .ntflist{max-height:24vh;overflow-y:auto;padding:4px 8px 8px;}
   #ntfBox .ntfrow{padding:6px 4px;border-bottom:1px dashed #DCE6FA;font-size:13.5px;font-weight:700;color:#23375e;} #ntfBox .ntfrow.go{cursor:pointer;} #ntfBox .ntfrow.go:hover{background:#F5F8FF;}
   #ntfBox .ntfrow small{display:block;font-size:11.5px;color:#7a86a0;font-weight:600;}
   .snsetonly button{margin-left:6px;}
@@ -3718,6 +3722,7 @@ function notify(kind, text, jump){
   ntfLog.unshift({ kind, text, jump: jump || "", at: new Date() }); if(ntfLog.length > 30) ntfLog.length = 30;
   if(!notify.q){ notify.q = true; setTimeout(()=>{ notify.q = false; playSound(soundOf(kind)); }, 50); }   // 一度にたくさん出ても、音は1回
   renderNtfBox(true);
+  clearTimeout(notify.t); notify.t = setTimeout(()=>{ const b = $("ntfBox"); if(b && !b.matches(":hover")){ b.classList.remove("open"); renderNtfBox(); } }, 30000);   // 30秒で小さい 🔔 にもどる（押せばまた見られる）
 }
 function renderNtfBox(open){
   let el = $("ntfBox");
@@ -3784,6 +3789,7 @@ loadCallAlerts(); setInterval(loadCallAlerts, 120000);
    今日のシフトの出勤時間・退勤時間になったら、上に出す。「済」で消える（内勤みんな同じ）。
    kb_settings 'shift_notice' = { casts: { cast_id: { off_in, off_out } } }（通知しない子）。送る文は 📝 テンプレ（別） ---------- */
 let shiftNoticeDays = {}, shiftNoticeShifts = {};
+const SN_SHOW_MS = 60 * 60000;   // 時間になってから60分だけ出す（すぎたら自然に消える）
 function shiftNoticeSet(){ const v = M.set && M.set.shift_notice; return Object.assign({ in: "", out: "", casts: {} }, v && typeof v === "object" ? v : {}); }
 async function loadShiftNotices(){
   if(!M.casts) return;
@@ -3803,8 +3809,8 @@ function shiftNoticeItems(){
     const cd = shiftNoticeDays[c.id] || {}, own = (set.casts || {})[c.id] || {};
     if(cd.status === "欠勤") return;
     const hs = cd.shift_start_ov != null ? Number(cd.shift_start_ov) : Number(sh.start), he = cd.shift_end_ov != null ? Number(cd.shift_end_ov) : Number(sh.end);   // 時間の変更（出勤時間を変える）があればそちら
-    if(!own.off_in && !cd.notice_in_at && now >= base + hs * 3600000) items.push({ c, kind: "in", h: hs });
-    if(!own.off_out && !cd.notice_out_at && now >= base + he * 3600000) items.push({ c, kind: "out", h: he });
+    if(!own.off_in && !cd.notice_in_at && now >= base + hs * 3600000 && now < base + hs * 3600000 + SN_SHOW_MS) items.push({ c, kind: "in", h: hs });
+    if(!own.off_out && !cd.notice_out_at && now >= base + he * 3600000 && now < base + he * 3600000 + SN_SHOW_MS) items.push({ c, kind: "out", h: he });
   });
   return items.sort((a, b)=>a.h - b.h);
 }
@@ -3812,12 +3818,8 @@ const shiftBeeped = new Set();
 function renderShiftNotices(){
   const el = $("shiftAlerts"); if(!el || !M.casts) return;
   const items = shiftNoticeItems();
-  el.innerHTML = items.length ? `<div class="callalert shiftn">🔔 出勤・退勤の時間です
-      <button type="button" class="snset" onclick="openShiftNoticeSet()">⚙️ 通知しない子</button>${items.map(({ c, kind, h })=>{
-      return `<div class="outrow"><span><b>${kind === "in" ? "🌅 出勤" : "🌙 退勤"} ${esc(lateHM(Math.round(h * 60)))}</b>　${esc(c.official_name || c.temp_name)}</span>
-        <button type="button" onclick="openTplBox(null,'${c.id}')">📝 テンプレ</button>
-        <button type="button" onclick="jumpToCast('${c.id}')">枠へ</button>
-        ${KB.CAN_EDIT ? `<button type="button" class="okbtn" onclick="shiftNoticeDone('${kind}','${c.id}')">✓ 済</button>` : ""}</div>`; }).join("")}</div>`
+  el.innerHTML = items.length ? `<div class="callalert shiftn">🔔 出勤・退勤（時間から60分だけ出ます）<button type="button" class="snset" onclick="openShiftNoticeSet()">⚙️ 通知しない子</button>
+      <div class="snchips">${items.map(({ c, kind, h })=>`<span class="snchip ${kind}"><b onclick="jumpToCast('${c.id}')">${kind === "in" ? "🌅" : "🌙"}${esc(lateHM(Math.round(h * 60)))} ${esc(c.official_name || c.temp_name)}</b><button type="button" title="テンプレ" onclick="openTplBox(null,'${c.id}','${kind === "in" ? "出勤" : "退勤"}')">📝</button>${KB.CAN_EDIT ? `<button type="button" class="okbtn" title="済" onclick="shiftNoticeDone('${kind}','${c.id}')">✓済</button>` : ""}</span>`).join("")}</div></div>`
     : "";
   el.insertAdjacentHTML("afterbegin", `<div class="snsetonly"><button type="button" onclick="openTplBox()">📝 テンプレ（送る文）</button>${KB.PRACTICE ? "" : `<button type="button" onclick="openShiftNoticeSet()">🔔 出勤・退勤の通知</button>`}<button type="button" onclick="openSoundSet()">🔊 通知の音</button></div>`);
   items.filter(x=>!shiftBeeped.has(x.kind + x.c.id)).forEach(x=>{ shiftBeeped.add(x.kind + x.c.id);
@@ -3831,27 +3833,34 @@ function tplFill(t, cid){
   if(cid == null) cid = $("tpl_cast") ? $("tpl_cast").value : ""; const c = M.casts.find(x=>x.id === cid), d = new Date();
   return String(t || "").replace(/\{名前\}/g, c ? (c.official_name || c.temp_name) : "{名前}").replace(/\{時間\}/g, lateHM(d.getHours() * 60 + d.getMinutes()));
 }
-function openTplBox(editId, castId){
+let tplScene = "";   // えらんでいる種類（"" = ぜんぶ）
+const TPL_BASE_SCENES = ["出勤", "退勤"];
+function openTplBox(editId, castId, scene){
   let bg = $("tplBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "tplBg"; bg.className = "modal-bg"; document.body.appendChild(bg); KB.closeOnBackdrop(bg, () => bg.classList.remove("show")); }
-  const keepCast = castId || ($("tpl_cast") ? $("tpl_cast").value : ""), list = tplList(), scenes = [...new Set(list.map(t=>t.scene || "そのほか"))];
-  const ed = editId === "new" ? { id: "", scene: "", title: "", text: "" } : list.find(t=>t.id === editId);
+  if(scene != null) tplScene = scene;
+  const keepCast = castId || ($("tpl_cast") ? $("tpl_cast").value : ""), list = tplList();
+  const scenes = [...new Set([...TPL_BASE_SCENES, ...list.map(t=>t.scene || "そのほか")])];
+  const ed = editId === "new" ? { id: "", scene: tplScene, title: "", text: "" } : list.find(t=>t.id === editId);
+  const shown = list.filter(t=>!tplScene || (t.scene || "そのほか") === tplScene);
+  const group = tplScene ? [tplScene] : scenes.filter(s=>shown.some(t=>(t.scene || "そのほか") === s));
   bg.innerHTML = `<div class="modal" style="max-width:680px"><button class="x" onclick="$('tplBg').classList.remove('show')">×</button>
     <h2>📝 テンプレ（送る文）</h2>
     <div class="f" style="margin:6px 0"><label>だれに送る？（{名前} がこの子の名前になります）</label>
       <select id="tpl_cast" onchange="openTplBox()"><option value="">（えらばない）</option>${M.casts.map(c=>`<option value="${c.id}" ${c.id === keepCast ? "selected" : ""}>${esc(c.official_name || c.temp_name)}</option>`).join("")}</select></div>
-    ${ed ? `<div class="tpled"><div class="f"><label>場面（まとめる見出し）</label><input id="tpl_scene" list="tplScenes" value="${esc(ed.scene)}" placeholder="例：出勤前 / 退勤 / 遅刻 / お客さん"><datalist id="tplScenes">${scenes.map(s=>`<option value="${esc(s)}">`).join("")}</datalist></div>
+    <div class="tplkinds"><span>種類：</span><button type="button" class="${tplScene ? "" : "on"}" onclick="openTplBox(null,null,'')">ぜんぶ</button>${scenes.map(s=>`<button type="button" class="${s === tplScene ? "on" : ""}" onclick="openTplBox(null,null,'${esc(s)}')">${esc(s)}</button>`).join("")}</div>
+    ${ed ? `<div class="tpled"><div class="f"><label>種類（あたらしい種類も書けます）</label><input id="tpl_scene" list="tplScenes" value="${esc(ed.scene)}" placeholder="例：出勤 / 退勤 / 遅刻 / お客さん"><datalist id="tplScenes">${scenes.map(s=>`<option value="${esc(s)}">`).join("")}</datalist></div>
       <div class="f"><label>名前（ボタンに出る）</label><input id="tpl_title" value="${esc(ed.title)}" placeholder="例：美咲 退勤のお礼"></div>
       <div class="f"><label>文</label><textarea id="tpl_text" rows="5" placeholder="{名前}さん、お疲れさまでした！…">${esc(ed.text)}</textarea></div>
       <button type="button" class="btn btn-primary btn-sm" onclick="saveTpl('${esc(ed.id)}')">保存</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="openTplBox()">やめる</button>
       ${ed.id ? `<button type="button" class="btn btn-ghost btn-sm" style="float:right" onclick="delTpl('${esc(ed.id)}')">消す</button>` : ""}</div>` : ""}
-    ${scenes.length ? scenes.map(s=>`<h3 class="tplsc">${esc(s)}</h3>${list.filter(t=>(t.scene || "そのほか") === s).map(t=>`<div class="tplrow">
+    ${shown.length ? group.map(s=>`<h3 class="tplsc">${esc(s)}</h3>${shown.filter(t=>(t.scene || "そのほか") === s).map(t=>`<div class="tplrow">
         <div><b>${esc(t.title || "（名前なし）")}</b><small>${esc(tplFill(t.text, keepCast))}</small></div>
         <span><button type="button" class="btn btn-primary btn-sm" onclick="copyTpl('${esc(t.id)}')">📋 コピー</button>
         ${KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openTplBox('${esc(t.id)}')">直す</button>` : ""}</span></div>`).join("")}`).join("")
-      : `<p style="color:var(--sub)">まだテンプレがありません。「＋ テンプレを足す」から登録してください。</p>`}
-    ${KB.CAN_EDIT && !ed ? `<button type="button" class="btn btn-ghost" style="margin-top:10px;width:100%" onclick="openTplBox('new')">＋ テンプレを足す</button>` : ""}</div>`;
+      : `<p style="color:var(--sub)">${tplScene ? "「" + esc(tplScene) + "」の" : ""}テンプレはまだありません。「＋ テンプレを足す」から登録してください。</p>`}
+    ${KB.CAN_EDIT && !ed ? `<button type="button" class="btn btn-ghost" style="margin-top:10px;width:100%" onclick="openTplBox('new')">＋ テンプレを足す${tplScene ? "（" + esc(tplScene) + "）" : ""}</button>` : ""}</div>`;
   bg.classList.add("show");
 }
 function copyTpl(id){ const t = tplList().find(x=>x.id === id); if(!t) return; navigator.clipboard.writeText(tplFill(t.text)).then(()=>toast("📋 「" + (t.title || "テンプレ") + "」をコピーしました")); }
@@ -3867,7 +3876,7 @@ async function saveTpl(id){
   if(!t.text.trim()){ toast("文を入れてください"); return; }
   const list = tplList().filter(x=>x.id !== t.id); const i = tplList().findIndex(x=>x.id === t.id);
   if(i >= 0) list.splice(i, 0, t); else list.push(t);
-  if(await saveTplList(list)){ toast("保存しました"); openTplBox(); }
+  if(await saveTplList(list)){ toast("保存しました"); openTplBox(null, null, t.scene || "そのほか"); }
 }
 async function delTpl(id){
   if(!KB.CAN_EDIT || !confirm("このテンプレを消しますか？")) return;
