@@ -143,9 +143,25 @@
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const yen = n => (Number(n)||0).toLocaleString("ja-JP") + "円";
   function toast(m){
+    // うまくいかなかった知らせ（〜できませんでした・失敗・エラー）は、赤く大きく、押して閉じるまで出したまま（見落とさないように。2026/11/4）
+    if(/できませんでした|失敗|エラー|error|Error|見つかりません/.test(String(m))){ errBox(m); return; }
     let t = document.getElementById("kbToast");
     if(!t){ t = document.createElement("div"); t.id = "kbToast"; t.className = "toast"; document.body.appendChild(t); }
     t.textContent = m; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), 2400);
+  }
+  function errBox(m){
+    let b = document.getElementById("kbErrBox");
+    if(!b){ b = document.createElement("div"); b.id = "kbErrBox"; b.style.cssText = "position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:99990;max-width:92vw;background:#FFE8EC;border:3px solid #D9304F;color:#9B1230;border-radius:14px;padding:12px 16px;font-size:15px;font-weight:800;box-shadow:0 8px 26px rgba(0,0,0,.25);display:flex;gap:12px;align-items:flex-start;line-height:1.6;font-family:inherit"; document.body.appendChild(b); }
+    b.innerHTML = `<span style="font-size:20px">⚠️</span><span style="flex:1;white-space:pre-wrap"></span><button type="button" style="font-family:inherit;font-weight:800;border:1.5px solid #D9304F;background:#fff;color:#9B1230;border-radius:10px;padding:4px 10px;cursor:pointer">閉じる</button>`;
+    b.children[1].textContent = String(m) + "\n（もう一度やってもだめなときは、このまま店長に見せてください）";
+    b.querySelector("button").onclick = () => b.remove();
+  }
+  // ⏳ 登録中・読み込み中：画面のまんなかに出して、ほかを押せないようにする（二重に登録しないように）
+  function busy(on, label){
+    let o = document.getElementById("kbBusy");
+    if(!on){ if(o) o.remove(); return; }
+    if(!o){ o = document.createElement("div"); o.id = "kbBusy"; o.style.cssText = "position:fixed;inset:0;z-index:99980;background:rgba(40,20,30,.28);display:flex;align-items:center;justify-content:center;font-family:inherit"; document.body.appendChild(o); }
+    o.innerHTML = `<div style="background:#fff;border:3px solid #F4A3BE;border-radius:16px;padding:16px 26px;font-size:17px;font-weight:900;color:#B2456B;box-shadow:0 8px 26px rgba(0,0,0,.2)">⏳ ${String(label || "保存しています…").replace(/[<>&]/g, "")}</div>`;
   }
   // 営業日（朝6時で切りかえ）。日本時間で計算
   function bizDateOf(d){ return PRACTICE ? PRACTICE_DAY : realBizDateOf(d); }   // 練習モードはいつも「練習の日」
@@ -223,7 +239,7 @@
     });
   }
 
-  window.KB = { sb, staffSession, deviceStatus, operatorName, CAN_EDIT, MANAGER_NAME, IS_OWNER, OWNER_NAME, q, esc, yen, toast, bizDateOf, realBizDateOf, rememberDay, startDay, nav, wipBanner, closeOnBackdrop, passGate, PRACTICE, PRACTICE_DAY };
+  window.KB = { sb, staffSession, deviceStatus, operatorName, CAN_EDIT, MANAGER_NAME, IS_OWNER, OWNER_NAME, q, esc, yen, toast, busy, errBox, bizDateOf, realBizDateOf, rememberDay, startDay, nav, wipBanner, closeOnBackdrop, passGate, PRACTICE, PRACTICE_DAY };
 })();
 
 /* ---------- ⬆ 上に戻るボタン（記録簿のページ共通）：ある程度下までスクロールしたら右下に出る。

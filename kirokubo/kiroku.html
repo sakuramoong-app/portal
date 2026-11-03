@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_live.js?v=2"></script><!-- いっしょに使う（保存の合図・入力中）。kb_common より前 -->
-<script src="kb_common.js?v=20"></script>
+<script src="kb_common.js?v=21"></script>
 <style>
   /* ===== 見やすさ重視（文字は大きめ・枠は少なめ・色は状態と注意だけ） ===== */
   body{font-size:14.5px;}
@@ -6386,6 +6386,16 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   renderList = function(){ const r = __renderListAlt.apply(this, arguments);
     document.querySelectorAll("#list > .cblock").forEach((el, i) => { el.classList.toggle("cb-a", i % 2 === 0); el.classList.toggle("cb-b", i % 2 === 1); });
     return r; }; }
+
+/* ---------- ⏳ 登録するを二重に押さない：登録中は画面のまんなかに「登録しています…」、終わるまでほかを押せない（2026/11/4 二重登録があった） ---------- */
+{ const __saveResLock = saveRes; let saving = false;
+  saveRes = async function(){
+    if(saving){ toast("⏳ 今、登録しています。終わるまで待ってください"); return; }
+    saving = true; KB.busy(true, "登録しています…（閉じたり、もう一度押したりしないでください）");
+    try{ return await __saveResLock.apply(this, arguments); }
+    catch(e){ KB.errBox("登録できませんでした：" + (e && e.message || e)); }
+    finally{ saving = false; KB.busy(false); }
+  }; }
 
 
 /* ---------- 本日のキャスト：お茶・欠勤の子は、あいうえお順（ほかの並び順も）から外して、いちばん下の別枠へ ---------- */
