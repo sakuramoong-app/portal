@@ -1659,7 +1659,9 @@ async function lookupCustomer(keepName){
     if(!keepName || !$("f_email").value) $("f_email").value = c.email || "";   // メールは、受付で入れたものを消さない
     $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = c.ng_reason || c.note || "";
     // ダミーで行った子の確認（renderCastChecks）のため、多めに読む。履歴に出すのは新しい10件
-    const pastAll = q(await sb.from("kb_reservations").select("id,biz_date,store_key,cast_id,dummy_name,course,status,total,address").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(200)) || [];
+    // 今開いている予約は「これまで」に入れない（その予約自体が「前に来た1件」に見えてしまうので。2026/11/3）
+    const pastAll = (q(await sb.from("kb_reservations").select("id,biz_date,store_key,cast_id,dummy_name,course,status,total,address").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(200)) || [])
+      .filter(x => !(editing && x.id === editing.id));
     custPast = pastAll;
     // 台帳エクセルの過去の利用もいっしょに（これまで・指名したことのあるキャスト・新規／店リピ／本指名の自動）
     let xl = [];
