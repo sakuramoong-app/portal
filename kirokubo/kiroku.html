@@ -225,6 +225,11 @@
   .callalert .outrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;border:1.5px solid #FFD08A;border-radius:10px;padding:6px 10px;margin-top:6px;font-size:14px;color:#5a3a00;}
   .callalert .outrow span{flex:1;} .callalert .outrow button{display:inline-block;width:auto;margin:0;}
   .callalert .okbtn{background:#2E7A35 !important;color:#fff !important;border-color:#2E7A35 !important;}
+  .callalert.shiftn{background:#EEF4FF;border-color:#8FB0EE;color:#2B4C8C;}  .callalert.shiftn .outrow{border-color:#BCD0F5;color:#23375e;}
+  .callalert .sntext{display:block;font-weight:500;font-size:12.5px;color:#556;white-space:pre-wrap;margin-top:2px;}
+  .callalert .snset{display:inline-block;width:auto;float:right;margin:0;padding:3px 10px;font-size:12.5px;}
+  .snsetonly{text-align:right;margin:2px 0;} .snsetonly button{font-family:inherit;font-size:12.5px;font-weight:700;background:#fff;border:1.5px solid var(--line);border-radius:99px;padding:3px 10px;cursor:pointer;color:var(--sub);}
+  .snrow{display:grid;grid-template-columns:1fr 1fr;gap:6px;border:1.5px solid var(--line);border-radius:10px;padding:8px;margin-bottom:8px;} .snrow select{grid-column:1/-1;} .snrow textarea{font-family:inherit;font-size:13px;} .snrow label{font-size:13px;font-weight:700;}
   table.board tr.before > th{background:#F1ECFB;color:#6c5896;font-size:12px;} table.board tr.gone > th{background:#F2F2F2;color:#999;}
   table.board tr.gone td{background:#FAFAFA;}
   /* エリアの色（今の記録簿と同じ）：見出しは濃いめ、マスはうすく */
@@ -409,6 +414,7 @@
     <div class="stats hide" id="stats" style="display:none"></div>
     <div class="tax hide" id="tax" style="display:none"></div>
     <div id="callAlerts"></div>
+    <div id="shiftAlerts"></div>
     <div class="notice"><textarea id="notice" placeholder="📢 本日のお知らせ（ここに書くと赤く大きく出ます）" onchange="saveNotice()"></textarea></div>
     <!-- 📊 今日の数字（内勤用・ふだんはしまっておく） -->
     <details class="fold" id="todayBox"><summary>📊 今日の数字</summary><div class="todaygrid" id="todayGrid"></div></details>
@@ -3711,8 +3717,112 @@ async function jumpToRes(id, bd){
   el.classList.remove("rcflash"); void el.offsetWidth; el.classList.add("rcflash");   // 予約のカードの光り方（.rescard.rcflash）
 }
 loadCallAlerts(); setInterval(loadCallAlerts, 120000);
+
+/* ---------- 🔔 出勤・退勤の通知（SQL 209）
+   今日のシフトの出勤時間・退勤時間になったら、上に出す。「済」で消える（内勤みんな同じ）。
+   文は kb_settings 'shift_notice' = { in, out, casts: { cast_id: { in, out, off_in, off_out } } }
+   {名前} {時間} を、その子の名前・時間に置きかえる ---------- */
+let shiftNoticeDays = {}, shiftNoticeShifts = {};
+function shiftNoticeSet(){ const v = M.set && M.set.shift_notice; return Object.assign({ in: "", out: "", casts: {} }, v && typeof v === "object" ? v : {}); }
+async function loadShiftNotices(){
+  if(KB.PRACTICE || !M.casts) return;
+  try{
+    const today = KB.bizDateOf();
+    const [sh, cd] = await Promise.all([loadShifts(today), sb.from("kb_cast_days").select("cast_id,status,shift_start_ov,shift_end_ov,notice_in_at,notice_out_at").eq("biz_date", today)]);
+    shiftNoticeShifts = cd.error ? {} : (sh || {});   // SQL 209 がまだなら出さない（済を残せないので）
+    shiftNoticeDays = {}; (cd.error ? [] : (cd.data || [])).forEach(x=>{ shiftNoticeDays[x.cast_id] = x; });
+  }catch(e){ shiftNoticeShifts = {}; }
+  renderShiftNotices();
+}
+function shiftNoticeText(kind, c, h){
+  const set = shiftNoticeSet(), own = (set.casts || {})[c.id] || {};
+  const t = String(own[kind] || set[kind] || "");
+  return t.replace(/\{名前\}/g, c.official_name || c.temp_name || "").replace(/{時間}/g, lateHM(Math.round(h * 60)));
+}
+function shiftNoticeItems(){
+  const today = KB.bizDateOf(), base = Date.parse(today + "T00:00:00+09:00"), now = Date.now(), set = shiftNoticeSet(), items = [];
+  Object.entries(shiftNoticeShifts).forEach(([name, sh])=>{
+    const c = M.casts.find(x=>x.shift_name === name || x.official_name === name); if(!c) return;
+    const cd = shiftNoticeDays[c.id] || {}, own = (set.casts || {})[c.id] || {};
+    if(cd.status === "欠勤") return;
+    const hs = cd.shift_start_ov != null ? Number(cd.shift_start_ov) : Number(sh.start), he = cd.shift_end_ov != null ? Number(cd.shift_end_ov) : Number(sh.end);   // 時間の変更（出勤時間を変える）があればそちら
+    if(!own.off_in && !cd.notice_in_at && now >= base + hs * 3600000) items.push({ c, kind: "in", h: hs });
+    if(!own.off_out && !cd.notice_out_at && now >= base + he * 3600000) items.push({ c, kind: "out", h: he });
+  });
+  return items.sort((a, b)=>a.h - b.h);
+}
+const shiftBeeped = new Set();
+function renderShiftNotices(){
+  const el = $("shiftAlerts"); if(!el || !M.casts) return;
+  const items = shiftNoticeItems();
+  el.innerHTML = items.length ? `<div class="callalert shiftn">🔔 出勤・退勤の時間です
+      <button type="button" class="snset" onclick="openShiftNoticeSet()">⚙️ 通知の文</button>${items.map(({ c, kind, h })=>{
+      const t = shiftNoticeText(kind, c, h);
+      return `<div class="outrow"><span><b>${kind === "in" ? "🌅 出勤" : "🌙 退勤"} ${esc(lateHM(Math.round(h * 60)))}</b>　${esc(c.official_name || c.temp_name)}${t ? `<small class="sntext">${esc(t)}</small>` : ""}</span>
+        ${t ? `<button type="button" onclick="copyShiftNotice('${kind}','${c.id}',${h})">📋 文をコピー</button>` : ""}
+        <button type="button" onclick="jumpToCast('${c.id}')">枠へ</button>
+        ${KB.CAN_EDIT ? `<button type="button" class="okbtn" onclick="shiftNoticeDone('${kind}','${c.id}')">✓ 済</button>` : ""}</div>`; }).join("")}</div>`
+    : KB.PRACTICE ? "" : `<div class="snsetonly"><button type="button" onclick="openShiftNoticeSet()">🔔 出勤・退勤の通知の文</button></div>`;
+  const fresh = items.filter(x=>!shiftBeeped.has(x.kind + x.c.id));
+  if(fresh.length){ fresh.forEach(x=>shiftBeeped.add(x.kind + x.c.id)); beep(); }
+}
+function copyShiftNotice(kind, cid, h){
+  const c = M.casts.find(x=>x.id === cid); if(!c) return;
+  navigator.clipboard.writeText(shiftNoticeText(kind, c, h)).then(()=>toast("📋 " + (kind === "in" ? "出勤" : "退勤") + "の文をコピーしました"));
+}
+async function shiftNoticeDone(kind, cid){
+  if(!KB.CAN_EDIT) return;
+  const today = KB.bizDateOf(), patch = { biz_date: today, cast_id: cid, notice_by: KB.operatorName(), updated_at: new Date().toISOString(), updated_by: KB.operatorName() };
+  patch[kind === "in" ? "notice_in_at" : "notice_out_at"] = new Date().toISOString();
+  try{
+    const r = q(await sb.from("kb_cast_days").upsert(patch, { onConflict: "biz_date,cast_id" }).select("*").single());
+    shiftNoticeDays[cid] = r; if(today === day) castDays[cid] = r;
+    renderShiftNotices();
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+// ⚙️ 通知の文：ふつうの文と、キャストごとの文（その子だけちがう文・通知しない）
+function snRowHtml(cid, o){
+  const ro = KB.CAN_EDIT ? "" : "disabled";
+  return `<div class="snrow">
+      <select class="sn-c" ${ro}><option value="">（キャストをえらぶ）</option>${M.casts.map(c=>`<option value="${c.id}" ${c.id === cid ? "selected" : ""}>${esc(c.official_name || c.temp_name)}</option>`).join("")}</select>
+      <textarea class="sn-in" rows="2" placeholder="出勤の文（空ならふつうの文）" ${ro}>${esc(o.in || "")}</textarea>
+      <textarea class="sn-out" rows="2" placeholder="退勤の文（空ならふつうの文）" ${ro}>${esc(o.out || "")}</textarea>
+      <label><input type="checkbox" class="sn-offin" ${o.off_in ? "checked" : ""} ${ro}> 出勤は通知しない</label>
+      <label><input type="checkbox" class="sn-offout" ${o.off_out ? "checked" : ""} ${ro}> 退勤は通知しない</label></div>`;
+}
+function openShiftNoticeSet(){
+  let bg = $("snBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "snBg"; bg.className = "modal-bg"; document.body.appendChild(bg); KB.closeOnBackdrop(bg, () => bg.classList.remove("show")); }
+  const set = shiftNoticeSet(), ro = KB.CAN_EDIT ? "" : "disabled";
+  bg.innerHTML = `<div class="modal" style="max-width:720px"><button class="x" onclick="$('snBg').classList.remove('show')">×</button>
+    <h2>⚙️ 出勤・退勤の通知の文</h2>
+    <p style="font-size:12.5px;color:var(--sub);line-height:1.6;margin:0 0 8px">シフトの時間になると、受付の上に出ます。文は「📋 文をコピー」で LINE などに貼れます。<br>{名前} {時間} と書くと、その子の名前・時間になります。文が空なら、知らせだけ出ます。</p>
+    <div class="f"><label>🌅 出勤のふつうの文</label><textarea id="sn_in" rows="2" ${ro}>${esc(set.in || "")}</textarea></div>
+    <div class="f"><label>🌙 退勤のふつうの文</label><textarea id="sn_out" rows="2" ${ro}>${esc(set.out || "")}</textarea></div>
+    <h3 style="margin:12px 0 6px;font-size:15px">👤 キャストごと（その子だけ文を変える・通知しない）</h3>
+    <div id="snRows">${Object.entries(set.casts || {}).map(([cid, o])=>snRowHtml(cid, o)).join("")}${snRowHtml("", {})}</div>
+    ${KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="$('snRows').insertAdjacentHTML('beforeend', snRowHtml('', {}))">＋ キャストを足す</button>
+    <button type="button" class="btn btn-primary" style="margin-top:10px;width:100%" onclick="saveShiftNoticeSet()">保存</button>` : ""}</div>`;
+  bg.classList.add("show");
+}
+async function saveShiftNoticeSet(){
+  if(!KB.CAN_EDIT) return;
+  const casts = {};
+  document.querySelectorAll("#snRows .snrow").forEach(r=>{
+    const cid = r.querySelector(".sn-c").value; if(!cid) return;
+    const o = { in: r.querySelector(".sn-in").value.trim(), out: r.querySelector(".sn-out").value.trim(), off_in: r.querySelector(".sn-offin").checked, off_out: r.querySelector(".sn-offout").checked };
+    if(o.in || o.out || o.off_in || o.off_out) casts[cid] = o;
+  });
+  const value = { in: $("sn_in").value.trim(), out: $("sn_out").value.trim(), casts };
+  try{
+    q(await sb.from("kb_settings").upsert({ key: "shift_notice", value, note: "🔔 出勤・退勤の通知の文（受付の ⚙️ 通知の文）" }));
+    M.set.shift_notice = value; $("snBg").classList.remove("show"); toast("保存しました"); renderShiftNotices();
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+setInterval(loadShiftNotices, 120000); setInterval(renderShiftNotices, 30000);
 const __loadDayA = loadDay;
-loadDay = async function(){ await __loadDayA(); renderCallAlerts(); };
+let shiftNoticeFirst = true;
+loadDay = async function(){ await __loadDayA(); renderCallAlerts(); if(shiftNoticeFirst){ shiftNoticeFirst = false; loadShiftNotices(); } };
 
 /* ---------- 💳 カード決済の進み具合（本日のキャスト一覧で、プルダウンで変える） ---------- */
 const CARD_STEP = [["unsent", "💳 URL未送信"], ["sent", "📨 URL送信済み"], ["paid", "✅ 決済済み"]];
