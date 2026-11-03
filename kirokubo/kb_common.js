@@ -239,7 +239,7 @@
     });
   }
 
-  window.KB = { sb, staffSession, deviceStatus, operatorName, CAN_EDIT, MANAGER_NAME, IS_OWNER, OWNER_NAME, q, esc, yen, toast, busy, errBox, bizDateOf, realBizDateOf, rememberDay, startDay, nav, wipBanner, closeOnBackdrop, passGate, PRACTICE, PRACTICE_DAY };
+  window.KB = { sb, staffSession, deviceStatus, operatorName, CAN_EDIT, IS_BOSS, MANAGER_NAME, IS_OWNER, OWNER_NAME, q, esc, yen, toast, busy, errBox, bizDateOf, realBizDateOf, rememberDay, startDay, nav, wipBanner, closeOnBackdrop, passGate, PRACTICE, PRACTICE_DAY };
 })();
 
 /* ---------- ⬆ 上に戻るボタン（記録簿のページ共通）：ある程度下までスクロールしたら右下に出る。

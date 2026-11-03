@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_live.js?v=2"></script><!-- いっしょに使う（保存の合図・入力中）。kb_common より前 -->
-<script src="kb_common.js?v=21"></script>
+<script src="kb_common.js?v=22"></script>
 <style>
   /* ===== 見やすさ重視（文字は大きめ・枠は少なめ・色は状態と注意だけ） ===== */
   body{font-size:14.5px;}
@@ -5084,6 +5084,11 @@ async function loadStaffPay(){
         in: w && w.clock_in != null ? Number(w.clock_in) : p ? p.in : null, out: w && w.clock_out != null ? Number(w.clock_out) : p ? p.out : null,
         saved: !!w, fromShift: !w && !!p, paid: !!(w && w.paid), src: (w && w.pay_source) || "", amount: w && w.day_paid ? w.day_paid : null, note: (w && w.note) || "", by: (w && w.paid_by) || "", at: w && w.paid_at };
     });
+    // 内勤は、自分の日払いだけ見える（店長・社長は全員）。共通ログインもGoogleログインも、ポータルの担当者の名前で決める 2026/11/4
+    if(!KB.IS_BOSS){
+      const me = { "きゃ": "kya", "すや": "suya", "らん": "ran", "かみ": "kami", "わか": "waka" }[KB.operatorName()] || "";
+      staffPay.rows = staffPay.rows.filter(r => r.id === me);
+    }
   }catch(e){ box.innerHTML = `<div class="hist">読めませんでした（SQL 127 は実行ずみ？）：${esc(e.message || e)}</div>`; return; }
   paintStaffPay();
 }
