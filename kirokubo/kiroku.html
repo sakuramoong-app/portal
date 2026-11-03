@@ -3530,7 +3530,7 @@ renderListTable = function(){
   const head = `<tr><th>時間</th><th>店舗</th><th>コース・エリア</th><th>お客さん・電話</th><th>状態・やること</th><th>キャストに</th><th>📝 備考</th></tr>`;
   // 今いない（不在・お茶・欠勤）は、枠ぜんたいをグレー・緑・赤に（今どこに誰がとつながっている）
   const block = (title, sub, list, cid, cls)=>`<div class="cblock ${cls || ""}" ${cid ? `id="cb-${cid}"` : ""}>
-      <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="editInfoNote('${cid}')">📌 今日のこと</button><button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button>` : ""}${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
+      <div class="ch"><b>${title}</b>${cid && KB.CAN_EDIT ? whereSel(cid) + dayStatusSel(cid) : ""}<small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="editInfoNote('${cid}')">📌 今日のこと</button><button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button>` : ""}${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
       ${cid ? attendHtml(cid) : ""}
       ${list.length ? `<div class="wrapx"><table class="list">${head}${list.map(r=>`<tr class="r ${["cancel", "tobi"].includes(r.status) ? "cx" : ""}" onclick="openForm(${r.id})">${resCells(r)}</tr>`).join("")}</table></div>` : `<div class="none">予約なし</div>`}</div>`;
   const noCast = rows.filter(r=>!r.cast_id).sort(byStart);
@@ -3555,6 +3555,23 @@ function dayStatusSel(cid){
   const opts = (st !== "gone" ? [["_here", hereLbl + (col ? "（" + col + "）" : "")]] : []).concat([["", "⬜ 不在"], ["出勤前", "🟪 出勤前"], ["お茶", "🟩 お茶"], ["欠勤", "🟥 欠勤"]]);
   return `<select class="daysel ${cur === "お茶" ? "tea" : cur === "欠勤" ? "absent" : cur === "出勤前" ? "pre" : cur === "" ? "away" : ""}" onclick="event.stopPropagation()" onchange="setDayStatus('${cid}',this.value)">
     ${opts.map(([v, l])=>`<option value="${v}" ${cur === v ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+}
+// 📍 今どこ（待機場所）のプルダウン：キャストの枠の名前の横。選ぶと「今どこに誰が」の場所が自動で動く（2026/11/4）
+//   場所 × 今の状態（待機中・仕事中・今いない…）で、今どこに誰がの置き場所が決まる。仕事中は予約のエリアが優先
+function whereSel(cid){
+  const cd = castDays[cid] || {}, cur = cd.standby || "";
+  const opts = [["", "📍 場所なし"]].concat(STANDBY.map(s => [s, "📍 " + s]));
+  if(cur && !STANDBY.includes(cur)) opts.push([cur, "📍 " + cur]);
+  return `<select class="daysel wheresel" title="今どこにいるか（今どこに誰がが自動で動きます）" onclick="event.stopPropagation()" onchange="setWhere('${cid}',this.value)">
+    ${opts.map(([v, l])=>`<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+}
+async function setWhere(cid, v){
+  const cd = castDays[cid] || {};
+  const seat = seatsOk && v !== "鶯谷" ? seatOf(cid) : null;   // 鶯谷から動いたら、席は立つ
+  if(seat) await leaveSeat(seat.id, true);
+  // 場所を選んだら、出勤前・不在・予約スタートなどは「来ている」として待機中に（お茶・欠勤・精算済はそのまま）
+  const keep = ["お茶", "欠勤"].includes(cd.status) || cd.settled;
+  await saveDayPart(cid, keep || !v ? { standby: v } : { standby: v, status: "" });
 }
 // 不在・出勤前・お茶・欠勤 → 今いない へ（新しい情報で上書き）
 async function setDayStatus(cid, v){
@@ -4701,7 +4718,7 @@ renderListTable = function(){
   const casts = sortRows(tlRows());
   const STATE = { wait: "待機中", work: "仕事中", start: "予約スタート", precall: "出勤前連絡", gone: "今いない" };
   const block = (title, sub, list, cid, cls)=>`<div class="cblock ${cls || ""}" ${cid ? `id="cb-${cid}"` : ""}>
-      <div class="ch"><b>${title}</b><small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="editInfoNote('${cid}')">📌 今日のこと</button><button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button><button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
+      <div class="ch"><b>${title}</b>${cid && KB.CAN_EDIT ? whereSel(cid) + dayStatusSel(cid) : ""}<small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="editInfoNote('${cid}')">📌 今日のこと</button><button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button><button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
       ${cid ? attendHtml(cid) : ""}
       ${list.length ? list.map(resCard).join("") : `<div class="none">予約なし</div>`}</div>`;
   const noCast = rows.filter(r=>!r.cast_id).sort(byStart);
@@ -6311,8 +6328,8 @@ $("f_status").addEventListener("change", () => { if(digits($("f_phone").value).l
 /* ---------- 🎨 本日のキャスト一覧：キャストごとの枠を2色で交互に（見分けやすく。2026/11/4） ---------- */
 document.head.insertAdjacentHTML("beforeend", `<style>
   /* やわらかい色（原色はやめる。2026/11/4 きゃ）：さくらピンクと、ラベンダー */
-  #list > .cblock.cb-a{border:2px solid #F8CFDC;border-left:8px solid #F4A3BE;background:#FFFBFC;}
-  #list > .cblock.cb-b{border:2px solid #DCD3F5;border-left:8px solid #B9A8EC;background:#FCFBFF;}
+  #list > .cblock.cb-a{border:4px solid #F4A3BE;background:#FFFBFC;}
+  #list > .cblock.cb-b{border:4px solid #B9A8EC;background:#FCFBFF;}
   /* 予約①〜⑥の色（カードの左の線と番号の札）：さくら・ピーチ・ミント・そら・ラベンダー・レモン */
   .rescard.rcn1{border-left:6px solid #F4A3BE;} .rescard.rcn1 .rc-no{background:#FDE3EC;color:#B2456B;border-color:#F4A3BE;}
   .rescard.rcn2{border-left:6px solid #F7BE95;} .rescard.rcn2 .rc-no{background:#FDEBDD;color:#A35A22;border-color:#F7BE95;}
