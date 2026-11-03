@@ -1894,19 +1894,35 @@ function buildMsg(c){
   if(st){ const [h,m] = st.split(":").map(Number); const mins = minutesOf(c.course) + c.ext*30 + c.date*30; const t = h*60+m+mins; en = String(Math.floor(t/60)%24).padStart(2,"0")+":"+String(t%60).padStart(2,"0"); }
   const backOps = c.opts.filter(o=>o.back>0).map(o=>o.label + (o.qty>1?"×"+o.qty:"")).join("・") || "なし";
   const noBackOps = c.opts.filter(o=>!(o.back>0)).map(o=>o.label + (o.qty>1?"×"+o.qty:"")).join("・") || "なし";
+  // 店名はエリアを伏せる（「五反田逆アナル倶楽部」を見て、行く場所をまちがえる子がいるので。2026/11/3）
+  const storeNoArea = k => storeLabel(k).replace(/[（(]?(池袋|五反田|鶯谷|錦糸町|渋谷|新宿|上野|秋葉原|大塚|巣鴨)[）)]?/g, "").trim() || storeLabel(k);
+  // 前回：本指名はそのキャストの前回、店リピはお店の前回（この予約の日より前・キャンセル／トビは数えない）
+  const ymdJ = s => { const [y, m, dd] = String(s).slice(0, 10).split("-"); return y ? `${y}/${Number(m)}/${Number(dd)}` : ""; };
+  const prevOf = cid => (custSeen || []).filter(p => p.biz_date && p.biz_date < day && !["cancel", "tobi"].includes(p.status) && (!cid || p.cast_id === cid)).map(p => p.biz_date).sort().pop();
+  const prev = visit === "honshi" ? prevOf($("f_cast").value) : visit === "repeat" ? prevOf(null) : "";
+  const visitTxt = ((VISIT.find(v=>v[0]===visit) || [])[1] || "") + (prev ? "（前回 " + ymdJ(prev) + "）" : "");
   $("msg").value =
-`【${cast ? (cast.official_name || cast.temp_name) : "キャスト"}】${isDummyStore(c.store) && $("f_dummy").value ? "（ダミー名「" + $("f_dummy").value + "」で受けています）" : ""}
+`お疲れ様です
+ご予約いただきました！
+ご確認お願いいたします🙇
+${isDummyStore(c.store) && $("f_dummy").value ? "\n（ダミー名「" + $("f_dummy").value + "」で受けています）" : ""}
 ${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st||"--:--"}〜${en||"--:--"}
-【店名】${storeLabel(c.store)}
-【名前】${$("f_name").value || "お客"}様 ${(VISIT.find(v=>v[0]===visit) || [])[1] || ""}
+【店名】${storeNoArea(c.store)}
+【名前】${$("f_name").value || "お客"}様 ${visitTxt}
 【コース】${c.course}${/^\d+$/.test(c.course)?"分":""}${c.free?"（"+FREE_SUFFIX[c.free]+"）":""}${c.ext?"＋延長"+c.ext*30+"分":""}
 【${{ love: "ホテル", biz: "ホテル", home: "自宅" }[$("f_place").value] || "ホテル・自宅"}】${$("f_area").value} ${$("f_address").value}${hotelMapUrl() ? "\n【地図】" + hotelMapUrl() : ""}
 【バック有OP】${backOps}
 【バック無OP】${noBackOps}${$("f_castnote") && $("f_castnote").value.trim() ? "\n【特記事項】" + $("f_castnote").value.trim() : ""}
 ${c.pay === "cash"
   ? `【料金総額】${c.total.toLocaleString("ja-JP")}円
-※お会いしたら最初に料金をいただいてください。盗難・貰い忘れに注意！`
-  : `【お支払い】カード決済の為、お金はいただかずスタートしてください`}`;
+
+※【盗難・料金貰い忘れ対策】料金はお会いして最初にいただいてください。
+部屋内ではキャストさん及びお客様どちらもお風呂やトイレにも貴重品を肌身離さず持ち歩くよう心がけてください。
+【お金を盗られる事件が実際にありました。気を付けましょう】`
+  : `【お支払い】カード決済の為、お金はいただかずスタートしてください
+
+※【盗難対策】部屋内ではキャストさん及びお客様どちらもお風呂やトイレにも貴重品を肌身離さず持ち歩くよう心がけてください。
+【お金を盗られる事件が実際にありました。気を付けましょう】`}`;
 }
 function copyMsg(){ navigator.clipboard.writeText($("msg").value).then(()=>toast("📋 文面をコピーしました")); }
 // 📩 ネット予約の返信（店名・お店の電話番号・予約の内容）。お店の電話番号は公式HPのもの（2026/10/28）
