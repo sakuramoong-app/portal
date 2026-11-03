@@ -235,6 +235,7 @@
   .tplkinds{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 4px;font-size:13px;font-weight:800;color:var(--sub);} .tplkinds button{font-family:inherit;font-size:13px;font-weight:800;background:#fff;border:1.5px solid var(--line);border-radius:99px;padding:4px 12px;cursor:pointer;color:#5C4B4F;} .tplkinds button.on{background:#FFE3EC;border-color:#F09AAA;color:#B0213F;}
   .ntfset{border:1.5px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:8px;} .ntfset-hd{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:4px;} .ntfset-hd b{flex:1 1 220px;} .ntfset-hd label{font-size:13px;font-weight:700;}
   .ntfset-row{display:flex;gap:6px;align-items:center;margin-top:4px;} .ntfset-row label{width:78px;font-size:12.5px;color:var(--sub);font-weight:700;flex:none;} .ntfset-row input{flex:1;font-family:inherit;font-size:13px;}
+  .cndays{display:inline-flex;gap:2px;flex-wrap:wrap;} .cndays label{font-size:12px;font-weight:700;border:1px solid var(--line);border-radius:6px;padding:1px 4px;} .cndays input{margin:0 2px 0 0;}
   #ntfBox{position:fixed;left:12px;bottom:104px;z-index:955;font-family:inherit;}
   #ntfBox .ntfopen{background:#fff;border:1.5px solid #8FB0EE;color:#2B4C8C;border-radius:99px;padding:7px 12px;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(43,76,140,.18);}
   #ntfBox.open{width:min(300px,calc(100vw - 24px));background:#fff;border:2px solid #8FB0EE;border-radius:14px;box-shadow:0 8px 24px rgba(43,76,140,.25);}
@@ -3715,12 +3716,40 @@ const SOUNDS = {
 };
 function lsGet(key){ try{ return JSON.parse(localStorage.getItem(key) || "{}") || {}; }catch(e){ return {}; } }
 function lsSet(key, v){ try{ localStorage.setItem(key, JSON.stringify(v)); }catch(e){} }
-function soundOf(kind){ const p = lsGet("kbSounds")[kind]; return SOUNDS[p] ? p : (NTF_KINDS[kind] || {}).def || "pipi"; }
-function voiceOn(kind){ const p = lsGet("kbVoice")[kind]; return p == null ? !!(NTF_KINDS[kind] || {}).voice : !!p; }
+// ➕ 自由な通知（毎日この時刻に）：kb_settings 'custom_ntfs' = [{ id, time: "20:15"（深夜は 25:30 など）, days: [0..6]（空ならまいにち）, text, say, sound, voice }]
+function customNtfs(){ const v = M.set && M.set.custom_ntfs; return Array.isArray(v) ? v : []; }
+function ntfDef(kind){
+  if(NTF_KINDS[kind]) return NTF_KINDS[kind];
+  const c = customNtfs().find(x=>"c:" + x.id === kind);
+  return c ? { label: "➕ " + (c.time || "") + " " + (c.text || ""), def: c.sound || "pipi", voice: !!c.voice, text: c.text || "", say: c.say || c.text || "" } : {};
+}
+function soundOf(kind){ const p = lsGet("kbSounds")[kind]; return SOUNDS[p] ? p : ntfDef(kind).def || "pipi"; }
+function voiceOn(kind){ const p = lsGet("kbVoice")[kind]; return p == null ? !!ntfDef(kind).voice : !!p; }
 function ntfTexts(){ const v = M.set && M.set.ntf_texts; return v && typeof v === "object" ? v : {}; }
 function ntfFill(t, vars){ return String(t || "").replace(/\{(名前|時間|状態|方法)\}/g, (m, k)=>vars && vars[k] != null ? vars[k] : ""); }
-function ntfText(kind, vars){ return ntfFill((ntfTexts()[kind] || {}).text || (NTF_KINDS[kind] || {}).text || "{名前}", vars); }
-function ntfSay(kind, vars){ return ntfFill((ntfTexts()[kind] || {}).say || (NTF_KINDS[kind] || {}).say || "", vars); }
+function ntfText(kind, vars){ return ntfFill((ntfTexts()[kind] || {}).text || ntfDef(kind).text || "{名前}", vars); }
+function ntfSay(kind, vars){ return ntfFill((ntfTexts()[kind] || {}).say || ntfDef(kind).say || "", vars); }
+// 出勤・退勤の通知を、何分前に出すか（マイナスなら後）。内勤みんな同じ（ntf_texts の in / out の before）
+function ntfBefore(kind){ const n = Number((ntfTexts()[kind] || {}).before); return isFinite(n) ? n : 0; }
+// 自由な通知：時刻になったら1回だけ（この端末で。リロードしても同じ日はもう出さない）
+function customDue(c, bd){
+  const m = String(c.time || "").match(/^(\d{1,2}):(\d{2})$/); if(!m) return null;
+  let h = Number(m[1]); if(h < 6) h += 24;   // 0:00〜5:59 は深夜（24:00〜29:59）
+  return Date.parse(bd + "T00:00:00+09:00") + (h * 60 + Number(m[2])) * 60000;
+}
+function checkCustomNtfs(){
+  if(!M.casts || KB.PRACTICE) return;
+  const bd = KB.bizDateOf(), now = Date.now(), dow = new Date(bd + "T12:00:00Z").getUTCDay(), fired = lsGet("kbFired");
+  customNtfs().forEach(c=>{
+    if(c.days && c.days.length && !c.days.includes(dow)) return;
+    const due = customDue(c, bd), key = bd + "|" + c.id;
+    if(due == null || fired[key] || now < due || now > due + 10 * 60000) return;   // 時刻から10分のあいだに開いていれば出す
+    fired[key] = 1; notify("c:" + c.id, { 時間: c.time }, "");
+  });
+  Object.keys(fired).forEach(k=>{ if(k.slice(0, 10) < bd) delete fired[k]; });   // 前の日の印は消す
+  lsSet("kbFired", fired);
+}
+setInterval(checkCustomNtfs, 20000);
 function playSound(id){
   const s = SOUNDS[id]; if(!s || !s.notes.length) return;
   try{
@@ -3781,8 +3810,13 @@ function openSoundSet(){
         <label><input type="checkbox" ${voiceOn(k) ? "checked" : ""} onchange="setVoice('${k}',this.checked)"> 🗣 声で読む</label>
         <button type="button" class="btn btn-ghost btn-sm" onclick="testNtf('${k}')">▶ 試す</button></div>
       <div class="ntfset-row"><label>表示する文</label><input class="nt-text" value="${esc((tx[k] || {}).text || "")}" placeholder="${esc(v.text)}" ${ro}></div>
-      <div class="ntfset-row"><label>読む文</label><input class="nt-say" value="${esc((tx[k] || {}).say || "")}" placeholder="${esc(v.say)}" ${ro}></div></div>`).join("")}
-    ${KB.CAN_EDIT ? `<button type="button" class="btn btn-primary" style="margin-top:6px;width:100%" onclick="saveNtfTexts()">文を保存（内勤みんなに）</button>` : ""}
+      <div class="ntfset-row"><label>読む文</label><input class="nt-say" value="${esc((tx[k] || {}).say || "")}" placeholder="${esc(v.say)}" ${ro}></div>
+      ${k === "in" || k === "out" ? `<div class="ntfset-row"><label>出す時刻</label><span>${k === "in" ? "出勤" : "退勤"}時間の <input class="nt-before" type="number" step="5" value="${ntfBefore(k) || ""}" placeholder="0" style="width:70px" ${ro}> 分前（0＝ちょうど、マイナス＝後）</span></div>` : ""}</div>`).join("")}
+    <h3 style="margin:14px 0 6px;font-size:15px">➕ 自由な通知（毎日この時刻に出す）</h3>
+    <p style="font-size:12.5px;color:var(--sub);line-height:1.6;margin:0 0 6px">例：20:15「明日の予約の前日確認の時間です」／ 25:00「回収の準備」。深夜は 25:00 のように書けます（1:00 と書いても深夜あつかい）。<br>曜日をえらばなければ、まいにち。時刻から10分のあいだに記録簿を開いていれば出ます。</p>
+    <div id="cnRows">${customNtfs().map(c=>cnRowHtml(c)).join("")}</div>
+    ${KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="$('cnRows').insertAdjacentHTML('beforeend', cnRowHtml({}))">＋ 通知を足す</button>` : ""}
+    ${KB.CAN_EDIT ? `<button type="button" class="btn btn-primary" style="margin-top:10px;width:100%" onclick="saveNtfTexts()">文・時刻・自由な通知を保存（内勤みんなに）</button>` : ""}
     ${window.speechSynthesis ? "" : `<p class="warn">この端末のブラウザは、声で読むことができません。</p>`}</div>`;
   bg.classList.add("show");
 }
@@ -3796,16 +3830,47 @@ function testNtf(kind){
   if(voiceOn(kind)) setTimeout(()=>speak(say), 600);
   toast(ntfFill((box && box.querySelector(".nt-text").value.trim()) || (ntfTexts()[kind] || {}).text || v.text, NTF_SAMPLE));
 }
+function cnRowHtml(c){
+  const ro = KB.CAN_EDIT ? "" : "disabled", days = c.days || [];
+  return `<div class="ntfset cnrow" data-id="${esc(c.id || "")}">
+    <div class="ntfset-hd"><input class="cn-time" value="${esc(c.time || "")}" placeholder="20:15" style="width:70px" ${ro}>
+      <span class="cndays">${["日", "月", "火", "水", "木", "金", "土"].map((d, i)=>`<label><input type="checkbox" class="cn-d" value="${i}" ${days.includes(i) ? "checked" : ""} ${ro}>${d}</label>`).join("")}</span>
+      <select class="cn-sound" ${ro}>${Object.entries(SOUNDS).map(([id, s])=>`<option value="${id}" ${(c.sound || "pipi") === id ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select>
+      <label><input type="checkbox" class="cn-voice" ${c.voice ? "checked" : ""} ${ro}> 🗣 声</label>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="testCn(this)">▶ 試す</button>
+      ${KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="if(confirm('この通知を消しますか？（保存で消えます）'))this.closest('.cnrow').remove()">消す</button>` : ""}</div>
+    <div class="ntfset-row"><label>表示する文</label><input class="cn-text" value="${esc(c.text || "")}" placeholder="例：前日確認の時間です" ${ro}></div>
+    <div class="ntfset-row"><label>読む文</label><input class="cn-say" value="${esc(c.say || "")}" placeholder="（空なら表示する文を読む）" ${ro}></div></div>`;
+}
+function cnRead(b){
+  return { id: b.dataset.id || ("n" + Date.now() + Math.floor(Math.random() * 1000)), time: b.querySelector(".cn-time").value.trim().normalize("NFKC").replace(/^(\d{1,2})(\d{2})$/, "$1:$2"),
+           days: [...b.querySelectorAll(".cn-d:checked")].map(x=>Number(x.value)), sound: b.querySelector(".cn-sound").value, voice: b.querySelector(".cn-voice").checked,
+           text: b.querySelector(".cn-text").value.trim(), say: b.querySelector(".cn-say").value.trim() };
+}
+function testCn(btn){
+  const c = cnRead(btn.closest(".cnrow"));
+  playSound(c.sound); if(c.voice) setTimeout(()=>speak(c.say || c.text), 600);
+  toast((c.time || "") + " " + (c.text || "（文がありません）"));
+}
 async function saveNtfTexts(){
   if(!KB.CAN_EDIT) return;
   const value = {};
-  document.querySelectorAll("#sndBg .ntfset").forEach(b=>{
-    const text = b.querySelector(".nt-text").value.trim(), say = b.querySelector(".nt-say").value.trim();
-    if(text || say) value[b.dataset.k] = { text, say };
+  document.querySelectorAll("#sndBg .ntfset[data-k]").forEach(b=>{
+    const text = b.querySelector(".nt-text").value.trim(), say = b.querySelector(".nt-say").value.trim(), bf = b.querySelector(".nt-before");
+    const before = bf && bf.value !== "" ? Number(bf.value) : 0;
+    if(text || say || before) value[b.dataset.k] = { text, say, before };
   });
+  const customs = [];
+  for(const b of document.querySelectorAll("#sndBg .cnrow")){
+    const c = cnRead(b); if(!c.time && !c.text) continue;
+    if(!/^\d{1,2}:\d{2}$/.test(c.time)){ toast("時刻は 20:15 のように入れてください：" + (c.text || "")); return; }
+    if(!c.text){ toast(c.time + " の通知に、表示する文を入れてください"); return; }
+    customs.push(c);
+  }
   try{
-    q(await sb.from("kb_settings").upsert({ key: "ntf_texts", value, note: "🔔 通知の表示する文・読む文（受付の 通知の設定）" }));
-    M.set.ntf_texts = value; toast("文を保存しました"); renderNtfBox();
+    q(await sb.from("kb_settings").upsert([{ key: "ntf_texts", value, note: "🔔 通知の表示する文・読む文・出勤退勤の何分前（受付の 通知の設定）" },
+                                           { key: "custom_ntfs", value: customs, note: "➕ 自由な通知（毎日この時刻に。受付の 通知の設定）" }]));
+    M.set.ntf_texts = value; M.set.custom_ntfs = customs; toast("保存しました"); renderNtfBox(); renderShiftNotices(); openSoundSet();
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
 if(window.speechSynthesis) speechSynthesis.getVoices();   // 声の一覧を先に読みこませておく
@@ -3872,8 +3937,9 @@ function shiftNoticeItems(){
     const cd = shiftNoticeDays[c.id] || {}, own = (set.casts || {})[c.id] || {};
     if(cd.status === "欠勤") return;
     const hs = cd.shift_start_ov != null ? Number(cd.shift_start_ov) : Number(sh.start), he = cd.shift_end_ov != null ? Number(cd.shift_end_ov) : Number(sh.end);   // 時間の変更（出勤時間を変える）があればそちら
-    if(!own.off_in && !cd.notice_in_at && now >= base + hs * 3600000 && now < base + hs * 3600000 + SN_SHOW_MS) items.push({ c, kind: "in", h: hs });
-    if(!own.off_out && !cd.notice_out_at && now >= base + he * 3600000 && now < base + he * 3600000 + SN_SHOW_MS) items.push({ c, kind: "out", h: he });
+    const dIn = base + hs * 3600000 - ntfBefore("in") * 60000, dOut = base + he * 3600000 - ntfBefore("out") * 60000;   // 「何分前に出す」（通知の設定）
+    if(!own.off_in && !cd.notice_in_at && now >= dIn && now < dIn + SN_SHOW_MS) items.push({ c, kind: "in", h: hs });
+    if(!own.off_out && !cd.notice_out_at && now >= dOut && now < dOut + SN_SHOW_MS) items.push({ c, kind: "out", h: he });
   });
   return items.sort((a, b)=>a.h - b.h);
 }
