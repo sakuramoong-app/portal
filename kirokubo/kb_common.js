@@ -30,7 +30,7 @@
   const PRACTICE = new URLSearchParams(location.search).has("practice");
   const DAY_TABLES = ["kb_reservations", "kb_cast_days", "kb_staff_work", "kb_day_notes", "kb_seat_logs"];
   const PRACTICE_BLOCK = ["kb_cust_cast_ng", "kb_customer_places", "kb_unsettled", "kb_cust_history", "kb_envelope_checks", "kb_collections", "kb_handovers",
-    "master_casts", "kb_cast_rules", "kb_settings", "prof_settings", "kb_media_fees", "kb_hotels", "kb_secrets", "staff_accounts"];
+    "master_casts", "kb_cast_rules", "kb_settings", "prof_settings", "kb_media_fees", "kb_hotels", "kb_secrets", "staff_accounts", "kb_prices", "kb_back", "kb_options", "prof_hotels"];
   function fakeQ(){
     const p = Promise.resolve({ data: { id: 0 }, error: null });
     const px = new Proxy(function(){}, { get(_, k){ if(k === "then") return p.then.bind(p); if(k === "catch") return p.catch.bind(p); if(k === "finally") return p.finally.bind(p); return () => px; } });
@@ -136,7 +136,8 @@
   const STAFF_PAGES = ["kiroku.html", "settle.html", "customers.html"];
   const PAGE = location.pathname.split("/").pop() || "index.html";
   const IS_BOSS = GOOGLE && ["manager", "owner"].includes(CLAIM.staff_role);
-  const CAN_EDIT = IS_BOSS || (STAFF_OPEN && STAFF_PAGES.includes(PAGE));   // 店長・社長はGoogleで入ったときだけ（共通アカウントでは、きゃ・社長は選べない）
+  // 社長（owner）は見るだけ（直せない）2026/11/4 社長の希望。回収明細の「社長が受け取った」は IS_OWNER で別に動く
+  const CAN_EDIT = !IS_OWNER && (IS_BOSS || (STAFF_OPEN && STAFF_PAGES.includes(PAGE)));   // 店長・社長はGoogleで入ったときだけ（共通アカウントでは、きゃ・社長は選べない）
 
   function q(res){ if(res.error) throw res.error; return res.data; }
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));

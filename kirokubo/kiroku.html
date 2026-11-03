@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_live.js?v=2"></script><!-- いっしょに使う（保存の合図・入力中）。kb_common より前 -->
-<script src="kb_common.js?v=18"></script>
+<script src="kb_common.js?v=19"></script>
 <style>
   /* ===== 見やすさ重視（文字は大きめ・枠は少なめ・色は状態と注意だけ） ===== */
   body{font-size:14.5px;}
@@ -616,7 +616,7 @@
         <div class="f"><label>終了時刻（自動・延長こみ）</label><div class="endview" id="endView">--:--</div></div>
       </div>
       <div id="castCal" style="display:none"></div>
-      <div class="row1"><div class="f"><label>コース<span class="req">必須</span></label><select id="f_course" onchange="recalc()"></select></div></div>
+      <div class="row1"><div class="f"><label>コース<span class="req">必須</span> <a href="javascript:void(0)" class="edit-only" onclick="openPriceEdit()" style="font-size:12.5px;font-weight:800;color:var(--pink-deep);margin-left:6px">✏️ コース・料金を直す</a></label><select id="f_course" onchange="recalc()"></select></div></div>
       <div class="row1"><div class="f"><label>割引（円）・割引の名前</label>
         <div style="display:flex;gap:6px"><input type="number" id="f_discount" min="0" value="0" oninput="recalc()" style="max-width:140px"><input id="f_discnote" placeholder="例：口コミ割" maxlength="60"></div></div></div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px;font-size:14px;font-weight:800">
@@ -6236,6 +6236,54 @@ function livePaint(){
   const __renderListLive = renderList;
   renderList = function(){ const r = __renderListLive.apply(this, arguments); livePaint(); return r; };
 })();
+
+/* ---------- ✏️ コース・料金を直す（だれでも。kb_prices：店舗×コース→基本額）2026/11/4 ---------- */
+function refreshCourses(){
+  const store = $("f_store").value, keep = $("f_course").value, list = M.prices.filter(p=>p.store_key === store);
+  $("f_course").innerHTML = `<option value="">（コースを選ぶ）</option>` + list.map(p=>`<option value="${esc(p.course)}">${esc(p.course)}${/^\d+$/.test(p.course)?"分" + (Number(p.course) >= 60 ? "（" + (Math.round(Number(p.course) / 6) / 10) + "時間）" : ""):""}　${yen(p.price)}${p.note?"（"+esc(p.note)+"）":""}</option>`).join("");
+  if(keep && list.some(p=>p.course === keep)) $("f_course").value = keep;
+}
+function openPriceEdit(store){
+  if(!KB.CAN_EDIT) return;
+  store = store || $("f_store").value || (M.stores[0] || {}).key;
+  let bg = $("priceBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "priceBg"; bg.className = "modal-bg"; document.body.appendChild(bg); KB.closeOnBackdrop(bg, () => bg.classList.remove("show")); }
+  const list = M.prices.filter(p=>p.store_key === store);
+  const row = p => `<tr data-old="${esc(p ? p.course : "")}">
+    <td><input class="pe-c" value="${esc(p ? p.course : "")}" placeholder="例：90 / 女レ80 / 泊21-5" style="width:120px"></td>
+    <td><input class="pe-p" type="number" min="0" step="500" value="${p ? p.price : ""}" placeholder="13000" style="width:100px"></td>
+    <td><input class="pe-n" value="${esc(p ? p.note : "")}" placeholder="（あれば）" style="width:160px"></td>
+    <td style="white-space:nowrap"><button type="button" class="btn btn-primary btn-sm" onclick="savePriceRow(this,'${esc(store)}')">${p ? "保存" : "＋ 足す"}</button>
+      ${p ? `<button type="button" class="btn btn-ghost btn-sm" onclick="delPriceRow(this,'${esc(store)}')">消す</button>` : ""}</td></tr>`;
+  bg.innerHTML = `<div class="modal" style="max-width:640px"><button class="x" onclick="$('priceBg').classList.remove('show')">×</button>
+    <h2>✏️ コース・料金を直す</h2>
+    <div class="f" style="margin:8px 0"><label>お店</label><select id="pe_store" onchange="openPriceEdit(this.value)">${M.stores.map(s=>`<option value="${s.key}" ${s.key === store ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select></div>
+    <p style="font-size:12.5px;color:var(--sub);line-height:1.6;margin:0 0 8px">コースは分だけなら数字（例：90）。料金は基本額（指名料・延長・オプションは別）。<br>新しいコースは、キャストのバックがまだないので、はじめの受付で「キャストの報酬」にバックを入れてください（次から自動）。</p>
+    <div style="overflow-x:auto"><table class="list"><tr><th>コース</th><th>料金（円）</th><th>説明</th><th></th></tr>${list.map(p => row(p)).join("")}${row(null)}</table></div></div>`;
+  bg.classList.add("show");
+}
+async function savePriceRow(btn, store){
+  const tr = btn.closest("tr"), old = tr.dataset.old, course = tr.querySelector(".pe-c").value.trim().normalize("NFKC"), price = Number(tr.querySelector(".pe-p").value), note = tr.querySelector(".pe-n").value.trim();
+  if(!course){ toast("コースを入れてください"); return; }
+  if(tr.querySelector(".pe-p").value === "" || !(price >= 0)){ toast("料金を入れてください"); return; }
+  if(course !== old && M.prices.some(p=>p.store_key === store && p.course === course)){ toast("そのコースはもうあります"); return; }
+  try{
+    q(await sb.from("kb_prices").upsert({ store_key: store, course, price, note }, { onConflict: "store_key,course" }));
+    if(old && old !== course) q(await sb.from("kb_prices").delete().eq("store_key", store).eq("course", old));   // 名前を変えたら、前の名前は消す
+    M.prices = M.prices.filter(p=>!(p.store_key === store && (p.course === old || p.course === course)));
+    M.prices.push({ store_key: store, course, price, note });
+    toast("保存しました（" + course + "・" + yen(price) + "）"); refreshCourses(); openPriceEdit(store); if($("f_store").value) recalc();
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+async function delPriceRow(btn, store){
+  const old = btn.closest("tr").dataset.old; if(!old) return;
+  if(!confirm("コース「" + old + "」を消しますか？（前の予約は消えません）")) return;
+  try{
+    q(await sb.from("kb_prices").delete().eq("store_key", store).eq("course", old));
+    M.prices = M.prices.filter(p=>!(p.store_key === store && p.course === old));
+    toast("消しました"); refreshCourses(); openPriceEdit(store);
+  }catch(e){ toast("消せませんでした：" + (e.message || e)); }
+}
 
 /* ---------- 📞 電話番号不明（00）で受けた予約：状態を変えるたびに「番号を入れて」と出す（2026/11/4） ---------- */
 function noPhoneRes(r){ return !!r && digits(((r.kb_customers) || {}).phone || "").length < 6; }
