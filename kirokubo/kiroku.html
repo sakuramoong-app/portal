@@ -3615,7 +3615,7 @@ async function jumpToRes(id, bd){
   const el = $("rc-" + id);
   if(!el){ if(r.cast_id) jumpToCast(r.cast_id); return; }
   el.scrollIntoView({ block: "center", behavior: "smooth" });
-  el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+  el.classList.remove("rcflash"); void el.offsetWidth; el.classList.add("rcflash");   // 予約のカードの光り方（.rescard.rcflash）
 }
 loadCallAlerts(); setInterval(loadCallAlerts, 120000);
 const __loadDayA = loadDay;
