@@ -1960,11 +1960,13 @@ TEL：${STORE_TEL[store] || ""}`;
 /* ---------- 保存・削除 ---------- */
 function startAt(){
   const st = $("f_start").value; if(!st) return null;
-  const [h,m] = st.split(":").map(Number);
+  let [h,m] = st.split(":").map(Number);
   // 日本時間で組み立てる。朝6時より前は次の日の日付（営業日はそのまま）
+  //   「25:00」「27:00」のような書き方も、その営業日の深夜（次の日の1時・3時）として読む（2026/11/4）
   const bd = ($("f_day") && $("f_day").value) || day;   // 日付を変えたとき（別の日の予約にする）
-  const d = new Date(`${bd}T${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:00+09:00`);
-  if(h < 6) d.setTime(d.getTime() + 24*3600*1000);
+  const late = h >= 24; if(late) h -= 24;
+  const d = new Date(`${bd}T${String(h).padStart(2,"0")}:${String(m || 0).padStart(2,"0")}:00+09:00`);
+  if(late || h < 6) d.setTime(d.getTime() + 24*3600*1000);
   return d;
 }
 async function saveRes(){
@@ -6124,10 +6126,11 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 const ST_DONE = ["done", "cancel", "tobi", "working"];
 function statusAtIso(bd, st, v){
   if(!v) return null;
-  const [h, m] = v.split(":").map(Number);
+  let [h, m] = v.split(":").map(Number);
   const base = /^pre_/.test(st) ? addDays(bd, -1) : bd;   // 前日確認は前日の時刻
-  const d = new Date(`${base}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00+09:00`);
-  if(h < 6) d.setTime(d.getTime() + 24 * 3600 * 1000);   // 朝6時より前は次の日（営業日の考え方）
+  const late = h >= 24; if(late) h -= 24;   // 「25:00」などの書き方も、次の日の1時として読む
+  const d = new Date(`${base}T${String(h).padStart(2, "0")}:${String(m || 0).padStart(2, "0")}:00+09:00`);
+  if(late || h < 6) d.setTime(d.getTime() + 24 * 3600 * 1000);   // 朝6時より前は次の日（営業日の考え方）
   return d.toISOString();
 }
 const sameTime = (a, b) => (a ? Date.parse(a) : 0) === (b ? Date.parse(b) : 0);
