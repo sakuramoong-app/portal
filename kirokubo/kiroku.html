@@ -922,7 +922,7 @@ async function quickStatus(id, st){
 }
 async function saveNotice(){
   if(!KB.CAN_EDIT) return;
-  try{ q(await sb.from("kb_day_notes").upsert({ biz_date: day, notice: $("notice").value, updated_by: KB.operatorName() })); toast("お知らせを保存しました"); }
+  try{ q(await sb.from("kb_day_notes").upsert({ biz_date: day, notice: $("notice").value, updated_by: KB.operatorName() })); toast("お知らせを保存しました"); if(day === KB.bizDateOf()) noticeSeenSet(day, $("notice").value); }
   catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
 
@@ -3705,6 +3705,7 @@ const NTF_KINDS = {
   status:  { label: "⏰ 状態の時刻になった",           def: "none",  voice: false, text: "⏰ {名前}　「{状態}」の時刻（{時間}〜の予約）", say: "{名前}さん、{状態}の時刻です" },
   in:      { label: "🌅 出勤の時間",                   def: "chime", voice: false, text: "🌅 {名前}　出勤の時間（{時間}）", say: "{名前}さん、出勤の時間です" },
   out:     { label: "🌙 退勤の時間",                   def: "pon",   voice: false, text: "🌙 {名前}　退勤の時間（{時間}）", say: "{名前}さん、退勤の時間です" },
+  notice:  { label: "📢 本日のお知らせ（書きかわった・まだ見ていない）", def: "up", voice: true, text: "📢 お知らせ（{名前}）：{内容}", say: "本日のお知らせです。{内容}" },
 };
 const SOUNDS = {
   pipi:   { label: "ピピッ（高い2回）", notes: [[880, 0], [880, .35]] },
@@ -3726,7 +3727,7 @@ function ntfDef(kind){
 function soundOf(kind){ const p = lsGet("kbSounds")[kind]; return SOUNDS[p] ? p : ntfDef(kind).def || "pipi"; }
 function voiceOn(kind){ const p = lsGet("kbVoice")[kind]; return p == null ? !!ntfDef(kind).voice : !!p; }
 function ntfTexts(){ const v = M.set && M.set.ntf_texts; return v && typeof v === "object" ? v : {}; }
-function ntfFill(t, vars){ return String(t || "").replace(/\{(名前|時間|状態|方法)\}/g, (m, k)=>vars && vars[k] != null ? vars[k] : ""); }
+function ntfFill(t, vars){ return String(t || "").replace(/\{(名前|時間|状態|方法|内容)\}/g, (m, k)=>vars && vars[k] != null ? vars[k] : ""); }
 function ntfText(kind, vars){ return ntfFill((ntfTexts()[kind] || {}).text || ntfDef(kind).text || "{名前}", vars); }
 function ntfSay(kind, vars){ return ntfFill((ntfTexts()[kind] || {}).say || ntfDef(kind).say || "", vars); }
 // 出勤・退勤の通知を、何分前に出すか（マイナスなら後）。内勤みんな同じ（ntf_texts の in / out の before）
@@ -3750,6 +3751,20 @@ function checkCustomNtfs(){
   lsSet("kbFired", fired);
 }
 setInterval(checkCustomNtfs, 20000);
+// 📢 本日のお知らせ：中身が変わった・この端末でまだ見ていない → 通知（自分で書いたものは出さない）
+function noticeSeenSet(bd, text){ lsSet("kbNoticeSeen", { bd, text: String(text || "") }); }
+async function checkNotice(){
+  if(!M.casts) return;
+  try{
+    const bd = KB.bizDateOf(), r = q(await sb.from("kb_day_notes").select("notice,updated_by").eq("biz_date", bd).maybeSingle()) || {};
+    const text = String(r.notice || "").trim(), seen = lsGet("kbNoticeSeen");
+    if(seen.bd === bd && String(seen.text || "").trim() === text) return;
+    noticeSeenSet(bd, text);
+    if(!text || (r.updated_by && r.updated_by === KB.operatorName() && seen.bd === bd)) return;   // 消された・自分で書いた
+    notify("notice", { 名前: r.updated_by || "", 内容: text.length > 120 ? text.slice(0, 120) + "…" : text }, `document.getElementById('notice').scrollIntoView({block:'center',behavior:'smooth'})`);
+  }catch(e){}
+}
+setInterval(checkNotice, 60000);
 function playSound(id){
   const s = SOUNDS[id]; if(!s || !s.notes.length) return;
   try{
@@ -3794,7 +3809,7 @@ function renderNtfBox(open){
        <div class="ntflist">${ntfLog.length ? ntfLog.map(n=>`<div class="ntfrow${n.jump ? " go" : ""}" ${n.jump ? `onclick="${esc(n.jump)}"` : ""}><small>${hhmm(n.at)}・${esc(SOUNDS[soundOf(n.kind)].label)}${voiceOn(n.kind) ? "・🗣" : ""}</small>${esc(n.text)}</div>`).join("") : `<div class="ntfrow">まだ通知はありません</div>`}</div>`
     : `<button type="button" class="ntfopen" onclick="renderNtfBox(true)">🔔${ntfLog.length ? " " + ntfLog.length : ""}</button>`;
 }
-const NTF_SAMPLE = { 名前: "さくら", 時間: "21:00", 状態: "移動中", 方法: "電話" };
+const NTF_SAMPLE = { 名前: "さくら", 時間: "21:00", 状態: "移動中", 方法: "電話", 内容: "雨なので交通費に気をつけてください" };
 function openSoundSet(){
   let bg = $("sndBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "sndBg"; bg.className = "modal-bg"; document.body.appendChild(bg); KB.closeOnBackdrop(bg, () => bg.classList.remove("show")); }
@@ -4058,7 +4073,7 @@ async function saveShiftNoticeSet(){
 setInterval(loadShiftNotices, 120000); setInterval(renderShiftNotices, 30000);
 const __loadDayA = loadDay;
 let shiftNoticeFirst = true;
-loadDay = async function(){ await __loadDayA(); renderCallAlerts(); if(shiftNoticeFirst){ shiftNoticeFirst = false; loadShiftNotices(); renderNtfBox(); } };
+loadDay = async function(){ await __loadDayA(); renderCallAlerts(); if(shiftNoticeFirst){ shiftNoticeFirst = false; loadShiftNotices(); renderNtfBox(); } checkNotice(); };
 
 /* ---------- 💳 カード決済の進み具合（本日のキャスト一覧で、プルダウンで変える） ---------- */
 const CARD_STEP = [["unsent", "💳 URL未送信"], ["sent", "📨 URL送信済み"], ["paid", "✅ 決済済み"]];
