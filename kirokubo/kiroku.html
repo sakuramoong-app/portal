@@ -849,7 +849,14 @@ async function loadDay(){
 }
 function castName(id){ const c = M.casts.find(x=>x.id===id); return c ? (c.official_name || c.temp_name) : (id || "—"); }
 function storeLabel(k){ const s = M.stores.find(x=>x.key===k); return s ? s.label : k; }
-function hm(iso){ if(!iso) return ""; const d = new Date(iso); const j = new Date(d.getTime()+9*3600*1000); return String(j.getUTCHours()).padStart(2,"0")+":"+String(j.getUTCMinutes()).padStart(2,"0"); }
+function hmRaw(iso){ if(!iso) return ""; const d = new Date(iso); const j = new Date(d.getTime()+9*3600*1000); return String(j.getUTCHours()).padStart(2,"0")+":"+String(j.getUTCMinutes()).padStart(2,"0"); }
+// 深夜（朝6時まで）は 24時より後の書き方にそろえる：3:00 → 27:00（内勤・キャストで書き方をそろえて、まちがえないように。2026/11/4）
+function hm(iso){ const s = hmRaw(iso); if(!s) return s; const h = Number(s.slice(0, 2)); return h < 6 ? String(h + 24) + s.slice(2) : s; }
+// 時刻の入力欄に入れる値：パソコンは文字の欄なので 27:00 のまま。スマホは時刻の欄なので 03:00
+const TIME_TEXT = !/iPhone|iPad|Android/i.test(navigator.userAgent);
+function hmIn(iso){ return TIME_TEXT ? hm(iso) : hmRaw(iso); }
+// 時・分 → 「27:00」の形（24時より後の書き方）
+function lateHM(t){ t = Math.round(t); let h = Math.floor(t / 60) % 24; const m = ((t % 60) + 60) % 60; if(h < 6) h += 24; return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0"); }
 function backOf(r){ return r.back_override != null ? r.back_override : (r.course_back + r.option_back + r.extra_back); }
 
 function renderList(){
@@ -912,7 +919,7 @@ function openForm(id){
     return `<optgroup label="${grp[st]}">` + list.map(c=>`<option value="${c.id}">${esc(c.official_name || c.temp_name)}</option>`).join("") + `</optgroup>`;
   }).join("");
   $("f_cast").value = r.cast_id || "";
-  $("f_start").value = r.start_at ? hm(r.start_at) : "";
+  $("f_start").value = r.start_at ? hmIn(r.start_at) : "";
   $("f_status").innerHTML = `<option value="">⚠️ 選択してください</option>` + Object.keys(STATUS).filter(k=>!STATUS_OLD.includes(k) || k === r.status).map(k=>`<option value="${k}">${STATUS[k]}</option>`).join("");
   $("f_status").value = r.status || "";
   stColor();
@@ -1890,9 +1897,12 @@ function recalc(){
 function buildMsg(c){
   const cast = M.casts.find(x=>x.id===$("f_cast").value);
   const d = new Date(day + "T12:00:00Z");
-  const st = $("f_start").value;
-  let en = "";
-  if(st){ const [h,m] = st.split(":").map(Number); const mins = minutesOf(c.course) + c.ext*30 + c.date*30; const t = h*60+m+mins; en = String(Math.floor(t/60)%24).padStart(2,"0")+":"+String(t%60).padStart(2,"0"); }
+  // 時刻は 24時より後の書き方（27:00〜28:30）。深夜にかかるときは「※営業日の深夜3:00〜4:30です」と1行足す（2026/11/4）
+  let st = $("f_start").value, en = "", lateNote = "";
+  if(st){ const [h,m] = st.split(":").map(Number); let s0 = h*60+m; if(s0 < 360) s0 += 1440;
+    const mins = minutesOf(c.course) + c.ext*30 + c.date*30, t = s0 + mins; st = lateHM(s0); en = lateHM(t);
+    const real = x => { const hh = Math.floor(x / 60) % 24; return (x >= 1440 ? "深夜" : "") + hh + ":" + String(x % 60).padStart(2, "0"); };
+    if(t > 1440) lateNote = `\n※${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]})営業日の${s0 >= 1440 ? real(s0) + "〜" + real(t).replace("深夜", "") : real(s0) + "〜" + real(t)}です`; }
   const backOps = c.opts.filter(o=>o.back>0).map(o=>o.label + (o.qty>1?"×"+o.qty:"")).join("・") || "なし";
   const noBackOps = c.opts.filter(o=>!(o.back>0)).map(o=>o.label + (o.qty>1?"×"+o.qty:"")).join("・") || "なし";
   // 店名はエリアを伏せる（「五反田逆アナル倶楽部」を見て、行く場所をまちがえる子がいるので。2026/11/3）
@@ -1905,7 +1915,7 @@ function buildMsg(c){
 ご予約いただきました！
 ご確認お願いいたします🙇
 ${isDummyStore(c.store) && $("f_dummy").value ? "\n（ダミー名「" + $("f_dummy").value + "」で受けています）" : ""}
-${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st||"--:--"}〜${en||"--:--"}
+${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st||"--:--"}〜${en||"--:--"}${lateNote}
 【店名】${storeNoArea(c.store)}
 【名前】${$("f_name").value || "お客"}様 ${visitTxt}
 【コース】${c.course}${/^\d+$/.test(c.course)?"分":""}${c.free?"（"+FREE_SUFFIX[c.free]+"）":""}${c.ext?"＋延長"+c.ext*30+"分":""}
@@ -1934,7 +1944,12 @@ function netReply(){
   wrap.style.display = on ? "" : "none"; if(!on || !last) return;
   const c = last, store = c.store, cast = M.casts.find(x => x.id === $("f_cast").value);
   const bd = ($("f_day") && $("f_day").value) || day, d = new Date(bd + "T12:00:00Z"), st = $("f_start").value;
-  let en = ""; if(st){ const [h, m] = st.split(":").map(Number), t = h * 60 + m + minutesOf(c.course) + c.ext * 30 + c.date * 30; en = String(Math.floor(t / 60) % 24).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"); }
+  // お客さまへの返信は、ふつうの日付と時刻（深夜3時なら「次の日の 03:00」。27:00 とは書かない）2026/11/4
+  let en = "", cd2 = d, st2 = st;
+  if(st){ const [h, m] = st.split(":").map(Number); let s0 = h * 60 + m; if(s0 < 360) s0 += 1440;
+    const t = s0 + minutesOf(c.course) + c.ext * 30 + c.date * 30, n = x => String(Math.floor(x / 60) % 24).padStart(2, "0") + ":" + String(x % 60).padStart(2, "0");
+    if(s0 >= 1440){ cd2 = new Date(d.getTime() + 24 * 3600 * 1000); }
+    st2 = n(s0); en = n(t); }
   const who = isDummyStore(store) && $("f_dummy").value ? $("f_dummy").value : cast ? ((cast.stores && cast.stores[store] && cast.stores[store].name) || cast.official_name || cast.temp_name) : "（キャスト）";
   const ops = c.opts.map(o => o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・");
   const place = [$("f_area").value, $("f_address").value].filter(Boolean).join(" ");
@@ -1944,7 +1959,7 @@ function netReply(){
 この度は${storeLabel(store)}をご利用いただき、誠にありがとうございます。
 下記の内容でご予約を承りました。
 
-■ご予約日時：${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st || "--:--"}〜${en || "--:--"}
+■ご予約日時：${cd2.getUTCMonth() + 1}/${cd2.getUTCDate()}(${DOW[cd2.getUTCDay()]}) ${st2 || "--:--"}〜${en || "--:--"}
 ■キャスト：${who}
 ■コース：${c.course}${/^\d+$/.test(c.course) ? "分" : ""}${c.ext ? "（延長" + c.ext * 30 + "分）" : ""}
 ■ご利用場所：${place || "（未定）"}${ops ? "\n■オプション：" + ops : ""}
@@ -2139,7 +2154,7 @@ recalc = function(){
   if(s){
     const [h, m] = s.split(":").map(Number);
     const t = h * 60 + m + minutesOf(last.course) + last.ext * 30 + last.date * 30;
-    $("endView").textContent = String(Math.floor(t / 60) % 24).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+    $("endView").textContent = lateHM(t);
   } else $("endView").textContent = "--:--";
   $("footTotal").textContent = yen(last.total);
   // 希望プレイを予約連絡に入れる
@@ -3967,7 +3982,10 @@ $("f_address").addEventListener("change", () => {
   conv();
   new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if(n.nodeType === 1){ if(n.matches && n.matches('input[type="time"]')) conv(n.parentNode); else if(n.querySelector && n.querySelector('input[type="time"]')) conv(n); } }))).observe(document.body, { childList: true, subtree: true });
   // 決めたとき（Enter・外に出たとき）に「12:40」の形にしてから、もとの処理へ
-  document.addEventListener("change", e => { const el = e.target; if(el && el.dataset && el.dataset.tm){ const n = norm(el.value); if(n !== el.value){ el.value = n; el.dispatchEvent(new Event("input", { bubbles: true })); } } }, true);
+  // 予約の開始時刻・状態の時刻は、朝6時より前を 24時より後の書き方に（000 → 24:00、300 → 27:00）2026/11/4
+  const lateOk = el => el.id === "f_start" || el.classList.contains("rc-time") || !!(el.closest && el.closest(".statchip"));
+  const toLate = s => { const m = /^(\d{2}):(\d{2})$/.exec(s); if(!m) return s; const h = Number(m[1]); return h < 6 ? String(h + 24) + ":" + m[2] : s; };
+  document.addEventListener("change", e => { const el = e.target; if(el && el.dataset && el.dataset.tm){ let n = norm(el.value); if(lateOk(el)) n = toLate(n); if(n !== el.value){ el.value = n; el.dispatchEvent(new Event("input", { bubbles: true })); } } }, true);
   document.addEventListener("keydown", e => { const el = e.target; if(e.key === "Enter" && el && el.dataset && el.dataset.tm){ e.preventDefault(); el.blur(); } }, true);
 })();
 document.head.insertAdjacentHTML("beforeend", `<style>
@@ -4670,7 +4688,7 @@ function resCard(r, i){
     <div class="rc-top">
       ${noTxt ? `<span class="rc-no">${noTxt}</span>` : ""}
       <span class="stbox">${stSel}${statusAtChip(r, ed)}</span>
-      <small class="rc-lbl">開始</small>${ed ? `<input type="time" class="rc-time" value="${hm(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>
+      <small class="rc-lbl">開始</small>${ed ? `<input type="time" class="rc-time" value="${hmIn(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>
       ${r.phone_draft ? `<span class="rc-draft" title="スマホで仮入力。PCで開いて確かめると取り入れます">📱仮入力</span>` : ""}${r.dummy_name ? `<span class="rc-store">🎭${esc(r.dummy_name)}</span>` : ""}
       <span class="rc-k">📍<b>${esc(r.area || "エリアなし")}</b></span>
       <span class="rc-k">${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""}${r.extension_count ? "＋延長" + r.extension_count : ""}</span>
@@ -6163,7 +6181,7 @@ function statusAtChip(r, ed){
   if(!("status_at" in r) || ST_DONE.includes(r.status)) return "";
   if(!r.status_at) return ed ? `<button type="button" class="statadd" title="この状態の時刻を入れる（例：確認電話を1.5時間前に）" onclick="statAdd(this,${r.id})">⏰</button>` : "";
   const over = Date.now() >= Date.parse(r.status_at);
-  return ed ? `<label class="statchip ${over ? "over" : ""}" title="この状態の時刻（空にすると消える）">⏰<input type="time" step="300" value="${hm(r.status_at)}" onchange="qStatusAt(${r.id},this.value)"></label>`
+  return ed ? `<label class="statchip ${over ? "over" : ""}" title="この状態の時刻（空にすると消える）">⏰<input type="time" step="300" value="${hmIn(r.status_at)}" onchange="qStatusAt(${r.id},this.value)"></label>`
     : `<span class="statchip ${over ? "over" : ""}">⏰ ${hm(r.status_at)}</span>`;
 }
 function statAdd(btn, id){

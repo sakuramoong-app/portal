@@ -113,7 +113,7 @@ function goToday(){ $("day").value = KB.bizDateOf(); loadDay(); }
 function moveDay(n){ const d = new Date($("day").value + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); $("day").value = d.toISOString().slice(0, 10); loadDay(); }
 function castName(id){ const c = M.casts.find(x=>x.id === id); return c ? (c.official_name || c.temp_name) : (id || "—"); }
 function storeLabel(k){ const s = M.stores.find(x=>x.key === k); return s ? s.label : (k || ""); }
-function hm(iso){ if(!iso) return "--:--"; const d = new Date(new Date(iso).getTime() + 9*3600*1000); return String(d.getUTCHours()).padStart(2,"0") + ":" + String(d.getUTCMinutes()).padStart(2,"0"); }
+function hm(iso){ if(!iso) return "--:--"; const d = new Date(new Date(iso).getTime() + 9*3600*1000); let h = d.getUTCHours(); if(h < 6) h += 24; return String(h).padStart(2,"0") + ":" + String(d.getUTCMinutes()).padStart(2,"0"); }   // 深夜は 27:00 のように（記録簿と同じ。2026/11/4）
 function backOf(r){ return r.back_override != null ? r.back_override : (r.course_back + r.option_back + r.extra_back); }
 function rulesOn(castId){ return M.rules.filter(r=>r.cast_id === castId && (r.valid_from || "2000-01-01") <= day && (!r.valid_to || r.valid_to > day)); }
 
