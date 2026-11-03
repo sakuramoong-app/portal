@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="kb.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
-<script src="kb_common.js?v=19"></script>
+<script src="kb_common.js?v=20"></script>
 <style>
   body{font-size:14.5px;}
   .wrap{max-width:1180px;}
@@ -134,8 +134,9 @@ const RESV_COLS = "*";   // 振込（SQL 173）の欄もあるので全部
 let names = {}, kanas = {}, kanaSel = "", staffNames = {}, ENV = {}, D = null, MO = null, place = "", mode = "day";
 
 async function init(){
-  $("navArea").innerHTML = KB.nav("kaishu.html");
-  if(!(await KB.staffSession({ owner: true }))){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
+  // 📦 回収明細は、ポータル・記録簿のタブには出さない、店長・社長だけの別のページ（2026/11/4 社長の希望）。上のタブも出さない
+  $("navArea").innerHTML = "";
+  if(!(await KB.staffSession({ owner: true }))){ $("gate").innerHTML = `店長・社長だけのページです。<br><a class="btn btn-primary" style="display:inline-block;margin-top:12px" href="../index.html?next=kaishu">🔑 Googleでログインする</a><br><small>ログインすると、この回収明細にもどります</small>`; return; }
   if(!(await KB.passGate("回収明細"))) return;   // 🔒 端末の登録の合言葉
   $("wip").innerHTML = KB.wipBanner();
   $("gate").style.display = "none"; $("main").style.display = "";

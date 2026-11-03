@@ -242,8 +242,15 @@
     }
     GOOGLE_STAFF = { name: me.name, role: me.role };
     localStorage.setItem(OPERATOR_STORAGE_KEY, me.name);   // ほかのアプリも、この名前を担当者として使う
+    // 📦 回収明細（ポータルには出さない別のページ）からログインしに来た店長・社長は、ログインしたら回収明細に戻す
+    try {
+      if (sessionStorage.getItem("afterLogin") === "kaishu" && ["manager", "owner"].includes(me.role)) {
+        sessionStorage.removeItem("afterLogin"); location.replace("kirokubo/kaishu.html"); return false;
+      }
+    } catch (e) {}
     return true;
   }
+  try { if (new URLSearchParams(location.search).get("next") === "kaishu") sessionStorage.setItem("afterLogin", "kaishu"); } catch (e) {}
   async function showAppView() {
     if (!(await applyGoogleStaff())) return;
     loginView.style.display = "none";

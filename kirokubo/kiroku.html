@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_live.js?v=2"></script><!-- いっしょに使う（保存の合図・入力中）。kb_common より前 -->
-<script src="kb_common.js?v=19"></script>
+<script src="kb_common.js?v=20"></script>
 <style>
   /* ===== 見やすさ重視（文字は大きめ・枠は少なめ・色は状態と注意だけ） ===== */
   body{font-size:14.5px;}
@@ -555,7 +555,7 @@
     <div class="step">
       <h3><span class="n">1</span>電話番号・お客さんの名前（台帳で履歴を見る）</h3>
       <div class="row1"><div class="f"><label>電話番号<span class="req">必須</span></label>
-        <div style="display:flex;gap:6px"><input id="f_phone" type="tel" inputmode="tel" placeholder="09012345678（わからない時は 00）" onchange="lookupCustomer()">
+        <div style="display:flex;gap:6px"><input id="f_phone" type="tel" inputmode="tel" placeholder="わからない時は 00" onchange="lookupCustomer()">
           <button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="lookupCustomer()">🔍 調べる</button></div></div></div>
       <div class="row1"><div class="f"><label>お客さんの名前<span class="req">必須</span></label><input id="f_name" maxlength="40" oninput="recalc()"></div></div>
       <div class="row1"><div class="f"><label>メールアドレス（あれば）</label><input id="f_email" type="email" inputmode="email" maxlength="120" placeholder="例：xxxx@gmail.com"></div></div>
@@ -6306,16 +6306,20 @@ $("f_status").addEventListener("change", () => { if(digits($("f_phone").value).l
 
 /* ---------- 🎨 本日のキャスト一覧：キャストごとの枠を2色で交互に（見分けやすく。2026/11/4） ---------- */
 document.head.insertAdjacentHTML("beforeend", `<style>
-  #list > .cblock.cb-a{border:2px solid #F3B6CB;border-left:8px solid #E5638C;}
-  #list > .cblock.cb-b{border:2px solid #A9CDEE;border-left:8px solid #4A8FD6;}
-  /* 予約①〜⑥の色（カードの左の線と番号の札） */
-  .rescard.rcn1{border-left:6px solid #E5638C;} .rescard.rcn1 .rc-no{background:#E5638C;}
-  .rescard.rcn2{border-left:6px solid #F08C2E;} .rescard.rcn2 .rc-no{background:#F08C2E;}
-  .rescard.rcn3{border-left:6px solid #2E9E5B;} .rescard.rcn3 .rc-no{background:#2E9E5B;}
-  .rescard.rcn4{border-left:6px solid #3A7BD5;} .rescard.rcn4 .rc-no{background:#3A7BD5;}
-  .rescard.rcn5{border-left:6px solid #8A5CD6;} .rescard.rcn5 .rc-no{background:#8A5CD6;}
-  .rescard.rcn6{border-left:6px solid #8B6B3E;} .rescard.rcn6 .rc-no{background:#8B6B3E;}
-  .rc-no{color:#fff;font-weight:900;font-size:12.5px;border-radius:99px;padding:2px 9px;white-space:nowrap;align-self:center;}
+  /* やわらかい色（原色はやめる。2026/11/4 きゃ）：さくらピンクと、ラベンダー */
+  #list > .cblock.cb-a{border:2px solid #F8CFDC;border-left:8px solid #F4A3BE;background:#FFFBFC;}
+  #list > .cblock.cb-b{border:2px solid #DCD3F5;border-left:8px solid #B9A8EC;background:#FCFBFF;}
+  /* 予約①〜⑥の色（カードの左の線と番号の札）：さくら・ピーチ・ミント・そら・ラベンダー・レモン */
+  .rescard.rcn1{border-left:6px solid #F4A3BE;} .rescard.rcn1 .rc-no{background:#FDE3EC;color:#B2456B;border-color:#F4A3BE;}
+  .rescard.rcn2{border-left:6px solid #F7BE95;} .rescard.rcn2 .rc-no{background:#FDEBDD;color:#A35A22;border-color:#F7BE95;}
+  .rescard.rcn3{border-left:6px solid #9DD9BC;} .rescard.rcn3 .rc-no{background:#E3F6EC;color:#2F7A55;border-color:#9DD9BC;}
+  .rescard.rcn4{border-left:6px solid #A6CDF0;} .rescard.rcn4 .rc-no{background:#E4F0FB;color:#2F6699;border-color:#A6CDF0;}
+  .rescard.rcn5{border-left:6px solid #C5B5F0;} .rescard.rcn5 .rc-no{background:#EEE9FC;color:#6650A8;border-color:#C5B5F0;}
+  .rescard.rcn6{border-left:6px solid #EFD98A;} .rescard.rcn6 .rc-no{background:#FCF5D8;color:#8A6D12;border-color:#EFD98A;}
+  .rc-no{font-weight:900;font-size:12.5px;border-radius:99px;padding:1px 9px;border:1.5px solid;white-space:nowrap;align-self:center;}
+  /* 今どこに誰が：横の線をはっきり（行の区切り） */
+  table.board tr > th, table.board tr > td{border-bottom:3px solid #D9C7CF !important;}
+  table.board tr > th:first-child{border-right:3px solid #D9C7CF !important;}
 </style>`);
 { const __renderListAlt = renderList;
   renderList = function(){ const r = __renderListAlt.apply(this, arguments);
