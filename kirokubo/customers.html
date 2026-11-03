@@ -165,7 +165,9 @@ function rowsOf(c){
   const pk = s => String(s || "").normalize("NFKC").replace(/\s/g, "");
   const b2 = b.filter((x, i) => {
     const h = c._hist[i];
-    const dup = h.cast_id && Number(h.total) > 0 && pk(h.place) && c._res.some(r => r.cast_id === h.cast_id && r.store_key === h.store_key && Number(r.total) === Number(h.total) && pk(r.address) === pk(h.place));
+    // 同じ日・同じキャスト・同じお店の予約が記録簿にあっても、同じ利用（11/1・11/2 は両方に書いてある。受付と同じ。2026/11/3）
+    const dup = h.cast_id && (c._res.some(r => r.biz_date === h.biz_date && r.cast_id === h.cast_id && r.store_key === h.store_key) ||
+      (Number(h.total) > 0 && pk(h.place) && c._res.some(r => r.cast_id === h.cast_id && r.store_key === h.store_key && Number(r.total) === Number(h.total) && pk(r.address) === pk(h.place))));
     if(!dup) return true;
     if(!h.cast_ng && !h.memo) return false;
     x.status = "dup"; x.dupNote = true; return true;
