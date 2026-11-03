@@ -1668,7 +1668,10 @@ async function lookupCustomer(keepName){
     // 台帳エクセルの行が、記録簿の予約と キャスト・お店・総額・場所 まで同じなら、同じ利用を2回書いたもの（日付が打ちまちがいで別の日になっていても）
     //   → 数えない・出さない（本指名と判断されないように）。台帳のデータは変えない
     const pk = s => String(s || "").normalize("NFKC").replace(/\s/g, "");
-    const dupOf = x => x.cast_id && Number(x.total) > 0 && pk(x.place) && pastAll.some(r => r.cast_id === x.cast_id && r.store_key === x.store_key && Number(r.total) === Number(x.total) && pk(r.address) === pk(x.place));
+    //   また、同じ日・同じキャスト・同じお店の予約が記録簿にあれば、それも同じ利用（11/1・11/2 は台帳エクセルと記録簿の両方に書いてある。2026/11/3）
+    const dupOf = x => x.cast_id && (
+      pastAll.some(r => r.biz_date === x.biz_date && r.cast_id === x.cast_id && r.store_key === x.store_key) ||
+      (Number(x.total) > 0 && pk(x.place) && pastAll.some(r => r.cast_id === x.cast_id && r.store_key === x.store_key && Number(r.total) === Number(x.total) && pk(r.address) === pk(x.place))));
     xl = xl.filter(x => !dupOf(x));
     custSeen = pastAll.concat(xl).sort((a, b) => String(b.biz_date).localeCompare(String(a.biz_date)));
     const seenAll = custSeen;
