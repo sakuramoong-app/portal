@@ -190,11 +190,8 @@
     const shown = phone ? items.filter(([h]) => ["kiroku.html", "settle.html", "index.html"].includes(h) || (h === "kaishu.html" && IS_BOSS)) : items;
     return `<nav class="kbnav">${shown.map(([h,l])=>`<a href="${h}" target="_blank" rel="opener" class="${h===active?"on":""}">${l}</a>`).join("")}<a href="kiroku.html?practice=1" target="_blank" rel="opener">🧪 練習</a><a href="../guide.html" target="_blank" rel="opener">📖 使い方</a></nav>`;
   }
-  function wipBanner(){
-    return `<div class="wip">🚧 <b>作成中です。触らないでください。</b><br><span>${CAN_EDIT
-      ? (IS_OWNER ? "👑 社長として開いています（直せます）。" : "👑 店長として開いています（直せます）。")
-      : "店長（きゃ）が準備中のページです。見るだけで、直すことはできません。"}</span></div>`;
-  }
+  // 🚧「作成中です」の帯は、本番で使いはじめたので出さない（2026/11/5 店長の希望）
+  function wipBanner(){ return ""; }
   // 外側を押したら閉じる小窓（押すのも離すのも外のときだけ。中で押し始めた・文字を選んでいる間は閉じない）
   function closeOnBackdrop(bg, close){
     let down = false, up = false;

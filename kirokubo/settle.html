@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_live.js?v=2"></script><!-- いっしょに使う（保存の合図・入力中）。kb_common より前 -->
-<script src="kb_common.js?v=22"></script>
+<script src="kb_common.js?v=23"></script>
 <style>
   .daybar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
   .daybar input[type=date]{font-family:inherit;font-size:14px;padding:8px 12px;border:1.5px solid var(--line);border-radius:99px;background:#fff;color:var(--ink);}
@@ -45,16 +45,21 @@
   .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
   .hint2{font-size:11.5px;color:var(--sub);}
   .note2{font-size:12px;background:var(--lemon-soft);border-radius:10px;padding:6px 10px;margin:6px 0;}
+  /* 📌 上の部分はスクロールしてもついてくる。未精算のキャストは箱の中でスクロール（スマホは画面がせまいので、ついてこない） */
+  .stickytop{position:sticky;top:0;z-index:50;background:var(--bg);padding-top:8px;margin-top:-8px;box-shadow:0 8px 10px -10px rgba(0,0,0,.25)}
+  #stickyTop #unsList{max-height:30vh;overflow:auto}
+  .card.svc{scroll-margin-top:calc(var(--stickyH,0px) + 10px)}   /* 枠へとんだとき、ついてくる部分にかくれない */
+  @media (max-width:700px){ .stickytop{position:static;box-shadow:none} #stickyTop #unsList{max-height:none} }
 </style>
 </head>
 <body>
 <div class="wrap">
+  <!-- 📌 上の部分（タイトル〜未精算のキャスト）は、スクロールしてもついてくる（2026/11/5 店長の希望）。未精算のキャストが長いときは箱の中でスクロール -->
+  <div class="stickytop" id="stickyTop">
   <header class="kbh"><h1>💴 精算（記録簿）</h1><span class="spacer"></span></header>
   <div id="navArea"></div>
   <div id="wipArea"></div>
-  <div id="gate" class="gate">読み込み中…</div>
-
-  <div id="main" style="display:none">
+  <div id="mainTop" style="display:none">
     <div class="daybar">
       <button class="btn btn-ghost btn-sm" onclick="moveDay(-1)">◀</button>
       <label class="datebox" onclick="event.preventDefault();openCuteCal()" title="押すとカレンダー"><span id="dayLabel"></span><span class="calico">📅</span><input type="date" id="day" onchange="loadDay()"></label>
@@ -64,6 +69,11 @@
     <div class="hint2" style="margin-bottom:8px">その日に受付のあったキャストが並びます。報酬・雑費・交通費バックは自動で計算。プラス・マイナスは手で足せます。<b>終わったら「精算済にする」。</b> <a href="posting.html" target="_blank" rel="noopener" style="font-weight:800;color:#7b5cd6">📖 ポスティング方法（新人さん用）</a></div>
     <div style="margin:0 0 8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="unsListToggle()">📒 未精算のキャスト（たたむ・ひらく）</button><button class="btn btn-ghost btn-sm" id="shopAllBtn" onclick="shopAllToggle()">🏪 全キャストの店落ちを開く</button></div>
     <div id="unsList" style="background:#F6F2FF;border-radius:14px;padding:10px 12px;margin-bottom:10px"></div>
+  </div>
+  </div>
+  <div id="gate" class="gate">読み込み中…</div>
+
+  <div id="main" style="display:none">
     <div style="margin:0 0 8px"><button class="btn btn-ghost btn-sm" onclick="slogToggle()">📜 精算・未精算のログ（月ごと）</button></div>
     <div id="slogPanel" style="display:none;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:10px"></div>
     <div class="sum" id="sum"></div>
@@ -105,7 +115,8 @@ async function init(){
     const [casts, stores, rules] = r.map(q);
     M = { casts, stores, rules };
   }catch(e){ $("gate").textContent = "読み込みに失敗しました：" + (e.message || e); return; }
-  $("gate").style.display = "none"; $("main").style.display = "";
+  $("gate").style.display = "none"; $("main").style.display = ""; $("mainTop").style.display = "";
+  try{ new ResizeObserver(() => document.documentElement.style.setProperty("--stickyH", (window.innerWidth > 700 ? $("stickyTop").offsetHeight : 0) + "px")).observe($("stickyTop")); }catch(e){}
   $("day").value = KB.startDay(); loadDay();   // 回収明細の ↗（?d=）・前のページで見ていた日
 
 }
