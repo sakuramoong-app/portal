@@ -247,7 +247,9 @@
   #ntfBox .ntfhd{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;font-weight:800;color:#2B4C8C;border-bottom:1.5px solid #DCE6FA;font-size:14px;}
   #ntfBox .ntfhd button{font-family:inherit;font-size:12.5px;font-weight:800;background:#EEF4FF;border:1px solid #BCD0F5;border-radius:99px;padding:3px 10px;margin-left:4px;cursor:pointer;color:#2B4C8C;}
   #ntfBox .ntflist{max-height:24vh;overflow-y:auto;padding:4px 8px 8px;}
-  #ntfBox .ntfrow{padding:6px 4px;border-bottom:1px dashed #DCE6FA;font-size:13.5px;font-weight:700;color:#23375e;} #ntfBox .ntfrow.go{cursor:pointer;} #ntfBox .ntfrow.go:hover{background:#F5F8FF;}
+  #ntfBox .ntfrow{padding:6px 4px;border-bottom:1px dashed #DCE6FA;font-size:13.5px;font-weight:700;color:#23375e;} #ntfBox .ntfrow{display:flex;gap:6px;align-items:center;} #ntfBox .ntfrow > div{flex:1;} #ntfBox .ntfrow .go{cursor:pointer;} #ntfBox .ntfrow .go:hover{background:#F5F8FF;}
+  #ntfBox .ntfbtns{display:flex;flex-direction:column;gap:3px;} #ntfBox .ntfbtns button{font-family:inherit;font-size:11.5px;font-weight:800;background:#fff;border:1px solid #BCD0F5;border-radius:8px;padding:2px 6px;cursor:pointer;color:#2B4C8C;white-space:nowrap;} #ntfBox .ntfbtns button.ok{background:#2E7A35;border-color:#2E7A35;color:#fff;}
+  #ntfBox .ntftabs{display:flex;gap:4px;padding:6px 8px 0;flex-wrap:wrap;} #ntfBox .ntftabs button{font-family:inherit;font-size:12px;font-weight:800;background:#fff;border:1px solid #BCD0F5;border-radius:99px;padding:2px 9px;cursor:pointer;color:#2B4C8C;} #ntfBox .ntftabs button.on{background:#2B4C8C;color:#fff;} #ntfBox .ntftabs .alldone{margin-left:auto;}
   #ntfBox .ntfrow small{display:block;font-size:11.5px;color:#7a86a0;font-weight:600;}
   .snsetonly button{margin-left:6px;}
   .tpled{background:#FFF8E8;border:1.5px solid #F2D49A;border-radius:12px;padding:10px;margin:8px 0;} .tpled textarea,.tpled input{width:100%;font-family:inherit;}
@@ -3838,10 +3840,16 @@ function speak(text){
   if(!text || !window.speechSynthesis) return;
   try{ const u = new SpeechSynthesisUtterance(text); u.lang = "ja-JP"; const v = jaVoice(); if(v) u.voice = v; u.rate = 1.05; speechSynthesis.speak(u); }catch(e){}
 }
-const ntfLog = [];
+// 通知の履歴：ログインしている人ごとに「未処理／⏸ 保留／✓ 済」（この端末に残す。2日たったら消える）
+const ntfKey = () => "kbNtf:" + (KB.operatorName() || "-");
+const ntfLog = (()=>{ try{ const l = JSON.parse(localStorage.getItem(ntfKey()) || "[]"); return Array.isArray(l) ? l.filter(n=>Date.now() - Date.parse(n.at) < 2 * 86400000) : []; }catch(e){ return []; } })();
+function ntfSave(){ if(ntfLog.length > 60) ntfLog.length = 60; try{ localStorage.setItem(ntfKey(), JSON.stringify(ntfLog)); }catch(e){} }
+let ntfTab = "";   // "" 未処理 / "hold" 保留 / "done" 済
+function ntfMark(id, st){ const n = ntfLog.find(x=>x.id === id); if(n){ n.st = st; ntfSave(); renderNtfBox(); } }
+function ntfAllDone(){ ntfLog.forEach(n=>{ if(!n.st) n.st = "done"; }); ntfSave(); renderNtfBox(); }
 function notify(kind, vars, jump){
   const text = ntfText(kind, vars);
-  ntfLog.unshift({ kind, text, jump: jump || "", at: new Date() }); if(ntfLog.length > 30) ntfLog.length = 30;
+  ntfLog.unshift({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), kind, text, jump: jump || "", at: new Date().toISOString(), st: "" }); ntfSave();
   (notify.batch = notify.batch || []).push({ kind, vars });
   if(!notify.q){ notify.q = true; setTimeout(()=>{   // 一度にたくさん出ても、音は1回・声は3件まで
     const b = notify.batch; notify.batch = []; notify.q = false;
@@ -3850,18 +3858,26 @@ function notify(kind, vars, jump){
     says.slice(0, 3).forEach(x=>speak(ntfSay(x.kind, x.vars)));
     if(says.length > 3) speak("ほか" + (says.length - 3) + "件");
   }, 50); }
-  renderNtfBox(true);
+  ntfTab = ""; renderNtfBox(true);
   clearTimeout(notify.t); notify.t = setTimeout(()=>{ const b = $("ntfBox"); if(b && !b.matches(":hover")){ b.classList.remove("open"); renderNtfBox(); } }, 30000);   // 30秒で小さい 🔔 にもどる（押せばまた見られる）
 }
 function renderNtfBox(open){
   let el = $("ntfBox");
   if(!el){ el = document.createElement("div"); el.id = "ntfBox"; document.body.appendChild(el); }
   if(open) el.classList.add("open");
-  const hhmm = d => String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  const hhmm = s => { const d = new Date(s); return (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
+  const cnt = st => ntfLog.filter(n=>(n.st || "") === st).length, nNew = cnt(""), nHold = cnt("hold");
+  const shown = ntfLog.filter(n=>(n.st || "") === ntfTab);
+  el.style.display = el.classList.contains("open") || nNew || nHold ? "" : "none";   // 未処理・保留がなければ 🔔 は出さない（履歴は上の「🔔 通知の履歴」から）
   el.innerHTML = el.classList.contains("open")
-    ? `<div class="ntfhd">🔔 通知（新しい順）<span><button type="button" onclick="openSoundSet()">⚙️ 設定</button><button type="button" onclick="$('ntfBox').classList.remove('open');renderNtfBox()">×</button></span></div>
-       <div class="ntflist">${ntfLog.length ? ntfLog.map(n=>`<div class="ntfrow${n.jump ? " go" : ""}" ${n.jump ? `onclick="${esc(n.jump)}"` : ""}><small>${hhmm(n.at)}・${esc(SOUNDS[soundOf(n.kind)].label)}${voiceOn(n.kind) ? "・🗣" : ""}</small>${esc(n.text)}</div>`).join("") : `<div class="ntfrow">まだ通知はありません</div>`}</div>`
-    : `<button type="button" class="ntfopen" onclick="renderNtfBox(true)">🔔${ntfLog.length ? " " + ntfLog.length : ""}</button>`;
+    ? `<div class="ntfhd">🔔 通知${KB.operatorName() ? `<small>（${esc(KB.operatorName())}）</small>` : ""}<span><button type="button" onclick="openSoundSet()">⚙️ 設定</button><button type="button" onclick="$('ntfBox').classList.remove('open');renderNtfBox()">×</button></span></div>
+       <div class="ntftabs">${[["", "未処理", nNew], ["hold", "⏸ 保留", nHold], ["done", "✓ 済", cnt("done")]].map(([k, l, c])=>`<button type="button" class="${ntfTab === k ? "on" : ""}" onclick="ntfTab='${k}';renderNtfBox()">${l} ${c}</button>`).join("")}
+         ${ntfTab === "" && nNew ? `<button type="button" class="alldone" onclick="ntfAllDone()">ぜんぶ済</button>` : ""}</div>
+       <div class="ntflist">${shown.length ? shown.map(n=>`<div class="ntfrow">
+         <div class="${n.jump ? "go" : ""}" ${n.jump ? `onclick="${esc(n.jump)}"` : ""}><small>${hhmm(n.at)}・${esc(SOUNDS[soundOf(n.kind)].label)}${voiceOn(n.kind) ? "・🗣" : ""}</small>${esc(n.text)}</div>
+         <span class="ntfbtns">${n.st !== "done" ? `<button type="button" class="ok" onclick="ntfMark('${n.id}','done')">✓ 済</button>` : ""}${n.st !== "hold" ? `<button type="button" onclick="ntfMark('${n.id}','hold')">⏸ 保留</button>` : ""}${n.st ? `<button type="button" onclick="ntfMark('${n.id}','')">もどす</button>` : ""}</span></div>`).join("")
+         : `<div class="ntfrow">${ntfTab === "hold" ? "保留はありません" : ntfTab === "done" ? "済はまだありません" : "未処理の通知はありません"}</div>`}</div>`
+    : `<button type="button" class="ntfopen" onclick="ntfTab=${nNew ? "''" : "'hold'"};renderNtfBox(true)">🔔${nNew ? " " + nNew : ""}${nHold ? " ⏸" + nHold : ""}</button>`;
 }
 const NTF_SAMPLE = { 名前: "さくら", 時間: "21:00", 状態: "移動中", 方法: "電話", 内容: "雨なので交通費に気をつけてください" };
 function openSoundSet(){
@@ -4019,7 +4035,7 @@ function renderShiftNotices(){
   el.innerHTML = items.length ? `<div class="callalert shiftn">🔔 出勤・退勤（時間から60分だけ出ます）<button type="button" class="snset" onclick="openShiftNoticeSet()">⚙️ 通知しない子</button>
       <div class="snchips">${items.map(({ c, kind, h })=>`<span class="snchip ${kind}"><b onclick="jumpToCast('${c.id}')">${kind === "in" ? "🌅" : "🌙"}${esc(lateHM(Math.round(h * 60)))} ${esc(c.official_name || c.temp_name)}</b><button type="button" title="テンプレ" onclick="openTplBox(null,'${c.id}','${kind === "in" ? "出勤" : "退勤"}')">📝</button>${KB.CAN_EDIT ? `<button type="button" class="okbtn" title="済" onclick="shiftNoticeDone('${kind}','${c.id}')">✓済</button>` : ""}</span>`).join("")}</div></div>`
     : "";
-  el.insertAdjacentHTML("afterbegin", `<div class="snsetonly"><button type="button" onclick="openTplBox()">📝 テンプレ（送る文）</button>${KB.PRACTICE ? "" : `<button type="button" onclick="openShiftNoticeSet()">🔔 出勤・退勤の通知</button>`}<button type="button" onclick="openSoundSet()">🔊 通知の設定（文・音・声）</button></div>`);
+  el.insertAdjacentHTML("afterbegin", `<div class="snsetonly"><button type="button" onclick="openTplBox()">📝 テンプレ（送る文）</button>${KB.PRACTICE ? "" : `<button type="button" onclick="openShiftNoticeSet()">🔔 出勤・退勤の通知</button>`}<button type="button" onclick="ntfTab='';renderNtfBox(true)">🔔 通知の履歴</button><button type="button" onclick="openSoundSet()">🔊 通知の設定（文・音・声）</button></div>`);
   items.filter(x=>!shiftBeeped.has(x.kind + x.c.id)).forEach(x=>{ shiftBeeped.add(x.kind + x.c.id);
     notify(x.kind, { 名前: x.c.official_name || x.c.temp_name, 時間: lateHM(Math.round(x.h * 60)) }, `jumpToCast('${x.c.id}')`); });
 }
