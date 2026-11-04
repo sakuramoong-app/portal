@@ -235,8 +235,14 @@ async function unsLogOther(date, cid, text, extra, meta){
 }
 
 // 🕒 実際に投函した時刻（カメラのアーカイブで見た時刻）。入れてあれば、精算の時刻はこちらで残す。朝6時より前は営業日の次の日
-const ptVal = {};
-function ptAt(id){ return bizTimeAt(ptVal[id]); }
+const ptVal = {}, ptDay = {}, ptBy = {};   // 精算した時刻・日付・人（あとから入れるとき。2026/11/5）
+function ptAt(id){
+  const v = ptVal[id], d = ptDay[id] || day;
+  if(d === day || !/^\d{2}:\d{2}$/.test(v || "")) return bizTimeAt(v);   // 営業日の日なら、朝6時より前は次の日
+  return new Date(d + "T" + v + ":00+09:00").toISOString();
+}
+// 精算した人のえらぶ一覧（内勤）。今ログインしている人がいちばん上
+function ptStaff(){ const me = KB.operatorName(); return [...new Set([me].concat(["きゃ", "すや", "らん", "かみ", "わか"]).filter(Boolean))]; }
 // 精算済にする：チェックした未精算もいっしょに。投函した額が合わなければ、新しい未精算（お釣り）を入れる
 settle = async function(id){
   // 📷 ポスティング（池袋・鶯谷・五反田）は、写真を入れるか「写真なし（キャストがくれなかった）」を選ばないと精算済にできない（2026/11/4 店長の希望）
@@ -261,7 +267,8 @@ settle = async function(id){
     + (picked.length ? "\n＋ 未精算 " + picked.length + "件（" + yen(add) + "）→ 合計 " + yen(due) : "")
     + (diff ? "\n投函した額 " + yen(c.deposited) + " → " + (diff < 0 ? "未精算 " + yen(-diff) : "お釣り " + yen(diff)) + " を未精算に入れます" : "");
   if(!confirm(msg)) return;
-  const by = KB.operatorName(), at = ptAt(id) || new Date().toISOString(), pl = document.getElementById("pl-" + id), place = pl ? pl.value : "";
+  if(ptDay[id] && ptDay[id] !== day && !ptVal[id]){ toast("🕒 ちがう日に精算したときは、時刻も入れてください"); return; }
+  const by = ptBy[id] || KB.operatorName(), at = ptAt(id) || new Date().toISOString(), pl = document.getElementById("pl-" + id), place = pl ? pl.value : "";
   const camNow = (unsCD()[id] || {}).camera_check || "";
   const labels = picked.map(x => unsLine(x, open.indexOf(x), id));
   const snap = { reward: c.reward, option: c.option, transportBack: c.transportBack, plus: c.plus, zappi: c.zappi, minus: c.minus,
@@ -289,10 +296,10 @@ settle = async function(id){
       note: diff < 0 ? "投函が足りなかった（投函 " + yen(c.deposited) + "／" + yen(due) + "）" : "多く投函した（投函 " + yen(c.deposited) + "／" + yen(due) + "）" }));
   }catch(e){ toast("未精算を保存できませんでした：" + (e.message || e)); return; }
   const cd = unsCD()[id] || {}, logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).slice();
-  logs.push({ at, by, kind: "settle", place, amount: c.deposited != null ? c.deposited : null, cam: cd.camera_check || "", text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") + (noPh ? "\n📷 写真なし（キャストがくれなかった）" : "") });
+  logs.push({ at, by, kind: "settle", place, amount: c.deposited != null ? c.deposited : null, cam: cd.camera_check || "", text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") + (noPh ? "\n📷 写真なし（キャストがくれなかった）" : "") + (by !== KB.operatorName() ? "\n（入力：" + KB.operatorName() + "）" : "") });
   if(noPh) finalSnap.noPhoto = true;
   await saveDay(id, Object.assign({ settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: finalSnap }, HAS_SLOG ? { settle_log: logs } : {}, HAS_170 ? { direct_home: false } : {}));
-  delete unsSel[id]; delete ptVal[id]; delete settleSkip[day + "|" + id]; delete noPhoto[id]; delete plSel[id]; await unsLoad();   // チェックを外した予約は、のこり（未精算）として次に出る
+  delete unsSel[id]; delete ptVal[id]; delete settleSkip[day + "|" + id]; delete noPhoto[id]; delete plSel[id]; delete ptDay[id]; delete ptBy[id]; await unsLoad();   // チェックを外した予約は、のこり（未精算）として次に出る
 };
 // ② 最後の精算（②など）だけ取り消す：その精算でいっしょに精算した未精算をまだにもどし、その精算で自動で入れた未精算は消す
 async function unsettleLastPart(id, cd, s){
@@ -838,10 +845,12 @@ cardHtml = function(id, c){
         : `<button class="btn btn-primary btn-sm" onclick="settle('${id}')">✅ 精算済にする</button>
            <button class="btn btn-ghost btn-sm homebtn" onclick="setDirectHome('${id}',true)">🏠 直帰</button>`) : ""}
     </div>
+    ${KB.CAN_EDIT && !done ? `<div class="ptime">🕒 精算（投函・回収）した日時 <input type="date" value="${ptDay[id] || day}" onchange="ptDay['${id}']=this.value"><input type="time" value="${ptVal[id] || ""}" onchange="ptVal['${id}']=this.value">
+      <span class="ptby">👤 精算した人 <select onchange="ptBy['${id}']=this.value">${ptStaff().map(n => `<option ${(ptBy[id] || KB.operatorName()) === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></span>
+      <small>あとから入れるときに（例：11/2 に らん が回収した）。時刻が空なら「精算済にする」を押した時刻、人は今ログインしている人。ポスティングはカメラのアーカイブで見た時刻</small></div>` : ""}
     <div id="camw-${id}" style="${plNow === "回収" ? "display:none" : ""}">   <!-- 回収場所が待機場（池袋・鶯谷・五反田）のときだけ -->
     <div class="camchk"><span>📹 投函を監視カメラで確認した？<b style="color:#c0392b">（ポスティングは必須）</b></span>
       ${[["ok", "◎ 確認した"], ["ng", "× 確認していない"]].map(([v, l]) => `<button type="button" class="cb ${v} ${cam === v ? "on" : ""}" ${KB.CAN_EDIT ? "" : "disabled"} onclick="setCamera('${id}','${cam === v ? "" : v}')">${l}</button>`).join("")}</div>
-    ${KB.CAN_EDIT && !done ? `<div class="ptime">🕒 実際に投函した時刻 <input type="time" value="${ptVal[id] || ""}" onchange="ptVal['${id}']=this.value"><small>カメラのアーカイブで見た時刻。空なら「精算済にする」を押した時刻</small></div>` : ""}
     </div>
     ${V.dep}
     ${photoBox(id)}
@@ -880,6 +889,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .sv .r.zp{background:#FFF3C4;border-radius:10px;padding:4px 8px;margin:2px -8px;font-weight:900} .sv .r.zp b{color:#c0392b}
   .linecopy{display:inline-flex;flex-direction:column;align-items:center;line-height:1.15;font-family:inherit;background:#06C755;color:#fff;border:none;border-radius:14px;padding:6px 14px;cursor:pointer;font-weight:900;font-size:14px;box-shadow:0 3px 8px rgba(6,199,85,.3)} .linecopy small{font-size:11px;font-weight:800;opacity:.95}
   .nophoto{display:inline-flex;align-items:center;gap:6px;font-weight:800;font-size:13px;margin:4px 0;padding:4px 10px;border:1.5px solid #E8D8DC;border-radius:99px;background:#fff;cursor:pointer}
+  .ptime input[type=date]{font-family:inherit;font-size:15px;font-weight:800;padding:9px 10px;border:1.5px solid var(--line,#F1E3E7);border-radius:12px;background:#fff;color:inherit} .ptby{display:inline-flex;align-items:center;gap:4px} .ptby select{font-family:inherit;font-size:15px;font-weight:800;padding:8px 10px;border:1.5px solid var(--line,#F1E3E7);border-radius:12px;background:#fff;color:inherit}
   .camchk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .camchk > span{flex-basis:100%}
   .camchk .cb{font-family:inherit;font-weight:800;font-size:13px;border:2px solid #ddd;background:#fff;border-radius:99px;padding:4px 12px;cursor:pointer;color:#5C4B4F}
   .camchk .cb.ok.on{background:#E5F6EC;border-color:#2e8b57;color:#2e8b57} .camchk .cb.ng.on{background:#FDE7E7;border-color:#c0392b;color:#c0392b}
