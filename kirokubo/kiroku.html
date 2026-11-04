@@ -2210,9 +2210,13 @@ const __recalc = recalc;
 recalc = function(){
   __recalc();
   if(!last) return;
-  const s = $("f_start").value;
-  if(s){
-    const [h, m] = s.split(":").map(Number);
+  // 打っているとちゅう（100・１２４０ など）でも終了時刻を出す。0〜5時は深夜（100 → 25:00）
+  const s = String($("f_start").value || "").normalize("NFKC").trim();
+  let h = NaN, m = NaN;
+  { const a = /^(\d{1,2}):(\d{1,2})$/.exec(s), d = s.replace(/[^\d]/g, "");
+    if(a){ h = +a[1]; m = +a[2]; } else if(d && d.length <= 4){ if(d.length <= 2){ h = +d; m = 0; } else { h = +d.slice(0, d.length - 2); m = +d.slice(-2); } }
+    if(h < 6) h += 24; }
+  if(s && isFinite(h) && isFinite(m)){
     const t = h * 60 + m + minutesOf(last.course) + last.ext * 30 + last.date * 30;
     $("endView").textContent = lateHM(t);
   } else $("endView").textContent = "--:--";
@@ -3131,7 +3135,7 @@ function renderToday(){
   });
   // 今日の店落ち＝暫定＋雑費 − 内勤の日払い（まだ払っていない人も。エクセルの「店落ち」と同じ）
   const spRows = (typeof staffPay !== "undefined" && staffPay.rows) || [];
-  const staffPaid = spRows.reduce((a, r) => a + (r.amount != null ? Number(r.amount) || 0 : (r.in != null && r.out != null && r.out > r.in ? Math.round((r.out - r.in) * r.hourly) : 0)), 0);
+  const staffPaid = spRows.reduce((a, r) => a + (r.amount != null ? Number(r.amount) || 0 : spAuto(r)), 0);
   el.innerHTML = t("今日の店落ち", yen(part[0] + part[1] - staffPaid) + `<div style="font-size:11.5px;font-weight:700;color:var(--sub);margin-top:2px">暫定＋雑費 ${yen(part[0] + part[1])} − 内勤の日払い ${yen(staffPaid)}</div>`) + t("☀️ 22時までの店落ち", yen(part[0])) + t("🌙 22時からの店落ち", yen(part[1])) + t("カード合計", yen(card)) + t("予約件数", live.length + "件")
     + t("予約のあるキャスト", ids.length + "名") + t("お茶", st.filter(s=>s === "お茶").length + "名") + t("欠勤", st.filter(s=>s === "欠勤").length + "名")
     + t("キャンセル・トビ", rows.filter(r=>r.status === "cancel").length + "件・" + rows.filter(r=>r.status === "tobi").length + "件");
@@ -3152,7 +3156,7 @@ function renderOwner(){
     ["実質的な店落ち", r=>(r.total || 0) - backOf(r) - Math.round(backOf(r) / 9)]];
   // 👤 内勤（スタッフ）：記録簿エクセルと同じく、合計にスタッフ分も入れる。報酬＝日払い（まだ払っていない人も）、残額・店落ちはマイナス、源泉は報酬÷9
   const spRows = (typeof staffPay !== "undefined" && staffPay.rows) || [];
-  const staffAmt = r => r.amount != null ? Number(r.amount) || 0 : (r.in != null && r.out != null && r.out > r.in ? Math.round((r.out - r.in) * r.hourly) : 0);
+  const staffAmt = r => r.amount != null ? Number(r.amount) || 0 : spAuto(r);
   const staff = spRows.filter(r => staffAmt(r) > 0).map(r => { const p = staffAmt(r), w = Math.round(p / 9); return { name: r.name, vals: [0, 0, 0, 0, 0, 0, 0, 0, p, -p, w, -p - w] }; });
   const sum = cols.map(([, f], i)=>live.reduce((a, r)=>a + (Number(f(r)) || 0), 0) + staff.reduce((a, s)=>a + s.vals[i], 0));
   // 合計の源泉は、エクセルと同じく「報酬の合計 ÷ 9 を四捨五入」（1行ずつ四捨五入して足すと数円ずれる）。実質的な店落ちは 残額の合計 − その源泉
@@ -4466,11 +4470,11 @@ $("f_address").addEventListener("change", () => {
 /* ---------- ⌨ パソコンの時刻：数字だけで入れられる（1240 → 12:40、930 → 09:30） ---------- */
 (function(){
   if(/iPhone|iPad|Android/i.test(navigator.userAgent)) return;
-  const norm = v => { const d = String(v || "").replace(/[^\d]/g, ""); if(!d) return ""; let h, m;
+  const norm = v => { const d = String(v || "").normalize("NFKC").replace(/[^\d]/g, ""); if(!d) return ""; let h, m;   // 全角の数字・コロンも（１００ → 25:00）
     if(d.length <= 2){ h = +d; m = 0; } else if(d.length === 3){ h = +d.slice(0, 1); m = +d.slice(1); } else { h = +d.slice(0, 2); m = +d.slice(2, 4); }
     if(m > 59) m = 59; if(h > 29) return String(v); return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0"); };
   const conv = root => (root || document).querySelectorAll('input[type="time"]').forEach(el => {
-    const v = el.getAttribute("value") || el.value; el.type = "text"; el.value = v;   // 27:00 は時刻の欄では消えるので、書いた値（value）から読む el.dataset.tm = "1"; el.placeholder = "--:--"; el.title = "数字だけで入れられます（1240 → 12:40）"; el.style.textAlign = "center"; el.inputMode = "numeric"; el.autocomplete = "off";
+    const v = el.getAttribute("value") || el.value; el.type = "text"; el.value = v;   /* 27:00 は時刻の欄では消えるので、書いた値（value）から読む */ el.dataset.tm = "1"; el.placeholder = "--:--"; el.title = "数字だけで入れられます（1240 → 12:40）"; el.style.textAlign = "center"; el.inputMode = "numeric"; el.autocomplete = "off";
     if(!el.style.width) el.style.width = "84px"; });
   conv();
   new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if(n.nodeType === 1){ if(n.matches && n.matches('input[type="time"]')) conv(n.parentNode); else if(n.querySelector && n.querySelector('input[type="time"]')) conv(n); } }))).observe(document.body, { childList: true, subtree: true });
@@ -5557,11 +5561,14 @@ async function loadStaffPay(){
   }catch(e){ box.innerHTML = `<div class="hist">読めませんでした（SQL 127 は実行ずみ？）：${esc(e.message || e)}</div>`; return; }
   paintStaffPay();
 }
+// 日払いの自動の額（時間×時給）。若林・上川は半額で、2でわった額と前後することが多いので、自動で入れない（空欄。手で入れる）2026/11/5
+const SP_NO_AUTO = ["waka", "kami"];
+function spAuto(r){ if(SP_NO_AUTO.includes(r.id)) return 0; return r.in != null && r.out != null && r.out > r.in ? Math.round((r.out - r.in) * r.hourly) : 0; }
 function paintStaffPay(){
   const box = $("staffPayGrid"); if(!box) return;
   const opts = (sel, from)=>{ let h = `<option value="">--</option>`; for(let x = from; x <= 30; x += 0.5) h += `<option value="${x}" ${sel === x ? "selected" : ""}>${halfLabel(x)}</option>`; return h; };
   const rows = staffPay.rows;
-  const calcAmt = r => r.in != null && r.out != null && r.out > r.in ? Math.round((r.out - r.in) * r.hourly) : 0;
+  const calcAmt = spAuto;
   const paidSum = rows.filter(r=>r.paid).reduce((a, r)=>a + (r.amount != null ? r.amount : calcAmt(r)), 0);
   $("staffPaySum").textContent = rows.length ? `払った ${yen(paidSum)}` : "";
   box.innerHTML = rows.length ? `<div class="wrapx"><table class="list" style="font-size:13.5px"><tr><th>内勤</th><th>出勤</th><th>退勤</th><th>時間</th><th>時給</th><th>日払い</th><th>払った</th><th>どこから</th><th>メモ</th><th></th></tr>
@@ -5590,7 +5597,7 @@ async function spSave(i){
   const r = staffPay.rows[i]; if(!r) return;
   if(r.in != null && r.out != null && r.out <= r.in){ toast("退勤は出勤より後にしてください"); return; }
   if(r.paid && !r.src){ toast("どこから払ったか選んでください"); return; }
-  const hrs = r.in != null && r.out != null ? r.out - r.in : null, amt = r.amount != null ? r.amount : (hrs ? Math.round(hrs * r.hourly) : 0);
+  const hrs = r.in != null && r.out != null ? r.out - r.in : null, amt = r.amount != null ? r.amount : spAuto(r);
   const by = KB.operatorName();
   try{
     q(await sb.from("kb_staff_work").upsert({ biz_date: day, staff_id: r.id, clock_in: r.in, clock_out: r.out, hours: hrs, hourly: r.hourly, day_paid: amt,
