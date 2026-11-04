@@ -346,7 +346,8 @@ function unsSelfDay(){
   if(!day || typeof KB === "undefined" || day >= KB.bizDateOf() || typeof rows === "undefined") return [];
   const cds = unsCD() || {};
   return [...new Set(rows.filter(r => r.cast_id && !["cancel", "tobi"].includes(r.status)).map(r => r.cast_id))]
-    .filter(cid => !(cds[cid] || {}).settled)
+    // 精算済でも、のこした予約（②がまだ）があれば出す（11/2 夏目あん：①だけ精算したら消えていた。2026/11/5）
+    .filter(cid => { const cd = cds[cid] || {}; return !cd.settled || kbPendingAfterSettle(cd, rows.filter(r => r.cast_id === cid)).length; })
     .map(cid => { let c = null; try{ c = calcCast(cid); }catch(e){} return c ? { cid, date: day, amount: c.drop } : null; }).filter(Boolean);
 }
 const unsOpenSet = new Set();   // 未精算のキャスト：開いているキャスト
