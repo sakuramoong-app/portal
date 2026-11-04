@@ -719,7 +719,7 @@ function settleViewHtml(id, c){
     if(r.off) return;
     h += R("コース報酬", yen(r.courseBack)) + r.ops.map(o => R("OP：" + o[0], "＋" + yen(o[1]), "op")).join("") + R("▶ この仕事の報酬（OP込み）", yen(r.total), "ans");
   });
-  h += `<div class="dl"></div>` + R("本日の報酬総額", yen(c.reward), "big") + R("本日のOP総額", yen(c.option), "big") + R("雑費" + (c.cd && c.cd.zappi_override != null ? "（手で直した" + (c.cd.zappi_note ? "：" + esc(c.cd.zappi_note) : "") + "）" : ""), "−" + yen(c.zappi), "big")
+  h += `<div class="dl"></div>` + R("本日の報酬総額", yen(c.reward), "big") + R("本日のOP総額", yen(c.option), "big") + R("雑費" + (c.cd && c.cd.zappi_override != null ? "（手で直した" + (c.cd.zappi_note ? "：" + esc(c.cd.zappi_note) : "") + "）" : ""), "−" + yen(c.zappi), "big zp")
     + P.pm.map(([l, v]) => R(l, pmYen(v), "big")).join("") + `<div class="dl"></div>`;
   h += `<div class="pb"><div class="k">本日の報酬 ／ 本日の手取り額</div><div class="v">${yen(P.pay)} ／ ${yen(c.takeHome)}</div></div>`;
   const dc = dropCalc(c);
@@ -737,17 +737,15 @@ function settleViewHtml(id, c){
     + `<div class="mmn">${MEMO_NOTE.map(esc).join("<br>")}</div>`;
   // 🏪 お店用（投函した額まではアコーディオンの中・過去の未精算と店落ちは外）
   const diff = c.deposited != null ? c.deposited - P.due : null, sel = unsSel[id] || new Set();
-  const past = unsOpen(id).filter(x => x.date !== day && (done || !sel.has(x.key)));
-  const dep = `<div class="sv"><div class="shop"><div class="hd">🏪 お店用</div>
-    <div class="dep" style="border:none;background:transparent;padding:4px 14px 0;margin:6px 0 0"><span>${P.due < 0 ? "お店から渡す額" : "投函額"}</span><b style="font-size:22px;color:${P.due < 0 ? "#2f7fd0" : "#d0121b"}">${yen(Math.abs(P.due))}</b></div>
-    <div class="dep"><span>実際に投函した額</span><input type="number" id="dep-${id}" value="${c.deposited != null ? c.deposited : ""}" placeholder="投函した額" ${KB.CAN_EDIT ? "" : "disabled"} onchange="setDeposit('${id}',this.value)"></div>
+  // お店用の中身（並びは cardHtml で：未精算 → 回収場所・コピー・精算済 → カメラ → 投函額 → 実際に投函した額 → 写真）2026/11/4
+  const dep = `<div class="dep depdue"><span>${P.due < 0 ? "お店から渡す額" : "投函額"}</span><b style="font-size:22px;color:${P.due < 0 ? "#2f7fd0" : "#d0121b"}">${yen(Math.abs(P.due))}</b></div>
+    <div class="dep"><span>実際に投函（回収）した額</span><input type="number" id="dep-${id}" value="${c.deposited != null ? c.deposited : ""}" placeholder="投函した額" ${KB.CAN_EDIT ? "" : "disabled"} onchange="setDeposit('${id}',this.value)"></div>
     <div class="stt" style="color:${diff == null ? "#9C8B8F" : diff === 0 ? "#2e8b57" : diff < 0 ? "#c0392b" : "#2f7fd0"}">${diff == null ? "投函した額をまだ入れていません（お金を確認してから入れる）"
-      : diff === 0 ? "✅ 未精算・お釣りは出ていません" : diff < 0 ? `⚠ 未精算が出ます（足りない ${yen(-diff)}）` : `⚠ お釣りが出ます（多い ${yen(diff)}）`}</div></div></div>`;
+      : diff === 0 ? "✅ 未精算・お釣りは出ていません" : diff < 0 ? `⚠ 未精算が出ます（足りない ${yen(-diff)}）` : `⚠ お釣りが出ます（多い ${yen(diff)}）`}</div>`;
   const stat = diff == null ? "投函した額 まだ" : diff === 0 ? "✅ ぴったり" : diff < 0 ? `⚠ 未精算 ${yen(-diff)}` : `⚠ お釣り ${yen(diff)}`;
-  const pastH = `<div class="sv"><div class="stt" style="color:${past.length ? "#5b3fa6" : "#2e8b57"}">${past.length ? `📒 過去の未精算：のこり ${past.length}件（${esc(past.map(x => unsMd(x.date) + " " + (x.amount < 0 ? "お釣り " : "") + yen(Math.abs(x.amount))).join("、"))}）` : "📒 過去の未精算：なし"}</div></div>`;
   const shop = `<div class="sv"><details class="gb gbd" ${shopOpen.has(id) ? "open" : ""} ontoggle="this.open ? shopOpen.add('${id}') : shopOpen.delete('${id}')"><summary class="k">🏪 店落ち（暫定的な残額＋雑費）<small>押すと開く</small></summary><div class="v">${yen(c.shopDrop)}</div>
       ${R("総額", yen(c.total))}${R("キャスト報酬（報酬＋OP）", yen(c.reward + c.option))}${R("暫定的な残額（総額−報酬）", yen(c.provisional))}${R("＋ 雑費", yen(c.zappi))}${R("＝ 店落ち（暫定的な残額＋雑費）", yen(c.provisional + c.zappi))}${R("【税務用】源泉徴収（手取りからは引かない）", yen(c.withholding))}${R("実質的な店落ち（暫定的な残額−源泉）", yen(c.realDrop))}</details></div>`;
-  return { view: `<div class="sv">${h}</div>`, dep, past: pastH, shop, stat, due: P.due };
+  return { view: `<div class="sv">${h}</div>`, dep, shop, stat, due: P.due };
 }
 // 精算場所の色（今どこに誰が のエリアの色と同じ。回収はピンク）
 const PLACE_COLOR = { "池袋": "#FFC966", "鶯谷": "#CCCCFF", "五反田": "#C6E0B4", "回収": "#FFC2D1" };
@@ -782,7 +780,7 @@ cardHtml = function(id, c){
   // 精算済にする か 🏠 直帰 のどちらも押していない → 右の枠をピカピカ
   const off = cd.status === "お茶" || cd.status === "欠勤";   // お茶・欠勤は、枠ぜんたいを色に（ピカピカはなし）
   const need = KB.CAN_EDIT && !done && !home && !off;
-  const cam = cd.camera_check || "";
+  const cam = cd.camera_check || "", plNow = cd.settle_place || PLACES[0];
   return `<div class="card svc ${done ? "done" : ""} ${cd.status === "お茶" ? "tea" : cd.status === "欠勤" ? "absent" : ""}" id="card-${id}">
     <h2>${esc(castName(id))}${cd.status === "お茶" ? `<span class="st tea">🟩 お茶</span>` : cd.status === "欠勤" ? `<span class="st absent">🟥 欠勤</span>` : ""}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : home ? "🏠 直帰" : "未精算"}</span>${done && (UNS || []).some(x => x.cast_id === id && x.biz_date === day && !x.done_on) ? `<span class="st" style="background:#FDE7E7;color:#c0392b;margin-left:4px">⚠️ 未精算あり</span>` : ""}
       ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
@@ -796,33 +794,37 @@ cardHtml = function(id, c){
     </details>
     </div><div class="svr ${need ? "need" : ""}">
     ${need ? `<div class="needmsg">👇「精算済にする」か「🏠 直帰」のどちらかを押してください</div>` : ""}
+    <div class="zpbox">🧾 雑費 <b>−${yen(c.zappi)}</b><small>${cd.zappi_override != null ? "（手で直した" + (cd.zappi_note ? "：" + esc(cd.zappi_note) : "") + "）" : "（自動）"}　忘れずに引く</small></div>
     ${dis ? "" : `<div class="pmz"><div class="pmzh">✏️ プラス・マイナス・雑費を直す</div>
       <div class="hint2" style="margin-top:6px">② プラス（交通費など）</div><div class="items">${items(c.plusItems, "plus")}</div>
       <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','plus')">＋ プラスを足す</button>
       <div class="hint2" style="margin-top:8px">マイナス（立て替えなど・雑費以外）</div><div class="items">${items(c.minusItems, "minus")}</div>
       <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','minus')">＋ マイナスを足す</button>
-      <div class="hint2" style="margin-top:8px">雑費（自動：${yen(c.zappiAuto)}）</div>
+      <div class="hint2 zph">🧾 雑費（自動：${yen(c.zappiAuto)}）</div>
       <div class="it" style="display:flex;gap:6px;align-items:center"><input type="number" id="zo-${id}" value="${cd.zappi_override != null ? cd.zappi_override : ""}" placeholder="空なら自動" style="width:120px"><input id="zr-${id}" value="${esc(cd.zappi_note || "")}" maxlength="100" placeholder="理由（例：体調不良で早退のため雑費なし）" style="flex:1;min-width:160px">
         <button class="btn btn-ghost btn-sm" onclick="setZappi('${id}')">雑費を直す</button></div>
     </div>`}
     ${V.shop}
+    <div class="sv"><div class="shop"><div class="hd">🏪 お店用</div>
     ${unsBoxHtml(id, c)}
-    ${V.dep}
-    <div class="camchk"><span>📹 投函を監視カメラで確認した？</span>
-      ${[["ok", "◎ 確認した"], ["ng", "× 確認していない"]].map(([v, l]) => `<button type="button" class="cb ${v} ${cam === v ? "on" : ""}" ${KB.CAN_EDIT ? "" : "disabled"} onclick="setCamera('${id}','${cam === v ? "" : v}')">${l}</button>`).join("")}</div>
-    ${KB.CAN_EDIT && !done ? `<div class="ptime">🕒 実際に投函した時刻 <input type="time" value="${ptVal[id] || ""}" onchange="ptVal['${id}']=this.value"><small>カメラのアーカイブで見た時刻。空なら「精算済にする」を押した時刻</small></div>` : ""}
-    ${photoBox(id)}
-    ${V.past}
     <div class="acts">
-      ${KB.CAN_EDIT ? `<select id="pl-${id}" class="plsel" style="background-color:${PLACE_COLOR[cd.settle_place || PLACES[0]] || "#fff"}" ${done ? "disabled" : ""}
-          onchange="this.style.backgroundColor = PLACE_COLOR[this.value] || '#fff'">${PLACES.map(p=>`<option ${cd.settle_place === p ? "selected" : ""} style="background:${PLACE_COLOR[p] || "#fff"}">${p}</option>`).join("")}</select>` : ""}
-      <button class="btn btn-ghost btn-sm" onclick="copyDetailImg('${id}')">🖼 画像でコピー</button>
+      ${KB.CAN_EDIT ? `<select id="pl-${id}" class="plsel" style="background-color:${PLACE_COLOR[plNow] || "#fff"}" ${done ? "disabled" : ""}
+          onchange="this.style.backgroundColor = PLACE_COLOR[this.value] || '#fff'; const w = document.getElementById('camw-${id}'); if(w) w.style.display = this.value === '回収' ? 'none' : ''">${PLACES.map(p=>`<option ${cd.settle_place === p ? "selected" : ""} style="background:${PLACE_COLOR[p] || "#fff"}">${p}</option>`).join("")}</select>` : ""}
+      <button class="linecopy" onclick="copyDetailImg('${id}')"><span>🖼 明細コピー</span><small>LINEで貼付 📷</small></button>
       ${KB.CAN_EDIT ? (done
         ? `<button class="btn btn-ghost btn-sm" onclick="unsettle('${id}')">↩ 精算済をもどす</button>`
         : home ? `<button class="btn btn-ghost btn-sm" onclick="setDirectHome('${id}',false)">↩ 直帰をもどす</button>`
         : `<button class="btn btn-primary btn-sm" onclick="settle('${id}')">✅ 精算済にする</button>
            <button class="btn btn-ghost btn-sm homebtn" onclick="setDirectHome('${id}',true)">🏠 直帰</button>`) : ""}
     </div>
+    <div id="camw-${id}" style="${plNow === "回収" ? "display:none" : ""}">   <!-- 回収場所が待機場（池袋・鶯谷・五反田）のときだけ -->
+    <div class="camchk"><span>📹 投函を監視カメラで確認した？</span>
+      ${[["ok", "◎ 確認した"], ["ng", "× 確認していない"]].map(([v, l]) => `<button type="button" class="cb ${v} ${cam === v ? "on" : ""}" ${KB.CAN_EDIT ? "" : "disabled"} onclick="setCamera('${id}','${cam === v ? "" : v}')">${l}</button>`).join("")}</div>
+    ${KB.CAN_EDIT && !done ? `<div class="ptime">🕒 実際に投函した時刻 <input type="time" value="${ptVal[id] || ""}" onchange="ptVal['${id}']=this.value"><small>カメラのアーカイブで見た時刻。空なら「精算済にする」を押した時刻</small></div>` : ""}
+    </div>
+    ${V.dep}
+    ${photoBox(id)}
+    </div></div>
     </div></div>
     ${settleLogHtml(id)}
   </div>`;
@@ -850,6 +852,12 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .needmsg{font-weight:900;color:#B26A00;font-size:13.5px;margin:0 0 6px}
   .homebtn{background:#EDEDED !important;border-color:#bbb !important;font-weight:800}
   .ptime{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .ptime input, input[id^="uo_t_"]{font-family:inherit;font-size:16px;font-weight:800;padding:10px 12px;border:1.5px solid var(--line,#F1E3E7);border-radius:12px;background:#fff;color:var(--ink,#5C4B4F);min-width:150px}   /* 受付の時刻の欄と同じ形 */ .ptime small{flex-basis:100%;font-weight:700;color:#9C8B8F;font-size:11.5px}
+  .dep{border-radius:14px !important} .gb{border-radius:14px !important} .shop{border-top:none !important;background:#FFFDFB;border:2px solid #F1E3E7;border-radius:16px;padding:8px 12px 10px !important}
+  .dep.depdue{border:none;background:transparent;padding:4px 4px 0;margin:6px 0 0}
+  .zpbox{background:#FFF3C4;border:2.5px solid #F2B705;border-radius:14px;padding:8px 14px;margin:6px 0 8px;font-weight:900;font-size:16px;color:#7a5200} .zpbox b{font-size:22px;color:#c0392b;margin-left:6px} .zpbox small{display:block;font-size:12px;font-weight:700;color:#9a7a20}
+  .sv .r.zp{background:#FFF3C4;border-radius:10px;padding:4px 8px;margin:2px -8px;font-weight:900} .sv .r.zp b{color:#c0392b}
+  .zph{margin-top:8px;font-weight:900 !important;color:#7a5200 !important;font-size:13.5px !important}
+  .linecopy{display:inline-flex;flex-direction:column;align-items:center;line-height:1.15;font-family:inherit;background:#06C755;color:#fff;border:none;border-radius:14px;padding:6px 14px;cursor:pointer;font-weight:900;font-size:14px;box-shadow:0 3px 8px rgba(6,199,85,.3)} .linecopy small{font-size:11px;font-weight:800;opacity:.95}
   .camchk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .camchk > span{flex-basis:100%}
   .camchk .cb{font-family:inherit;font-weight:800;font-size:13px;border:2px solid #ddd;background:#fff;border-radius:99px;padding:4px 12px;cursor:pointer;color:#5C4B4F}
   .camchk .cb.ok.on{background:#E5F6EC;border-color:#2e8b57;color:#2e8b57} .camchk .cb.ng.on{background:#FDE7E7;border-color:#c0392b;color:#c0392b}
