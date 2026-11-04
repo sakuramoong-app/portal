@@ -77,6 +77,10 @@
   .hl{margin-top:4px;font-size:11.5px;} .hl summary{cursor:pointer;color:#8a6d00;font-weight:800;} .hli{background:#FFFCEB;border:1px solid #F2D27A;border-radius:8px;padding:4px 7px;margin-top:4px;white-space:normal;min-width:220px;line-height:1.5;} .hli .ht{white-space:pre-wrap;color:var(--ink);} .hli .hb{color:var(--sub);text-align:right;}
   .who2{font-size:11.5px;color:var(--sub);font-weight:700;margin-top:3px;}
   td.amt b{font-size:15px;} td.amt small{color:var(--sub);font-weight:700;}
+  .sec{font-size:16px;margin:16px 0 6px;color:#7a4a5a;border-bottom:2px solid #F1E3E7;padding-bottom:3px;}
+  .gh{border:2px solid;border-radius:12px 12px 0 0;margin-top:10px;overflow:hidden;} .ght{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 12px;font-size:15px;} .ghs{font-size:13px;font-weight:700;color:#5C4B4F;}
+  .payline,.envline{padding:6px 12px;font-size:13.5px;background:#fff;border-top:1px dashed #E8D8DC;} .envres{margin-left:6px;font-weight:800;}
+  .tk{font-size:13px;font-weight:700;margin-left:6px;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -93,10 +97,6 @@
     </div>
     <div id="dayArea"></div>
 
-    <h2 style="font-size:17px;margin:18px 0 2px">📮 待機場の封筒</h2>
-    <div class="lead">「精算済にする」で精算場所に池袋・鶯谷・五反田を選んだ分が、前回の回収から数えられていきます（日をまたいでたまります。上の表はその日の分だけ）。<br>
-      封筒を回収したら、回収した封筒の数を入れて「📮 回収した」を押してください（そこからまた 0 から数えます）。記録簿の数と同じなら ✅、ちがえば ⚠️ が残ります。</div>
-    <div class="egrid" id="egrid"></div>
   </div>
 </div>
 <script>
@@ -243,7 +243,9 @@ function totalsFor(day, R, rows){
   const sum = (l, f) => l.reduce((a, r) => a + f(r), 0);
   // kb_handovers.expenses：経費（キャッシュフローへの補充）と、type:"transfer" の振込（キャンセル料など。カードと同じ扱い）
   const items = ho && Array.isArray(ho.expenses) ? ho.expenses : [];
-  const ex = sum(items.filter(x => x.type !== "transfer"), x => Number(x.amount) || 0);
+  const ex = sum(items.filter(x => !x.type || x.type === "ex"), x => Number(x.amount) || 0);   // type:"advance"（キキララの立て替え）は経費ではない
+  // 🪙 キキララが足りなくて、売上金（回収金）から立て替えた分（type:"advance"）。キキララから精算（返してもらう）まで、回収金から出ている
+  const adv = items.map((x, i) => Object.assign({ i }, x)).filter(x => x.type === "advance"), advOpen = sum(adv.filter(x => !x.settled), x => Number(x.amount) || 0);
   // 🏦 振込：予約枠の振込（SQL 173。キャンセルの予約は売上に入っていないので、粗利に足してから引く）＋ 回収明細で手で入れた振込
   const trRes = R.resv.filter(r => r.biz_date === day && r.transfer_status && Number(r.transfer_amount));
   const trCancel = sum(trRes.filter(r => ["cancel", "tobi"].includes(r.status)), r => Number(r.transfer_amount));
@@ -266,8 +268,8 @@ function totalsFor(day, R, rows){
   const kikiPaid = (R.kikiPaid || []).filter(x => x.biz_date === day), kikiPaidSum = sum(kikiPaid, x => Number(x.day_paid) || 0);
   const kikiRet = (R.kikiRet || []).filter(x => x.kiki_returned_on === day), kikiRetSum = sum(kikiRet, x => Number(x.day_paid) || 0);
   const unpaid = staff.filter(x => !x.paid), unpaidSum = sum(unpaid, x => Number(x.day_paid) || 0);   // まだ払っていない日払いは、回収金に残っている
-  const hand = fin - A.notCol + kikiPaidSum - kikiRetSum + unpaidSum;   // 随時の回収合計（未回収 ■ を引いた、今渡す額・実際のお金）
-  return { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand, all, kikiPaid, kikiPaidSum, kikiRet, kikiRetSum, unpaid, unpaidSum };
+  const hand = fin - A.notCol + kikiPaidSum - kikiRetSum + unpaidSum - advOpen;   // 随時の回収合計（未回収 ■ を引いた、今渡す額・実際のお金）
+  return { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand, all, kikiPaid, kikiPaidSum, kikiRet, kikiRetSum, unpaid, unpaidSum, adv, advOpen };
 }
 
 /* ---------- 1日ごと ---------- */
@@ -291,7 +293,7 @@ async function loadDay(){
 function paintDay(){
   if(!D) return;
   const all = rowsFor(D.day, D), rows = all.filter(r => !place || r.place === place);
-  const { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand, kikiPaid, kikiPaidSum, kikiRet, kikiRetSum, unpaid, unpaidSum } = totalsFor(D.day, D, rows);
+  const { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand, kikiPaid, kikiPaidSum, kikiRet, kikiRetSum, unpaid, unpaidSum, adv, advOpen } = totalsFor(D.day, D, rows);
   const TRL = { wait: "振込待ち", owner: "社長の確認待ち", done: "✅ 振込処理完了" }, trLine = r => `${esc(names[r.cast_id] || "")} ${["cancel", "tobi"].includes(r.status) ? "キャンセル料" : "もらい忘れ"}（${TRL[r.transfer_status] || ""}）`;
   const ed = KB.CAN_EDIT && !D.no171, dt = new Date(D.day + "T12:00:00Z");
   let h = D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "";
@@ -302,26 +304,53 @@ function paintDay(){
     <div class="s">回収サイン<b><span class="mk day">✔${T.dayN}</span>　<span class="mk me">✔${T.meN}</span>　<span class="mk none">■${T.noneN}</span></b></div>
     <div class="s ${T.yetN ? "ng" : ""}">まだチェックしていない<b>${T.yetN}人</b></div>
     <div class="s ${T.todo ? "ng" : ""}">処理まだ（交通費・経費・精算ミス）<b>${T.todo}件</b></div></div>`;
-  h += `<div class="card"><h2>👛 キャストごとの回収（${md(D.day)}(${DOW[dt.getUTCDay()]})${place ? "・" + esc(place) : ""}）</h2>`;
-  h += kanaBarK(rows);
-  if(!rows.length) h += `<div class="lead">この日に予約のあったキャストはいません。</div>`;
-  else h += `<div class="tbl"><table class="coltbl">
+  /* 👛 回収を3つに分ける（2026/11/4 店長の希望）
+     ① 内勤者ごと：精算場所「回収」（内勤がその場で受け取った）。精算した内勤ごと。内勤の日払いをどこから取ったかも
+     ② 池袋・鶯谷・五反田：封筒（ポスティング）。待機場ごと。あるはずの封筒の数もいっしょに
+     ③ 未割り当て：まだ精算していない（回収・ポスティングすると ① か ② へ） */
+  const gStaff = {}, gPlace = {}, gOpen = [];
+  rows.forEach(r => {
+    if(r.cd.settled && r.place === "回収") (gStaff[r.cd.settled_by || "（名前なし）"] = gStaff[r.cd.settled_by || "（名前なし）"] || []).push(r);
+    else if(r.cd.settled && PLACES.includes(r.place)) (gPlace[r.place] = gPlace[r.place] || []).push(r);
+    else gOpen.push(r);
+  });
+  const staffOfName = nm => staff.filter(x => (staffNames[x.staff_id] || x.staff_id) === nm);
+  if(!place) staff.forEach(x => { const nm = staffNames[x.staff_id] || x.staff_id; if(!gStaff[nm]) gStaff[nm] = []; });   // 回収がなくても、日払いがある内勤は出す
+  const kana = kanaSel ? (r => kanaHeadK(r.id) === kanaSel) : (() => true);
+  const grpSum = list => list.reduce((a, r) => a + r.amt, 0);
+  const grpCnt = list => { const c = list.filter(r => countVal(r) != null); return c.length ? c.reduce((a, r) => a + countVal(r), 0) : null; };
+  const signs = list => `<span class="mk day">✔${list.filter(r => r.state === "day").length}</span> <span class="mk me">✔${list.filter(r => r.state === "me").length}</span>${list.filter(r => !r.state || r.state === "none").length ? ` <span class="mk none">■ 未回収 ${list.filter(r => !r.state || r.state === "none").length}</span>` : ""}`;
+  const todoN = list => list.reduce((a, r) => a + todoOf(r), 0);
+  const table = list => list.length ? `<div class="tbl"><table class="coltbl">
     <tr><th class="l">キャスト名</th><th class="l">回収場所</th><th>店落ち／カード</th><th>封筒の中（数えた額）</th><th class="l">回収サイン</th><th class="l">交通費・経費・精算ミス（処理したら ✓）</th></tr>
-    ${rows.filter(r => !kanaSel || kanaHeadK(r.id) === kanaSel).map(r => { const x = extraItems(r, ed);
-      return `<tr class="${countPerfect(r) ? "perfect" : ""}"><td class="l"><b>${esc(names[r.id] || r.id)}</b>${histHtml(r)}
-          <div class="rowlinks"><a class="j" href="settle.html?d=${r.day}&c=${encodeURIComponent(r.id)}" target="_blank" rel="noopener" title="この日のこの子の精算へ">↗ 精算</a>　<a class="j" href="javascript:void 0" onclick="phView('${r.day}','${esc(r.id)}')">🖼 写真を見る</a></div></td>
-        <td class="l">${r.place ? `<span class="st" style="background:${PLACE_COLOR[r.place] || "#eee"};color:#333">${esc(r.place)}</span>` : ""}</td>
-        <td class="amt"><b>${num(r.shop)}</b> <small>／ ${r.card ? num(r.card) : "0"}</small>${r.card ? `<br><small style="font-weight:900;color:${r.amt < 0 ? "#2f7fd0" : "#c0392b"}">${r.amt < 0 ? "返金 " + num(-r.amt) + "円（お店から渡す）" : "回収 " + num(r.amt) + "円"}</small>` : ""}</td>
-        ${countCell(r, ed)}
-        <td class="l"><span class="cs">${["day", "me"].map(k => `<button class="${k} ${r.state === k ? "on" : ""}" ${ed ? "" : "disabled"} onclick="setState('${r.id}','${r.state === k && !r.auto ? "" : k}')">${STATE[k]}</button>`).join("")}</span>${!r.state || r.state === "none" ? `<div class="who2" style="color:#E0001B">■ 未回収</div>` : ""}${r.cd.settled && r.cd.settled_at ? `<div class="who2">${r.auto ? "✔ 当日回収（自動）・" : ""}精算 ${esc(r.cd.settled_by || "")} ${when(r.cd.settled_at)}</div>` : ""}</td>
-        <td class="l wrapc" id="row-${r.id}">${x}</td></tr>`; }).join("")}
-    <tr class="tot"><td class="l">合計</td><td></td><td>${num(T.shop)} <small>／ ${num(T.card)}</small></td>
-      <td>${(() => { const c = rows.filter(r => countVal(r) != null); return c.length ? num(c.reduce((a, r) => a + countVal(r), 0)) : ""; })()}<div class="who2">💯 ${rows.filter(countPerfect).length} / ${rows.length}人</div></td>
-      <td class="l"><span class="mk day">✔${T.dayN}</span>　<span class="mk me">✔${T.meN}</span>${T.yetN + T.noneN ? `　<span class="mk none">■ 未回収 ${T.yetN + T.noneN}</span>` : ""}</td><td></td></tr>
-  </table></div>
-  <div class="leg">・回収サイン：<b class="mk day">✔ 当日回収</b>（黒）／<b class="mk me">✔ 店長が回収</b>（赤）。どちらも押していなければ <b class="mk none">■ 未回収</b>（そのまま社長に渡す）。もう一度押すと消えます<br>
+    ${list.filter(kana).map(r => rowHtml(r, ed)).join("")}</table></div>` : "";
+  const grpHead = (title, list, color, extra) => `<div class="gh" style="border-color:${color}"><div class="ght" style="background:${color}"><b>${title}</b>
+      <span class="ghs">${list.length}人　回収するはず <b>${yen(grpSum(list))}</b>${grpCnt(list) != null ? `　数えた額 <b>${yen(grpCnt(list))}</b>` : ""}　${signs(list)}${todoN(list) ? `　<span class="st wait">処理まだ ${todoN(list)}</span>` : ""}</span></div>
+      ${extra || ""}</div>`;
+  // 内勤の日払い：この内勤の回収金から取ったか（取っていなければ、回収金に残っている）
+  const payLine = nm => staffOfName(nm).map(x => `<div class="payline">👛 ${esc(nm)}の日払い ${yen(x.day_paid)}：${!x.paid ? `<b style="color:#c0392b">⚠️ まだ取っていない（回収金に残っている・合計に入っています）</b>`
+      : x.pay_source === "kikirara" ? `🪙 キキララから取った${!(D.kikiOpen || []).some(k => k.biz_date === x.biz_date && k.staff_id === x.staff_id) ? `<b style="color:#2e8b57">（✅ 返金ずみ）</b>` : `<b style="color:#c0392b">（まだ返していない → 下の 🪙 キキララで「返金完了」）</b>`}`
+      : `<b style="color:#2e8b57">✅ この日の回収金から取った</b>`}</div>`).join("");
+  h += `<div class="card"><h2>👛 回収（${md(D.day)}(${DOW[dt.getUTCDay()]})${place ? "・" + esc(place) : ""}）</h2>` + kanaBarK(rows);
+  h += `<h3 class="sec">① 内勤者ごと（その場で受け取った分）</h3>`;
+  const sNames = Object.keys(gStaff).sort((a, b) => a.localeCompare(b, "ja"));
+  h += sNames.length ? sNames.map(nm => grpHead("🙋 " + esc(nm), gStaff[nm], "#FFE3EC", payLine(nm)) + table(gStaff[nm])).join("") : `<div class="lead">内勤が受け取った分はありません。</div>`;
+  h += `<h3 class="sec">② 池袋・鶯谷・五反田（封筒）</h3>`;
+  h += PLACES.filter(p => !place || place === p).map(p => { const list = gPlace[p] || [];
+    const posted = list.length;
+    return grpHead("📮 " + p, list, PLACE_COLOR[p], `<div class="envline">この日の封筒 <b>${posted}通</b>${ENV[p] ? `　／　前回の回収からたまっている封筒 <b>${ENV[p].since.length}通</b>${ENV[p].last ? `（前回 ${when(ENV[p].last.checked_at)} ${esc(ENV[p].last.checked_by)}）` : ""}
+      ${KB.CAN_EDIT ? `　回収した封筒 <input type="number" min="0" id="env-${p}" oninput="envCheck('${p}')" style="width:64px"> 通 <button class="btn btn-primary btn-sm" onclick="save('${p}')">📮 回収した</button><span class="envres" id="envres-${p}"></span>` : ""}` : ""}</div>`) + table(list); }).join("");
+  h += `<h3 class="sec">③ 未割り当て（まだ精算していない）</h3><div class="leg" style="margin:0 0 6px">回収（内勤が受け取る）・ポスティング（待機場の封筒）で精算すると、① か ② へ移ります。</div>`;
+  h += gOpen.length ? grpHead("⏳ 未割り当て", gOpen, "#EEE8E9") + table(gOpen) : `<div class="lead">未割り当てはありません 🎉</div>`;
+  h += `<div class="leg">・回収サイン：<b class="mk day">✔ 当日回収</b>（黒）／<b class="mk me">✔ 店長が回収</b>（赤）。どちらも押していなければ <b class="mk none">■ 未回収</b>（そのまま社長に渡す）。もう一度押すと消えます<br>
     ・封筒の中：当日回収・店長が回収を押すと、精算で投函した額が自動で入ります。そろっているはずの額（店落ち − カード − 振込）と同じなら <b>💯 完璧回収</b>（自動）。額がちがったら手で入れなおす<br>
     ・交通費・プラスはキャッシュフローから出して、袋には「店落ち − カード」の額をそろえます　・精算ミスは精算画面で未精算・お釣りになっています。項目ごとに、処理したら ✓</div>`;
+  // 各種回収金の合計（① ② ③ ごと）
+  const totRows = sNames.filter(nm => gStaff[nm].length).map(nm => ["🙋 " + esc(nm), gStaff[nm]]).concat(PLACES.filter(p => gPlace[p]).map(p => ["📮 " + p, gPlace[p]]), gOpen.length ? [["⏳ 未割り当て", gOpen]] : []);
+  h += `<h3 class="sec">💰 各種回収金の合計</h3><div class="tbl"><table class="coltbl"><tr><th class="l">どこ</th><th>人数</th><th>回収するはず</th><th>数えた額</th><th class="l">回収サイン</th></tr>
+    ${totRows.map(([t, l]) => `<tr><td class="l"><b>${t}</b></td><td>${l.length}</td><td>${num(grpSum(l))}</td><td>${grpCnt(l) != null ? num(grpCnt(l)) : ""}</td><td class="l">${signs(l)}</td></tr>`).join("")}
+    <tr class="tot"><td class="l">合計</td><td>${rows.length}</td><td>${num(grpSum(rows))}</td><td>${grpCnt(rows) != null ? num(grpCnt(rows)) : ""}</td><td class="l">${signs(rows)}</td></tr></table></div>
+    <div class="leg">経費をどこの回収金から取ったか、キキララの立て替えは、下の 💼 経費・🪙 キキララ に入れます。</div>`;
   h += `</div>`;
 
   const ex2 = (ho && Array.isArray(ho.expenses) ? ho.expenses : []).map((x, i) => Object.assign({ i }, x));
@@ -329,7 +358,12 @@ function paintDay(){
   const itemRows = (list, kind) => list.map(x => `<tr>
       <td class="l">${ed ? `<input value="${esc(x.memo || "")}" placeholder="${kind === "transfer" ? "メモ（例：キャンセル料 ○○さん）" : "メモ（例：キャッシュフロー補充）"}" maxlength="60" style="width:100%" onchange="setExp(${x.i},'memo',this.value)">` : esc(x.memo || "")}</td>
       <td>${ed ? `<input type="number" value="${Number(x.amount) || ""}" placeholder="金額" style="width:100px;text-align:right" onchange="setExp(${x.i},'amount',this.value)">` : num(x.amount)}</td>
+      ${kind === "ex" ? `<td class="l" style="white-space:nowrap">${fromSel(x, ed)}
+        <label class="tk"><input type="checkbox" ${x.taken ? "checked" : ""} ${ed ? "" : "disabled"} onchange="setExp(${x.i},'taken',this.checked)"> 取った</label>${x.taken && x.taken_by ? `<small class="who2">${esc(x.taken_by)} ${when(x.taken_at)}</small>` : ""}</td>` : ""}
       <td class="l" style="white-space:nowrap">${ed ? `<a class="j" href="javascript:void 0" onclick="delExp(${x.i})">🗑</a>` : ""}</td></tr>`).join("");
+  // どこの回収金から（① 内勤 ／ ② 待機場）
+  const fromOpts = [...new Set(Object.values(staffNames).concat(rowsFor(D.day, D).filter(r => r.place === "回収").map(r => r.cd.settled_by).filter(Boolean)))].map(n => "🙋 " + n).concat(PLACES.map(p => "📮 " + p));
+  function fromSel(x, ed){ return ed ? `<select onchange="setExp(${x.i},'from',this.value)"><option value="">（どこの回収金から？）</option>${fromOpts.concat(x.from && !fromOpts.includes(x.from) ? [x.from] : []).map(o => `<option ${x.from === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>` : esc(x.from || ""); }
   h += `<div class="grid"><div class="card"><h2>🧮 社長に渡す額${place ? "<small style='font-size:12px;color:var(--sub)'>（この日の全部）</small>" : ""}</h2>
     <div class="flow">
       <span>キャスト全員の店落ち（暫定的な残額＋雑費）の合計</span><span class="v">${yen(A.shop)}</span>
@@ -346,6 +380,7 @@ function paintDay(){
       ${kikiPaid.map(x => `<span>＋ 🪙 キキララから払った日払い ${esc(staffNames[x.staff_id] || x.staff_id)}（回収金には残っている）</span><span class="v">＋${yen(x.day_paid)}</span>`).join("")}
       ${unpaid.map(x => `<span style="color:#c0392b">＋ ⚠️ まだ払っていない日払い ${esc(staffNames[x.staff_id] || x.staff_id)}（回収金に残っている）</span><span class="v" style="color:#c0392b">＋${yen(x.day_paid)}</span>`).join("")}
       ${kikiRet.map(x => `<span>− 🪙 キキララへ返金 ${md(x.biz_date)}の ${esc(staffNames[x.staff_id] || x.staff_id)}</span><span class="v">−${yen(x.day_paid)}</span>`).join("")}
+      ${adv.filter(x => !x.settled && Number(x.amount)).map(x => `<span style="color:#c0392b">− 🪙 キキララへ立て替え（まだ精算していない）${esc(x.memo || "")}</span><span class="v" style="color:#c0392b">−${yen(x.amount)}</span>`).join("")}
       <div class="handrow"><span>＝ 🤝 随時の回収合計（今、社長に渡す額）</span><span style="color:#E0001B;font-size:18px">${yen(hand)}</span></div>
     </div>
     <div class="flow" style="margin-top:12px">
@@ -354,8 +389,8 @@ function paintDay(){
     </div></div>
   <div class="card"><h2>💼 経費（E：回収金からキャッシュフローに補充）</h2>
     <div class="leg" style="margin:0 0 6px">キャッシュフローが足りなくなったときに、回収金から補充した額を入れます。キャストの交通費は、キャッシュフローから出したものなので、ここには入れません。</div>
-    <table class="ex">${itemRows(ex2.filter(x => x.type !== "transfer"), "ex")}
-      ${ed ? `<tr><td class="l" colspan="3"><button class="btn btn-ghost btn-sm" onclick="addExp()">＋ 経費を足す</button></td></tr>` : ""}</table>
+    <table class="ex">${itemRows(ex2.filter(x => !x.type || x.type === "ex"), "ex")}
+      ${ed ? `<tr><td class="l" colspan="4"><button class="btn btn-ghost btn-sm" onclick="addExp()">＋ 経費を足す</button></td></tr>` : ""}</table>
     <h2 style="margin-top:12px">🏦 振込（キャンセル料など）</h2>
     <div class="leg" style="margin:0 0 6px">お店の口座に振り込まれた分です。カードと同じで、粗利には入りますが、回収金には入りません。</div>
     <table class="ex">${itemRows(ex2.filter(x => x.type === "transfer"), "transfer")}
@@ -368,12 +403,32 @@ function paintDay(){
       ${kikiRet.map(x => `<tr><td class="l">${md(x.biz_date)} ${esc(staffNames[x.staff_id] || x.staff_id)}<small style="color:#2e8b57">（✅ この日に返した${x.kiki_returned_by ? "・" + esc(x.kiki_returned_by) : ""}）</small></td><td>${num(x.day_paid)}</td>
         <td class="l">${ed ? `<a class="j" href="javascript:void 0" onclick="kikiReturn('${x.biz_date}','${esc(x.staff_id)}',false)">取り消し</a>` : ""}</td></tr>`).join("")}
       ${!(D.kikiOpen || []).length && !kikiRet.length ? `<tr><td class="l" colspan="3" style="color:var(--sub)">返していないキキララの日払いはありません</td></tr>` : ""}</table>`}
+    <h2 style="margin-top:12px">🪙 キキララが足りない → 売上金から立て替え</h2>
+    <div class="leg" style="margin:0 0 6px">両替金（キキララ）が足りなくなって、この日の売上金（回収金）から一時的に立て替えた分です。キキララから売上金へもどしたら「立て替え精算した」に ✓（それまでは社長に渡す額から引いています）。</div>
+    <table class="ex">${adv.map(x => `<tr>
+        <td class="l">${ed ? `<input value="${esc(x.memo || "")}" placeholder="メモ（例：両替が足りない）" maxlength="60" style="width:100%" onchange="setExp(${x.i},'memo',this.value)">` : esc(x.memo || "")}</td>
+        <td>${ed ? `<input type="number" value="${Number(x.amount) || ""}" placeholder="金額" style="width:100px;text-align:right" onchange="setExp(${x.i},'amount',this.value)">` : num(x.amount)}</td>
+        <td class="l" style="white-space:nowrap">${fromSel(x, ed)}
+          <label class="tk"><input type="checkbox" ${x.settled ? "checked" : ""} ${ed ? "" : "disabled"} onchange="setExp(${x.i},'settled',this.checked)"> 立て替え精算した</label>${x.settled && x.settled_by ? `<small class="who2">${esc(x.settled_by)} ${when(x.settled_at)}</small>` : ""}</td>
+        <td class="l">${ed ? `<a class="j" href="javascript:void 0" onclick="delExp(${x.i})">🗑</a>` : ""}</td></tr>`).join("")}
+      ${ed ? `<tr><td class="l" colspan="4"><button class="btn btn-ghost btn-sm" onclick="addExp('advance')">＋ 立て替えを足す</button></td></tr>` : ""}</table>
     <div class="hand"><div class="k">🤝 社長に手渡し（随時の回収合計・現金）</div><div class="v">${yen(hand)}</div></div>
     ${ho && ho.received_at && ho.received_amount != null && ho.received_amount !== hand ? `<div class="warn" style="margin-top:8px">受け取ったときは ${yen(ho.received_amount)} でした。そのあと ${sgn(hand - ho.received_amount)}円 変わっています（あとから回収した分など）。</div>` : ""}
     <div class="chk"><input type="checkbox" ${ho && ho.received_at ? "checked" : ""} ${KB.IS_OWNER && !D.no171 ? "" : "disabled"} onchange="setReceived(this.checked)"> 社長が受け取った
       <small>${ho && ho.received_at ? `${esc(ho.received_by)} ${when(ho.received_at)}（${yen(ho.received_amount ?? hand)}）` : "（社長のログインでだけ押せる・日時が残る）"}</small></div>
   </div></div>`;
   $("dayArea").innerHTML = h;
+}
+// 回収の表の1行（キャスト1人）
+function rowHtml(r, ed){
+  const x = extraItems(r, ed);
+  return `<tr class="${countPerfect(r) ? "perfect" : ""}"><td class="l"><b>${esc(names[r.id] || r.id)}</b>${histHtml(r)}
+          <div class="rowlinks"><a class="j" href="settle.html?d=${r.day}&c=${encodeURIComponent(r.id)}" target="_blank" rel="noopener" title="この日のこの子の精算へ">↗ 精算</a>　<a class="j" href="javascript:void 0" onclick="phView('${r.day}','${esc(r.id)}')">🖼 写真を見る</a></div></td>
+        <td class="l">${r.place ? `<span class="st" style="background:${PLACE_COLOR[r.place] || "#eee"};color:#333">${esc(r.place)}</span>` : ""}</td>
+        <td class="amt"><b>${num(r.shop)}</b> <small>／ ${r.card ? num(r.card) : "0"}</small>${r.card ? `<br><small style="font-weight:900;color:${r.amt < 0 ? "#2f7fd0" : "#c0392b"}">${r.amt < 0 ? "返金 " + num(-r.amt) + "円（お店から渡す）" : "回収 " + num(r.amt) + "円"}</small>` : ""}</td>
+        ${countCell(r, ed)}
+        <td class="l"><span class="cs">${["day", "me"].map(k => `<button class="${k} ${r.state === k ? "on" : ""}" ${ed ? "" : "disabled"} onclick="setState('${r.id}','${r.state === k && !r.auto ? "" : k}')">${STATE[k]}</button>`).join("")}</span>${!r.state || r.state === "none" ? `<div class="who2" style="color:#E0001B">■ 未回収</div>` : ""}${r.cd.settled && r.cd.settled_at ? `<div class="who2">${r.auto ? "✔ 当日回収（自動）・" : ""}精算 ${esc(r.cd.settled_by || "")} ${when(r.cd.settled_at)}</div>` : ""}</td>
+        <td class="l wrapc" id="row-${r.id}">${x}</td></tr>`;
 }
 // あかさたな：押した行（あ行・か行…）のキャストだけ表に出す。もう一度押す／「全員」で元にもどす（記録簿・精算と同じ）
 const KANA_ROWS = [["あ", "あいうえおぁぃぅぇぉ"], ["か", "かきくけこがぎぐげご"], ["さ", "さしすせそざじずぜぞ"], ["た", "たちつてとだぢづでどっ"], ["な", "なにぬねの"],
@@ -482,9 +537,14 @@ async function saveHo(patch){
 }
 const HO = () => D.ho.find(h => h.biz_date === D.day) || null;
 const exList = () => ((HO() && Array.isArray(HO().expenses)) ? HO().expenses : []).map(x => Object.assign({}, x));
-function addExp(type){ const l = exList(); l.push(type === "transfer" ? { type, memo: "キャンセル料", amount: 0 } : { memo: "キャッシュフロー補充", amount: 0 }); saveHo({ expenses: l }); }
+function addExp(type){ const l = exList(); l.push(type === "transfer" ? { type, memo: "キャンセル料", amount: 0 } : type === "advance" ? { type, memo: "両替が足りない", amount: 0, from: "", settled: false } : { memo: "キャッシュフロー補充", amount: 0, from: "", taken: false }); saveHo({ expenses: l }); }
 function delExp(i){ const l = exList(); if(!confirm("この行を消しますか？")) return; l.splice(i, 1); saveHo({ expenses: l }); }
-function setExp(i, k, v){ const l = exList(); if(!l[i]) return; l[i][k] = k === "amount" ? Math.max(0, Number(v) || 0) : v; saveHo({ expenses: l }); }
+function setExp(i, k, v){
+  const l = exList(); if(!l[i]) return;
+  l[i][k] = k === "amount" ? Math.max(0, Number(v) || 0) : v;
+  if(k === "taken" || k === "settled"){ l[i][k + "_by"] = v ? KB.operatorName() : ""; l[i][k + "_at"] = v ? new Date().toISOString() : null; }   // ✓ した人・時刻
+  saveHo({ expenses: l });
+}
 function setReceived(on){
   if(!KB.IS_OWNER) return;
   const hand = totalsFor(D.day, D).hand;
@@ -553,22 +613,10 @@ async function load(){
       if(last) qq = qq.gt("settled_at", last.checked_at);   // 回収の記録がまだなければ、これまでの全部を数える
       ENV[p] = { last, hist: hist.slice(0, 5), since: q(await qq) || [] };
     }
-  }catch(e){ $("egrid").innerHTML = `<div class="warn">読めませんでした（SQL 170 は実行ずみ？）：${esc(e.message || e)}</div>`; return; }
+  }catch(e){ toast("封筒の記録が読めませんでした：" + (e.message || e)); return; }
   paint();
 }
-function paint(){
-  $("egrid").innerHTML = PLACES.map(p => { const E = ENV[p], l = E.last;
-    return `<div class="ec" style="border-color:${PLACE_COLOR[p]}"><div class="et" style="background:${PLACE_COLOR[p]}">${p}</div><div class="body">
-      <div class="now">${l ? `前回の回収 ${when(l.checked_at)}（${esc(l.checked_by)}）から、` : "（回収の記録はまだありません）"}あるはずの封筒</div>
-        <div class="num">${E.since.length}<small>通</small></div>
-        <div class="who">${E.since.length ? (() => { const g = {}; E.since.forEach(x => (g[x.biz_date] = g[x.biz_date] || []).push(names[x.cast_id] || x.cast_id));   // 営業日ごとに（前の日の分もたまっている）
-          return Object.keys(g).sort().map(d => `<div><b>${md(d)}</b>（${g[d].length}通）：${g[d].map(esc).join("・")}</div>`).join(""); })() : "まだ投函はありません"}</div>
-      ${KB.CAN_EDIT ? `<div class="f">回収した封筒 <input type="number" min="0" id="env-${p}" oninput="envCheck('${p}')"> 通 <button class="btn btn-primary btn-sm" onclick="save('${p}')">📮 回収した</button></div>
-        <div class="envres" id="envres-${p}"></div>` : ""}
-      ${E.hist.length ? `<div class="hist">${E.hist.map(h => `<div><span>${when(h.checked_at)} ${esc(h.checked_by)}</span><span style="flex:1"></span>
-        ${h.found === h.expected ? `<span class="ok">✅ ${h.found}通 一致</span>` : `<span class="ng">⚠️ ${h.found}通／記録 ${h.expected}件</span>`}</div>`).join("")}</div>` : ""}
-    </div></div>`; }).join("");
-}
+function paint(){ if(mode === "day") paintDay(); }   // 📮 封筒は ② 池袋・鶯谷・五反田 の中に出す
 // 回収した封筒の数を打ったら、あるはずの数と合っているか、その場で出す
 function envCheck(p){
   const v = $("env-" + p).value, el = $("envres-" + p); if(!el) return;
