@@ -237,6 +237,13 @@ const ptVal = {};
 function ptAt(id){ return bizTimeAt(ptVal[id]); }
 // 精算済にする：チェックした未精算もいっしょに。投函した額が合わなければ、新しい未精算（お釣り）を入れる
 settle = async function(id){
+  // 📹 ポスティング（池袋・鶯谷・五反田）は、監視カメラで確認してからでないと精算済にできない（2026/11/4 店長の希望）
+  { const pl0 = document.getElementById("pl-" + id), place0 = pl0 ? pl0.value : "";
+    if(place0 && place0 !== "回収" && ((unsCD()[id] || {}).camera_check || "") !== "ok"){
+      toast("📹 ポスティングは、監視カメラで投函を確認して「◎ 確認した」を押してから精算済にしてください");
+      const w = document.getElementById("camw-" + id); if(w) w.scrollIntoView({ block: "center", behavior: "smooth" });
+      return;
+    } }
   const c = calcCast(id), sel = unsSel[id] || new Set(), open = unsOpen(id), picked = open.filter(x => sel.has(x.key));
   const add = picked.reduce((a, x) => a + x.amount, 0), due = c.drop + add;
   const diff = c.deposited != null ? c.deposited - due : null;   // −＝足りない（未精算）／＋＝多い（お釣り）
@@ -794,15 +801,14 @@ cardHtml = function(id, c){
     </details>
     </div><div class="svr ${need ? "need" : ""}">
     ${need ? `<div class="needmsg">👇「精算済にする」か「🏠 直帰」のどちらかを押してください</div>` : ""}
-    <div class="zpbox">🧾 雑費 <b>−${yen(c.zappi)}</b><small>${cd.zappi_override != null ? "（手で直した" + (cd.zappi_note ? "：" + esc(cd.zappi_note) : "") + "）" : "（自動）"}　忘れずに引く</small></div>
     ${dis ? "" : `<div class="pmz"><div class="pmzh">✏️ プラス・マイナス・雑費を直す</div>
       <div class="hint2" style="margin-top:6px">② プラス（交通費など）</div><div class="items">${items(c.plusItems, "plus")}</div>
       <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','plus')">＋ プラスを足す</button>
       <div class="hint2" style="margin-top:8px">マイナス（立て替えなど・雑費以外）</div><div class="items">${items(c.minusItems, "minus")}</div>
       <button class="btn btn-ghost btn-sm" onclick="addItem('${id}','minus')">＋ マイナスを足す</button>
-      <div class="hint2 zph">🧾 雑費（自動：${yen(c.zappiAuto)}）</div>
-      <div class="it" style="display:flex;gap:6px;align-items:center"><input type="number" id="zo-${id}" value="${cd.zappi_override != null ? cd.zappi_override : ""}" placeholder="空なら自動" style="width:120px"><input id="zr-${id}" value="${esc(cd.zappi_note || "")}" maxlength="100" placeholder="理由（例：体調不良で早退のため雑費なし）" style="flex:1;min-width:160px">
-        <button class="btn btn-ghost btn-sm" onclick="setZappi('${id}')">雑費を直す</button></div>
+      <div class="zpw"><div class="zph">🧾 雑費（自動：${yen(c.zappiAuto)}）　今：<b>−${yen(c.zappi)}</b></div>
+      <div class="it" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input type="number" id="zo-${id}" value="${cd.zappi_override != null ? cd.zappi_override : ""}" placeholder="空なら自動" style="width:120px"><input id="zr-${id}" value="${esc(cd.zappi_note || "")}" maxlength="100" placeholder="理由（例：体調不良で早退のため雑費なし）" style="flex:1;min-width:160px">
+        <button class="btn btn-ghost btn-sm" onclick="setZappi('${id}')">雑費を直す</button></div></div>
     </div>`}
     ${V.shop}
     <div class="sv"><div class="shop"><div class="hd">🏪 お店用</div>
@@ -818,7 +824,7 @@ cardHtml = function(id, c){
            <button class="btn btn-ghost btn-sm homebtn" onclick="setDirectHome('${id}',true)">🏠 直帰</button>`) : ""}
     </div>
     <div id="camw-${id}" style="${plNow === "回収" ? "display:none" : ""}">   <!-- 回収場所が待機場（池袋・鶯谷・五反田）のときだけ -->
-    <div class="camchk"><span>📹 投函を監視カメラで確認した？</span>
+    <div class="camchk"><span>📹 投函を監視カメラで確認した？<b style="color:#c0392b">（ポスティングは必須）</b></span>
       ${[["ok", "◎ 確認した"], ["ng", "× 確認していない"]].map(([v, l]) => `<button type="button" class="cb ${v} ${cam === v ? "on" : ""}" ${KB.CAN_EDIT ? "" : "disabled"} onclick="setCamera('${id}','${cam === v ? "" : v}')">${l}</button>`).join("")}</div>
     ${KB.CAN_EDIT && !done ? `<div class="ptime">🕒 実際に投函した時刻 <input type="time" value="${ptVal[id] || ""}" onchange="ptVal['${id}']=this.value"><small>カメラのアーカイブで見た時刻。空なら「精算済にする」を押した時刻</small></div>` : ""}
     </div>
@@ -854,9 +860,9 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .ptime{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .ptime input, input[id^="uo_t_"]{font-family:inherit;font-size:16px;font-weight:800;padding:10px 12px;border:1.5px solid var(--line,#F1E3E7);border-radius:12px;background:#fff;color:var(--ink,#5C4B4F);min-width:150px}   /* 受付の時刻の欄と同じ形 */ .ptime small{flex-basis:100%;font-weight:700;color:#9C8B8F;font-size:11.5px}
   .dep{border-radius:14px !important} .gb{border-radius:14px !important} .shop{border-top:none !important;background:#FFFDFB;border:2px solid #F1E3E7;border-radius:16px;padding:8px 12px 10px !important}
   .dep.depdue{border:none;background:transparent;padding:4px 4px 0;margin:6px 0 0}
-  .zpbox{background:#FFF3C4;border:2.5px solid #F2B705;border-radius:14px;padding:8px 14px;margin:6px 0 8px;font-weight:900;font-size:16px;color:#7a5200} .zpbox b{font-size:22px;color:#c0392b;margin-left:6px} .zpbox small{display:block;font-size:12px;font-weight:700;color:#9a7a20}
+  .zpw{background:#FFF3C4;border:2px solid #F2B705;border-radius:14px;padding:8px 10px;margin-top:10px} .zpw .zph{margin:0 0 6px;font-weight:900;color:#7a5200;font-size:14.5px} .zpw .zph b{color:#c0392b;font-size:16px}
+  .pmz input{border:1.5px solid var(--line,#F1E3E7);border-radius:12px;padding:7px 10px;font-family:inherit;font-size:14px;background:#fff;color:inherit}
   .sv .r.zp{background:#FFF3C4;border-radius:10px;padding:4px 8px;margin:2px -8px;font-weight:900} .sv .r.zp b{color:#c0392b}
-  .zph{margin-top:8px;font-weight:900 !important;color:#7a5200 !important;font-size:13.5px !important}
   .linecopy{display:inline-flex;flex-direction:column;align-items:center;line-height:1.15;font-family:inherit;background:#06C755;color:#fff;border:none;border-radius:14px;padding:6px 14px;cursor:pointer;font-weight:900;font-size:14px;box-shadow:0 3px 8px rgba(6,199,85,.3)} .linecopy small{font-size:11px;font-weight:800;opacity:.95}
   .camchk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .camchk > span{flex-basis:100%}
   .camchk .cb{font-family:inherit;font-weight:800;font-size:13px;border:2px solid #ddd;background:#fff;border-radius:99px;padding:4px 12px;cursor:pointer;color:#5C4B4F}
