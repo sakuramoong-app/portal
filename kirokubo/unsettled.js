@@ -180,7 +180,9 @@ function unsCopy(id){
 const logWhen = at => { const d = new Date(at); return isNaN(d) ? "" : (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
 const SLOG_KINDS = { post: "📮 当日ポスティング", late: "💴 未精算を精算", receipt: "🧾 領収書だけ投函", collect: "👛 回収", change: "💴 お釣りを渡した", settle: "✅ 精算済", uns: "⚠️ 未精算にした", memo: "📝 メモ" };
 // ⚠️ あとで対応が必要（精算済のあとに起きたこと）→ 未精算（kb_unsettled）にする。あとは未精算と同じ流れで精算する
-const FOLLOW = { receipt: ["🧾 領収書の投函がまだ", 0], short: ["📮 投函が足りない", 1], over: ["💴 多く投函した・お釣りを渡していない", -1], other: ["📝 その他", 1] };
+// 🔔 次の出勤日に知らせる（SQL 210）：知らせない／出勤時刻／退勤時刻
+const ALERT_AT = { "": "🔔 知らせない", in: "🔔 次の出勤日の出勤時刻に知らせる", out: "🔔 次の出勤日の退勤時刻に知らせる" };
+const alertBox = idAttr => `<select class="unalert" id="${idAttr}">${Object.entries(ALERT_AT).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>`;
 // 時刻（HH:MM）→ その営業日の日時（朝6時より前は次の日）
 function bizTimeAt(v){
   if(!/^\d{2}:\d{2}$/.test(v || "")) return "";
@@ -199,32 +201,12 @@ function settleLogHtml(id){
   return `<div class="slog"><b>📜 精算の履歴</b><small style="color:#9C8B8F">（自動で残ります。上書きしません）</small>
     ${KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-left:6px" onclick="settleLogAdd('${id}')">📝 メモを書く</button>` : ""}
     ${l.length ? l.map(slogLine).join("") : `<div class="hint2" style="font-size:12px">まだありません</div>`}
-    ${KB.CAN_EDIT && cd.settled && UNS !== null ? `<details class="sladd"><summary>⚠️ あとで対応が必要（未精算にする）</summary><div class="slf">
-      <select id="fk-${id}">${Object.entries(FOLLOW).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join("")}</select>
-      <input type="number" id="fa-${id}" min="0" placeholder="金額（領収書は空でOK）" style="width:170px">
-      <input id="fm-${id}" placeholder="メモ（何があったか）" maxlength="200" style="flex:1;min-width:180px">
-      <button type="button" class="btn btn-primary btn-sm" onclick="unsFollow('${id}')">未精算にする</button>
-      <div class="hint2" style="font-size:11.5px;flex-basis:100%">未精算になって、次の精算の「未精算」と「📒 未精算のキャスト」に出ます。精算したときの時刻・場所・内勤・カメラは自動で残ります</div></div></details>` : ""}</div>`;
+  </div>`;   // 「⚠️ あとで対応が必要」は 11/5 にやめた（📒 未精算のキャストの「＋ 未精算を手で足す」で入れる）
 }
 async function settleLogAdd(id){
   const v = prompt("メモ（あとから見てわかるように）"); if(!v || !v.trim()) return;
   const cd = unsCD()[id] || {}, l = (Array.isArray(cd.settle_log) ? cd.settle_log : []).concat([{ at: new Date().toISOString(), by: KB.operatorName(), kind: "memo", text: v.trim() }]);
   await saveDay(id, { settle_log: l });
-}
-async function unsFollow(id){
-  const g = k => { const e = document.getElementById(k + "-" + id); return e ? e.value.trim() : ""; };
-  const k = g("fk"), f = FOLLOW[k], memo = g("fm"), amt = Math.abs(Number(g("fa")) || 0);
-  if(!f) return;
-  if(k !== "receipt" && !amt){ toast("金額を入れてください"); return; }
-  if(k === "other" && !memo){ toast("メモを入れてください"); return; }
-  const amount = k === "receipt" ? 0 : amt * f[1], note = f[0].replace(/^\S+\s/, "") + (memo ? "：" + memo : "");
-  if(!confirm(`${castName(id)}：「${note}」${amount ? (amount > 0 ? " 未精算 " + yen(amount) : " お釣り " + yen(-amount)) : ""} を未精算にしますか？`)) return;
-  const by = KB.operatorName();
-  try{ q(await sb.from("kb_unsettled").insert({ cast_id: id, biz_date: day, amount, note, source: "manual", created_by: by })); }
-  catch(e){ toast("未精算にできませんでした：" + (e.message || e)); return; }
-  const cd = unsCD()[id] || {}, l = (Array.isArray(cd.settle_log) ? cd.settle_log : []).concat([{ at: new Date().toISOString(), by, kind: "uns", amount, text: note }]);
-  await saveDay(id, { settle_log: l });
-  toast("⚠️ 未精算にしました"); await unsLoad();
 }
 // ほかの日の精算に、備考を足す（未精算をいっしょに精算したとき）
 async function unsLogOther(date, cid, text, extra, meta){
@@ -362,6 +344,7 @@ function unsListHtml(){
         ${me.map(x => `<div class="ur"><b class="ab">・</b> <b>${unsMd(x.date)}</b>（${esc(castName(cid))}）${x.amount >= 0 ? "未精算 " + yen(x.amount) : "お店から渡す " + yen(-x.amount)}　<small style="color:#c0392b">今見ている日・まだ精算していない（この日の枠で精算）</small></div>`).join("")}
         ${l.map((x, i) => `<div class="ur">${KB.CAN_EDIT ? `<input type="checkbox" ${(unsOnly[cid] || new Set()).has(x.key) ? "checked" : ""} onchange="unsOnlyToggle('${cid}','${x.key}',this.checked)" title="未精算だけを、今日精算する">` : ""}<b class="ab">${UNS_ABC[i] || i + 1}</b> <b>${unsMd(x.date)}</b>（${esc(castName(cid))}）<span class="${x.amount >= 0 ? "neg" : "pos"}">${esc(x.what)}</span>${unsJump(x.date, cid)}
           ${x.kind === "entry" && x.raw.source === "manual" ? `<small>手で入れた・${esc(x.raw.created_by || "")}</small>` : ""}
+          ${x.kind === "entry" && "alert_at" in x.raw ? (KB.CAN_EDIT ? `<select class="unalert sm" title="次の出勤日に知らせる" onchange="unsSetAlert(${x.raw.id},this.value)">${Object.entries(ALERT_AT).map(([k, lb]) => `<option value="${k}" ${(x.raw.alert_at || "") === k ? "selected" : ""}>${lb.replace("次の出勤日の", "").replace("に知らせる", "")}</option>`).join("")}</select>` : x.raw.alert_at ? `<small>${ALERT_AT[x.raw.alert_at]}</small>` : "") : ""}
           ${KB.CAN_EDIT && x.kind === "entry" ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="unsDel(${x.raw.id})">🗑</button>` : ""}</div>`).join("")}
         ${unsOnlyFoot(cid, l)}</details>`; }).join("") + '</div>'
     : `<div class="hint2">未精算はありません 🎉</div>`}
@@ -369,9 +352,10 @@ function unsListHtml(){
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px">
         <select id="un_cast"><option value="">キャスト</option>${casts.map(c => `<option value="${c.id}">${esc(castName(c.id))}</option>`).join("")}</select>
         <input type="date" id="un_day" value="${day}">
-        <select id="un_kind"><option value="1">未精算（キャストが払う）</option><option value="-1">お釣り（お店が払う）</option></select>
-        <input type="number" id="un_amt" min="1" placeholder="金額" style="width:110px">
+        <select id="un_kind"><option value="1">未精算（キャストが払う）</option><option value="-1">お釣り（お店が払う）</option><option value="r0">🧾 領収書のみ未回収（お金は精算ずみ・金額なし）</option><option value="r1">🧾 領収書未精算（お金も未精算・金額を入れる）</option></select>
+        <input type="number" id="un_amt" min="1" placeholder="金額（領収書のみは空）" style="width:150px">
         <input id="un_note" maxlength="300" placeholder="なんの未精算か（例：エクセルの頃の分）" style="flex:1;min-width:160px">
+        ${alertBox("un_alert")}
         <button type="button" class="btn btn-primary btn-sm" onclick="unsAdd()">足す</button></div></details>` : ""}`;
 }
 // 💴 未精算だけを精算（当日お茶・未精算だけ先に精算する子）。一覧でチェック → 精算場所・投函した額 → 精算済
@@ -416,11 +400,19 @@ async function unsOnlySettle(cid){
   delete unsOnly[cid]; toast(`✅ ${castName(cid)} の未精算を精算しました`);
   if(typeof loadDay === "function") await loadDay(); await unsLoad();
 }async function unsAdd(){
-  const cid = $("un_cast").value, amt = Math.abs(Number($("un_amt").value) || 0), d = $("un_day").value;
-  if(!cid || !amt || !d){ toast("キャスト・日付・金額を入れてください"); return; }
-  try{ q(await sb.from("kb_unsettled").insert({ cast_id: cid, biz_date: d, amount: amt * Number($("un_kind").value), note: $("un_note").value.trim() || "手で入れた未精算", source: "manual", created_by: KB.operatorName() }));
+  const cid = $("un_cast").value, amt = Math.abs(Number($("un_amt").value) || 0), d = $("un_day").value, kind = $("un_kind").value, alert = ($("un_alert") || {}).value || "";
+  const rOnly = kind === "r0", rUns = kind === "r1";
+  if(!cid || !d || (!rOnly && !amt)){ toast(rOnly ? "キャスト・日付を入れてください" : "キャスト・日付・金額を入れてください"); return; }
+  const memo = $("un_note").value.trim();
+  const note = rOnly ? "🧾 領収書のみ未回収（お金は精算ずみ）" + (memo ? "：" + memo : "") : rUns ? "🧾 領収書未精算（お金も未精算）" + (memo ? "：" + memo : "") : memo || "手で入れた未精算";
+  const amount = rOnly ? 0 : rUns ? amt : amt * Number(kind);
+  try{ q(await sb.from("kb_unsettled").insert(Object.assign({ cast_id: cid, biz_date: d, amount, note, source: "manual", created_by: KB.operatorName() }, alert ? { alert_at: alert } : {})));
     toast("未精算を足しました"); await unsLoad(); }
-  catch(e){ toast("足せませんでした：" + (e.message || e)); }
+  catch(e){ toast("足せませんでした：" + (e.message || e) + (alert ? "（🔔 を使うには SQL 210 の実行が必要です）" : "")); }
+}
+async function unsSetAlert(uid, v){
+  try{ q(await sb.from("kb_unsettled").update({ alert_at: v }).eq("id", uid)); toast(v ? ALERT_AT[v] + "ようにしました" : "知らせないようにしました"); await unsLoad(); }
+  catch(e){ toast("保存できませんでした：" + (e.message || e) + "（SQL 210 は実行ずみ？）"); }
 }
 async function unsDel(uid){
   if(!confirm("この未精算を消しますか？（まちがいで入れたとき。精算したときは、精算の枠でチェックして精算済にしてください）")) return;
@@ -891,6 +883,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .linecopy{display:inline-flex;flex-direction:column;align-items:center;line-height:1.15;font-family:inherit;background:#06C755;color:#fff;border:none;border-radius:14px;padding:6px 14px;cursor:pointer;font-weight:900;font-size:14px;box-shadow:0 3px 8px rgba(6,199,85,.3)} .linecopy small{font-size:11px;font-weight:800;opacity:.95}
   .nophoto{display:inline-flex;align-items:center;gap:6px;font-weight:800;font-size:13px;margin:4px 0;padding:4px 10px;border:1.5px solid #E8D8DC;border-radius:99px;background:#fff;cursor:pointer}
   .ptime input[type=date]{font-family:inherit;font-size:15px;font-weight:800;padding:9px 10px;border:1.5px solid var(--line,#F1E3E7);border-radius:12px;background:#fff;color:inherit} .ptby{display:inline-flex;align-items:center;gap:4px} .ptby select{font-family:inherit;font-size:15px;font-weight:800;padding:8px 10px;border:1.5px solid var(--line,#F1E3E7);border-radius:12px;background:#fff;color:inherit}
+  .unalert{font-family:inherit;font-size:13px;font-weight:700;padding:6px 8px;border:1.5px solid var(--line,#F1E3E7);border-radius:10px;background:#fff;color:inherit} .unalert.sm{font-size:11.5px;padding:2px 4px;border-radius:8px}
   .camchk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .camchk > span{flex-basis:100%}
   .camchk .cb{font-family:inherit;font-weight:800;font-size:13px;border:2px solid #ddd;background:#fff;border-radius:99px;padding:4px 12px;cursor:pointer;color:#5C4B4F}
   .camchk .cb.ok.on{background:#E5F6EC;border-color:#2e8b57;color:#2e8b57} .camchk .cb.ng.on{background:#FDE7E7;border-color:#c0392b;color:#c0392b}

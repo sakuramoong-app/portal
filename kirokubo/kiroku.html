@@ -241,6 +241,7 @@
   .dachip button{border:none;background:#fff;border-radius:99px;width:22px;height:22px;cursor:pointer;font-weight:800;color:#a35a00;}
   .daadd{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:13px;font-weight:700;color:var(--sub);} .daadd input{font-family:inherit;font-size:13px;padding:4px 8px;border:1.5px solid var(--line);border-radius:8px;} #da_time{width:64px;} #da_text{width:220px;max-width:60vw;}
   .daadd button{font-family:inherit;font-size:13px;font-weight:800;background:#fff;border:1.5px solid #FFB547;color:#a35a00;border-radius:99px;padding:4px 12px;cursor:pointer;}
+  .snchip.uns{border-color:#F2B705;background:#FFF8DC;}
   #ntfBox{position:fixed;left:12px;bottom:104px;z-index:955;font-family:inherit;}
   #ntfBox .ntfopen{background:#fff;border:1.5px solid #8FB0EE;color:#2B4C8C;border-radius:99px;padding:7px 12px;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(43,76,140,.18);}
   #ntfBox.open{width:min(300px,calc(100vw - 24px));background:#fff;border:2px solid #8FB0EE;border-radius:14px;box-shadow:0 8px 24px rgba(43,76,140,.25);}
@@ -3752,6 +3753,7 @@ const NTF_KINDS = {
   in:      { label: "🌅 出勤の時間",                   def: "chime", voice: false, text: "🌅 {名前}　出勤の時間（{時間}）", say: "{名前}さん、出勤の時間です" },
   out:     { label: "🌙 退勤の時間",                   def: "pon",   voice: false, text: "🌙 {名前}　退勤の時間（{時間}）", say: "{名前}さん、退勤の時間です" },
   notice:  { label: "📢 本日のお知らせ（書きかわった・まだ見ていない）", def: "up", voice: true, text: "📢 お知らせ（{名前}）：{内容}", say: "本日のお知らせです。{内容}" },
+  uns:     { label: "🧾 未精算・領収書（次の出勤日の出勤／退勤時刻）", def: "triple", voice: true, text: "🧾 {名前}　未精算・領収書の回収（{時間}）：{内容}", say: "{名前}さんの未精算と領収書を回収してください" },
   alarm:   { label: "⏰ 時刻アラート（お知らせの下で足したもの）", def: "triple", voice: true, text: "⏰ {時間}　{内容}（{名前}）", say: "{時間}です。{内容}" },
 };
 const SOUNDS = {
@@ -4063,6 +4065,10 @@ function shiftNoticeItems(){
     const dIn = base + hs * 3600000 - ntfBefore("in") * 60000, dOut = base + he * 3600000 - ntfBefore("out") * 60000;   // 「何分前に出す」（通知の設定）
     if(!own.off_in && !cd.notice_in_at && now >= dIn && now < dIn + SN_SHOW_MS) items.push({ c, kind: "in", h: hs });
     if(!own.off_out && !cd.notice_out_at && now >= dOut && now < dOut + SN_SHOW_MS) items.push({ c, kind: "out", h: he });
+    // 🧾 未精算（領収書など）の「次の出勤日の出勤時刻／退勤時刻に知らせる」（SQL 210）。回収するまで、出勤のたびに
+    const uns = ((typeof UNS !== "undefined" && UNS) || []).filter(u => u.cast_id === c.id && !u.done_on && u.alert_at && u.biz_date < today), udone = lsGet("kbUnsAlertDone");
+    ["in", "out"].forEach(at => { const us = uns.filter(u => u.alert_at === at), due = at === "in" ? dIn : dOut;
+      if(us.length && !udone[today + "|" + c.id + "|" + at] && now >= due && now < due + SN_SHOW_MS) items.push({ c, kind: "uns", at, h: at === "in" ? hs : he, us }); });
   });
   return items.sort((a, b)=>a.h - b.h);
 }
@@ -4071,12 +4077,15 @@ function renderShiftNotices(){
   const el = $("shiftAlerts"); if(!el || !M.casts) return;
   const items = shiftNoticeItems();
   el.innerHTML = items.length ? `<div class="callalert shiftn">🔔 出勤・退勤（時間から60分だけ出ます）<button type="button" class="snset" onclick="openShiftNoticeSet()">⚙️ 通知しない子</button>
-      <div class="snchips">${items.map(({ c, kind, h })=>`<span class="snchip ${kind}"><b onclick="jumpToCast('${c.id}')">${kind === "in" ? "🌅" : "🌙"}${esc(lateHM(Math.round(h * 60)))} ${esc(c.official_name || c.temp_name)}</b><button type="button" title="テンプレ" onclick="openTplBox(null,'${c.id}','${kind === "in" ? "出勤" : "退勤"}')">📝</button>${KB.CAN_EDIT ? `<button type="button" class="okbtn" title="済" onclick="shiftNoticeDone('${kind}','${c.id}')">✓済</button>` : ""}</span>`).join("")}</div></div>`
+      <div class="snchips">${items.map(({ c, kind, h, at, us })=> kind === "uns"
+        ? `<span class="snchip uns" title="${esc(us.map(u => u.note || "").join(" ／ "))}"><b onclick="jumpToCast('${c.id}')">🧾${esc(lateHM(Math.round(h * 60)))} ${esc(c.official_name || c.temp_name)} 未精算・領収書 ${us.length}件</b><button type="button" class="okbtn" title="済（この端末で今日は出さない）" onclick="unsAlertDone('${c.id}','${at}')">✓済</button></span>`
+        : `<span class="snchip ${kind}"><b onclick="jumpToCast('${c.id}')">${kind === "in" ? "🌅" : "🌙"}${esc(lateHM(Math.round(h * 60)))} ${esc(c.official_name || c.temp_name)}</b><button type="button" title="テンプレ" onclick="openTplBox(null,'${c.id}','${kind === "in" ? "出勤" : "退勤"}')">📝</button>${KB.CAN_EDIT ? `<button type="button" class="okbtn" title="済" onclick="shiftNoticeDone('${kind}','${c.id}')">✓済</button>` : ""}</span>`).join("")}</div></div>`
     : "";
   el.insertAdjacentHTML("afterbegin", `<div class="snsetonly"><button type="button" onclick="openTplBox()">📝 テンプレ（送る文）</button>${KB.PRACTICE ? "" : `<button type="button" onclick="openShiftNoticeSet()">🔔 出勤・退勤の通知</button>`}<button type="button" onclick="ntfTab='';renderNtfBox(true)">🔔 通知の履歴</button><button type="button" onclick="openSoundSet()">🔊 通知の設定（文・音・声）</button></div>`);
-  items.filter(x=>!shiftBeeped.has(x.kind + x.c.id)).forEach(x=>{ shiftBeeped.add(x.kind + x.c.id);
-    notify(x.kind, { 名前: x.c.official_name || x.c.temp_name, 時間: lateHM(Math.round(x.h * 60)) }, `jumpToCast('${x.c.id}')`); });
+  items.filter(x=>!shiftBeeped.has(x.kind + (x.at || "") + x.c.id)).forEach(x=>{ shiftBeeped.add(x.kind + (x.at || "") + x.c.id);
+    notify(x.kind, { 名前: x.c.official_name || x.c.temp_name, 時間: lateHM(Math.round(x.h * 60)), 内容: x.us ? x.us.map(u => u.note || "").join("／") : "" }, `jumpToCast('${x.c.id}')`); });
 }
+function unsAlertDone(cid, at){ const d = lsGet("kbUnsAlertDone"), today = KB.bizDateOf(); Object.keys(d).forEach(k => { if(k.slice(0, 10) < today) delete d[k]; }); d[today + "|" + cid + "|" + at] = 1; lsSet("kbUnsAlertDone", d); renderShiftNotices(); }
 
 /* ---------- 📝 テンプレ（いろいろな場面で送る文を、自由に登録してコピー）
    kb_settings 'msg_templates' = [{ id, scene, title, text }]。{名前} {時間} は、えらんだキャスト・今の時刻に ---------- */
@@ -6907,6 +6916,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>#list > .cblock.sdone{back
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 <script src="kb_cal.js?v=1"></script>
-<script src="unsettled.js?v=49"></script>
+<script src="unsettled.js?v=50"></script>
 </body>
 </html>
