@@ -237,13 +237,21 @@ const ptVal = {};
 function ptAt(id){ return bizTimeAt(ptVal[id]); }
 // 精算済にする：チェックした未精算もいっしょに。投函した額が合わなければ、新しい未精算（お釣り）を入れる
 settle = async function(id){
-  // 📹 ポスティング（池袋・鶯谷・五反田）は、監視カメラで確認してからでないと精算済にできない（2026/11/4 店長の希望）
-  { const pl0 = document.getElementById("pl-" + id), place0 = pl0 ? pl0.value : "";
-    if(place0 && place0 !== "回収" && ((unsCD()[id] || {}).camera_check || "") !== "ok"){
-      toast("📹 ポスティングは、監視カメラで投函を確認して「◎ 確認した」を押してから精算済にしてください");
-      const w = document.getElementById("camw-" + id); if(w) w.scrollIntoView({ block: "center", behavior: "smooth" });
-      return;
-    } }
+  // 📷 ポスティング（池袋・鶯谷・五反田）は、写真を入れるか「写真なし（キャストがくれなかった）」を選ばないと精算済にできない（2026/11/4 店長の希望）
+  const pl0 = document.getElementById("pl-" + id), place0 = pl0 ? pl0.value : "", phList = phCache[phKey(id)];
+  if(place0 && place0 !== "回収" && !noPhoto[id] && !(phList && phList.length)){
+    toast(phList === null ? "📷 写真を読みこみ中です。少し待ってから、もう一度押してください"
+      : "📷 ポスティングは、お金・領収書の写真を入れるか、「写真なし（キャストがくれなかった）」にチェックしてから精算済にしてください");
+    const w = document.getElementById("ph-" + id); if(w) w.scrollIntoView({ block: "center", behavior: "smooth" });
+    return;
+  }
+  // 📹 ポスティングは、監視カメラで投函を確認するのも必須
+  if(place0 && place0 !== "回収" && ((unsCD()[id] || {}).camera_check || "") !== "ok"){
+    toast("📹 ポスティングは、監視カメラで投函を確認して「◎ 確認した」を押してから精算済にしてください");
+    const w = document.getElementById("camw-" + id); if(w) w.scrollIntoView({ block: "center", behavior: "smooth" });
+    return;
+  }
+  const noPh = place0 !== "回収" && !!noPhoto[id] && !(phList && phList.length);
   const c = calcCast(id), sel = unsSel[id] || new Set(), open = unsOpen(id), picked = open.filter(x => sel.has(x.key));
   const add = picked.reduce((a, x) => a + x.amount, 0), due = c.drop + add;
   const diff = c.deposited != null ? c.deposited - due : null;   // −＝足りない（未精算）／＋＝多い（お釣り）
@@ -279,9 +287,10 @@ settle = async function(id){
       note: diff < 0 ? "投函が足りなかった（投函 " + yen(c.deposited) + "／" + yen(due) + "）" : "多く投函した（投函 " + yen(c.deposited) + "／" + yen(due) + "）" }));
   }catch(e){ toast("未精算を保存できませんでした：" + (e.message || e)); return; }
   const cd = unsCD()[id] || {}, logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).slice();
-  logs.push({ at, by, kind: "settle", place, amount: c.deposited != null ? c.deposited : null, cam: cd.camera_check || "", text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") });
+  logs.push({ at, by, kind: "settle", place, amount: c.deposited != null ? c.deposited : null, cam: cd.camera_check || "", text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") + (noPh ? "\n📷 写真なし（キャストがくれなかった）" : "") });
+  if(noPh) finalSnap.noPhoto = true;
   await saveDay(id, Object.assign({ settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: finalSnap }, HAS_SLOG ? { settle_log: logs } : {}, HAS_170 ? { direct_home: false } : {}));
-  delete unsSel[id]; delete ptVal[id]; delete settleSkip[day + "|" + id]; await unsLoad();   // チェックを外した予約は、のこり（未精算）として次に出る
+  delete unsSel[id]; delete ptVal[id]; delete settleSkip[day + "|" + id]; delete noPhoto[id]; await unsLoad();   // チェックを外した予約は、のこり（未精算）として次に出る
 };
 // ② 最後の精算（②など）だけ取り消す：その精算でいっしょに精算した未精算をまだにもどし、その精算で自動で入れた未精算は消す
 async function unsettleLastPart(id, cd, s){
@@ -864,6 +873,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .pmz input{border:1.5px solid var(--line,#F1E3E7);border-radius:12px;padding:7px 10px;font-family:inherit;font-size:14px;background:#fff;color:inherit}
   .sv .r.zp{background:#FFF3C4;border-radius:10px;padding:4px 8px;margin:2px -8px;font-weight:900} .sv .r.zp b{color:#c0392b}
   .linecopy{display:inline-flex;flex-direction:column;align-items:center;line-height:1.15;font-family:inherit;background:#06C755;color:#fff;border:none;border-radius:14px;padding:6px 14px;cursor:pointer;font-weight:900;font-size:14px;box-shadow:0 3px 8px rgba(6,199,85,.3)} .linecopy small{font-size:11px;font-weight:800;opacity:.95}
+  .nophoto{display:inline-flex;align-items:center;gap:6px;font-weight:800;font-size:13px;margin:4px 0;padding:4px 10px;border:1.5px solid #E8D8DC;border-radius:99px;background:#fff;cursor:pointer}
   .camchk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .camchk > span{flex-basis:100%}
   .camchk .cb{font-family:inherit;font-weight:800;font-size:13px;border:2px solid #ddd;background:#fff;border-radius:99px;padding:4px 12px;cursor:pointer;color:#5C4B4F}
   .camchk .cb.ok.on{background:#E5F6EC;border-color:#2e8b57;color:#2e8b57} .camchk .cb.ng.on{background:#FDE7E7;border-color:#c0392b;color:#c0392b}
@@ -883,12 +893,14 @@ document.addEventListener("focusout", e => { const t = e.target; if(t && t.datas
 const PH_BUCKET = "settle-photos";
 const phCache = {};   // "営業日|キャスト" → [{ name, url }] ／ null＝読みこみ中
 const phKey = id => day + "|" + id;
+const noPhoto = {};   // 📷 写真なし（キャストがくれなかった）にチェックした子（精算済にすると、精算の履歴に残る）
 function photoBox(id){
   const k = phKey(id);
   if(!(k in phCache)){ phCache[k] = null; setTimeout(() => phLoad(id), 0); }
-  const list = phCache[k] || [], ed = KB.CAN_EDIT;
+  const list = phCache[k] || [], ed = KB.CAN_EDIT, cd = unsCD()[id] || {}, done = !!cd.settled, snapNo = !!(cd.settle_snapshot || {}).noPhoto;
   return `<div class="phbox" id="ph-${id}" ${ed ? `tabindex="0" onpaste="phPaste(event,'${id}')"` : ""}>
-    <div class="phh">📷 お金・領収書の写真 <small>${phCache[k] === null ? "読みこみ中…" : list.length ? list.length + "枚" : "まだありません"}</small></div>
+    <div class="phh">📷 お金・領収書の写真 <b style="color:#c0392b;font-size:12px">（ポスティングは必須）</b> <small>${phCache[k] === null ? "読みこみ中…" : list.length ? list.length + "枚" : "まだありません"}</small></div>
+    ${!list.length && (done ? snapNo : ed) ? `<label class="nophoto"><input type="checkbox" ${noPhoto[id] || snapNo ? "checked" : ""} ${done ? "disabled" : ""} onchange="noPhoto['${id}'] = this.checked"> 📷 写真なし（キャストがくれなかった）</label>` : ""}
     ${list.length ? `<div class="phthumbs">${list.map(p => `<span class="pht"><a href="${p.url}" target="_blank" rel="noopener"><img src="${p.url}" alt="写真" loading="lazy"></a>${ed ? `<button type="button" class="phdel" title="この写真を消す" onclick="phDel('${id}','${p.name}')">×</button>` : ""}</span>`).join("")}</div>` : ""}
     ${ed ? `<div class="phbtns"><label class="btn btn-ghost btn-sm">📷 写真をとる<input type="file" accept="image/*" capture="environment" hidden onchange="phFiles(this,'${id}')"></label>
       <label class="btn btn-ghost btn-sm">🖼 写真を選ぶ<input type="file" accept="image/*" multiple hidden onchange="phFiles(this,'${id}')"></label>
