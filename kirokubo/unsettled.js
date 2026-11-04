@@ -29,7 +29,9 @@ function kbPartIds(cd, all, parts){
   const ids = new Set();
   (parts || kbSnapParts(cd)).forEach(p => {
     if(Array.isArray(p.resIds)) p.resIds.forEach(i => ids.add(i));
-    else { const at = p.at || cd.settled_at; all.forEach(r => { if(!at || !r.created_at || String(r.created_at) <= String(at)) ids.add(r.id); }); }
+    // ② ができる前（11/4より前）の精算は、どの予約を精算したか残っていない → その日の予約はぜんぶ精算したものとする
+    //   （あとから手で入れた予約は、作った時刻が精算より後になるので、時刻では分けられない。11/1 ムム：雑費が 0円になっていた）
+    else all.forEach(r => ids.add(r.id));
   });
   return ids;
 }
@@ -290,7 +292,7 @@ settle = async function(id){
   logs.push({ at, by, kind: "settle", place, amount: c.deposited != null ? c.deposited : null, cam: cd.camera_check || "", text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") + (noPh ? "\n📷 写真なし（キャストがくれなかった）" : "") });
   if(noPh) finalSnap.noPhoto = true;
   await saveDay(id, Object.assign({ settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: finalSnap }, HAS_SLOG ? { settle_log: logs } : {}, HAS_170 ? { direct_home: false } : {}));
-  delete unsSel[id]; delete ptVal[id]; delete settleSkip[day + "|" + id]; delete noPhoto[id]; await unsLoad();   // チェックを外した予約は、のこり（未精算）として次に出る
+  delete unsSel[id]; delete ptVal[id]; delete settleSkip[day + "|" + id]; delete noPhoto[id]; delete plSel[id]; await unsLoad();   // チェックを外した予約は、のこり（未精算）として次に出る
 };
 // ② 最後の精算（②など）だけ取り消す：その精算でいっしょに精算した未精算をまだにもどし、その精算で自動で入れた未精算は消す
 async function unsettleLastPart(id, cd, s){
@@ -526,7 +528,9 @@ function settleParts(id){
     const opSum = bo.reduce((a, o) => a + o.back * (o.qty || 1), 0);
     const head = `${hm(r.start_at)} ${storeLabel(r.store_key)} ${r.course}${/^\d+$/.test(r.course) ? "分" : ""}${r.extension_count ? " 延長" + r.extension_count : ""}`;
     const courseBack = off ? 0 : r.back_override != null ? r.back_override : (r.course_back || 0) + (r.extra_back || 0);
-    return { no: i + 1, head, off, st: r.status, courseBack, ops, opSum, total: courseBack + opSum };
+    // お客さんの総額と、新規・店リピ・本指名（精算明細に出す。2026/11/4）
+    const vk = ({ new: "新規", repeat: "店リピ", honshi: "本指名" })[r.visit_kind] || "";
+    return { no: i + 1, head, off, st: r.status, courseBack, ops, opSum, total: courseBack + opSum, guest: Number(r.total) || 0, vk };
   });
   return { c, d, pay, pm, uns, sum, due, memo, res, rest };
 }
@@ -551,6 +555,7 @@ copyDetail = function(id){
   P.res.forEach(r => {
     lines.push("", `■ ${r.no}本目　${r.head}`);
     if(r.off){ lines.push(`　${r.st === "cancel" ? "キャンセル" : "トビ"}（報酬なし）`); return; }
+    lines.push(`　お客さんの総額${r.vk ? "（" + r.vk + "）" : ""}　${yen(r.guest)}`);
     lines.push(`　コース報酬　${yen(r.courseBack)}`);
     r.ops.forEach(o => lines.push(`　OP：${o[0]}　＋${yen(o[1])}`));
     lines.push(`　▶ この仕事の報酬（OP込み）　${yen(r.total)}`);
@@ -581,6 +586,7 @@ settleCanvas = function(id){
   P.res.forEach(r => {
     ops.push(["job", `${r.no}本目`, r.head, r.off ? (r.st === "cancel" ? "キャンセル" : "トビ") : "", r.off]);
     if(r.off) return;
+    ops.push(["jrow", "お客さんの総額" + (r.vk ? "（" + r.vk + "）" : ""), yen(r.guest)]);
     ops.push(["jrow", "コース報酬", yen(r.courseBack)]);
     r.ops.forEach(o => ops.push(["jrow", "OP：" + o[0], "＋" + yen(o[1]), "op"]));
     ops.push(["jsum", "この仕事の報酬（OP込み）", yen(r.total)]);
@@ -733,7 +739,7 @@ function settleViewHtml(id, c){
   P.res.forEach(r => {
     h += `<div class="job ${r.off ? "off" : ""}"><span class="no">${r.no}本目</span><span>${esc(r.head)}</span>${r.off ? `<span style="margin-left:auto">${r.st === "cancel" ? "キャンセル" : "トビ"}</span>` : ""}</div>`;
     if(r.off) return;
-    h += R("コース報酬", yen(r.courseBack)) + r.ops.map(o => R("OP：" + o[0], "＋" + yen(o[1]), "op")).join("") + R("▶ この仕事の報酬（OP込み）", yen(r.total), "ans");
+    h += R("お客さんの総額" + (r.vk ? "（" + r.vk + "）" : ""), yen(r.guest), "gst") + R("コース報酬", yen(r.courseBack)) + r.ops.map(o => R("OP：" + o[0], "＋" + yen(o[1]), "op")).join("") + R("▶ この仕事の報酬（OP込み）", yen(r.total), "ans");
   });
   h += `<div class="dl"></div>` + R("本日の報酬総額", yen(c.reward), "big") + R("本日のOP総額", yen(c.option), "big") + R("雑費" + (c.cd && c.cd.zappi_override != null ? "（手で直した" + (c.cd.zappi_note ? "：" + esc(c.cd.zappi_note) : "") + "）" : ""), "−" + yen(c.zappi), "big zp")
     + P.pm.map(([l, v]) => R(l, pmYen(v), "big")).join("") + `<div class="dl"></div>`;
@@ -796,7 +802,7 @@ cardHtml = function(id, c){
   // 精算済にする か 🏠 直帰 のどちらも押していない → 右の枠をピカピカ
   const off = cd.status === "お茶" || cd.status === "欠勤";   // お茶・欠勤は、枠ぜんたいを色に（ピカピカはなし）
   const need = KB.CAN_EDIT && !done && !home && !off;
-  const cam = cd.camera_check || "", plNow = cd.settle_place || PLACES[0];
+  const cam = cd.camera_check || "", plNow = (done ? cd.settle_place : plSel[id]) || cd.settle_place || PLACES[0];   // 選んだ回収場所は、描きなおしても（カメラ・写真を押しても）そのまま
   return `<div class="card svc ${done ? "done" : ""} ${cd.status === "お茶" ? "tea" : cd.status === "欠勤" ? "absent" : ""}" id="card-${id}">
     <h2>${esc(castName(id))}${cd.status === "お茶" ? `<span class="st tea">🟩 お茶</span>` : cd.status === "欠勤" ? `<span class="st absent">🟥 欠勤</span>` : ""}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : home ? "🏠 直帰" : "未精算"}</span>${done && (UNS || []).some(x => x.cast_id === id && x.biz_date === day && !x.done_on) ? `<span class="st" style="background:#FDE7E7;color:#c0392b;margin-left:4px">⚠️ 未精算あり</span>` : ""}
       ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
@@ -824,7 +830,7 @@ cardHtml = function(id, c){
     ${unsBoxHtml(id, c)}
     <div class="acts">
       ${KB.CAN_EDIT ? `<select id="pl-${id}" class="plsel" style="background-color:${PLACE_COLOR[plNow] || "#fff"}" ${done ? "disabled" : ""}
-          onchange="this.style.backgroundColor = PLACE_COLOR[this.value] || '#fff'; const w = document.getElementById('camw-${id}'); if(w) w.style.display = this.value === '回収' ? 'none' : ''">${PLACES.map(p=>`<option ${cd.settle_place === p ? "selected" : ""} style="background:${PLACE_COLOR[p] || "#fff"}">${p}</option>`).join("")}</select>` : ""}
+          onchange="plSel['${id}'] = this.value; this.style.backgroundColor = PLACE_COLOR[this.value] || '#fff'; const w = document.getElementById('camw-${id}'); if(w) w.style.display = this.value === '回収' ? 'none' : ''">${PLACES.map(p=>`<option ${plNow === p ? "selected" : ""} style="background:${PLACE_COLOR[p] || "#fff"}">${p}</option>`).join("")}</select>` : ""}
       <button class="linecopy" onclick="copyDetailImg('${id}')"><span>🖼 明細コピー</span><small>LINEで貼付 📷</small></button>
       ${KB.CAN_EDIT ? (done
         ? `<button class="btn btn-ghost btn-sm" onclick="unsettle('${id}')">↩ 精算済をもどす</button>`
@@ -893,6 +899,7 @@ document.addEventListener("focusout", e => { const t = e.target; if(t && t.datas
 const PH_BUCKET = "settle-photos";
 const phCache = {};   // "営業日|キャスト" → [{ name, url }] ／ null＝読みこみ中
 const phKey = id => day + "|" + id;
+const plSel = {};   // 精算場所のプルダウンで選んだもの（精算済にするまで覚えておく）
 const noPhoto = {};   // 📷 写真なし（キャストがくれなかった）にチェックした子（精算済にすると、精算の履歴に残る）
 function photoBox(id){
   const k = phKey(id);

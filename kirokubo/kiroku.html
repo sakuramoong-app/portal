@@ -608,7 +608,8 @@
       <div class="row2" style="margin-top:8px">
         <div class="f"><label>売上店舗<span class="req">必須</span></label><select id="f_store" onchange="onStore()"></select></div>
         <div class="f"><label>キャスト（フリーのときは行く人）<span class="req">必須</span></label><select id="f_cast" onchange="onCast()"></select>
-          <label style="display:block;font-size:12px;color:var(--sub);margin-top:4px"><input type="checkbox" id="f_castAll" onchange="fillCastSel()" style="width:auto;display:inline;vertical-align:middle;margin-right:4px"> シフトにない人も出す</label><div id="castLink"></div></div>
+          <label style="display:block;font-size:12px;color:var(--sub);margin-top:4px"><input type="checkbox" id="f_castAll" onchange="fillCastSel()" style="width:auto;display:inline;vertical-align:middle;margin-right:4px"> シフトにない人も出す</label><div id="castLink"></div>
+          <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="toggleFreeNow()">🙋 今行ける子を見る（キャスト未定のとき）</button><div id="freeNowBox"></div></div>
       </div>
       <!-- ダミーのお店（極門・エイティーン）だけ -->
       <div id="dummyWrap" style="display:none;background:#F6F2FE;border-radius:12px;padding:8px 10px;margin-bottom:8px">
@@ -936,7 +937,12 @@ async function saveNotice(){
 
 /* ---------- 受付の小窓 ---------- */
 function storeGroup(store){ const br = M.set.back_ranks || {}; for(const g in br){ if((br[g]||[]).includes(store)) return g; } return "sakurana"; }
-function minutesOf(course){ const m = String(course).match(/(\d+)$/); if(String(course).includes("泊")) return 480; return m ? Number(m[1]) : 0; }
+// お泊り「泊23-5」は 23時〜5時 → 6時間（前は泊はいつも8時間だった。2026/11/4）
+function minutesOf(course){
+  const s = String(course).normalize("NFKC");
+  if(s.includes("泊")){ const t = s.match(/(\d{1,2})\s*[-〜~～]\s*(\d{1,2})/); if(t){ const h = ((Number(t[2]) - Number(t[1])) % 24 + 24) % 24; if(h) return h * 60; } return 480; }
+  const m = s.match(/(\d+)$/); return m ? Number(m[1]) : 0;
+}
 
 function openForm(id){
   editing = id ? rows.find(r=>r.id===id) : null;
@@ -1787,6 +1793,13 @@ function markMissing(list){
 // 入れたら赤い枠を消す
 ["input", "change", "click"].forEach(ev=>document.addEventListener(ev, e=>{ const m = e.target.closest && e.target.closest(".miss"); if(m) m.classList.remove("miss"); }));
 
+// コースの説明（kb_course_info）の【プレイ内容】にふくまれるOPは、お金を取らない（例：極門の極コースは逆AF込み・入門はAF・逆AF込み）2026/11/4
+function courseIncludesOp(store, course, label){
+  const info = (M.courseInfo || []).find(i => i.store_key === store && String(course || "").startsWith(i.course_type));
+  if(!info) return false;
+  const m = String(info.description || "").match(/【プレイ内容】\s*\n?([^\n]*)/);
+  return !!m && m[1].split(/[・、,\s]+/).map(s => s.trim()).includes(label);
+}
 /* ---------- 計算 ---------- */
 function calc(){
   const store = $("f_store").value, g = storeGroup(store), course = $("f_course").value;
@@ -1813,6 +1826,7 @@ function calc(){
   const opts = [];
   M.options.filter(o=>o.store_group===g).forEach(o=>{
     if(!$("o_"+o.code) || !$("o_"+o.code).checked) return;
+    if(courseIncludesOp(store, course, o.label)){ why.push(`${o.label}：コース（${course}）のプレイ内容にふくまれるので 0円`); return; }
     let p = +$("op_"+o.code).value||0, b = +$("ob_"+o.code).value||0;
     const special = cast && rulesOn(cast.id).find(r=>r.kind==="op_price" && r.params.op===o.code && (!r.params.group || r.params.group===g));
     if(special){ p = special.params.price; b = special.params.back; why.push(`${o.label}：特例 ${yen(p)}（バック${yen(b)}）`); }
@@ -3549,6 +3563,26 @@ function freeNowOf(x){
   if(cd.settled || ["お茶", "欠勤", "精算済"].includes(cd.status)) return false;
   return !x.bks.some(b=>b.s - g <= now && now < b.e + g);
 }
+// 🙋 受付の中で「今だれ行けますか？」：今すぐ行ける子と、3時間以内にあく子（あく時刻順）。押すとキャストに入る（2026/11/4）
+function toggleFreeNow(){
+  const el = $("freeNowBox"); if(!el) return;
+  if(el.innerHTML){ el.innerHTML = ""; return; }
+  if(day !== KB.bizDateOf()){ el.innerHTML = `<div class="hint2">今日の画面でだけ使えます</div>`; return; }
+  const now = nowHour(), list = [];
+  tlRows().forEach(x => {
+    if(!x.c || !x.shift) return;
+    const cd = x.cd || {};
+    if(goneKind(cd) || ["お茶", "欠勤"].includes(cd.status)) return;
+    if(freeNowOf(x)){ list.push({ x, at: now, now: true }); return; }
+    const s = freeSlots(x).find(([a, b]) => b > now && a < now + 3);
+    if(s) list.push({ x, at: Math.max(s[0], now), now: false });
+  });
+  list.sort((a, b) => a.at - b.at);
+  el.innerHTML = `<div class="fnbox">${list.length ? list.map(({ x, at, now: n }) => `<button type="button" class="fnchip ${n ? "now" : ""}" onclick="$('f_cast').value='${x.c.id}';onCast();$('freeNowBox').innerHTML=''">
+      <b>${esc(castLabel(x))}</b><small>${n ? "今すぐ" : lateHM(Math.round(at * 60)) + "〜"}${(x.cd && x.cd.standby) ? "・" + esc(x.cd.standby) : ""}・〜${lateHM(Math.round(x.shift.end * 60))}</small></button>`).join("")
+    : `<div class="hint2">今すぐ・3時間以内に行ける子はいません</div>`}</div>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>.fnbox{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px} .fnchip{display:inline-flex;flex-direction:column;align-items:flex-start;font-family:inherit;background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:5px 10px;cursor:pointer;color:#5C4B4F} .fnchip.now{border-color:#2e8b57;background:#EFF9F2} .fnchip b{font-size:14px} .fnchip small{font-size:11.5px;color:var(--sub);font-weight:700}</style>`);
 sortRows = function(list){
   const mode = ($("s_sort") && $("s_sort").value) || "kana";
   const kana = x => String((x.c && (x.c.kana || x.c.official_name || x.c.temp_name)) || x.name);
@@ -6844,24 +6878,28 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 
 
 /* ---------- 本日のキャスト：お茶・欠勤の子は、あいうえお順（ほかの並び順も）から外して、いちばん下の別枠へ ---------- */
+// ✅ 精算済（ふえた予約もない）の子も、グレーにして下の別枠へ（2026/11/4 店長の希望）
+const settledDone = x => !!(x.c && x.cd && x.cd.settled && !(typeof kbPendingAfterSettle === "function" && kbPendingAfterSettle(x.cd, rows.filter(r=>r.cast_id === x.c.id)).length));
 const __sortRowsTea = sortRows;
 sortRows = function(list){
   const out = __sortRowsTea(list);
-  const off = x => !!goneKind(x.cd);
-  return out.filter(x=>!off(x)).concat(out.filter(off));
+  const off = x => !!goneKind(x.cd), sd = x => !off(x) && settledDone(x);
+  return out.filter(x=>!off(x) && !sd(x)).concat(out.filter(sd), out.filter(off));
 };
 const __renderListTea = renderListTable;
 renderListTable = function(){
   __renderListTea.apply(this, arguments);
-  const first = document.querySelector("#list > .cblock.tea, #list > .cblock.absent");
+  tlRows().filter(x => !goneKind(x.cd) && settledDone(x)).forEach(x => { const el = $("cb-" + x.c.id); if(el && el.parentElement && el.parentElement.id === "list") el.classList.add("sdone"); });
+  const sel = "#list > .cblock.sdone, #list > .cblock.tea, #list > .cblock.absent", first = document.querySelector(sel);
   if(first){
-    const n = document.querySelectorAll("#list > .cblock.tea, #list > .cblock.absent").length;
-    first.insertAdjacentHTML("beforebegin", `<div class="teahead" style="margin:18px 0 6px;padding:6px 12px;border-radius:12px;background:#F3F3F3;border:1.5px dashed #CFCFCF;font-weight:900;color:#666">🟩 お茶・🟥 欠勤（${n}名）</div>`);
+    const n = k => document.querySelectorAll("#list > .cblock." + k).length;
+    first.insertAdjacentHTML("beforebegin", `<div class="teahead" style="margin:18px 0 6px;padding:6px 12px;border-radius:12px;background:#F3F3F3;border:1.5px dashed #CFCFCF;font-weight:900;color:#666">${[n("sdone") ? "✅ 精算済（" + n("sdone") + "名）" : "", n("tea") + n("absent") ? "🟩 お茶・🟥 欠勤（" + (n("tea") + n("absent")) + "名）" : ""].filter(Boolean).join("　")}</div>`);
   }
 };
+document.head.insertAdjacentHTML("beforeend", `<style>#list > .cblock.sdone{background:#EFEFEF !important;border-color:#CFCFCF !important;opacity:.8} #list > .cblock.sdone:hover{opacity:1}</style>`);
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 <script src="kb_cal.js?v=1"></script>
-<script src="unsettled.js?v=46"></script>
+<script src="unsettled.js?v=47"></script>
 </body>
 </html>
