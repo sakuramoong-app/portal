@@ -740,6 +740,10 @@ async function saveTerms(){
 (function(){ ["termsBg","hearBg"].forEach(id=>{ let down = false; const bg = $(id);
   bg.addEventListener("mousedown", e=>{ down = e.target === bg; });
   bg.addEventListener("click", e=>{ if(e.target === bg && down) bg.classList.remove("show"); }); }); })();
+// キャストの窓も、窓の外をクリックしたら閉じる（直したプロフがあれば確認してから）。PCの左右に並べる画面では閉じない（2026/11/6）
+(function(){ let down = false; const bg = $("editBg"); if(!bg) return;
+  bg.addEventListener("mousedown", e=>{ down = e.target === bg; });
+  bg.addEventListener("click", e=>{ if(e.target === bg && down && !(typeof isPane === "function" && isPane())) closeEdit(); }); })();
 
 /* ---------- 受付で必ず案内すること（キャストごとの確認事項） ---------- */
 /* ---------- 受付ルール（キャストごと）。kb_cast_checks に入れる ----------
