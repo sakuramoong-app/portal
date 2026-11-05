@@ -484,6 +484,7 @@
       <label>並び・絞り <select id="s_sort" onchange="setSort(this.value)">
         <option value="kana">あいうえお順</option><option value="start">出勤が早い順</option><option value="endEarly">退勤が早い順</option><option value="endLate">退勤が遅い順</option>
         <option value="booked">予約があるキャストのみ</option><option value="freeNow">今すぐ行けるキャスト</option></select></label>
+      <label style="font-size:13px;font-weight:700;cursor:pointer"><input type="checkbox" id="rcAllOpenChk" onchange="rcAllOpenToggle(this.checked)" style="width:auto;display:inline;vertical-align:middle"> 📄 予約の「くわしく」をいつも開いておく</label>
       <div class="kanabar" id="kanaBar"></div>
       <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openForm(null)">＋ 受付を開く（キャスト未定）</button>
     </div>
@@ -4969,6 +4970,26 @@ openForm = function(id){
   checkNewHotel();
 };
 
+/* ---------- 📄 くわしく（予約カードの中）に「🧾 料金の内訳・報酬」も出す。「くわしくをいつも開いておく」も選べる（この端末だけ）2026/11/5
+   時刻・状態・コース・延長・支払い・ホテル・メモはカードのまま直せる。OP・交通費・割引は「✏️ 開く」から（金額を計算しなおすため） ---------- */
+function rcAllOpen(){ try{ return localStorage.getItem("kbRcAllOpen") === "1"; }catch(e){ return false; } }
+function rcAllOpenToggle(on){ try{ localStorage.setItem("kbRcAllOpen", on ? "1" : "0"); }catch(e){} renderList(); }
+setTimeout(() => { const ck = document.getElementById("rcAllOpenChk"); if(ck) ck.checked = rcAllOpen(); }, 0);
+function rcMoneyRows(r){
+  const Y = n => yen(Number(n) || 0), row = (k, v) => v ? `<div class="rm-r"><span>${k}</span><b>${v}</b></div>` : "";
+  const ops = (r.options || []).map(o => `${esc(o.label)}${o.qty > 1 ? "×" + o.qty : ""} ${Y(o.price * (o.qty || 1))}${o.back ? `<small>（バック ${Y(o.back * (o.qty || 1))}）</small>` : ""}`);
+  const back = r.back_override != null ? Number(r.back_override) : (Number(r.course_back) || 0) + (Number(r.option_back) || 0) + (Number(r.extra_back) || 0);
+  const media = (r.media || []).map(m => ((M.media || []).find(x => x.code === m) || {}).label || m).join("・");
+  return `${row("基本（" + esc(r.course || "") + "）", Y(r.base_price))}${row("入会金", Number(r.admission) ? Y(r.admission) : "")}${row("指名料", Number(r.nomination_fee) ? Y(r.nomination_fee) : "")}
+    ${row("延長・デート", Number(r.extension_fee) ? Y(r.extension_fee) : "")}
+    ${ops.length ? `<div class="rm-r"><span>OP</span><b>${ops.join("<br>")}</b></div>` : ""}
+    ${row("交通費", Number(r.transport) ? Y(r.transport) : "")}${row("割引" + (r.discount_note ? "（" + esc(r.discount_note) + "）" : ""), Number(r.discount) ? "−" + Y(r.discount) : "")}
+    ${row("総額", Y(r.total))}${Number(r.card_total) ? row("うちカード", Y(r.card_total)) : ""}
+    ${row("キャストの報酬", Y(back) + (r.back_override != null ? "（手で直した）" : ""))}${row("媒体", esc(media))}
+    <div class="rm-hint">OP・交通費・割引を変えるときは「✏️ 開く」から</div>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>.rm-r{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dotted #EEE;padding:2px 0;font-size:13px} .rm-r span{color:var(--sub);white-space:nowrap} .rm-r b{text-align:right}
+  .rm-hint{font-size:11.5px;color:var(--sub);margin-top:6px}</style>`);
 /* ---------- 🏨 予約のカードから小窓で：ホテル名・部屋番号・地図（エリア〜交通費も見られる）。新しいホテルはリストに足せる・Googleで調べる窓（2026/11/5） ---------- */
 function openHotelBox(id){
   const r = rows.find(x => x.id === id); if(!r) return;
@@ -5499,7 +5520,7 @@ function resCard(r, i){
     ${cardStep || payUrl ? `<div class="rc-2">${cardStep}${payUrl}</div>` : ""}
     ${trRow(r, ed)}
     ${r.dress && dressText(r.dress) ? `<div class="rc-dress">👗 ${esc(dressText(r.dress))}</div>` : ""}
-    <details class="rc-more" ${rcOpen.has(r.id) ? "open" : ""} ontoggle="rcToggle(${r.id},this.open)"><summary>くわしく（お客さん・場所・OP・備考${nLog ? " " + nLog + "件" : ""}）</summary>
+    <details class="rc-more" ${rcOpen.has(r.id) || rcAllOpen() ? "open" : ""} ontoggle="rcToggle(${r.id},this.open)"><summary>くわしく（お客さん・場所・OP・備考${nLog ? " " + nLog + "件" : ""}）</summary>
     <div class="rc-grid">
       <div class="rc-box"><div class="rc-h">💴 コース・料金</div>
         <div class="rc-row">${ed ? `<select onchange="qCourse(${r.id},this.value)">${prices.map(p=>`<option value="${esc(p.course)}" ${p.course === r.course ? "selected" : ""}>${esc(p.course)}${/^\d+$/.test(p.course) ? "分" : ""}</option>`).join("")}${prices.some(p=>p.course === r.course) ? "" : `<option selected>${esc(r.course || "")}</option>`}</select>` : esc(r.course)}
@@ -5518,6 +5539,7 @@ function resCard(r, i){
         ${placeCell(r)}
         ${todosHtml(r)}
       </div>
+      <div class="rc-box"><div class="rc-h">🧾 料金の内訳・報酬</div>${rcMoneyRows(r)}</div>
       <div class="rc-box rc-biko"><div class="rc-h">📝 備考</div>${memoBoxes(r)}</div>
     </div></details>
   </div>`;
