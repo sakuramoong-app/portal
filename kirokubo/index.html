@@ -1418,7 +1418,7 @@ async function saveReflect(){
 }
 // ---------- 🌐 公式HPにも入れる（お店ごとに「確かめる」→ チェックしたお店に「入れる」） ----------
 let hpPush = null;
-const HP_CMS_LABEL = { gname:"名前", gye:"年齢", g3s:"サイズ", Dttcomm1:"Pサイズ", Dttcomm2:"性格", Dttcomm3:"趣味", Dttcomm4:"性感帯", Dttcomm5:"チャームポイント", Dttcomm6:"状態（竿/玉）", Dttcomm7:"髪の毛",
+const HP_CMS_LABEL = { gnew:"メインアイコン", gnew2:"サブアイコン①", gnew3:"サブアイコン②", gnew4:"サブアイコン③", gnew5:"サブアイコン④", gnew6:"サブアイコン⑤", gname:"名前", gye:"年齢", g3s:"サイズ", Dttcomm1:"Pサイズ", Dttcomm2:"性格", Dttcomm3:"趣味", Dttcomm4:"性感帯", Dttcomm5:"チャームポイント", Dttcomm6:"状態（竿/玉）", Dttcomm7:"髪の毛",
   comm1:"本人から一言", comm1a:"本人から一言（HTML）", comm2:"店長から一言", comm2a:"店長から一言（HTML）" };
 function hpOptsOf(data, sk){   // このお店のオプション（◎○△× が入っているものだけ）→ 公式HPに入れる形
   const o = profOpts(data, sk).options || {}, out = {};
@@ -2129,7 +2129,11 @@ function paintProf(){
         <input class="ed" id="pf_b_${f}" value="${esc(v)}" ${ro}></div>`; }).join("")}
       ${(() => { const v = pfVibesText(profGet(data, sk, "vibes")); return `<div class="pfCard"><div class="lb">${PF_BASIC.length + 1} 雰囲気 <small style="color:#9C8B8F">（・で区切る）</small></div>
         <div class="vw"><span>${v ? esc(v) : "—"}</span>${v ? `<button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this)" data-v="${esc(v)}">📋</button>` : ""}</div>
-        <input class="ed" id="pf_b_vibes" value="${esc(v)}" placeholder="例：清楚・かわいい系" ${ro}></div>`; })()}</div></div></details>
+        <input class="ed" id="pf_b_vibes" value="${esc(v)}" placeholder="例：清楚・かわいい系" ${ro}></div>`; })()}
+      ${(() => { const v = String(profGet(data, sk, "castType") || ""); return `<div class="pfCard"><div class="lb">${PF_BASIC.length + 2} キャストの種類 <small style="color:#9C8B8F">（公式HPのメインアイコン）</small></div>
+        <div class="vw"><span>${v ? esc(v) : "—"}</span></div>
+        <select class="ed" id="pf_b_castType" ${ro}>${["", ...CAST_TYPES].map(t => `<option value="${t}" ${t === v ? "selected" : ""}>${t || "（なし）"}</option>`).join("")}</select></div>`; })()}
+      <div class="hint" style="grid-column:1/-1;font-size:12px">🌐 公式HPのアイコンは自動：メイン＝キャストの種類／サブ＝状態（ありあり・ありなし・なしなし）→ Pサイズ（13cm〜20cm）→ 雰囲気（公式HPにあるアイコンの言葉だけ）の順に入ります</div></div></div></details>
     <details ${pfAcc("intro")}><summary class="pfHead">💬 紹介文</summary><div class="pfBody">
       <div class="hint" style="display:flex;align-items:center;gap:6px">本人から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_c')">📋 コピー</button></div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
       <div class="hint" style="margin-top:8px;display:flex;align-items:center;gap:6px">店長から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_m')">📋 コピー</button></div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></details>
@@ -2153,6 +2157,21 @@ function paintProf(){
     ${CAN_EDIT ? pfHotelEditor(hp) + `<div style="text-align:right;margin-top:8px"><button class="btn btn-primary btn-sm" onclick="saveProf(true)">💾 ホテルを保存</button></div>` : ""}`;
 }
 function pfVibesText(v){ return Array.isArray(v) ? v.join("・") : String(v || "").trim(); }
+// 🌐 公式HPのアイコン（2026/11/6 店長の決まり）
+//   メイン：キャストの種類（NH・男の娘・女装子）
+//   サブ：状態（竿/玉）→ ありあり／ありなし／なしなし、Pサイズ → 13cm〜20cm、雰囲気（公式HPにアイコンがある言葉だけ。管理画面にないものはとばす）
+const CAST_TYPES = ["NH", "男の娘", "女装子"];
+function hpIconsOf(data, sk){
+  const main = String(profGet(data, sk, "castType") || "").trim(), subs = [];
+  const st = String(profGet(data, sk, "state") || "").normalize("NFKC").replace(/\s/g, "");
+  const m = st.match(/(あり|なし)[\/／・]?(あり|なし)/);
+  if(m) subs.push(m[1] + m[2]);
+  const ps = String(profGet(data, sk, "psize") || "").normalize("NFKC").match(/(\d{2})(?:\.\d)?\s*(cm|センチ)?/i);
+  if(ps && Number(ps[1]) >= 13 && Number(ps[1]) <= 20) subs.push(ps[1] + "cm");
+  const vb = profGet(data, sk, "vibes");
+  (Array.isArray(vb) ? vb : String(vb || "").split(/[・、,，\s]+/)).map(s => String(s).trim()).filter(Boolean).forEach(s => subs.push(s));
+  return main || subs.length ? { main, subs } : null;
+}
 // 画面の中身 → pf.data（いま開いているお店の分）。変えたお店は pf.dirty に
 function pfCollect(){
   if(!pf || !$("pf_c")) return;
@@ -2163,6 +2182,7 @@ function pfCollect(){
   PF_BASIC.forEach(([f]) => { const v = $("pf_b_" + f).value.trim(); if(v !== String(profGet(data, sk, f) || "").trim()) sp[f] = v; });
   // 雰囲気（キャストプロフの vibes。いくつも入れられる。2026/11/6 旧プロフにあったもの）
   if($("pf_b_vibes")){ const v = $("pf_b_vibes").value.trim(); if(v !== pfVibesText(profGet(data, sk, "vibes"))){ sp.vibes = v.split(/[・、,，\s]+/).map(s => s.trim()).filter(Boolean); pf.dirty.add(sk); } }
+  if($("pf_b_castType")){ const v = $("pf_b_castType").value; if(v !== String(profGet(data, sk, "castType") || "")){ sp.castType = v; pf.dirty.add(sk); } }
   const c1 = $("pf_c").value.trim(), c2 = $("pf_m").value.trim();
   if(c1 !== String(profGet(data, sk, "comment") || "").trim()) sp.comment = c1;
   if(c2 !== String(profGet(data, sk, "mgrComment") || "").trim()) sp.mgrComment = c2;
@@ -2543,6 +2563,7 @@ function hpSetsOf(data, sks){   // プロフのお店 → 公式HPに入れる�
       ["comment", "mgrComment"].forEach(f => { const v = String(profGet(data, sk, f) || "").trim(); if(v) s[f] = v; });
     }
     const o = hpOptsOf(data, sk); if(Object.keys(o).length) s.options = o;
+    if(!PROF_DUMMY.includes(sk)){ const ic = hpIconsOf(data, sk); if(ic) s.icons = ic; }   // 🌐 アイコン（2026/11/6）
     if(Object.keys(s).length) sets[sk] = s;
   });
   return sets;
