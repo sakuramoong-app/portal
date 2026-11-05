@@ -1416,10 +1416,16 @@ async function paintAreaInfo(){
     }
   }catch(e){ html += `<div class="warn">交通費の記録を読めませんでした：${esc(e.message || e)}</div>`; }
   // 📒 台帳エクセル・記録簿で、この場所に行ったことのあるお客さん（顧客台帳の「📍 エリアで探す」と同じ。SQL 215）2026/11/6
+  window.pastPlaceCache = window.pastPlaceCache || {};
   try{
     const word = (typeof tripDest === "function" && tripDest(area)) || area;
     if(word && word.length >= 2 && !/^(池袋|鶯谷|五反田)$/.test(word)){
-      const hits = q(await sb.rpc("kb_customer_place_search", { p_q: word, p_limit: 50 })) || [];
+      // 一度探した場所は覚えておく（エリアの欄は何回も描きなおすので、そのたびに探すと間に合わない回があった）
+      let hits = pastPlaceCache[word];
+      if(!hits){
+        try{ hits = q(await sb.rpc("kb_customer_place_search", { p_q: word, p_limit: 50 })) || []; pastPlaceCache[word] = hits; }
+        catch(e){ hits = []; }
+      }
       if($("f_area").value.trim() !== area) return;
       if(hits.length) html += `<details class="pastplace"><summary>📒 台帳・記録簿で「${esc(word)}」に行ったこと：${hits.length >= 50 ? "50件以上" : hits.length + "件"}（押すと見る）</summary>`
         + hits.slice(0, 15).map(x => `<div>${x.biz_date ? esc(x.biz_date.slice(2).replace(/-/g, "/")) : ""}　${esc([x.area, x.place].filter(Boolean).join(" "))}${Number(x.transport) ? "　🚕 " + yen(x.transport) : ""}　<small>${esc(x.name || "")}・${esc(x.src)}</small></div>`).join("") + `</details>`;
