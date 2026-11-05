@@ -470,7 +470,7 @@ function isStaffSession(s){ return !!s && !!s.user && (String(s.user.email || ""
 const CLAIM = (()=>{ try{ const t = JSON.parse(localStorage.getItem("sb-tuxqpqokbvkrckgxcfdn-auth-token") || "null"); return t && t.access_token ? claimOf(t.access_token) : {}; }catch(e){ return {}; } })();
 const GOOGLE = ["staff", "manager", "owner"].includes(CLAIM.staff_role);
 function operatorName(){ if(GOOGLE) return CLAIM.staff_name || ""; try{ return localStorage.getItem("currentOperator") || ""; }catch(e){ return ""; } }
-const CAN_EDIT = GOOGLE && CLAIM.staff_role === "manager";   // 直せるのは、Googleで入った店長だけ（社長は見るだけ。2026/11/4 社長の希望）
+const CAN_EDIT = GOOGLE ? CLAIM.staff_role !== "owner" : true;   // 内勤みんなが直せる（2026/11/5 店長の希望）。社長は見るだけ（2026/11/4 社長の希望）
 if(!CAN_EDIT) document.body.classList.add("readonly");
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));

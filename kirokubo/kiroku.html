@@ -4907,6 +4907,60 @@ openForm = function(id){
   checkNewHotel();
 };
 
+/* ---------- 🏨 予約のカードから小窓で：ホテル名・部屋番号・地図（エリア〜交通費も見られる）。新しいホテルはリストに足せる・Googleで調べる窓（2026/11/5） ---------- */
+function openHotelBox(id){
+  const r = rows.find(x => x.id === id); if(!r) return;
+  let bg = $("hbBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "hbBg"; bg.className = "modal-bg"; document.body.appendChild(bg); KB.closeOnBackdrop(bg, () => bg.classList.remove("show")); }
+  const area = r.area || "", addr = String(r.address || ""), m = addr.match(/^(.*?)[\s　]*([0-9０-９]+)[号室]*$/);
+  const hotels = (M.hotels || []).filter(h => !area || !h.area || h.area === area);
+  bg.innerHTML = `<div class="modal" style="max-width:560px"><button class="x" onclick="$('hbBg').classList.remove('show')">×</button>
+    <h2>🏨 ホテル・部屋（${esc(castName(r.cast_id))}・${hm(r.start_at)}〜）</h2>
+    <div class="hbinfo">📍 エリア <b>${esc(area || "なし")}</b>　🚕 交通費 <b>${yen(r.transport || 0)}</b>　総額 <b>${yen(r.total)}</b>
+      <small>（エリア・交通費を変えるときは「✏️ 開く」から。料金が変わるため）</small></div>
+    <div class="row2" style="margin-top:8px">
+      <div class="f"><label>ホテル名</label><input id="hb_name" list="hbList" value="${esc(m ? m[1] : addr)}" oninput="hbCheck(${id})"><datalist id="hbList">${hotels.map(h => `<option value="${esc(h.hotel_name)}">`).join("")}</datalist></div>
+      <div class="f"><label>部屋番号</label><input id="hb_room" inputmode="numeric" value="${esc(m ? m[2] : "")}" style="max-width:120px"></div>
+    </div>
+    <div id="hbMore"></div>
+    <button type="button" class="btn btn-primary" style="margin-top:10px;width:100%" onclick="hbSave(${id})">保存</button></div>`;
+  bg.classList.add("show"); hbCheck(id);
+}
+// 小窓で Google を出す（別のタブではなく、横に小さい窓）
+function hbWin(url){ const w = Math.min(900, screen.availWidth - 80), h = Math.min(800, screen.availHeight - 80); window.open(url, "hbsearch", `width=${w},height=${h},left=${screen.availWidth - w - 20},top=40`); }
+function hbCheck(id){
+  const r = rows.find(x => x.id === id), el = $("hbMore"); if(!r || !el) return;
+  const area = r.area || "", name = $("hb_name").value.trim(), key = s => String(s || "").replace(/[\s　]/g, "");
+  const hit = (M.hotels || []).find(h => (!area || !h.area || h.area === area) && key(h.hotel_name) === key(name));
+  const q2 = encodeURIComponent(((area || "").replace(/^出張（(.*)）$/, "$1").replace(/^出張$/, "") + " " + name).trim());
+  if(!name){ el.innerHTML = ""; return; }
+  el.innerHTML = hit
+    ? `<div class="hbok">✅ ホテルリストにあります${hit.store_status === "ng" ? `<b style="color:#c0392b">（🚫 店としてNG）</b>` : hit.store_status === "far" ? "（△ 遠い）" : ""}　${hit.map_url ? `<a href="javascript:void 0" onclick="hbWin('${esc(hit.map_url)}')">🗺 地図を見る</a>` : `<a href="javascript:void 0" onclick="hbWin('https://www.google.com/maps/search/?api=1&query=${q2}')">🗺 Googleマップで調べる</a>`}</div>`
+    : `<div class="newhotel">🆕 「<b>${esc(name)}</b>」は${area ? esc(area) + "の" : ""}ホテルリストにありません。
+        <div style="margin:6px 0;display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn btn-ghost btn-sm" onclick="hbWin('https://www.google.com/search?q=${q2}')">🔍 Googleで調べる（小窓）</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="hbWin('https://www.google.com/maps/search/?api=1&query=${q2}')">🗺 Googleマップで調べる（小窓）</button></div>
+        <div class="f"><label>地図のURL（Googleマップで「共有」→「リンクをコピー」して貼る）</label><input id="hb_map" placeholder="https://maps.app.goo.gl/…"></div>
+        <label style="font-size:13px;font-weight:700"><input type="checkbox" id="hb_add" checked> 保存するときに、ホテルリストにも足す（とりあえず足しておく。OK・NGはあとで）</label></div>`;
+}
+async function hbSave(id){
+  if(!KB.CAN_EDIT) return;
+  const r = rows.find(x => x.id === id); if(!r) return;
+  const name = $("hb_name").value.trim(), room = $("hb_room").value.trim().normalize("NFKC");
+  const address = [name, room].filter(Boolean).join(" ");
+  try{
+    if($("hb_add") && $("hb_add").checked && name && r.area){
+      const map = $("hb_map") ? $("hb_map").value.trim() : "";
+      if(map && !/^https?:\/\//i.test(map)){ toast("地図のURLは https:// から始まるものを貼ってください"); return; }
+      const row = { hotel_id: "h" + Date.now().toString(36), area: r.area, hotel_name: name, map_url: map, store_status: "", note: "記録簿の予約カードで追加（" + KB.operatorName() + "）" };
+      q(await sb.from("prof_hotels").insert(row)); M.hotels.push(row);
+    }
+  }catch(e){ toast("ホテルリストに足せませんでした：" + (e.message || e)); }
+  if(address === (r.address || "")){ $("hbBg").classList.remove("show"); return; }
+  if(await pushLog(id, `🏨 ホテル・部屋 → ${address || "（なし）"}`, { address })){ $("hbBg").classList.remove("show"); toast("ホテル・部屋を保存しました"); renderList(); }
+}
+document.head.insertAdjacentHTML("beforeend", `<style>.rc-hotel{font-family:inherit;font-size:13px;font-weight:800;background:#F2F8FF;border:1.5px solid #9cc6ee;color:#1f5d99;border-radius:99px;padding:2px 10px;cursor:pointer}
+  .hbinfo{background:#FFF8E8;border:1.5px solid #F2D49A;border-radius:12px;padding:8px 12px;font-size:13.5px} .hbinfo small{display:block;color:var(--sub);font-size:11.5px;margin-top:2px}
+  .hbok{background:#EEF9F0;border:1.5px solid #9AD3A8;border-radius:12px;padding:8px 12px;margin-top:8px;font-size:13.5px;font-weight:700}</style>`);
 /* ---------- リストにないホテル：店として／キャストとして OK・NG で足す（地図のURLも） ---------- */
 let newHotelTimer = null;
 function checkNewHotel(){ clearTimeout(newHotelTimer); newHotelTimer = setTimeout(paintNewHotel, 400); }
@@ -5368,6 +5422,7 @@ function resCard(r, i){
       <small class="rc-lbl">開始</small>${ed ? `<input type="time" class="rc-time" value="${hmIn(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>
       ${r.phone_draft ? `<span class="rc-draft" title="スマホで仮入力。PCで開いて確かめると取り入れます">📱仮入力</span>` : ""}${r.dummy_name ? `<span class="rc-store">🎭${esc(r.dummy_name)}</span>` : ""}
       <span class="rc-k">📍<b>${esc(r.area || "エリアなし")}</b></span>
+      ${ed ? `<button type="button" class="rc-hotel" onclick="openHotelBox(${r.id})" title="ホテル名・部屋番号・地図（開かずに入れられる）">🏨 ${esc(r.address || "ホテル・部屋を入れる")}</button>` : r.address ? `<span class="rc-k">🏨 ${esc(r.address)}</span>` : ""}
       <span class="rc-k">${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""}${r.extension_count ? "＋延長" + r.extension_count : ""}</span>
       <span class="rc-k">総額 <b class="rc-yen">${yen(r.total)}</b><small>（${r.payment === "cash" && Number(r.card_total) > 0 ? "現金＋カード " + yen(Number(r.card_total)) : esc(PAY_LABEL[r.payment] || "")}）</small></span>
       <span class="rc-k">👤<b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${digits(c.phone || "").length >= 6 ? ` <span class="tel">📞${esc(c.phone)}</span>` : ` <span class="rc-nophone">📞番号まだ</span>`}</span>
