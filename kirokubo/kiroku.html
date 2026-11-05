@@ -744,6 +744,8 @@
           <span></span><input type="text" id="f_xop_label" placeholder="ほかのOP（自由入力）" oninput="recalc()">
           <span></span><input type="number" id="f_xop_price" placeholder="料金" oninput="recalc()"><input type="number" id="f_xop_back" placeholder="バック" oninput="recalc()">
         </div>
+        <div id="xopMore"></div><!-- ほかのOP の2つめから（＋で足す）2026/11/5 -->
+        <button type="button" class="btn btn-ghost btn-sm" style="margin-top:4px" onclick="addXop()">＋ ほかのOPを足す</button>
         <div class="f" style="margin-top:8px"><label>📝 キャストに伝える特記事項（予約連絡の文面に入ります）</label><input id="f_castnote" maxlength="200" placeholder="例：個人コスプレオプション「私物コス6番」" oninput="recalc()"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="openOptAdd()">＋ 一覧にオプションを足す</button><button type="button" class="btn btn-ghost btn-sm edit-only" onclick="openOptEdit()">⚙️ 一覧を直す・消す（店長）</button></div>
       </details>
@@ -1035,8 +1037,9 @@ function onStore(r){
       <input type="number" id="ob_${o.code}" value="${s?s.back:o.back}" title="バック（1回あたり）" oninput="recalc()" ${o.manual?"":"readonly"}>
     </div>`;
   }).join("") + `<div style="font-size:11px;color:var(--sub);margin-top:4px">右の2つは「料金」「バック」（1回あたり）。内容で変わるOPだけ直せます。</div>`;
-  const x = sel.find(s=>s.code==="custom");
+  const xs = sel.filter(s=>/^custom\d*$/.test(s.code || "")).sort((a, b)=>(Number(a.code.slice(6)) || 1) - (Number(b.code.slice(6)) || 1)), x = xs[0];   // ほかのOP：1つめは上の欄、2つめからは足した欄
   $("f_xop_label").value = x ? x.label : ""; $("f_xop_price").value = x ? x.price : ""; $("f_xop_back").value = x ? x.back : "";
+  clearXop(); xs.slice(1).forEach(o => addXop(null, o));
   // 媒体・新規リピ
   $("f_media").innerHTML = M.media.map(m=>`<button type="button" class="chip ${mediaSel.includes(m.code)?"on":""}" onclick="toggleMedia('${m.code}')">${esc(m.label)}</button>`).join("");
   $("f_visit").innerHTML = VISIT.map(([k,l])=>`<button type="button" class="chip ${visit===k?"on":""}" onclick="setVisit('${k}')">${l}</button>`).join("");
@@ -1081,7 +1084,7 @@ async function loadShifts(ymd){
     // 内勤が受理（確認通知）したシフトだけ。サクラシフトでは 受理 → 入力待ち → 内勤入力中 → 確定 と進む（媒体へ入れ終わると確定）。
     // 変更の申請中・入力中・変更確定も、受理したことがあるので出す。出さないのは「未提出」「提出済み（まだ受理していない）」だけ
     if(!["input_waiting", "inputting", "confirmed", "change_requested", "change_inputting", "change_confirmed"].includes(r.data && r.data.status)) return;
-    if(sh && sh.start != null && sh.end != null) out[r.cast_name] = { start: sh.start, end: sh.end, confirmed: ["confirmed", "change_confirmed"].includes(r.data.status) };
+    if(sh && sh.start != null && sh.end != null) out[r.cast_name] = { start: sh.start, end: sh.end, confirmed: ["confirmed", "change_confirmed"].includes(r.data.status), kanzen: !!((r.data.kanzen || {})[src]) };   // kanzen＝完（完全終了。キャストがシフトで書く）2026/11/5
   });
   return (shiftCache[ymd] = out);
 }
@@ -1346,7 +1349,7 @@ function onAfWish(){
   recalc();
 }
 function optSummary(){
-  const n = [...document.querySelectorAll("#f_opts input[type=checkbox]:checked")].filter(b=>!["o_af", "o_gyakuaf"].includes(b.id)).length + ($("f_xop_label").value.trim() ? 1 : 0);
+  const n = [...document.querySelectorAll("#f_opts input[type=checkbox]:checked")].filter(b=>!["o_af", "o_gyakuaf"].includes(b.id)).length + ($("f_xop_label").value.trim() ? 1 : 0) + xopExtra().length;
   $("optCount").textContent = n ? `（${n}件 選択中）` : "";
   if(n) $("optDetails").open = true;
 }
@@ -1840,6 +1843,17 @@ function markMissing(list){
 // 入れたら赤い枠を消す
 ["input", "change", "click"].forEach(ev=>document.addEventListener(ev, e=>{ const m = e.target.closest && e.target.closest(".miss"); if(m) m.classList.remove("miss"); }));
 
+// ＋ ほかのOP（2つめから）：欄の id は f_xop_label_2 … （一時保存でもどせるように）2026/11/5
+let xopN = 1;
+function addXop(idx, o){
+  const i = idx || ++xopN; if(idx && idx > xopN) xopN = idx;
+  if($("f_xop_label_" + i)) return;
+  $("xopMore").insertAdjacentHTML("beforeend", `<div class="opt xoprow" style="margin-top:4px"><span></span><input type="text" id="f_xop_label_${i}" placeholder="ほかのOP（自由入力）" oninput="recalc()" value="${esc(o ? o.label : "")}">
+    <span></span><input type="number" id="f_xop_price_${i}" placeholder="料金" oninput="recalc()" value="${o ? o.price : ""}"><input type="number" id="f_xop_back_${i}" placeholder="バック" oninput="recalc()" value="${o ? o.back : ""}">
+    <button type="button" class="btn btn-ghost btn-sm" title="この行を消す" onclick="this.closest('.xoprow').remove();recalc()">🗑</button></div>`);
+}
+function clearXop(){ const el = $("xopMore"); if(el) el.innerHTML = ""; xopN = 1; }
+function xopExtra(){ return [...document.querySelectorAll("#xopMore .xoprow")].map(r => { const [l, p, b] = r.querySelectorAll("input"); return { label: l.value.trim(), price: +p.value || 0, back: +b.value || 0 }; }).filter(x => x.label); }
 // コースの説明（kb_course_info）の【プレイ内容】にふくまれるOPは、お金を取らない（例：極門の極コースは逆AF込み・入門はAF・逆AF込み）2026/11/4
 function courseIncludesOp(store, course, label){
   const info = (M.courseInfo || []).find(i => i.store_key === store && String(course || "").startsWith(i.course_type));
@@ -1921,6 +1935,7 @@ function calc(){
   }
   // 👙 キューティーの下着（バック無OP）
   if(store === "cutie" && typeof underSel !== "undefined" && underSel){ const u = UNDER.find(x => x[0] === underSel); if(u) opts.push({ group:g, code:"underwear", label:"下着（" + u[1] + "）", qty:1, price:u[2], back:0, manual:true }); }
+  xopExtra().forEach((x, i)=>opts.push({ group:g, code:"custom" + (i + 2), label:x.label, qty:1, price:x.price, back:x.back, manual:true }));   // 2つめからのほかのOP
   if($("f_xop_label").value.trim()){
     opts.push({ group:g, code:"custom", label:$("f_xop_label").value.trim(), qty:1, price:+$("f_xop_price").value||0, back:+$("f_xop_back").value||0, manual:true });
   }
@@ -2676,7 +2691,7 @@ function renderBoard(){
   });
   const chip = (x, st)=>{
     const nm = castLabel(x);
-    const sh = x.shift ? `${hShort(x.shift.start)}-${hShort(x.shift.end)}` : "";
+    const sh = x.shift ? `${hShort(x.shift.start)}-${hShort(x.shift.end)}${x.shift.kanzen ? "完" : ""}` : "";
     const cds = (x.cd && x.cd.status) || "";
     const note = cds ? cds : (x.cd && x.cd.settled ? "精算済" : "");
     const now = nowHour(), live = x.bks.filter(b=>!["done", "cancel", "tobi", "flowed"].includes(b.r.status));
@@ -3525,7 +3540,7 @@ renderBoard = function(){
   const used = seatLogs.filter(l=>!l.end_at);
   const chip = (x, st, col)=>{
     const cid = x.c ? x.c.id : "";
-    const sh = x.shift ? `${hShort(x.shift.start)}-${hShort(x.shift.end)}` : "";
+    const sh = x.shift ? `${hShort(x.shift.start)}-${hShort(x.shift.end)}${x.shift.kanzen ? "完" : ""}` : "";
     const gk = goneKind(x.cd);
     const now = nowHour(), live = x.bks.filter(b=>!["done", "cancel", "tobi", "flowed"].includes(b.r.status));
     const rel = x.bks.find(b=>b.r.status === "working") || live.filter(b=>b.e > now).sort((a, b)=>a.s - b.s)[0];
@@ -3756,7 +3771,7 @@ renderListTable = function(){
   el.innerHTML = (noCast.length ? block("キャスト未定", "", noCast, "") : "")
     + (casts.length ? casts.map(x=>{
         const st = boardState(x), col = boardCol(x, st), gk = goneKind(x.cd);
-        const sub = `${x.shift ? "出勤 " + tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) + (x.shiftOrig ? "（予定 " + tlLabel(x.shiftOrig.start) + "〜" + tlLabel(x.shiftOrig.end) + "）" : "") : "シフトなし"}・${STATE[st]}${st !== "gone" && col ? "（" + col + "）" : gk ? "（" + gk + "）" : ""}`;
+        const sub = `${x.shift ? "出勤 " + tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) + (x.shift.kanzen ? "（完）" : "") + (x.shiftOrig ? "（予定 " + tlLabel(x.shiftOrig.start) + "〜" + tlLabel(x.shiftOrig.end) + "）" : "") : "シフトなし"}・${STATE[st]}${st !== "gone" && col ? "（" + col + "）" : gk ? "（" + gk + "）" : ""}`;
         const cls = st === "gone" ? (gk === "お茶" ? "tea" : gk === "欠勤" ? "absent" : "away") : "";
         return block("【" + esc(castLabel(x)) + "】" + (x.c && typeof kbPendingAfterSettle === "function" && kbPendingAfterSettle(x.cd, rows.filter(r=>r.cast_id === x.c.id)).length ? `<span class="part2chip" title="精算済のあとで予約がふえました。💴 精算で②の精算をしてください">⚠️ ②の精算がまだ</span>` : ""), esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart) : [], x.c ? x.c.id : "", cls);
       }).join("") : `<div class="gate">${mode === "freeNow" ? "今すぐ行けるキャストはいません" : mode === "booked" ? "予約があるキャストはいません" : "この日のキャストがいません"}</div>`) + cancelSection();
@@ -4749,6 +4764,7 @@ async function draftResume(){
   openForm(d.id);
   const v = d.vals || {}, set = id => { const el = $(id); if(!el || !(id in v)) return; if(el.type === "checkbox") el.checked = !!v[id]; else el.value = v[id]; };
   set("f_store"); onStore(); set("f_cast"); onCast();
+  Object.keys(v).forEach(id => { const m = /^f_xop_label_(\d+)$/.exec(id); if(m) addXop(Number(m[1])); });   // ＋で足したほかのOPの欄も
   Object.keys(v).forEach(id => { if(!["f_store", "f_cast"].includes(id)) set(id); });
   Object.entries(d.radios || {}).forEach(([n, val]) => setRadio(n, val));
   const s = d.st || {};
@@ -5405,7 +5421,7 @@ renderListTable = function(){
   el.innerHTML = (noCast.length ? block("キャスト未定", "", noCast, "") : "")
     + (casts.length ? casts.map(x=>{
         const st = boardState(x), col = boardCol(x, st), gk = goneKind(x.cd);
-        const sub = `${x.shift ? "出勤 " + tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) + (x.shiftOrig ? "（予定 " + tlLabel(x.shiftOrig.start) + "〜" + tlLabel(x.shiftOrig.end) + "）" : "") : "シフトなし"}・${STATE[st]}${st !== "gone" && col ? "（" + col + "）" : gk ? "（" + gk + "）" : ""}`;
+        const sub = `${x.shift ? "出勤 " + tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) + (x.shift.kanzen ? "（完）" : "") + (x.shiftOrig ? "（予定 " + tlLabel(x.shiftOrig.start) + "〜" + tlLabel(x.shiftOrig.end) + "）" : "") : "シフトなし"}・${STATE[st]}${st !== "gone" && col ? "（" + col + "）" : gk ? "（" + gk + "）" : ""}`;
         const cls = st === "gone" ? (gk === "お茶" ? "tea" : gk === "欠勤" ? "absent" : "away") : "";
         return block("【" + esc(castLabel(x)) + "】" + (x.c && typeof kbPendingAfterSettle === "function" && kbPendingAfterSettle(x.cd, rows.filter(r=>r.cast_id === x.c.id)).length ? `<span class="part2chip" title="精算済のあとで予約がふえました。💴 精算で②の精算をしてください">⚠️ ②の精算がまだ</span>` : ""), esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart) : [], x.c ? x.c.id : "", cls);
       }).join("") : `<div class="gate">${mode === "freeNow" ? "今すぐ行けるキャストはいません" : mode === "booked" ? "予約があるキャストはいません" : "この日のキャストがいません"}</div>`)
