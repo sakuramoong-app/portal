@@ -3827,7 +3827,7 @@ renderListTable = function(){
   const head = `<tr><th>時間</th><th>店舗</th><th>コース・エリア</th><th>お客さん・電話</th><th>状態・やること</th><th>キャストに</th><th>📝 備考</th></tr>`;
   // 今いない（不在・お茶・欠勤）は、枠ぜんたいをグレー・緑・赤に（今どこに誰がとつながっている）
   const block = (title, sub, list, cid, cls)=>`<div class="cblock ${cls || ""}" ${cid ? `id="cb-${cid}"` : ""}>
-      <div class="ch"><b>${title}</b>${cid && KB.CAN_EDIT ? whereSel(cid) + dayStatusSel(cid) : ""}<small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="editInfoNote('${cid}')">📌 今日のこと</button><button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button>` : ""}${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
+      <div class="ch"><b>${title}</b>${cid && KB.CAN_EDIT ? whereSel(cid) + dayStatusSel(cid) + kanzenBtn(cid) : ""}<small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="editInfoNote('${cid}')">📌 今日のこと</button><button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button>` : ""}${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
       ${cid ? attendHtml(cid) : ""}
       ${list.length ? `<div class="wrapx"><table class="list">${head}${list.map(r=>`<tr class="r ${["cancel", "tobi", "flowed"].includes(r.status) ? "cx" : ""}" onclick="openForm(${r.id})">${resCells(r)}</tr>`).join("")}</table></div>` : `<div class="none">予約なし</div>`}</div>`;
   const noCast = rows.filter(r=>!r.cast_id).sort(byStart);
@@ -4618,6 +4618,29 @@ tlRows = function(){
     return x;
   });
 };
+// 🏁 完（完全終了）：その日だけ記録簿でつける・外す（SQL 212：kb_cast_days.kanzen。null＝サクラシフトのとおり）2026/11/5
+const __tlRowsK = tlRows;
+tlRows = function(){
+  return __tlRowsK().map(x => {
+    const cd = x.cd || {};
+    if(x.shift && cd.kanzen != null && x.shift.kanzen !== cd.kanzen){ x.shiftKanzen = x.shiftKanzen ?? !!x.shift.kanzen; x.shift = Object.assign({}, x.shift, { kanzen: !!cd.kanzen }); }
+    return x;
+  });
+};
+function kanzenBtn(cid){
+  const x = tlRows().find(r => r.c && r.c.id === cid); if(!x || !x.shift) return "";
+  const on = !!x.shift.kanzen, cd = castDays[cid] || {};
+  return `<button type="button" class="kzbtn ${on ? "on" : ""}" title="${cd.kanzen != null ? "記録簿で" + (on ? "つけた" : "外した") : "サクラシフトのとおり"}（押すと${on ? "外す" : "つける"}）" onclick="event.stopPropagation();setKanzen('${cid}')">🏁 完${on ? "" : "なし"}</button>`;
+}
+async function setKanzen(cid){
+  const x = tlRows().find(r => r.c && r.c.id === cid); if(!x || !x.shift) return;
+  const now = !!x.shift.kanzen, next = !now, fromShift = x.shiftKanzen ?? now;
+  if(!confirm(`${castName(cid)}：この日を「${next ? "完（完全終了）にする" : "完ではない"}」にしますか？`)) return;
+  try{
+    if(await saveDayPart(cid, { kanzen: next === fromShift && (castDays[cid] || {}).kanzen != null ? null : next })) toast(`🏁 ${castName(cid)}：${next ? "完にしました" : "完を外しました"}`);
+  }catch(e){ toast("保存できませんでした（SQL 212 は実行ずみ？）：" + (e.message || e)); }
+}
+document.head.insertAdjacentHTML("beforeend", `<style>.kzbtn{font-family:inherit;font-size:12px;font-weight:800;border:1.5px solid var(--line);background:#fff;color:#999;border-radius:99px;padding:3px 9px;cursor:pointer;margin-left:4px} .kzbtn.on{background:#2B4C8C;border-color:#2B4C8C;color:#fff}</style>`);
 const __openAttend = openAttend;
 openAttend = function(cid, kind){
   __openAttend(cid, kind);
@@ -5563,7 +5586,7 @@ renderListTable = function(){
   const casts = sortRows(tlRows());
   const STATE = { wait: "待機中", work: "仕事中", start: "予約スタート", precall: "出勤前連絡", gone: "今いない" };
   const block = (title, sub, list, cid, cls)=>`<div class="cblock ${cls || ""}" ${cid ? `id="cb-${cid}"` : ""}>
-      <div class="ch"><b>${title}</b>${cid && KB.CAN_EDIT ? whereSel(cid) + dayStatusSel(cid) : ""}<small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="editInfoNote('${cid}')">📌 今日のこと</button><button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button><button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
+      <div class="ch"><b>${title}</b>${cid && KB.CAN_EDIT ? whereSel(cid) + dayStatusSel(cid) + kanzenBtn(cid) : ""}<small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="editInfoNote('${cid}')">📌 今日のこと</button><button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button><button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
       ${cid ? attendHtml(cid) : ""}
       ${list.length ? list.map(resCard).join("") : `<div class="none">予約なし</div>`}</div>`;
   const noCast = rows.filter(r=>!r.cast_id).sort(byStart);
