@@ -2725,7 +2725,7 @@ function nowHour(){ const j = new Date(Date.now() + 9 * 3600 * 1000); let h = j.
 function hShort(v){ const h = Math.floor(v) % 24, m = Math.round((v - Math.floor(v)) * 60); return h + (m ? ":" + String(m).padStart(2, "0") : ""); }
 function boardState(x){
   const isToday = day === KB.bizDateOf(), now = nowHour(), cd = x.cd || {};
-  if((cd.settled && cd.status !== "待機中") || ["お茶", "欠勤", "精算済", "不在"].includes(cd.status)) return "gone";   // 精算して待機中のまま（2026/11/6）は、まだいる
+  if((cd.settled && !["待機中", "仕事中"].includes(cd.status)) || ["お茶", "欠勤", "精算済", "不在"].includes(cd.status)) return "gone";   // 精算して待機中のまま（2026/11/6）は、まだいる
   if(cd.status === "仕事中") return "work";   // 状態のプルダウンで手で選んだもの（2026/11/5）
   const work = x.bks.find(b=>b.r.status === "working" || (isToday && b.s <= now && now < b.e && b.r.status !== "done"));
   if(work) return "work";
@@ -3576,7 +3576,8 @@ boardState = function(x){
   const cd = x.cd || {};
   const aw = autoWork(x);
   if(aw && aw.t >= manualT(x)) return "work";
-  if(cd.settled) return "gone";
+  if(cd.settled && !["待機中", "仕事中"].includes(cd.status)) return "gone";   // 先に精算して待機中・仕事中のままの子は、まだいる（2026/11/6）
+  if(["不在", "お茶", "欠勤"].includes(cd.status)) return "gone";
   if(cd.status === "仕事中") return "work";
   if(cd.status === "予約スタート") return "start";   // 待機しないで、最初の予約から仕事を始める
   if(cd.status === "出勤前連絡") return "precall";   // 出勤前に「何時からどこで待機」と連絡があった
@@ -3604,7 +3605,7 @@ renderBoard = function(){
     // 自動で退席するのは、はっきりしたときだけ：予約を「接客中」にした・お茶・欠勤・不在・精算済（2026/11/5）
     //   前は「鶯谷で待機中でなくなったら」で、次の予約の時刻になっただけ・別のPCの古い画面が描きなおしただけでも席が外れていた（1時間くらいで外れる）
     const s = x.c && seatsOk ? seatOf(x.c.id) : null, cd0 = x.cd || {};
-    const clearlyOut = x.bks.some(b => b.r.status === "working") || (cd0.settled && cd0.status !== "待機中") || ["お茶", "欠勤", "不在"].includes(cd0.status);
+    const clearlyOut = x.bks.some(b => b.r.status === "working") || (cd0.settled && !["待機中", "仕事中"].includes(cd0.status)) || ["お茶", "欠勤", "不在"].includes(cd0.status);
     if(s && KB.CAN_EDIT && clearlyOut && !autoLeft.has(s.id)){ autoLeft.add(s.id); leaveSeat(s.id, true); }
   });
   const used = seatLogs.filter(l=>!l.end_at);
@@ -3669,7 +3670,7 @@ async function moveCast(cid, target){
     return;
   }
   if(seat && area !== "鶯谷") await leaveSeat(seat.id, true);
-  if(await saveDayPart(cid, { standby: area, status: "" })) toast(castLabel(x) + " → " + area + "で待機");
+  if(await saveDayPart(cid, { standby: area, status: (x.cd && x.cd.settled) ? "待機中" : "" })) toast(castLabel(x) + " → " + area + "で待機");   // 精算済の子も、待機の段に動かしたら待機中（2026/11/6）
 }
 async function cycleGone(cid){
   const cd = castDays[cid] || {};
@@ -3758,13 +3759,13 @@ function onNowOf(x){
   if(day !== KB.bizDateOf() || !x.shift) return false;
   const now = nowHour(), cd = x.cd || {};
   if(now < x.shift.start || now >= x.shift.end) return false;
-  return !((cd.settled && cd.status !== "待機中") || ["お茶", "欠勤", "精算済", "不在"].includes(cd.status));
+  return !((cd.settled && !["待機中", "仕事中"].includes(cd.status)) || ["お茶", "欠勤", "精算済", "不在"].includes(cd.status));
 }
 function freeNowOf(x){
   if(day !== KB.bizDateOf() || !x.shift) return false;
   const now = nowHour(), g = gapOf(x), cd = x.cd || {};
   if(now < x.shift.start || now >= x.shift.end) return false;
-  if((cd.settled && cd.status !== "待機中") || ["お茶", "欠勤", "精算済", "不在", "仕事中"].includes(cd.status)) return false;
+  if((cd.settled && !["待機中", "仕事中"].includes(cd.status)) || ["お茶", "欠勤", "精算済", "不在", "仕事中"].includes(cd.status)) return false;
   return !x.bks.some(b=>b.s - g <= now && now < b.e + g);
 }
 // 📍 タイムラインの名前の横に「今どこにいるか」（今どこに誰が と同じ判断。今日だけ）2026/11/5
@@ -7274,7 +7275,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 
 /* ---------- 本日のキャスト：お茶・欠勤の子は、あいうえお順（ほかの並び順も）から外して、いちばん下の別枠へ ---------- */
 // ✅ 精算済（ふえた予約もない）の子も、グレーにして下の別枠へ（2026/11/4 店長の希望）
-const settledDone = x => !!(x.c && x.cd && x.cd.settled && x.cd.status !== "待機中" && !(typeof kbPendingAfterSettle === "function" && kbPendingAfterSettle(x.cd, rows.filter(r=>r.cast_id === x.c.id)).length));
+const settledDone = x => !!(x.c && x.cd && x.cd.settled && !["待機中", "仕事中"].includes(x.cd.status) && !(typeof kbPendingAfterSettle === "function" && kbPendingAfterSettle(x.cd, rows.filter(r=>r.cast_id === x.c.id)).length));
 const __sortRowsTea = sortRows;
 sortRows = function(list){
   const out = __sortRowsTea(list);
