@@ -778,10 +778,11 @@
       <div class="row2" style="display:none">
         <div></div>
       </div>
-      <div class="f" style="margin-top:4px"><label>📨 キャストへの予約連絡（コピーしてLINEで送る）</label></div>
+      <div class="f" style="margin-top:4px"><label>📨 キャストへの予約連絡（コピーしてLINEで送る）<button type="button" class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="openCastMsgTpl()">✏️ 連絡の文を直す</button></label></div>
       <textarea class="msg" id="msg" readonly></textarea>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px">
         <button class="btn btn-ghost btn-sm" onclick="copyMsg()">📋 文面をコピー</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="msgEditBtn" onclick="msgEdit('msg')">✏️ この場だけ直す</button>
         <label style="font-size:14px;font-weight:800;background:#E6F6EE;border-radius:99px;padding:7px 14px;cursor:pointer">
           <input type="checkbox" id="f_notified"> ✅ キャストに伝えた</label>
         <span class="hist" id="notifiedInfo" style="margin:0"></span>
@@ -791,6 +792,7 @@
         <div class="f"><label>📩 お客さまへの返信（ネット予約・コピーして返信）<button type="button" class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="openNetTpl()">✏️ 返信の文を直す</button></label></div>
         <textarea class="msg" id="netReply" readonly style="min-height:240px"></textarea>
         <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="navigator.clipboard.writeText($('netReply').value).then(()=>toast('📋 返信の文をコピーしました'))">📋 返信の文をコピー</button>
+        <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" id="netReplyEditBtn" onclick="msgEdit('netReply')">✏️ この場だけ直す</button>
       </div>
       <div class="f" style="margin:12px 0 8px"><label class="bikoh">📝 備考（だれが・いつ・どんな対応／いちばん大事なメモ）</label><div id="formLog"></div></div>
     </div>
@@ -2056,33 +2058,79 @@ function buildMsg(c){
   // 本指名のときだけ、そのキャストを前回指名した日（受付の「本指名」の横と同じ lastNomiOf）。新規・店リピは日付なし
   const prev = visit === "honshi" ? lastNomiOf($("f_cast").value) : "";
   const visitTxt = ((VISIT.find(v=>v[0]===visit) || [])[1] || "") + (prev ? "（前回 " + prev + "）" : "");
-  $("msg").value =
-`お疲れ様です
+  // 文は「✏️ 連絡の文を直す」で、内勤みんなで直せる（kb_settings 'cast_msg_tpl'。2026/11/5）
+  const T = castMsgTpl(), yen0 = n => Number(n || 0).toLocaleString("ja-JP");
+  const money = { 総額: yen0(c.total), 現金: yen0(c.total - (c.splitCard || 0)), カード: yen0(c.splitCard || 0) };
+  const V = {
+    ダミー行: isDummyStore(c.store) && $("f_dummy").value ? "\n（ダミー名「" + $("f_dummy").value + "」で受けています）" : "",
+    日時: `${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st||"--:--"}〜${en||"--:--"}${lateNote}`,
+    店名: storeNoArea(c.store), 名前: $("f_name").value || "お客", 種別: visitTxt,
+    コース: `${c.course}${/^\d+$/.test(c.course)?"分":""}${c.free?"（"+FREE_SUFFIX[c.free]+"）":""}${c.ext?"＋延長"+c.ext*30+"分":""}`,
+    場所見出し: { love: "ホテル", biz: "ホテル", home: "自宅" }[$("f_place").value] || "ホテル・自宅",
+    場所: `${$("f_area").value} ${$("f_address").value}`,
+    ビジホ行: (() => { try{ return $("f_place").value === "biz" ? "\n【ビジホ】" + bizText(bizState) : ""; }catch(e){ return ""; } })(),
+    地図行: hotelMapUrl() ? "\n【地図】" + hotelMapUrl() : "",
+    バック有OP: backOps, バック無OP: noBackOps,
+    特記事項行: $("f_castnote") && $("f_castnote").value.trim() ? "\n【特記事項】" + $("f_castnote").value.trim() : "",
+    お金: fillVars(T[c.pay === "split" ? "split" : c.pay === "cash" ? "cash" : "card"], money),
+  };
+  $("msg").value = fillVars(T.main, V);
+}
+function fillVars(t, V){ return String(t || "").replace(/\{([^{}\s]+)\}/g, (m, k) => (k in V ? V[k] : m)); }
+const CAST_MSG_DEF = {
+  main: `お疲れ様です
 ご予約いただきました！
 ご確認お願いいたします🙇
-${isDummyStore(c.store) && $("f_dummy").value ? "\n（ダミー名「" + $("f_dummy").value + "」で受けています）" : ""}
-${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st||"--:--"}〜${en||"--:--"}${lateNote}
-【店名】${storeNoArea(c.store)}
-【名前】${$("f_name").value || "お客"}様 ${visitTxt}
-【コース】${c.course}${/^\d+$/.test(c.course)?"分":""}${c.free?"（"+FREE_SUFFIX[c.free]+"）":""}${c.ext?"＋延長"+c.ext*30+"分":""}
-【${{ love: "ホテル", biz: "ホテル", home: "自宅" }[$("f_place").value] || "ホテル・自宅"}】${$("f_area").value} ${$("f_address").value}${(() => { try{ return $("f_place").value === "biz" ? "\n【ビジホ】" + bizText(bizState) : ""; }catch(e){ return ""; } })()}${hotelMapUrl() ? "\n【地図】" + hotelMapUrl() : ""}
-【バック有OP】${backOps}
-【バック無OP】${noBackOps}${$("f_castnote") && $("f_castnote").value.trim() ? "\n【特記事項】" + $("f_castnote").value.trim() : ""}
-${c.pay === "split"
-  ? `【料金総額】${c.total.toLocaleString("ja-JP")}円（現金 ${(c.total - (c.splitCard || 0)).toLocaleString("ja-JP")}円＋カード ${(c.splitCard || 0).toLocaleString("ja-JP")}円）
-※現金の ${(c.total - (c.splitCard || 0)).toLocaleString("ja-JP")}円は、お会いして最初にいただいてください（カードの分は決済URLで払っていただきます）
-部屋内ではキャストさん及びお客様どちらもお風呂やトイレにも貴重品を肌身離さず持ち歩くよう心がけてください。
-【お金を盗られる事件が実際にありました。気を付けましょう】`
-  : c.pay === "cash"
-  ? `【料金総額】${c.total.toLocaleString("ja-JP")}円
+{ダミー行}
+{日時}
+【店名】{店名}
+【名前】{名前}様 {種別}
+【コース】{コース}
+【{場所見出し}】{場所}{ビジホ行}{地図行}
+【バック有OP】{バック有OP}
+【バック無OP】{バック無OP}{特記事項行}
+{お金}`,
+  cash: `【料金総額】{総額}円
 
 ※【盗難・料金貰い忘れ対策】料金はお会いして最初にいただいてください。
 部屋内ではキャストさん及びお客様どちらもお風呂やトイレにも貴重品を肌身離さず持ち歩くよう心がけてください。
-【お金を盗られる事件が実際にありました。気を付けましょう】`
-  : `【お支払い】カード決済の為、お金はいただかずスタートしてください
+【お金を盗られる事件が実際にありました。気を付けましょう】`,
+  card: `【お支払い】カード決済の為、お金はいただかずスタートしてください
 
 ※【盗難対策】部屋内ではキャストさん及びお客様どちらもお風呂やトイレにも貴重品を肌身離さず持ち歩くよう心がけてください。
-【お金を盗られる事件が実際にありました。気を付けましょう】`}`;
+【お金を盗られる事件が実際にありました。気を付けましょう】`,
+  split: `【料金総額】{総額}円（現金 {現金}円＋カード {カード}円）
+※現金の {現金}円は、お会いして最初にいただいてください（カードの分は決済URLで払っていただきます）
+部屋内ではキャストさん及びお客様どちらもお風呂やトイレにも貴重品を肌身離さず持ち歩くよう心がけてください。
+【お金を盗られる事件が実際にありました。気を付けましょう】`,
+};
+function castMsgTpl(){ const v = (M.set && M.set.cast_msg_tpl) || {}; const o = {}; Object.keys(CAST_MSG_DEF).forEach(k => { o[k] = typeof v[k] === "string" && v[k].trim() ? v[k] : CAST_MSG_DEF[k]; }); return o; }
+function openCastMsgTpl(){
+  let bg = $("cmBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "cmBg"; bg.className = "modal-bg"; document.body.appendChild(bg); KB.closeOnBackdrop(bg, () => bg.classList.remove("show")); }
+  const T = castMsgTpl(), ro = KB.CAN_EDIT ? "" : "disabled";
+  const box = (k, label, rows) => `<div class="f" style="margin-top:8px"><label>${label}</label><textarea id="cm_${k}" rows="${rows}" style="width:100%;font-family:inherit;font-size:13px" ${ro}>${esc(T[k])}</textarea></div>`;
+  bg.innerHTML = `<div class="modal" style="max-width:680px"><button class="x" onclick="$('cmBg').classList.remove('show')">×</button>
+    <h2>✏️ 📨 キャストへの予約連絡の文</h2>
+    <p style="font-size:12.5px;color:var(--sub);line-height:1.7;margin:0 0 4px">内勤みんな同じ文になります。{ } の中は、その予約の内容に変わります。<br>
+      使えるもの：{ダミー行} {日時} {店名} {名前} {種別} {コース} {場所見出し} {場所} {ビジホ行} {地図行} {バック有OP} {バック無OP} {特記事項行} {お金}<br>
+      <b>【コース】【バック無OP】【料金総額】の見出しは消さないでください</b>（3P・希望プレイ・カード決済の文が、ここに自動で足されます）</p>
+    ${box("main", "📨 本文", 14)}
+    ${box("cash", "💴 {お金}：現金のとき（{総額}）", 5)}
+    ${box("card", "💳 {お金}：カードのとき", 4)}
+    ${box("split", "💴＋💳 {お金}：現金＋カードのとき（{総額} {現金} {カード}）", 5)}
+    ${KB.CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:10px"><button type="button" class="btn btn-primary" style="flex:1" onclick="saveCastMsgTpl()">保存</button>
+      <button type="button" class="btn btn-ghost" onclick="if(confirm('はじめの文にもどしますか？（保存するまでは変わりません）'))Object.keys(CAST_MSG_DEF).forEach(k=>$('cm_'+k).value=CAST_MSG_DEF[k])">はじめの文にもどす</button></div>` : ""}</div>`;
+  bg.classList.add("show");
+}
+async function saveCastMsgTpl(){
+  if(!KB.CAN_EDIT) return;
+  const v = {}; Object.keys(CAST_MSG_DEF).forEach(k => { v[k] = $("cm_" + k).value; });
+  if(!/【コース】/.test(v.main) || !/【バック無OP】/.test(v.main)){ if(!confirm("【コース】か【バック無OP】の見出しがありません。3P・希望プレイの文が入らなくなりますが、保存しますか？")) return; }
+  try{
+    q(await sb.from("kb_settings").upsert({ key: "cast_msg_tpl", value: v, note: "📨 キャストへの予約連絡の文（受付の ✏️ 連絡の文を直す）" }));
+    M.set.cast_msg_tpl = v; $("cmBg").classList.remove("show"); toast("保存しました"); recalc();
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
 function copyMsg(){ navigator.clipboard.writeText($("msg").value).then(()=>toast("📋 文面をコピーしました")); }
 // 📩 ネット予約の返信（店名・お店の電話番号・予約の内容）。お店の電話番号は公式HPのもの（2026/10/28）
@@ -7145,6 +7193,30 @@ renderListTable = function(){
   }
 };
 document.head.insertAdjacentHTML("beforeend", `<style>#list > .cblock.sdone{background:#EFEFEF !important;border-color:#CFCFCF !important;opacity:.8} #list > .cblock.sdone:hover{opacity:1}</style>`);
+
+/* ---------- ✏️ この場だけ直す：キャストへの予約連絡・お客さまへの返信の文を、その場で書きかえる（テンプレは変えない）2026/11/5
+   書きかえている間は、受付の内容を変えても文は自動で作りなおさない。「↺ 自動の文にもどす」でもとにもどる。受付を開きなおすと自動にもどる ---------- */
+const msgManual = { msg: null, netReply: null };
+function msgEdit(id){
+  const ta = $(id), btn = $(id + "EditBtn"); if(!ta) return;
+  if(msgManual[id] == null){
+    msgManual[id] = ta.value; ta.readOnly = false; ta.classList.add("msgedit"); ta.focus();
+    ta.oninput = () => { msgManual[id] = ta.value; };
+    if(btn) btn.textContent = "↺ 自動の文にもどす";
+    toast("✏️ 文を直せます（この予約のこの場だけ。テンプレは変わりません）");
+  } else {
+    msgManual[id] = null; ta.readOnly = true; ta.classList.remove("msgedit"); ta.oninput = null;
+    if(btn) btn.textContent = "✏️ この場だけ直す";
+    recalc();
+  }
+}
+// 受付を開きなおしたら、自動の文にもどす（作りなおしは、開いたときの計算で）
+function msgManualReset(){ ["msg", "netReply"].forEach(id => { msgManual[id] = null; const ta = $(id), btn = $(id + "EditBtn"); if(ta){ ta.readOnly = true; ta.classList.remove("msgedit"); ta.oninput = null; } if(btn) btn.textContent = "✏️ この場だけ直す"; }); }
+{ const __rcMan = recalc; recalc = function(){ const r = __rcMan.apply(this, arguments);
+    ["msg", "netReply"].forEach(id => { if(msgManual[id] != null && $(id)) $(id).value = msgManual[id]; });   // 書きかえている文は、そのまま
+    return r; }; }
+{ const __ofMan = openForm; openForm = function(){ msgManualReset(); return __ofMan.apply(this, arguments); }; }
+document.head.insertAdjacentHTML("beforeend", `<style>textarea.msg.msgedit{background:#FFFBEA !important;border:2px solid #F2B705 !important}</style>`);
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 <script src="kb_cal.js?v=1"></script>
