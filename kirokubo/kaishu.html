@@ -560,7 +560,7 @@ async function loadMonth(){
   $("dayArea").innerHTML = `<div class="lead">読み込み中…</div>`;
   try{
     const [R, sw, rates] = await Promise.all([readRange(from, to),
-      sb.from("kb_staff_work").select("biz_date,staff_id,clock_in,clock_out,hours,hourly,day_paid,paid").gte("biz_date", from).lt("biz_date", to).order("biz_date"),
+      sb.from("kb_staff_work").select("*").gte("biz_date", from).lt("biz_date", to).order("biz_date"),
       sb.from("kb_staff_rates").select("staff_id,record_name,from_date,hourly").order("from_date")]);
     if(mode !== "month" || $("day").value.slice(0, 7) !== ym) return;
     MO = Object.assign(R, { ym, from, to, sw: sw.error ? [] : (sw.data || []), rates: rates.error ? [] : (rates.data || []) });
@@ -588,15 +588,27 @@ function staffMonthHtml(){
     if(!work.length) return "";
     const sum = k => work.reduce((s, r) => s + r[k], 0);
     const rate = rateOn(id, MO.to);
-    return `<div class="card"><h2>🕒 ${esc(nameOf(id))} <small style="font-size:12px;color:var(--sub)">時給 ${num(rate)}円・${work.length}日</small></h2>
-      <div class="tbl"><table><tr><th class="l">月日</th><th>出勤</th><th>退勤</th><th>時間合計</th><th>日払い報酬</th><th>日払い残額</th><th>総報酬</th></tr>
-      ${rows.map(r => { const dt = new Date(r.d + "T12:00:00Z");
-        return `<tr${r.hrs ? "" : ' style="color:#bbb"'}><td class="l">${Number(r.d.slice(8))}(${DOW[dt.getUTCDay()]})</td><td>${r.w ? hh(r.w.clock_in) : ""}</td><td>${r.w ? hh(r.w.clock_out) : ""}</td>
+    const tcN = work.filter(r => r.w && r.w.tc_checked_at).length;
+    return `<div class="card"><h2>🕒 ${esc(nameOf(id))} <small style="font-size:12px;color:var(--sub)">時給 ${num(rate)}円・${work.length}日</small>
+        <small style="font-size:12.5px;margin-left:8px;color:${tcN === work.length ? "#1a8a4a" : "#E0001B"}">⏱ タイムカード確認 ${tcN}／${work.length}日</small></h2>
+      <div class="tbl"><table><tr><th class="l">月日</th><th>⏱ タイムカード</th><th>出勤</th><th>退勤</th><th>時間合計</th><th>日払い報酬</th><th>日払い残額</th><th>総報酬</th></tr>
+      ${rows.map(r => { const dt = new Date(r.d + "T12:00:00Z"), on = !!(r.w && r.w.tc_checked_at);
+        const tc = r.w && r.hrs ? `<label style="cursor:pointer;white-space:nowrap" title="${on ? esc((r.w.tc_checked_by || "") + " " + when(r.w.tc_checked_at)) : "タイムカードと合っていたら押す"}"><input type="checkbox" style="width:18px;height:18px;vertical-align:middle" ${on ? "checked" : ""} onchange="tcCheck('${r.w.staff_id}','${r.d}',this.checked)">${on ? ` <small style="color:var(--sub)">${esc(r.w.tc_checked_by || "")}</small>` : ""}</label>` : "";
+        return `<tr${r.hrs ? (on ? ' style="background:#EEF9EE"' : "") : ' style="color:#bbb"'}><td class="l">${Number(r.d.slice(8))}(${DOW[dt.getUTCDay()]})</td><td>${tc}</td><td>${r.w ? hh(r.w.clock_in) : ""}</td><td>${r.w ? hh(r.w.clock_out) : ""}</td>
           <td>${r.hrs || ""}</td><td>${r.hrs ? num(r.paid) + (r.unpaid ? ' <small style="color:#E0001B">（まだ払っていない）</small>' : "") : ""}</td><td>${r.hrs ? num(r.rest) : ""}</td><td>${r.hrs ? num(r.total) : ""}</td></tr>`; }).join("")}
-      <tr class="tot"><td class="l">合計</td><td></td><td></td><td>${Math.round(sum("hrs") * 100) / 100}</td><td>${num(sum("paid"))}</td><td>${num(sum("rest"))}</td><td>${num(sum("total"))}</td></tr></table></div>
+      <tr class="tot"><td class="l">合計</td><td>${tcN}／${work.length}</td><td></td><td></td><td>${Math.round(sum("hrs") * 100) / 100}</td><td>${num(sum("paid"))}</td><td>${num(sum("rest"))}</td><td>${num(sum("total"))}</td></tr></table></div>
       <div class="leg">・記録簿の「💴 内勤の日払い」で入れた出勤・退勤から　・総報酬＝時間×時給　・日払い残額＝総報酬−その日に払った日払い</div></div>`;
   }).join("");
   return cards ? `<h2 style="margin:18px 4px 8px;font-size:17px">🕒 内勤の勤怠（${esc($("ymLabel").textContent)}）</h2>` + cards : "";
+}
+// ⏱ タイムカードと見くらべたチェック（SQL 223）。数字にはさわらない。押した人・時刻を残す
+async function tcCheck(sid, d, on){
+  const patch = on ? { tc_checked_at: new Date().toISOString(), tc_checked_by: KB.operatorName() } : { tc_checked_at: null, tc_checked_by: "" };
+  try{
+    q(await sb.from("kb_staff_work").update(patch).eq("biz_date", d).eq("staff_id", sid));
+    const w = MO.sw.find(x => x.staff_id === sid && x.biz_date === d); if(w) Object.assign(w, patch);
+    const y = scrollY; paintMonth(); scrollTo(0, y);
+  }catch(e){ toast("保存できませんでした：" + (e.message || e) + "（SQL 223 がまだかも）"); paintMonth(); }
 }
 function paintMonth(){
   if(!MO) return;
