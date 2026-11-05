@@ -91,6 +91,7 @@ async function run(){
   if(!confirm(only ? `${only} の1日分を取りこみます。よろしいですか？` : `${J.month} の ${days.length}日分と、まだ終わっていない未精算を取りこみます。よろしいですか？`)) return;
   $("go").disabled = true; $("res").innerHTML = "";
   const tot = { res: 0, newCustomers: 0, castDays: 0, staff: 0, missStore: 0 }, missCast = new Set(), missStaff = new Set(), by = KB.operatorName();
+  const checks = [];
   for(let i = 0; i < days.length; i++){
     let ok = false, err = "";
     for(let t = 0; t < 3 && !ok; t++){
@@ -99,6 +100,21 @@ async function run(){
       catch(e){ err = e.message || String(e); await new Promise(r => setTimeout(r, 1500)); }
     }
     if(!ok){ $("res").innerHTML = `<span class="ng">${esc(days[i].d)} で止まりました：${esc(err)}<br>（SQL 203 は実行ずみ？）もう一度「取りこむ」を押すと、その日から入れなおせます。</span>`; $("go").disabled = false; return; }
+    // 💰 答え合わせ（SQL 222）：アプリに入った数字と、エクセルのその日の合計をくらべる。1円でもちがえば止める（2026/11/6 店長：お金は絶対まちがえない）
+    const X = days[i].check;
+    if(X){
+      let A;
+      try{ A = q(await sb.rpc("kb_xl_day_check", { p_day: days[i].d })); }
+      catch(e){ $("res").innerHTML = `<span class="ng">${esc(days[i].d)}：答え合わせができませんでした（SQL 222 は実行ずみ？）：${esc(e.message || e)}</span>`; $("go").disabled = false; return; }
+      const items = [["総額", A.total, X.total], ["報酬＋内勤の日払い", A.back + A.staff, X.backStaff], ["雑費", A.zappi, X.zappi], ["内勤の日払い", A.staff, X.staff], ["カード", A.card, X.card], ["店落ち（今日の数字）", A.drop, X.drop]];
+      const bad = items.filter(([, a, x]) => Number(a) !== Number(x));
+      checks.push({ d: days[i].d, items, bad: bad.length });
+      if(bad.length){
+        $("res").innerHTML = `<div class="ng" style="font-size:15px">⛔ ${esc(days[i].d)} の数字がエクセルとちがうので止めました（この日までは入っています）</div>${checkTable(checks)}
+          <p class="lead">この日の記録簿を開いて、ちがう所を Claude に教えてください。直してから、この日からもう一度取りこめます（同じ日を入れなおすと、その日のエクセルの分だけ入れなおします）。</p>`;
+        $("go").disabled = false; return;
+      }
+    }
     $("fill").style.width = Math.round((i + 1) / days.length * 100) + "%";
     $("prog").textContent = `${days[i].d}　${i + 1} / ${days.length} 日`;
   }
@@ -113,8 +129,16 @@ async function run(){
     <tr><td>お店がわからず入れなかった予約</td><td>${tot.missStore ? `<span class="ng">${tot.missStore} 件</span>` : "0"}</td></tr>
     <tr><td>見つからなかったキャスト</td><td>${missCast.size ? `<span class="ng">${[...missCast].map(esc).join("、")}</span>（予約は入れて、備考に名前を残しました）` : "なし"}</td></tr>
     <tr><td>入れなかった内勤</td><td>${missStaff.size ? [...missStaff].map(esc).join("、") : "なし"}</td></tr></table>
-    <p class="lead" style="margin-top:8px">📒 <a href="kiroku.html">記録簿</a> でその日を開いて、エクセルと見くらべてください。</p>`;
+    <p class="lead" style="margin-top:8px">📒 <a href="kiroku.html">記録簿</a> でその日を開いて、エクセルと見くらべてください。</p>
+    <h3 style="margin-top:12px">💰 お金の答え合わせ（エクセル ⇔ アプリ）</h3>${checks.length ? checkTable(checks) : `<p class="ng">答え合わせの数字がファイルにありません（新しいファイル kiroku_202610_v3.json を使ってください）</p>`}`;
   $("go").disabled = false;
+}
+// 答え合わせの表：日ごとに ✅／⛔、ちがう所はエクセルとアプリの両方の数字を出す
+function checkTable(list){
+  const yen = v => Number(v || 0).toLocaleString();
+  return `<table style="font-size:13px"><tr><th>日</th><th>結果</th><th style="text-align:left">くわしく（アプリ ／ エクセル）</th></tr>${list.map(c => `<tr><td>${esc(c.d.slice(5))}</td>
+    <td>${c.bad ? '<span class="ng">⛔ ちがう</span>' : '<span class="ok">✅ 一致</span>'}</td>
+    <td style="text-align:left">${c.items.map(([k, a, x]) => Number(a) === Number(x) ? `<span style="color:#7a8">${k} ${yen(a)}</span>` : `<b class="ng">${k}：アプリ ${yen(a)} ／ エクセル ${yen(x)}</b>`).join("　")}</td></tr>`).join("")}</table>`;
 }
 init();
 </script>
