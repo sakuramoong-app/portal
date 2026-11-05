@@ -559,11 +559,44 @@ async function loadMonth(){
   $("ymLabel").textContent = `${Number(ym.slice(0, 4))}年${Number(ym.slice(5))}月`;
   $("dayArea").innerHTML = `<div class="lead">読み込み中…</div>`;
   try{
-    const R = await readRange(from, to);
+    const [R, sw, rates] = await Promise.all([readRange(from, to),
+      sb.from("kb_staff_work").select("biz_date,staff_id,clock_in,clock_out,hours,hourly,day_paid,paid").gte("biz_date", from).lt("biz_date", to).order("biz_date"),
+      sb.from("kb_staff_rates").select("staff_id,record_name,from_date,hourly").order("from_date")]);
     if(mode !== "month" || $("day").value.slice(0, 7) !== ym) return;
-    MO = Object.assign(R, { ym });
+    MO = Object.assign(R, { ym, from, to, sw: sw.error ? [] : (sw.data || []), rates: rates.error ? [] : (rates.data || []) });
   }catch(err){ $("dayArea").innerHTML = `<div class="warn">読めませんでした：${esc(err.message || err)}</div>`; return; }
   paintMonth();
+}
+/* ---------- 🕒 内勤の勤怠（月）：エクセルの集計シートのいちばん下と同じ形（2026/11/6 店長）----------
+   記録簿の「💴 内勤の日払い」で入れたもの（kb_staff_work）から。時給の内勤（蘭子・上川・若林）ごと
+   総報酬 ＝ 時間 × 時給 ／ 日払い報酬 ＝ その日に払った日払い ／ 日払い残額 ＝ 総報酬 − 日払い報酬（月末などにまとめて払う分） */
+function staffMonthHtml(){
+  if(!MO || !MO.sw) return "";
+  const days = []; for(let d = new Date(MO.from + "T12:00:00Z"); d.toISOString().slice(0, 10) < MO.to; d.setUTCDate(d.getUTCDate() + 1)) days.push(d.toISOString().slice(0, 10));
+  const ids = [...new Set(MO.rates.map(r => r.staff_id).concat(MO.sw.map(w => w.staff_id)))];
+  const nameOf = id => (MO.rates.filter(r => r.staff_id === id).slice(-1)[0] || {}).record_name || id;
+  const rateOn = (id, d) => (MO.rates.filter(r => r.staff_id === id && r.from_date <= d).slice(-1)[0] || {}).hourly || 0;
+  const hh = h => h == null ? "" : String(Math.round((Number(h) >= 24 ? Number(h) - 24 : Number(h)) * 100) / 100);
+  const cards = ids.map(id => {
+    const rows = days.map(d => {
+      const w = MO.sw.find(x => x.staff_id === id && x.biz_date === d);
+      const hrs = w ? (w.hours != null ? Number(w.hours) : (w.clock_in != null && w.clock_out != null ? w.clock_out - w.clock_in : 0)) : 0;
+      const rate = (w && w.hourly) || rateOn(id, d), total = Math.round(hrs * rate), paid = w && w.paid ? Number(w.day_paid) || 0 : 0;
+      return { d, w, hrs, rate, total, paid, rest: hrs ? total - paid : 0, unpaid: !!(w && !w.paid && Number(w.day_paid)) };
+    });
+    const work = rows.filter(r => r.hrs > 0);
+    if(!work.length) return "";
+    const sum = k => work.reduce((s, r) => s + r[k], 0);
+    const rate = rateOn(id, MO.to);
+    return `<div class="card"><h2>🕒 ${esc(nameOf(id))} <small style="font-size:12px;color:var(--sub)">時給 ${num(rate)}円・${work.length}日</small></h2>
+      <div class="tbl"><table><tr><th class="l">月日</th><th>出勤</th><th>退勤</th><th>時間合計</th><th>日払い報酬</th><th>日払い残額</th><th>総報酬</th></tr>
+      ${rows.map(r => { const dt = new Date(r.d + "T12:00:00Z");
+        return `<tr${r.hrs ? "" : ' style="color:#bbb"'}><td class="l">${Number(r.d.slice(8))}(${DOW[dt.getUTCDay()]})</td><td>${r.w ? hh(r.w.clock_in) : ""}</td><td>${r.w ? hh(r.w.clock_out) : ""}</td>
+          <td>${r.hrs || ""}</td><td>${r.hrs ? num(r.paid) + (r.unpaid ? ' <small style="color:#E0001B">（まだ払っていない）</small>' : "") : ""}</td><td>${r.hrs ? num(r.rest) : ""}</td><td>${r.hrs ? num(r.total) : ""}</td></tr>`; }).join("")}
+      <tr class="tot"><td class="l">合計</td><td></td><td></td><td>${Math.round(sum("hrs") * 100) / 100}</td><td>${num(sum("paid"))}</td><td>${num(sum("rest"))}</td><td>${num(sum("total"))}</td></tr></table></div>
+      <div class="leg">・記録簿の「💴 内勤の日払い」で入れた出勤・退勤から　・総報酬＝時間×時給　・日払い残額＝総報酬−その日に払った日払い</div></div>`;
+  }).join("");
+  return cards ? `<h2 style="margin:18px 4px 8px;font-size:17px">🕒 内勤の勤怠（${esc($("ymLabel").textContent)}）</h2>` + cards : "";
 }
 function paintMonth(){
   if(!MO) return;
@@ -599,7 +632,8 @@ function paintMonth(){
       <tr class="tot"><td class="l">合計</td><td>${num(S.F)}</td><td>${S.card ? "−" + num(S.card) : ""}</td><td>${S.tr ? "−" + num(S.tr) : ""}</td><td>${S.ex ? "−" + num(S.ex) : ""}</td><td>${num(S.fin)}</td><td class="l">${S.yet ? `まだ ${S.yet}人` : ""}</td><td>${S.notCol ? "−" + num(S.notCol) : ""}</td><td>${num(S.hand)}</td><td class="l">${num(S.rcv)}（${S.rdays}日分）</td></tr>
     </table></div>
     <div class="leg">・日付を押すと、その日の「1日ごと」が開きます　・場所で絞っても、店落ち粗利から右はその日の全部です<br>
-      ・店落ち粗利（F）＝ キャスト全員の店落ち（暫定的な残額＋雑費）＋ 振込 − 内勤日払い　・全部回収したら ＝ F − D − 振込 − E</div>` : `<div class="lead">この月の予約はありません。</div>`) + `</div>`;
+      ・店落ち粗利（F）＝ キャスト全員の店落ち（暫定的な残額＋雑費）＋ 振込 − 内勤日払い　・全部回収したら ＝ F − D − 振込 − E</div>` : `<div class="lead">この月の予約はありません。</div>`) + `</div>`
+    + staffMonthHtml();
   $("dayArea").innerHTML = html;
 }
 
