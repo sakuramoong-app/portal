@@ -7128,7 +7128,8 @@ function livePaint(){
   new MutationObserver(() => { if(!$("formBg").classList.contains("show")) KBLive.setEditing(null); }).observe($("formBg"), { attributes: true, attributeFilter: ["class"] });
   // 入力中の中身（店・時間・キャスト・お客さんの名前）をほかの人の右下に出す。電話番号は出さない
   const selText = id => { const s = $(id); return s && s.selectedIndex > 0 ? (s.options[s.selectedIndex].text || "").replace(/（.*$/, "").trim() : ""; };
-  const formInfo = () => [selText("f_store"), ($("f_start") || {}).value || "", selText("f_cast"), (($("f_name") || {}).value || "").trim() && (($("f_name").value || "").trim() + "様")].filter(Boolean).join("・");
+  // お客さんの名前は送らない（入力中の合図に、お客さんの情報は入れない。2026/11/6 社長の指摘）
+  const formInfo = () => [selText("f_store"), ($("f_start") || {}).value || "", selText("f_cast")].filter(Boolean).join("・");
   const sendInfo = () => { if($("formBg").classList.contains("show") && KBLive.setInfo) KBLive.setInfo(formInfo()); };
   $("formBg").addEventListener("input", sendInfo); $("formBg").addEventListener("change", sendInfo);
   const __renderListLive = renderList;

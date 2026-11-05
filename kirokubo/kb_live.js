@@ -8,7 +8,7 @@
 (function(){
   const tabId = Math.random().toString(36).slice(2) + Date.now().toString(36);
   const changedCbs = [], presenceCbs = [];
-  let ch = null, ready = false, editing = null, sendTimer = null, others = [], info = "", infoTimer = null;   // info：入力中の予約のかんたんな中身（店・時間・キャスト・名前）
+  let ch = null, ready = false, editing = null, sendTimer = null, others = [], info = "", infoTimer = null;   // info：入力中の予約のかんたんな中身（店・時間・キャスト。お客さんの名前は入れない）
 
   // 保存（kb_ の表への書きこみ）を見はる。読むだけ・rpc は数えない
   const of = window.fetch.bind(window);
@@ -37,10 +37,16 @@
     others = list;
     presenceCbs.forEach(f => { try{ f(list); }catch(e){} });
   }
-  function start(){
+  // 🔒 チャンネルは private（ログインした内勤だけ入れる。SQL 214 の決まり）。ログインがすむまでは入らない（2026/11/6 社長の指摘）
+  //   前は公開のチャンネルで、ページの中の公開鍵だけで、ログインしていない画面でも「入力中」が見えていた
+  async function start(){
     if(!window.KB || !KB.sb){ setTimeout(start, 300); return; }
     if(typeof KB.sb.channel !== "function") return;
-    ch = KB.sb.channel("kb-live", { config: { broadcast: { self: false }, presence: { key: tabId } } });
+    let sess = null;
+    try{ sess = ((await KB.sb.auth.getSession()).data || {}).session; }catch(e){}
+    if(!sess || !sess.access_token){ setTimeout(start, 2000); return; }   // ログインしていないあいだは、つながない
+    try{ KB.sb.realtime.setAuth(sess.access_token); }catch(e){}
+    ch = KB.sb.channel("kb-live", { config: { private: true, broadcast: { self: false }, presence: { key: tabId } } });
     ch.on("broadcast", { event: "changed" }, msg => {
       const p = (msg && msg.payload) || {};
       if(p.from === tabId) return;
