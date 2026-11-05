@@ -2160,9 +2160,9 @@ function pfVibesText(v){ return Array.isArray(v) ? v.join("・") : String(v || "
 // 🌐 公式HPのアイコン（2026/11/6 店長の決まり）
 //   メイン：キャストの種類（NH・男の娘・女装子）
 //   サブ：状態（竿/玉）→ ありあり／ありなし／なしなし、Pサイズ → 13cm〜20cm、雰囲気（公式HPにアイコンがある言葉だけ。管理画面にないものはとばす）
-const CAST_TYPES = ["NH", "男の娘", "女装子"];
+const CAST_TYPES = ["ニューハーフ", "男の娘", "女装子", "爆乳男子"];   // 公式HPのアイコンと同じ言葉（2026/11/6）
 function hpIconsOf(data, sk){
-  const main = String(profGet(data, sk, "castType") || "").trim(), subs = [];
+  const main = String(profGet(data, sk, "castType") || "").trim().replace(/^NH$/i, "ニューハーフ"), subs = [];
   const st = String(profGet(data, sk, "state") || "").normalize("NFKC").replace(/\s/g, "");
   const m = st.match(/(あり|なし)[\/／・]?(あり|なし)/);
   if(m) subs.push(m[1] + m[2]);

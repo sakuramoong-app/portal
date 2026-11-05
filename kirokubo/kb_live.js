@@ -31,12 +31,31 @@
     if(!ch || !ready) return;
     ch.track({ tab: tabId, by: who(), rid: editing, info, page: location.pathname.split("/").pop(), at: Date.now() }).catch(() => {});
   }
-  function readPresence(){
-    const st = ch.presenceState(), list = [];
-    Object.keys(st).forEach(k => (st[k] || []).forEach(p => { if(p.tab !== tabId) list.push(p); }));
-    others = list;
-    presenceCbs.forEach(f => { try{ f(list); }catch(e){} });
+  // 「入力中」が消えのこらないように（2026/11/6 わか：入力中：わか（新しい予約）が消えない）
+  //   入力中のあいだは1分ごとに合図を出しなおす。受ける側は、3分以上合図が新しくならない「入力中」は出さない
+  //   （相手のPCと時計がずれることがあるので、こちらで「最後に変わったのを見た時刻」でくらべる）
+  const seen = {};   // tab → { at: 相手の at, t: こちらで見た時刻 }
+  const STALE = 3 * 60 * 1000;
+  function fresh(){
+    const now = Date.now();
+    return others.map(p => (p.rid && seen[p.tab] && now - seen[p.tab].t > STALE) ? Object.assign({}, p, { rid: null, info: "" }) : p);
   }
+  function readPresence(){
+    const st = ch.presenceState(), list = [], now = Date.now();
+    Object.keys(st).forEach(k => (st[k] || []).forEach(p => {
+      if(p.tab === tabId) return;
+      const s = seen[p.tab];
+      if(!s || s.at !== p.at) seen[p.tab] = { at: p.at, t: now };
+      list.push(p);
+    }));
+    others = list;
+    const f2 = fresh();
+    presenceCbs.forEach(f => { try{ f(f2); }catch(e){} });
+  }
+  setInterval(() => {
+    if(editing) track();   // 入力中の合図を出しなおす
+    if(others.some(p => p.rid)){ const f2 = fresh(); presenceCbs.forEach(f => { try{ f(f2); }catch(e){} }); }   // 古くなった「入力中」を消す
+  }, 60 * 1000);
   // 🔒 チャンネルは private（ログインした内勤だけ入れる。SQL 214 の決まり）。ログインがすむまでは入らない（2026/11/6 社長の指摘）
   //   前は公開のチャンネルで、ページの中の公開鍵だけで、ログインしていない画面でも「入力中」が見えていた
   async function start(){
@@ -65,6 +84,7 @@
     onPresence: f => presenceCbs.push(f),
     setEditing(rid){ editing = rid == null ? null : String(rid); info = ""; track(); },
     setInfo(s){ s = String(s || "").slice(0, 80); if(s === info) return; info = s; clearTimeout(infoTimer); infoTimer = setTimeout(track, 1500); },
-    others: () => others,
+    others: () => fresh(),
+    isEditing: () => editing,
   };
 })();

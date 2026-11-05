@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="kb.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
-<script src="kb_live.js?v=3"></script><!-- いっしょに使う（保存の合図・入力中）。kb_common より前 -->
+<script src="kb_live.js?v=4"></script><!-- いっしょに使う（保存の合図・入力中）。kb_common より前 -->
 <script src="kb_common.js?v=23"></script>
 <style>
   /* ===== 見やすさ重視（文字は大きめ・枠は少なめ・色は状態と注意だけ） ===== */
@@ -7179,6 +7179,8 @@ function livePaint(){
   openForm = function(id){ const r = __openFormLive.apply(this, arguments); Promise.resolve(r).then(() => { KBLive.setEditing(editing ? editing.id : "new"); livePaint(); }); return r; };
   // 閉じたら「入力中」を消す（×・キャンセル・外を押す・保存、どれで閉じても）
   new MutationObserver(() => { if(!$("formBg").classList.contains("show")) KBLive.setEditing(null); }).observe($("formBg"), { attributes: true, attributeFilter: ["class"] });
+  // 念のため：受付が閉じているのに「入力中」のままなら消す（30秒ごと。2026/11/6 消えのこり対策）
+  setInterval(() => { if(KBLive.isEditing && KBLive.isEditing() && !$("formBg").classList.contains("show")) KBLive.setEditing(null); }, 30 * 1000);
   // 入力中の中身（店・時間・キャスト・お客さんの名前）をほかの人の右下に出す。電話番号は出さない
   const selText = id => { const s = $(id); return s && s.selectedIndex > 0 ? (s.options[s.selectedIndex].text || "").replace(/（.*$/, "").trim() : ""; };
   // お客さんの名前は送らない（入力中の合図に、お客さんの情報は入れない。2026/11/6 社長の指摘）
