@@ -4245,7 +4245,8 @@ async function outcallDone(id, bd){
   if(!(await pushLog(id, "アウトコールあり → 終了", { status: "done" }))) return;
   const cd = castDays[r.cast_id] || {};
   const area = STANDBY.find(s=>(r.area || "").includes(s)) || (STANDBY.includes(cd.standby) ? cd.standby : "出張・他エリア");
-  if(r.cast_id) await saveDayPart(r.cast_id, { standby: area, status: "" });
+  // 先に精算した子（精算済・待機中のまま）は、アウトコールのあとも「待機中」のまま（空にすると今いないになる）2026/11/6
+  if(r.cast_id) await saveDayPart(r.cast_id, { standby: area, status: cd.settled ? "待機中" : "" });
   toast(castName(r.cast_id) + "：終了 → " + area + "で待機");
   renderList(); loadCallAlerts();
 }
