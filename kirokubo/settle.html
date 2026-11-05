@@ -196,7 +196,9 @@ function calcCast(castId){
   const provisional = total - reward - option;          // 暫定残額（総額 − 報酬）
   const shopDrop = total - reward - option + zappi;   // 店落ち＝総額−報酬＋雑費（交通費・プラスマイナスは経費なので入れない）                    // 店落ち（暫定残額 ＋ 雑費 など）
   const realDrop = provisional - withholding;           // 実質的な店落ち（暫定残額 − 源泉）
-  const deposited = cd.deposited != null ? cd.deposited : null;
+  // 投函した額：精算済にすると空にもどす（②の精算で前の額が残らないように）。精算済の枠では、精算したときの額を出す（2026/11/5）
+  const snapDep = cd.settled && !prevParts.length && cd.settle_snapshot ? cd.settle_snapshot.deposited : null;
+  const deposited = cd.deposited != null ? cd.deposited : snapDep != null ? Number(snapDep) : null;
   const diff = deposited != null ? deposited - drop : null;   // マイナス＝未精算／プラス＝お釣り
   return { partNo: prevParts.length + 1, prevParts, allLive, transferPaid, trIds, all, live, cd, reward, option, transportBack, why, exempt, zappiAuto, zappi, plusItems, minusItems, plus, minus, takeHome, total, cardPaid, cardUnconfirmed, drop, withholding, provisional, shopDrop, realDrop, deposited, diff };
 }
@@ -221,7 +223,7 @@ function render(){
     <div class="s ${showMoney ? "" : "hide"}">総額<b>${yen(sum.total)}</b></div>
     <div class="s ${showMoney ? "" : "hide"}">キャスト手取り<b>${yen(sum.take)}</b></div>
     <div class="s ${showMoney ? "" : "hide"}">投函額（−はお店から渡す）<b>${yen(sum.drop)}</b></div>
-    <div class="s ${showMoney ? "" : "hide"}">店落ち<b>${yen(sum.shop)}</b></div>
+    <div class="s ${showMoney ? "" : "hide"}" title="記録簿の「今日の店落ち」は、ここから内勤の日払いを引いた数字です">店落ち（暫定＋雑費・内勤日払いを引く前）<b>${yen(sum.shop)}</b></div>
     <div class="s ${showMoney ? "" : "hide"}">☀️ 22時まで（暫定＋雑費）<b>${yen(split[0])}</b></div>
     <div class="s ${showMoney ? "" : "hide"}">🌙 22時から（暫定＋雑費）<b>${yen(split[1])}</b></div>
     <button class="btn btn-ghost btn-sm" onclick="showMoney=!showMoney;render()">${showMoney ? "🙈 金額をかくす" : "👁 金額を見る"}</button>
@@ -556,6 +558,6 @@ init();
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 <script src="kb_cal.js?v=1"></script>
-<script src="unsettled.js?v=50"></script>
+<script src="unsettled.js?v=51"></script>
 </body>
 </html>

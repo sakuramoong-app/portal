@@ -2539,10 +2539,12 @@ function nowHour(){ const j = new Date(Date.now() + 9 * 3600 * 1000); let h = j.
 function hShort(v){ const h = Math.floor(v) % 24, m = Math.round((v - Math.floor(v)) * 60); return h + (m ? ":" + String(m).padStart(2, "0") : ""); }
 function boardState(x){
   const isToday = day === KB.bizDateOf(), now = nowHour(), cd = x.cd || {};
-  if(cd.settled || ["お茶", "欠勤", "精算済"].includes(cd.status)) return "gone";
+  if(cd.settled || ["お茶", "欠勤", "精算済", "不在"].includes(cd.status)) return "gone";
+  if(cd.status === "仕事中") return "work";   // 状態のプルダウンで手で選んだもの（2026/11/5）
   const work = x.bks.find(b=>b.r.status === "working" || (isToday && b.s <= now && now < b.e && b.r.status !== "done"));
   if(work) return "work";
-  if(["予約スタート", "出勤前連絡"].includes(cd.status)) return "before";
+  if(cd.status === "待機中") return "wait";
+  if(["予約スタート", "出勤前連絡", "出勤前"].includes(cd.status)) return "before";
   if(isToday && x.shift){
     if(now < x.shift.start) return "before";
     if(now >= x.shift.end) return "gone";
@@ -2578,7 +2580,8 @@ function renderBoard(){
     const note = cds ? cds : (x.cd && x.cd.settled ? "精算済" : "");
     const now = nowHour(), live = x.bks.filter(b=>!["done", "cancel", "tobi"].includes(b.r.status));
     const rel = x.bks.find(b=>b.r.status === "working") || live.filter(b=>b.e > now).sort((a, b)=>a.s - b.s)[0] || live.sort((a, b)=>b.s - a.s)[0];
-    const pill = rel ? `<span class="st ${rel.r.status}">${esc(hm(rel.r.start_at))} ${esc(STATUS[rel.r.status] || "")}</span>` : "";
+    // 仕事中は、終わる時刻も出す（12:00〜13:30 接客中）2026/11/5
+    const pill = rel ? `<span class="st ${rel.r.status}">${esc(hm(rel.r.start_at))}${st === "work" && rel.r.end_at ? "〜" + esc(hm(rel.r.end_at)) : ""} ${esc(STATUS[rel.r.status] || "")}</span>` : "";
     const seat = x.c && typeof seatOf === "function" ? seatOf(x.c.id) : null;
     const cls = st === "gone" ? "gone inl" + (cds === "お茶" ? " tea" : cds === "欠勤" ? " absent" : "") : st;
     return `<button class="chipc ${cls}" onclick="openCast('${x.c ? x.c.id : ""}','${esc(x.name)}')">【${esc(nm)}】${esc(sh)}${seat ? `<span class="seatbadge">🪑${seat.seat}</span>` : ""}${note ? `<small>（${esc(note)}）</small>` : ""}${pill && st !== "gone" ? `<br>${pill}` : ""}</button>`;
@@ -2706,7 +2709,9 @@ function calcCast(castId){
   const provisional = total - reward - option;          // 暫定残額（総額 − 報酬）
   const shopDrop = total - reward - option + zappi;   // 店落ち＝総額−報酬＋雑費（交通費・プラスマイナスは経費なので入れない）                    // 店落ち（暫定残額 ＋ 雑費 など）
   const realDrop = provisional - withholding;           // 実質的な店落ち（暫定残額 − 源泉）
-  const deposited = cd.deposited != null ? cd.deposited : null;
+  // 投函した額：精算済にすると空にもどす（②の精算で前の額が残らないように）。精算済の枠では、精算したときの額を出す（2026/11/5）
+  const snapDep = cd.settled && !prevParts.length && cd.settle_snapshot ? cd.settle_snapshot.deposited : null;
+  const deposited = cd.deposited != null ? cd.deposited : snapDep != null ? Number(snapDep) : null;
   const diff = deposited != null ? deposited - drop : null;   // マイナス＝未精算／プラス＝お釣り
   return { partNo: prevParts.length + 1, prevParts, allLive, transferPaid, trIds, all, live, cd, reward, option, transportBack, why, exempt, zappiAuto, zappi, plusItems, minusItems, plus, minus, takeHome, total, cardPaid, cardUnconfirmed, drop, withholding, provisional, shopDrop, realDrop, deposited, diff };
 }
@@ -3424,7 +3429,7 @@ renderBoard = function(){
     // 予約スタート：最初の予約の時刻を大きめに
     const first = live.slice().sort((a, b)=>a.s - b.s)[0];
     const pill = st === "start" ? (first ? `<br><span class="firstbk">🕐 最初の予約 ${esc(hm(first.r.start_at))}</span>` : `<br><small>（予約がまだありません）</small>`)
-      : rel && st !== "gone" ? `<br><span class="st ${rel.r.status}">${esc(hm(rel.r.start_at))} ${esc(STATUS[rel.r.status] || "")}</span>` : "";
+      : rel && st !== "gone" ? `<br><span class="st ${rel.r.status}">${esc(hm(rel.r.start_at))}${st === "work" && rel.r.end_at ? "〜" + esc(hm(rel.r.end_at)) : ""} ${esc(STATUS[rel.r.status] || "")}</span>` : "";   // 仕事中は終わる時刻も（2026/11/5）
     const cls = st === "gone" ? "gone inl" + (gk === "出勤前" ? " pre" : gk === "お茶" ? " tea" : gk === "欠勤" ? " absent" : "") : st;
     let seat = "";
     if(st === "wait" && col === "鶯谷" && cid && seatsOk && KB.CAN_EDIT){
@@ -3565,7 +3570,7 @@ function freeNowOf(x){
   if(day !== KB.bizDateOf() || !x.shift) return false;
   const now = nowHour(), g = gapOf(x), cd = x.cd || {};
   if(now < x.shift.start || now >= x.shift.end) return false;
-  if(cd.settled || ["お茶", "欠勤", "精算済"].includes(cd.status)) return false;
+  if(cd.settled || ["お茶", "欠勤", "精算済", "不在", "仕事中"].includes(cd.status)) return false;
   return !x.bks.some(b=>b.s - g <= now && now < b.e + g);
 }
 // 🙋 受付の中で「今だれ行けますか？」：今すぐ行ける子と、3時間以内にあく子（あく時刻順）。押すとキャストに入る（2026/11/4）
@@ -3659,11 +3664,13 @@ renderListTable = function(){
 function dayStatusSel(cid){
   const cd = castDays[cid] || {}, x = tlRows().find(r=>r.c && r.c.id === cid);
   const st = x ? boardState(x) : "gone", col = x ? boardCol(x, st) : "";
-  const cur = st === "gone" ? goneKind(cd) : "_here";
-  const hereLbl = { wait: "🟡 待機中", work: "🔴 仕事中", start: "🔵 予約スタート" }[st] || "";
-  if(!KB.CAN_EDIT) return `<span class="st">${esc(st === "gone" ? "今いない・" + (cur || "不在") : hereLbl + (col ? "（" + col + "）" : ""))}</span>`;
-  const opts = (st !== "gone" ? [["_here", hereLbl + (col ? "（" + col + "）" : "")]] : []).concat([["", "⬜ 不在"], ["出勤前", "🟪 出勤前"], ["お茶", "🟩 お茶"], ["欠勤", "🟥 欠勤"]]);
-  return `<select class="daysel ${cur === "お茶" ? "tea" : cur === "欠勤" ? "absent" : cur === "出勤前" ? "pre" : cur === "" ? "away" : ""}" onclick="event.stopPropagation()" onchange="setDayStatus('${cid}',this.value)">
+  // 状態：待機中・仕事中・出勤前連絡・不在・お茶・欠勤（2026/11/5）。えらんでいなければ「自動」（シフトと予約から）
+  const MAN = ["待機中", "仕事中", "出勤前連絡", "不在", "お茶", "欠勤"];
+  const cur = MAN.includes(cd.status) ? cd.status : cd.status === "出勤前" ? "出勤前連絡" : "";
+  const autoLbl = { wait: "🟡 待機中", work: "🔴 仕事中", before: "🟪 出勤前", start: "🔵 予約スタート", gone: "⬜ 今いない" }[st] || "";
+  if(!KB.CAN_EDIT) return `<span class="st">${esc((cur || autoLbl) + (col ? "（" + col + "）" : ""))}</span>`;
+  const opts = [["", "🤖 自動：" + autoLbl.replace(/^\S+\s/, "") + (col && !cur ? "（" + col + "）" : "")], ["待機中", "🟡 待機中"], ["仕事中", "🔴 仕事中"], ["出勤前連絡", "🟪 出勤前連絡"], ["不在", "⬜ 不在"], ["お茶", "🟩 お茶"], ["欠勤", "🟥 欠勤"]];
+  return `<select class="daysel ${cur === "お茶" ? "tea" : cur === "欠勤" ? "absent" : cur === "出勤前連絡" ? "pre" : cur === "不在" ? "away" : ""}" onclick="event.stopPropagation()" onchange="setDayStatus('${cid}',this.value)">
     ${opts.map(([v, l])=>`<option value="${v}" ${cur === v ? "selected" : ""}>${l}</option>`).join("")}</select>`;
 }
 // 📍 今どこ（待機場所）のプルダウン：キャストの枠の名前の横。選ぶと「今どこに誰が」の場所が自動で動く（2026/11/4）
@@ -3680,15 +3687,16 @@ async function setWhere(cid, v){
   const seat = seatsOk && v !== "鶯谷" ? seatOf(cid) : null;   // 鶯谷から動いたら、席は立つ
   if(seat) await leaveSeat(seat.id, true);
   // 場所を選んだら、出勤前・不在・予約スタートなどは「来ている」として待機中に（お茶・欠勤・精算済はそのまま）
-  const keep = ["お茶", "欠勤"].includes(cd.status) || cd.settled;
+  const keep = ["お茶", "欠勤", "待機中", "仕事中"].includes(cd.status) || cd.settled;
   await saveDayPart(cid, keep || !v ? { standby: v } : { standby: v, status: "" });
 }
-// 不在・出勤前・お茶・欠勤 → 今いない へ（新しい情報で上書き）
+// 状態のプルダウン。不在・お茶・欠勤 → 今いない へ（場所も消す）。自動・待機中・仕事中・出勤前連絡 は場所はそのまま
 async function setDayStatus(cid, v){
   if(v === "_here") return;
-  const seat = seatsOk ? seatOf(cid) : null;
+  const keepPlace = ["", "待機中", "仕事中", "出勤前連絡"].includes(v);
+  const seat = seatsOk && !keepPlace ? seatOf(cid) : null;
   if(seat) await leaveSeat(seat.id, true);
-  await saveDayPart(cid, { status: v, standby: "" });
+  await saveDayPart(cid, keepPlace ? { status: v } : { status: v, standby: "" });
 }
 
 /* ---------- 🔔 確認電話が来ていない予約（画面のいちばん上に赤く）
@@ -5047,7 +5055,7 @@ saveNextFee = async function(clear){
    ・カードで「URL未送信」のときは、決済の管理画面のURLを出す
    ・備考は1つずつ四角い枠で（右下に だれ・いつ）。決まった高さでスクロール
    ============================================================ */
-const PAY_ADMIN_URL = "https://pay-admin.star-pay.jp/kanri/index.php";
+const PAY_ADMIN_URL = "https://pay-admin.star-pay.jp/sms/sms_input.php";   // お客さんにSMSで決済URLを送る画面（2026/11/5）
 const PAY_LABEL = { cash: "現金", card: "カード（×1.15）", card_paid: "カード済み" };
 
 // 料金が変わるものを、裏で予約を開いて直して保存する
@@ -6916,6 +6924,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>#list > .cblock.sdone{back
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 <script src="kb_cal.js?v=1"></script>
-<script src="unsettled.js?v=50"></script>
+<script src="unsettled.js?v=51"></script>
 </body>
 </html>

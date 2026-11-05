@@ -258,7 +258,7 @@ settle = async function(id){
                  shopDrop: c.shopDrop, realDrop: c.realDrop, deposited: c.deposited, diff, by, at, transferPaid: c.transferPaid || 0, trIds: c.trIds || [],
                  uns: picked.map((x, i) => ({ kind: x.kind, date: x.date, amount: x.amount, id: x.raw.id || null, label: labels[i] })), due };
   // ② この精算に入れた予約を覚える。前の精算（①…）があれば、合計した数字にして parts に並べる
-  snap.resIds = c.live.map(r => r.id); snap.part = (c.partNo || 1);
+  snap.resIds = c.live.map(r => r.id); snap.part = (c.partNo || 1); snap.place = place;   // どこで精算したか（②のときに①を出す）
   const finalSnap = c.prevParts && c.prevParts.length ? kbSumParts(c.prevParts.concat([snap])) : snap;
   try{
     for(const x of picked){
@@ -280,7 +280,7 @@ settle = async function(id){
   const cd = unsCD()[id] || {}, logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).slice();
   logs.push({ at, by, kind: "settle", place, amount: c.deposited != null ? c.deposited : null, cam: cd.camera_check || "", text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") + (noPh ? "\n📷 写真なし（キャストがくれなかった）" : "") + (by !== KB.operatorName() ? "\n（入力：" + KB.operatorName() + "）" : "") });
   if(noPh) finalSnap.noPhoto = true;
-  await saveDay(id, Object.assign({ settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: finalSnap }, HAS_SLOG ? { settle_log: logs } : {}, HAS_170 ? { direct_home: false } : {}));
+  await saveDay(id, Object.assign({ settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: finalSnap, deposited: null }, HAS_SLOG ? { settle_log: logs } : {}, HAS_170 ? { direct_home: false } : {}));
   delete unsSel[id]; delete ptVal[id]; delete settleSkip[day + "|" + id]; delete noPhoto[id]; delete plSel[id]; delete ptDay[id]; delete ptBy[id]; await unsLoad();   // チェックを外した予約は、のこり（未精算）として次に出る
 };
 // ② 最後の精算（②など）だけ取り消す：その精算でいっしょに精算した未精算をまだにもどし、その精算で自動で入れた未精算は消す
@@ -297,7 +297,7 @@ async function unsettleLastPart(id, cd, s){
   }catch(e){ toast("未精算をもどせませんでした：" + (e.message || e)); return; }
   const logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).concat([{ at: new Date().toISOString(), by, text: `「${mk}」の精算を取り消しました（前の精算はそのまま）` }]);
   const prev = parts[parts.length - 1] || {};
-  await saveDay(id, Object.assign({ settled: true, settled_at: prev.at || cd.settled_at, settle_snapshot: kbSumParts(parts) }, HAS_SLOG ? { settle_log: logs } : {}));
+  await saveDay(id, Object.assign({ settled: true, settled_at: prev.at || cd.settled_at, settle_snapshot: kbSumParts(parts), deposited: last.deposited != null ? last.deposited : null }, HAS_SLOG ? { settle_log: logs } : {}));
   await unsLoad();
 }
 // 精算済をもどす：この日にいっしょに精算した未精算もまだにもどす。この日の精算で自動で入れた未精算は消す
@@ -318,19 +318,27 @@ unsettle = async function(id){
     }
   }catch(e){ toast("未精算をもどせませんでした：" + (e.message || e)); return; }
   const logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).concat([{ at: new Date().toISOString(), by, text: "精算済を取り消しました" + (snapU.length ? `（いっしょに精算した未精算 ${snapU.length}件もまだにもどしました）` : "") }]);
-  await saveDay(id, Object.assign({ settled: false, settled_at: null, settle_snapshot: null }, HAS_SLOG ? { settle_log: logs } : {}));
+  await saveDay(id, Object.assign({ settled: false, settled_at: null, settle_snapshot: null, deposited: cd.deposited != null ? cd.deposited : ((cd.settle_snapshot || {}).deposited ?? null) }, HAS_SLOG ? { settle_log: logs } : {}));
   await unsLoad();
 };
 
 // 📒 未精算のキャスト（全員）。精算ページの上にいつも出す。手で足す（エクセルの頃の分など）・消す
 // 今見ている日が今日より前なら、その日の「精算していない子」もリストに出す（精算済をもどした日など）。見るだけ（精算はその日の枠で）
+//   今日の画面では「🏠 直帰」の子だけ出す（直帰でも、未精算リストから個別に精算できるように。2026/11/5）
 function unsSelfDay(){
-  if(!day || typeof KB === "undefined" || day >= KB.bizDateOf() || typeof rows === "undefined") return [];
-  const cds = unsCD() || {};
+  if(!day || typeof KB === "undefined" || typeof rows === "undefined") return [];
+  const isToday = day >= KB.bizDateOf(), cds = unsCD() || {};
   return [...new Set(rows.filter(r => r.cast_id && !["cancel", "tobi"].includes(r.status)).map(r => r.cast_id))]
     // 精算済でも、のこした予約（②がまだ）があれば出す（11/2 夏目あん：①だけ精算したら消えていた。2026/11/5）
-    .filter(cid => { const cd = cds[cid] || {}; return !cd.settled || kbPendingAfterSettle(cd, rows.filter(r => r.cast_id === cid)).length; })
-    .map(cid => { let c = null; try{ c = calcCast(cid); }catch(e){} return c ? { cid, date: day, amount: c.drop } : null; }).filter(Boolean);
+    .filter(cid => { const cd = cds[cid] || {}, pend = cd.settled && kbPendingAfterSettle(cd, rows.filter(r => r.cast_id === cid)).length;
+      return isToday ? (!cd.settled || pend) && !!cd.direct_home : !cd.settled || pend; })
+    .map(cid => { let c = null; try{ c = calcCast(cid); }catch(e){} return c ? { cid, date: day, amount: c.drop, c, home: !!(cds[cid] || {}).direct_home } : null; }).filter(Boolean);
+}
+// 未精算リストに出すもの（キャストごと）：ほかの日の未精算 ＋ 今見ている日のまだの分（直帰など）。☑ で個別に精算できる
+function unsListItems(cid){
+  const me = unsSelfDay().filter(x => x.cid === cid).map(x => ({ key: "d" + x.date, kind: "day", date: x.date, amount: x.amount, raw: { c: x.c }, self: true,
+    what: (x.home ? "🏠 直帰・" : "今見ている日・") + (x.amount >= 0 ? `未精算 ${yen(x.amount)}` : `お店から渡す ${yen(-x.amount)}`) }));
+  return unsOpen(cid).filter(x => !me.some(m => m.key === x.key)).concat(me).sort((p, q) => String(p.date).localeCompare(String(q.date)));
 }
 const unsOpenSet = new Set();   // 未精算のキャスト：開いているキャスト
 function unsListHtml(){
@@ -338,10 +346,9 @@ function unsListHtml(){
   const ids = [...new Set(UNSD.map(x => x.cid).concat((UNS || []).filter(x => !x.done_on).map(x => x.cast_id), self.map(x => x.cid)))].sort((a, b) => castName(a).localeCompare(castName(b), "ja"));
   const casts = (M.casts || []).filter(c => c.status !== "left").sort((a, b) => castName(a.id).localeCompare(castName(b.id), "ja"));
   return `<div class="uhd">📒 未精算のキャスト（${ids.length}人）<small>前の${UNS_DAYS}日の、精算していない日と、投函が合わなかった分</small></div>
-    ${ids.length ? '<div class="unsgrid">' + ids.map(cid => { const l = unsOpen(cid), me = self.filter(x => x.cid === cid), sum = l.concat(me).reduce((a, x) => a + x.amount, 0);
+    ${ids.length ? '<div class="unsgrid">' + ids.map(cid => { const l = unsListItems(cid), sum = l.reduce((a, x) => a + x.amount, 0);
       // キャストごとに1行にまとめる（押すと中身が開く）。チェック中のものがあれば開いたまま 2026/11/4
-      return `<details class="unsc" ${(unsOnly[cid] || new Set()).size || unsOpenSet.has(cid) ? "open" : ""} ontoggle="this.open ? unsOpenSet.add('${cid}') : unsOpenSet.delete('${cid}')"><summary class="uh"><b>${esc(castName(cid))}</b><span class="${sum >= 0 ? "neg" : "pos"}">${sum >= 0 ? "未精算 " + yen(sum) : "渡す " + yen(-sum)}</span><small>${l.length + me.length}件</small></summary>
-        ${me.map(x => `<div class="ur"><b class="ab">・</b> <b>${unsMd(x.date)}</b>（${esc(castName(cid))}）${x.amount >= 0 ? "未精算 " + yen(x.amount) : "お店から渡す " + yen(-x.amount)}　<small style="color:#c0392b">今見ている日・まだ精算していない（この日の枠で精算）</small></div>`).join("")}
+      return `<details class="unsc" ${(unsOnly[cid] || new Set()).size || unsOpenSet.has(cid) ? "open" : ""} ontoggle="this.open ? unsOpenSet.add('${cid}') : unsOpenSet.delete('${cid}')"><summary class="uh"><b>${esc(castName(cid))}</b><span class="${sum >= 0 ? "neg" : "pos"}">${sum >= 0 ? "未精算 " + yen(sum) : "渡す " + yen(-sum)}</span><small>${l.length}件</small></summary>
         ${l.map((x, i) => `<div class="ur">${KB.CAN_EDIT ? `<input type="checkbox" ${(unsOnly[cid] || new Set()).has(x.key) ? "checked" : ""} onchange="unsOnlyToggle('${cid}','${x.key}',this.checked)" title="未精算だけを、今日精算する">` : ""}<b class="ab">${UNS_ABC[i] || i + 1}</b> <b>${unsMd(x.date)}</b>（${esc(castName(cid))}）<span class="${x.amount >= 0 ? "neg" : "pos"}">${esc(x.what)}</span>${unsJump(x.date, cid)}
           ${x.kind === "entry" && x.raw.source === "manual" ? `<small>手で入れた・${esc(x.raw.created_by || "")}</small>` : ""}
           ${x.kind === "entry" && "alert_at" in x.raw ? (KB.CAN_EDIT ? `<select class="unalert sm" title="次の出勤日に知らせる" onchange="unsSetAlert(${x.raw.id},this.value)">${Object.entries(ALERT_AT).map(([k, lb]) => `<option value="${k}" ${(x.raw.alert_at || "") === k ? "selected" : ""}>${lb.replace("次の出勤日の", "").replace("に知らせる", "")}</option>`).join("")}</select>` : x.raw.alert_at ? `<small>${ALERT_AT[x.raw.alert_at]}</small>` : "") : ""}
@@ -373,7 +380,7 @@ function unsOnlyFoot(cid, l){
       <button type="button" class="btn btn-primary btn-sm" onclick="unsOnlySettle('${cid}')">✅ 未精算だけ精算済にする</button></div></div>`;
 }
 async function unsOnlySettle(cid){
-  const l = unsOpen(cid), s = unsOnly[cid] || new Set(), picked = l.filter(x => s.has(x.key)); if(!picked.length) return;
+  const l = unsListItems(cid), s = unsOnly[cid] || new Set(), picked = l.filter(x => s.has(x.key)); if(!picked.length) return;
   const sum = picked.reduce((a, x) => a + x.amount, 0), place = $("uo_pl_" + cid).value, dv = $("uo_dep_" + cid).value;
   const dep = dv === "" ? null : Number(dv) || 0, diff = dep != null ? dep - sum : null;
   const labels = picked.map(x => unsLine(x, l.indexOf(x), cid));
@@ -801,11 +808,14 @@ cardHtml = function(id, c){
   const V = settleViewHtml(id, c), home = !done && !!cd.direct_home;
   // 精算済にする か 🏠 直帰 のどちらも押していない → 右の枠をピカピカ
   const off = cd.status === "お茶" || cd.status === "欠勤";   // お茶・欠勤は、枠ぜんたいを色に（ピカピカはなし）
-  const need = KB.CAN_EDIT && !done && !home && !off;
+  // キャンセル・トビだけ（お金も報酬もない）の子は「精算なし」（11/1 ゆい：欠勤でキャンセル2件なのに未精算と出ていた）
+  const nothing = !done && !(c.all || []).some(r => r.status !== "cancel" && r.status !== "tobi") && !c.total && !c.reward && !c.option && !c.plus && !c.minus;
+  const need = KB.CAN_EDIT && !done && !home && !off && !nothing;
   const cam = cd.camera_check || "", plNow = (done ? cd.settle_place : plSel[id]) || cd.settle_place || PLACES[0];   // 選んだ回収場所は、描きなおしても（カメラ・写真を押しても）そのまま
   return `<div class="card svc ${done ? "done" : ""} ${cd.status === "お茶" ? "tea" : cd.status === "欠勤" ? "absent" : ""}" id="card-${id}">
-    <h2>${esc(castName(id))}${cd.status === "お茶" ? `<span class="st tea">🟩 お茶</span>` : cd.status === "欠勤" ? `<span class="st absent">🟥 欠勤</span>` : ""}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : home ? "🏠 直帰" : "未精算"}</span>${done && (UNS || []).some(x => x.cast_id === id && x.biz_date === day && !x.done_on) ? `<span class="st" style="background:#FDE7E7;color:#c0392b;margin-left:4px">⚠️ 未精算あり</span>` : ""}
-      ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
+    <h2>${esc(castName(id))}${cd.status === "お茶" ? `<span class="st tea">🟩 お茶</span>` : cd.status === "欠勤" ? `<span class="st absent">🟥 欠勤</span>` : ""}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : home ? "🏠 直帰" : nothing ? "精算なし（キャンセル・トビだけ）" : "未精算"}</span>${done && (UNS || []).some(x => x.cast_id === id && x.biz_date === day && !x.done_on) ? `<span class="st" style="background:#FDE7E7;color:#c0392b;margin-left:4px">⚠️ 未精算あり</span>` : ""}
+      ${done && cd.settled_at ? (() => { const s = cd.settle_snapshot || {}, later = s.paidOn && s.paidOn !== day;   // いつ・どこで・だれが（後日の合算・個別の精算も）2026/11/5
+        return `<small class="hint2 sdwho">${later ? `<b>${s.only ? "📮 後日に個別精算" : "📮 後日に合算で精算"}</b>：` : ""}${esc(logWhen(cd.settled_at))}${cd.settle_place ? "・" + esc(cd.settle_place) : ""}${cd.settled_by ? "・" + esc(cd.settled_by) : ""}</small>`; })() : ""}</h2>
     ${resPickHtml(id, c)}
     <div class="svg2"><div class="svl">
     <details class="svf" ${svOpen.has(id) ? "open" : ""} ontoggle="this.open ? svOpen.add('${id}') : svOpen.delete('${id}')">
@@ -826,7 +836,9 @@ cardHtml = function(id, c){
         <button class="btn btn-ghost btn-sm" onclick="setZappi('${id}')">雑費を直す</button></div></div>
     </div>`}
     ${V.shop}
-    <div class="sv"><div class="shop"><div class="hd">🏪 お店用</div>
+    <div class="sv"><div class="shop"><div class="hd">🏪 お店用${!done && c.partNo > 1 ? `（${PART_MARK[c.partNo - 1] || c.partNo}の精算）` : ""}</div>
+    ${!done && c.partNo > 1 ? `<div class="prevparts">${(c.prevParts || []).map((p, i) => `<div>✅ ${PART_MARK[i] || i + 1} 精算済：${p.at ? esc(logWhen(p.at)) : ""}${p.place ? "・" + esc(p.place) : ""}${p.by ? "・" + esc(p.by) : ""}・投函 ${yen(p.deposited != null ? p.deposited : p.drop || 0)}</div>`).join("")}
+      <small>ここから下は ${PART_MARK[c.partNo - 1] || c.partNo}（のこした予約）の精算です。投函した額も ${PART_MARK[c.partNo - 1] || c.partNo} の分だけ入れてください</small></div>` : ""}
     ${unsBoxHtml(id, c)}
     <div class="acts">
       ${KB.CAN_EDIT ? `<select id="pl-${id}" class="plsel" style="background-color:${PLACE_COLOR[plNow] || "#fff"}" ${done ? "disabled" : ""}
@@ -884,6 +896,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .nophoto{display:inline-flex;align-items:center;gap:6px;font-weight:800;font-size:13px;margin:4px 0;padding:4px 10px;border:1.5px solid #E8D8DC;border-radius:99px;background:#fff;cursor:pointer}
   .ptime input[type=date]{font-family:inherit;font-size:15px;font-weight:800;padding:9px 10px;border:1.5px solid var(--line,#F1E3E7);border-radius:12px;background:#fff;color:inherit} .ptby{display:inline-flex;align-items:center;gap:4px} .ptby select{font-family:inherit;font-size:15px;font-weight:800;padding:8px 10px;border:1.5px solid var(--line,#F1E3E7);border-radius:12px;background:#fff;color:inherit}
   .unalert{font-family:inherit;font-size:13px;font-weight:700;padding:6px 8px;border:1.5px solid var(--line,#F1E3E7);border-radius:10px;background:#fff;color:inherit} .unalert.sm{font-size:11.5px;padding:2px 4px;border-radius:8px}
+  .prevparts{background:#EEF9F0;border:1.5px solid #9AD3A8;border-radius:12px;padding:6px 10px;margin:6px 0;font-size:13px;font-weight:800;color:#2e6b3c} .prevparts small{display:block;font-weight:700;color:#557;font-size:11.5px;margin-top:2px}
+  .sdwho{font-size:12.5px !important;font-weight:700;margin-left:6px}
   .camchk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .camchk > span{flex-basis:100%}
   .camchk .cb{font-family:inherit;font-weight:800;font-size:13px;border:2px solid #ddd;background:#fff;border-radius:99px;padding:4px 12px;cursor:pointer;color:#5C4B4F}
   .camchk .cb.ok.on{background:#E5F6EC;border-color:#2e8b57;color:#2e8b57} .camchk .cb.ng.on{background:#FDE7E7;border-color:#c0392b;color:#c0392b}
