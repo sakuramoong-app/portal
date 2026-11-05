@@ -594,8 +594,8 @@
     <!-- ① 電話番号（最初に台帳の履歴を見る） -->
     <div class="step">
       <h3><span class="n">1</span>電話番号・お客さんの名前（台帳で履歴を見る）</h3>
-      <div class="row1"><div class="f"><label>電話番号<span class="req">必須</span></label>
-        <div style="display:flex;gap:6px"><input id="f_phone" type="tel" inputmode="tel" placeholder="わからない時は 00" onchange="lookupCustomer()">
+      <div class="row1"><div class="f"><label>電話番号<span class="req">必須</span><small style="font-weight:700;color:var(--sub);margin-left:6px">下4けただけでも探せます（4けた入れて「🔍 調べる」）</small></label>
+        <div style="display:flex;gap:6px"><input id="f_phone" type="tel" inputmode="tel" placeholder="下4けたでも探せる・わからない時は 00" onchange="lookupCustomer()">
           <button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="lookupCustomer()">🔍 調べる</button></div></div></div>
       <div class="row1"><div class="f"><label>お客さんの名前<span class="req">必須</span></label><input id="f_name" maxlength="40" oninput="recalc()"></div></div>
       <div class="row1"><div class="f"><label>メールアドレス（あれば）</label><input id="f_email" type="email" inputmode="email" maxlength="120" placeholder="例：xxxx@gmail.com"></div></div>
