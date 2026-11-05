@@ -68,6 +68,7 @@
     <div class="cols">
       <div>
         <div class="search"><input id="q" placeholder="電話番号（下3けたからでも）か名前で探す" oninput="debounceSearch()" autocomplete="off"></div>
+        <div class="search"><input id="qp" placeholder="📍 エリア・ホテル名・住所で探す（例：川崎）" oninput="debouncePlace()" autocomplete="off"></div>
         <div class="flt">
           <button class="chip on" data-f="all" onclick="setFilter('all')">ぜんぶ</button>
           <button class="chip" data-f="ng" onclick="setFilter('ng')">⚠️ 店NG</button>
@@ -118,7 +119,27 @@ async function init(){
   const id = Number(new URLSearchParams(location.search).get("id"));   // 記録簿から「?id=」で開いたとき
   if(id) openCustomer(id);
 }
-function debounceSearch(){ clearTimeout(timer); timer = setTimeout(search, 300); }
+function debounceSearch(){ clearTimeout(timer); if($("qp")) $("qp").value = ""; timer = setTimeout(search, 300); }
+// 📍 エリア・ホテル名・住所で探す（台帳エクセルの履歴＋記録簿の予約。交通費の参考に）SQL 215。2026/11/6
+function debouncePlace(){ clearTimeout(timer); $("q").value = ""; timer = setTimeout(placeSearch, 400); }
+async function placeSearch(){
+  const t = $("qp").value.trim();
+  if(t.length < 2){ if(!t) search(); else $("listHint").textContent = "2文字以上入れてください"; return; }
+  $("listHint").textContent = "探しています…";
+  let l = [];
+  try{ l = q(await sb.rpc("kb_customer_place_search", { p_q: t, p_limit: 200 })) || []; }
+  catch(e){ $("listHint").textContent = "探せませんでした（SQL 215 は実行ずみ？）：" + (e.message || e); return; }
+  if($("qp").value.trim() !== t) return;
+  const tr = l.filter(x => Number(x.transport) > 0).map(x => Number(x.transport));
+  const avg = tr.length ? Math.round(tr.reduce((a, b) => a + b, 0) / tr.length / 500) * 500 : null;
+  $("listHint").innerHTML = `「${esc(t)}」で入ったこと：${l.length}件${l.length >= 200 ? "（新しい200件）" : ""}・${new Set(l.map(x => x.customer_id)).size}人`
+    + (tr.length ? `　🚕 交通費（記録簿の${tr.length}件）：よくある額 <b>${yen(mode(tr))}</b>・平均 約${yen(avg)}・${yen(Math.min(...tr))}〜${yen(Math.max(...tr))}` : "");
+  $("list").innerHTML = l.length ? l.map(x => `<div class="li" onclick="openCustomer(${x.customer_id})">
+      <div class="nm">${esc(x.name || "（名前なし）")}${x.ng ? '<span class="badge b-ng">⚠️ 店NG</span>' : ""}<small style="color:var(--sub);font-weight:600;margin-left:6px">${x.biz_date ? md(x.biz_date) : ""}</small></div>
+      <div class="sub">📍 ${esc([x.area, x.place].filter(Boolean).join(" "))}${Number(x.transport) ? `　🚕 ${yen(x.transport)}` : ""}　<small>${esc(x.src)}</small></div></div>`).join("")
+    : `<div class="empty">見つかりません</div>`;
+}
+const mode = a => { const c = {}; a.forEach(v => c[v] = (c[v] || 0) + 1); return Number(Object.keys(c).sort((x, y) => c[y] - c[x])[0]); };
 function setFilter(f){ filter = f; document.querySelectorAll(".flt .chip").forEach(b=>b.classList.toggle("on", b.dataset.f === f)); paintList(); }
 async function search(){
   const t = $("q").value.trim();
