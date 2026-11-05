@@ -192,7 +192,7 @@ async function start(){
   const last = nowYm();
   const opts = ymRange(first, last).reverse().map(ym=>`<option value="${ym}">${ymLabel(ym)}</option>`).join("");
   $("fromYm").innerHTML = opts; $("toYm").innerHTML = opts;
-  let saved = ""; try{ saved = localStorage.getItem("kbStatsLiveYm") || ""; }catch(e){}
+  let saved = "2026-10"; try{ const v = localStorage.getItem("kbStatsLiveYm2"); if(v != null) saved = v; }catch(e){}   // 10月はエクセルから取りこんだので、はじめから10月〜は新しい記録簿の数字（2026/11/6）
   $("liveYm").innerHTML = `<option value="">使わない（過去の数字だけ）</option>` + ymRange("2026-10", ymAdd(last, 1)).map(ym=>`<option value="${ym}">${ymLabel(ym)}から使う</option>`).join("");
   $("liveYm").value = saved; liveYm = $("liveYm").value;
   quick("thisYear", true);
@@ -214,7 +214,7 @@ function quick(k, silent){
 }
 async function changeLive(){
   liveYm = $("liveYm").value;
-  try{ localStorage.setItem("kbStatsLiveYm", liveYm); }catch(e){}
+  try{ localStorage.setItem("kbStatsLiveYm2", liveYm); }catch(e){}
   $("gate").style.display = ""; $("gate").textContent = "新しい記録簿の数字を読みこみ中…";
   await loadLive();
   $("gate").style.display = "none";
