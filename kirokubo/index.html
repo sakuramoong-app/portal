@@ -1836,7 +1836,7 @@ function pfPhotoJpeg(file, w, h){
 }
 /* ---------- ✂️ トリミング＋お店のロゴ（ロゴはプロフ用①〜⑧だけ。一覧用のサムネにはのせない） ----------
    pfPhotoPend[k].c = { z: 大きさ(1＝ぴったり), ox, oy: 写真のどこを真ん中にするか(0〜1), logo: { on, x, y: ロゴの真ん中(0〜1), w: 幅(写真の幅に対して), a: 濃さ } } */
-const LOGO_DEF = { on: true, x: 0.5, y: 0.63, w: 0.4, a: 0.7 };   // 真ん中より少し下・幅4割・少し透ける
+const LOGO_DEF = { on: true, x: 0.5, y: 0.63, w: 0.55, a: 0.5 };   // 真ん中より少し下・幅5.5割・半分透ける（2026/11/6 大きく・薄く）
 const pfLogos = {};   // お店（mk）→ Image（読みこみずみ）。null＝ロゴなし
 async function pfLogoOf(mk){
   if(mk in pfLogos) return pfLogos[mk];
