@@ -2126,7 +2126,10 @@ function paintProf(){
       <div class="pfBody ${pfEdit.basic ? "" : "pfView"}"><div class="pfCards">
       ${PF_BASIC.map(([f, l], i) => { const v = String(profGet(data, sk, f) || ""); return `<div class="pfCard"><div class="lb">${i + 1} ${l}</div>
         <div class="vw"><span>${v ? esc(v) : "—"}</span>${v ? `<button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this)" data-v="${esc(v)}">📋</button>` : ""}</div>
-        <input class="ed" id="pf_b_${f}" value="${esc(v)}" ${ro}></div>`; }).join("")}</div></div></details>
+        <input class="ed" id="pf_b_${f}" value="${esc(v)}" ${ro}></div>`; }).join("")}
+      ${(() => { const v = pfVibesText(profGet(data, sk, "vibes")); return `<div class="pfCard"><div class="lb">${PF_BASIC.length + 1} 雰囲気 <small style="color:#9C8B8F">（・で区切る）</small></div>
+        <div class="vw"><span>${v ? esc(v) : "—"}</span>${v ? `<button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this)" data-v="${esc(v)}">📋</button>` : ""}</div>
+        <input class="ed" id="pf_b_vibes" value="${esc(v)}" placeholder="例：清楚・かわいい系" ${ro}></div>`; })()}</div></div></details>
     <details ${pfAcc("intro")}><summary class="pfHead">💬 紹介文</summary><div class="pfBody">
       <div class="hint" style="display:flex;align-items:center;gap:6px">本人から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_c')">📋 コピー</button></div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
       <div class="hint" style="margin-top:8px;display:flex;align-items:center;gap:6px">店長から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_m')">📋 コピー</button></div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></details>
@@ -2149,6 +2152,7 @@ function paintProf(){
   if($("e_hotel")) $("e_hotel").innerHTML = `${hotelHtml ? `<div class="pfChips">${hotelHtml}</div>` : `<div class="hint">まだありません</div>`}
     ${CAN_EDIT ? pfHotelEditor(hp) + `<div style="text-align:right;margin-top:8px"><button class="btn btn-primary btn-sm" onclick="saveProf(true)">💾 ホテルを保存</button></div>` : ""}`;
 }
+function pfVibesText(v){ return Array.isArray(v) ? v.join("・") : String(v || "").trim(); }
 // 画面の中身 → pf.data（いま開いているお店の分）。変えたお店は pf.dirty に
 function pfCollect(){
   if(!pf || !$("pf_c")) return;
@@ -2157,6 +2161,8 @@ function pfCollect(){
   const before = JSON.stringify({ b: PF_BASIC.map(([f]) => profGet(data, sk, f)), c: profGet(data, sk, "comment"), m: profGet(data, sk, "mgrComment"), o: profOpts(data, sk) });
   const sp = data.storeProfiles[sk] = data.storeProfiles[sk] || { active: true };
   PF_BASIC.forEach(([f]) => { const v = $("pf_b_" + f).value.trim(); if(v !== String(profGet(data, sk, f) || "").trim()) sp[f] = v; });
+  // 雰囲気（キャストプロフの vibes。いくつも入れられる。2026/11/6 旧プロフにあったもの）
+  if($("pf_b_vibes")){ const v = $("pf_b_vibes").value.trim(); if(v !== pfVibesText(profGet(data, sk, "vibes"))){ sp.vibes = v.split(/[・、,，\s]+/).map(s => s.trim()).filter(Boolean); pf.dirty.add(sk); } }
   const c1 = $("pf_c").value.trim(), c2 = $("pf_m").value.trim();
   if(c1 !== String(profGet(data, sk, "comment") || "").trim()) sp.comment = c1;
   if(c2 !== String(profGet(data, sk, "mgrComment") || "").trim()) sp.mgrComment = c2;
