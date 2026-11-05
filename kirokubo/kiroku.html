@@ -1823,6 +1823,8 @@ async function lookupCustomer(keepName){
           <button type="button" class="btn btn-ghost btn-sm" onclick="if(confirm('店NGを外しますか？（まちがいだったとき）'))custNgDecide(${c.id},false)">NGを外す（まちがいだった）</button></div></div>` : "") +
       // 📝 お客さんメモ（顧客台帳のメモ。台帳エクセルの電話の欄の文字・⚠️注意の言葉もここ）
       (String(c.note || "").trim() ? `<div style="background:#FFF8D6;border:1.5px solid #F2C94C;border-radius:12px;padding:8px 12px;margin:8px 0;font-size:14px;line-height:1.7"><b>📝 お客さんメモ</b><br>${esc(String(c.note).trim()).replace(/\n/g, "<br>")}</div>` : "") +
+      // 🏷 顧客タグ（顧客台帳でつける。SQL 217）2026/11/6
+      ((c.tags || []).length ? `<div class="ctags-in">🏷 ${custTagsHtml(c)}</div>` : "") +
       // 履歴は1回ずつ1行で、大きめ・濃いめに（受付でいちばん大事なので）
       `<div class="custhist"><div class="ch-head">📋 これまで ${seenAll.length}件${xl.length ? `（うち台帳エクセル ${xl.length}件）` : ""}${seenAll.length > 10 ? "（新しい10件）" : ""}</div>
         ${past.map(p => { const x = p.status === "cancel" ? "キャンセル" : p.status === "tobi" ? "トビ" : "";
@@ -5207,6 +5209,13 @@ async function inlineSave(id, field, v){
   const label = field === "address" ? "ホテル・部屋 → " + (v || "（なし）") : "場所の種類 → " + (PLACE[v] || "（なし）");
   if(await pushLog(id, label, { [field]: v })){ toast("保存しました"); renderList(); }
 }
+// 🏷 顧客タグ（顧客台帳の kb_customers.tags）を小さいバッジで。2026/11/6
+function custTagsHtml(c){
+  const t = (c && Array.isArray(c.tags)) ? c.tags : [];
+  return t.length ? ` ${t.map(x => `<span class="ctag-b">${esc(x)}</span>`).join("")}` : "";
+}
+(function(){ const s = document.createElement("style"); s.textContent = `.ctag-b{display:inline-block;background:#FFE3EC;border:1px solid #E9A3BA;color:#B0213F;border-radius:99px;padding:0 8px;margin:0 2px;font-size:11.5px;font-weight:800;line-height:1.6;vertical-align:middle}
+  .ctags-in{margin:8px 0;font-weight:800;font-size:13px}.ctags-in .ctag-b{font-size:13px;padding:1px 10px}`; document.head.appendChild(s); })();
 function custCell(r){
   const c = r.kb_customers || {};
   if(!r.customer_id || !KB.CAN_EDIT) return c.ng ? `<br><small style="color:#B0213F">⚠️ NG：${esc(c.ng_reason || "")}</small>` : "";
@@ -5595,7 +5604,7 @@ function resCard(r, i){
       ${ed ? `<button type="button" class="rc-hotel" onclick="openHotelBox(${r.id})" title="ホテル名・部屋番号・地図（開かずに入れられる）">🏨 ${esc(r.address || "ホテル・部屋を入れる")}</button>` : r.address ? `<span class="rc-k">🏨 ${esc(r.address)}</span>` : ""}${r.address ? `<button type="button" class="rc-hcopy" title="ホテル名と部屋番号をコピー" onclick="rcCopyAddr(${r.id})">📋</button>` : ""}
       <span class="rc-k">${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""}${r.extension_count ? "＋延長" + r.extension_count : ""}</span>
       <span class="rc-k">総額 <b class="rc-yen">${yen(r.total)}</b><small>（${r.payment === "cash" && Number(r.card_total) > 0 ? "現金＋カード " + yen(Number(r.card_total)) : esc(PAY_LABEL[r.payment] || "")}）</small></span>
-      <span class="rc-k">👤<b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${digits(c.phone || "").length >= 6 ? ` <span class="tel">📞${esc(c.phone)}</span>` : ` <span class="rc-nophone">📞番号まだ</span>`}</span>
+      <span class="rc-k">👤<b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${custTagsHtml(c)}${digits(c.phone || "").length >= 6 ? ` <span class="tel">📞${esc(c.phone)}</span>` : ` <span class="rc-nophone">📞番号まだ</span>`}</span>
       ${told}
 
       ${mates.map(m => `<button type="button" class="rc-mate" onclick="rcJump(${m.id})">👥 ${esc(castName(m.cast_id))}の予約へ</button>`).join("")}

@@ -171,6 +171,7 @@ async function openCustomer(id){
     cur = q(c); if(!cur){ $("detail").innerHTML = `<div class="empty">見つかりません</div>`; return; }
     cur._res = q(res) || []; cur._hist = hist.error ? [] : (hist.data || []); cur._ngs = ngs.error ? [] : (ngs.data || []); cur._places = q(places) || [];
   }catch(e){ $("detail").innerHTML = `<div class="empty">読めませんでした：${esc(e.message || e)}</div>`; return; }
+  if(custTagList == null) await loadCustTags();
   paintList(); paintDetail();
 }
 function rowsOf(c){
@@ -219,6 +220,9 @@ function paintDetail(){
       <div class="c"><div class="k">キャンセル／トビ</div><div class="v">${cnt("cancel")}／${cnt("tobi")}</div></div>
     </div>
     ${top.length ? `<div style="font-size:13px;margin-top:6px">よく指名するキャスト：${top.map(([n, k])=>esc(n) + " " + k + "回").join("、")}</div>` : ""}</div>
+
+    <div class="csec"><h3>🏷 タグ <small style="font-size:12px;color:var(--sub);font-weight:700">押すとつく・もう一度押すと外れる（受付と予約カードに出ます）</small></h3>
+      <div id="c_tags">${custTagChips()}</div></div>
 
     <div class="csec"><h3>📝 お客さんのこと</h3>
       <div class="f2">
@@ -324,6 +328,38 @@ async function delSubPhone(i){
   if(!confirm(`副番号 ${p} を消しますか？`)) return;
   ps.splice(i, 1); await setSubPhones(ps);
 }
+/* ---------- 🏷 顧客タグ（SQL 217：kb_customers.tags ＋ kb_settings 'cust_tags'）2026/11/6 ---------- */
+var custTagList = null;
+async function loadCustTags(){
+  try{ const s = q(await sb.from("kb_settings").select("value").eq("key", "cust_tags").maybeSingle()); custTagList = Array.isArray(s && s.value) ? s.value : []; }
+  catch(e){ custTagList = []; }
+}
+function custTagChips(){
+  if(!cur) return "";
+  const have = cur.tags || [], list = [...new Set([...(custTagList || []), ...have])];
+  const ed = KB.CAN_EDIT;
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${list.map((t, i) => { const on = have.includes(t);
+      return `<button type="button" class="ctag ${on ? "on" : ""}" ${ed ? `onclick="toggleCustTag(custTagAt(${i}))"` : "disabled"}>${on ? "✓ " : ""}${esc(t)}</button>`; }).join("")}
+    ${ed ? `<button type="button" class="ctag add" onclick="addCustTag()">＋ タグを足す</button>` : ""}</div>`;
+}
+function custTagAt(i){ const have = (cur && cur.tags) || []; return [...new Set([...(custTagList || []), ...have])][i]; }
+async function toggleCustTag(t){
+  if(!cur || !KB.CAN_EDIT || !t) return;
+  const have = cur.tags || [], next = have.includes(t) ? have.filter(x => x !== t) : have.concat(t);
+  try{ q(await sb.from("kb_customers").update({ tags: next, updated_by: KB.operatorName(), updated_at: new Date().toISOString() }).eq("id", cur.id)); cur.tags = next; $("c_tags").innerHTML = custTagChips(); }
+  catch(e){ toast("タグを保存できませんでした：" + (e.message || e) + "（SQL 217 がまだかも）"); }
+}
+async function addCustTag(){
+  const t = (prompt("新しいタグ（例：タメ口・要注意）") || "").trim().slice(0, 20); if(!t) return;
+  if(!(custTagList || []).includes(t)){
+    const next = (custTagList || []).concat(t);
+    try{ q(await sb.from("kb_settings").upsert({ key: "cust_tags", value: next, note: "🏷 顧客タグの一覧（顧客台帳で足せる）" })); custTagList = next; }
+    catch(e){ toast("タグの一覧に足せませんでした：" + (e.message || e)); return; }
+  }
+  if(!(cur.tags || []).includes(t)) await toggleCustTag(t); else $("c_tags").innerHTML = custTagChips();
+}
+(function(){ const s = document.createElement("style"); s.textContent = `.ctag{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:5px 12px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;color:var(--sub)}
+  .ctag.on{background:#FFE3EC;border-color:#E05A86;color:#B0213F}.ctag.add{border-style:dashed}.ctag:disabled{cursor:default}`; document.head.appendChild(s); })();
 async function saveCustomer(){
   const patch = { name: $("c_name").value.trim(), phone: phoneNormC($("c_phone").value), email: $("c_email").value.trim(), ng: $("c_ng").value === "1", ng_reason: $("c_ngr").value.trim(), note: $("c_note").value, updated_by: KB.operatorName(), updated_at: new Date().toISOString() };
   if(patch.phone && patch.phone !== cur.phone){
