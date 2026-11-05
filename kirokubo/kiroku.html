@@ -1103,6 +1103,7 @@ function specOfProf(d){
 }
 // ダミー名の写真（公式HPの在籍番号 hp_no から。SQL 156）。押すと公式HPのその子のページ
 const DUMMY_SITE = { eighteen: "18-josokko-gakuen", gokumon: "gokumon-sm" };
+function dmProfUrl(d){ const site = DUMMY_SITE[d && d.store_key], no = d && Number(d.hp_no); return site && no ? `https://www.${site}.com/gal/gal-${no}.html` : ""; }   // 公式HPのその子のページ
 function dmPhoto(d, w){
   const site = DUMMY_SITE[d && d.store_key], no = d && Number(d.hp_no);
   if(!site || !no) return "";
@@ -2062,7 +2063,9 @@ function buildMsg(c){
   const T = castMsgTpl(), yen0 = n => Number(n || 0).toLocaleString("ja-JP");
   const money = { 総額: yen0(c.total), 現金: yen0(c.total - (c.splitCard || 0)), カード: yen0(c.splitCard || 0) };
   const V = {
-    ダミー行: isDummyStore(c.store) && $("f_dummy").value ? "\n（ダミー名「" + $("f_dummy").value + "」で受けています）" : "",
+    // 18・極門：ダミー名のプロフ（公式HPのページ）のURLも（2026/11/5）
+    ダミー行: isDummyStore(c.store) && $("f_dummy").value ? "\n（ダミー名「" + $("f_dummy").value + "」で受けています）"
+      + (() => { const dm = M.dummies.find(x => x.store_key === c.store && x.name === $("f_dummy").value), u = dmProfUrl(dm); return u ? "\n【プロフ】" + u : ""; })() : "",
     日時: `${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st||"--:--"}〜${en||"--:--"}${lateNote}`,
     店名: storeNoArea(c.store), 名前: $("f_name").value || "お客", 種別: visitTxt,
     コース: `${c.course}${/^\d+$/.test(c.course)?"分":""}${c.free?"（"+FREE_SUFFIX[c.free]+"）":""}${c.ext?"＋延長"+c.ext*30+"分":""}`,
@@ -2658,7 +2661,7 @@ function renderTL(){
         cells.push(`<div class="c ${inShift ? "on" : ""} ${i % 2 ? "half" : ""}" data-t="${tlLabel(h)}" onclick="tlCell('${cid}',${h})"></div>`);
       }
       return `<div class="r ${want != null && x.ok === false ? "dim" : ""}">
-        <div class="nm ${x.ok ? "ok" : ""}" onclick="jumpCast('${cid}')">${esc(castLabel(x))}${st}<small>${shiftTxt}${x.cd && x.cd.standby ? "・" + esc(x.cd.standby) : ""}${g ? "・間" + x.c.interval_min + "分" : ""}${esc(playMarks(x))}</small></div>
+        <div class="nm ${x.ok ? "ok" : ""}" onclick="jumpCast('${cid}')">${esc(castLabel(x))}${st}${tlNowLoc(x)}<small>${shiftTxt}${x.cd && x.cd.standby ? "・" + esc(x.cd.standby) : ""}${g ? "・間" + x.c.interval_min + "分" : ""}${esc(playMarks(x))}</small></div>
         <div class="cells">${cells.join("")}
           ${g ? x.bks.map(b=>`<div class="gap" style="left:${p(b.s - g)}%;width:${p(b.s) - p(b.s - g)}%"></div><div class="gap" style="left:${p(b.e)}%;width:${p(b.e + g) - p(b.e)}%"></div>`).join("") : ""}
           ${x.bks.map(b=>`<div class="bk st ${b.r.status}" style="left:${p(b.s)}%;width:${Math.max(1.5, p(b.e) - p(b.s))}%"
@@ -3739,6 +3742,17 @@ function freeNowOf(x){
   if(cd.settled || ["お茶", "欠勤", "精算済", "不在", "仕事中"].includes(cd.status)) return false;
   return !x.bks.some(b=>b.s - g <= now && now < b.e + g);
 }
+// 📍 タイムラインの名前の横に「今どこにいるか」（今どこに誰が と同じ判断。今日だけ）2026/11/5
+function tlNowLoc(x){
+  if(day !== KB.bizDateOf() || !x || !x.c) return "";
+  let st = "gone", col = "";
+  try{ st = boardState(x); col = boardCol(x, st) || ""; }catch(e){ return ""; }
+  const gk = goneKind(x.cd);
+  const t = st === "work" ? "🔴 仕事中" + (col ? "（" + col + "）" : "") : st === "wait" ? "🟡 " + (col ? col + "で待機" : "待機中") : st === "before" ? "🟪 出勤前" + (col ? "（" + col + "）" : "")
+    : st === "start" ? "🔵 予約スタート" : gk ? (gk === "お茶" ? "🟩 お茶" : "🟥 欠勤") : (x.cd && x.cd.settled) ? "✅ 精算済" : "⬜ 今いない";
+  return `<span class="tlloc ${st}">${esc(t)}</span>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>.tlloc{display:inline-block;margin-left:4px;font-size:11px;font-weight:800;border-radius:99px;padding:0 6px;background:#F3F3F3;color:#555;vertical-align:middle} .tlloc.work{background:#EADCFB;color:#6c3fb5} .tlloc.wait{background:#FFF4C9;color:#8a6d00} .tlloc.before{background:#EEE8FB;color:#5b3fa6}</style>`);
 // 🙋 受付の中で「今だれ行けますか？」：今すぐ行ける子と、3時間以内にあく子（あく時刻順）。押すとキャストに入る（2026/11/4）
 function toggleFreeNow(){
   const el = $("freeNowBox"); if(!el) return;
