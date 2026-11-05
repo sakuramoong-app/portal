@@ -41,7 +41,7 @@
     </div>
     <div class="box" id="runBox" style="display:none">
       <h2>③ 取りこむ</h2>
-      <p class="lead">日付を選ぶと、その日だけ入れます（ためしの1日）。空なら全部の日と、まだ終わっていない未精算を入れます。<br>
+      <p class="lead">日付を選ぶと、その日だけ入れます（ためしの1日）。空なら全部の日を入れます（未精算は入れません。アプリに手で入れてあるので。2026/11/6 店長）。<br>
         同じ日をもう一度入れると、その日のエクセルの分を消して入れなおします。手で入れた予約は消えません。</p>
       <div style="margin-bottom:8px">日付：<input type="date" id="only"> <small class="lead">（空＝全部）</small></div>
       <button class="btn btn-primary" id="go" onclick="run()">📥 取りこむ</button>
@@ -88,7 +88,7 @@ async function run(){
   const days = only ? J.days.filter(d => d.d === only) : J.days;
   if(!days.length){ toast("その日はファイルにありません"); return; }
   const map = {}; document.querySelectorAll("#mapT select").forEach(s => { if(s.value) map[s.dataset.nm] = s.value; });
-  if(!confirm(only ? `${only} の1日分を取りこみます。よろしいですか？` : `${J.month} の ${days.length}日分と、まだ終わっていない未精算を取りこみます。よろしいですか？`)) return;
+  if(!confirm(only ? `${only} の1日分を取りこみます。よろしいですか？` : `${J.month} の ${days.length}日分を取りこみます（未精算は入れません）。よろしいですか？`)) return;
   $("go").disabled = true; $("res").innerHTML = "";
   const tot = { res: 0, newCustomers: 0, castDays: 0, staff: 0, missStore: 0 }, missCast = new Set(), missStaff = new Set(), by = KB.operatorName();
   const checks = [];
@@ -119,7 +119,7 @@ async function run(){
     $("prog").textContent = `${days[i].d}　${i + 1} / ${days.length} 日`;
   }
   let uns = null;
-  if(!only){ try{ uns = q(await sb.rpc("kb_xl_uns_import", { p_src: J.src, p_rows: J.uns || [], p_by: by })); (uns.missCast || []).forEach(x => missCast.add(x)); }catch(e){ uns = { err: e.message || String(e) }; } }
+  if(false && !only){ try{ uns = q(await sb.rpc("kb_xl_uns_import", { p_src: J.src, p_rows: J.uns || [], p_by: by })); (uns.missCast || []).forEach(x => missCast.add(x)); }catch(e){ uns = { err: e.message || String(e) }; } }
   $("res").innerHTML = `<div class="ok">✅ 取りこみが終わりました</div><table>
     <tr><td>予約</td><td>${tot.res.toLocaleString()} 件</td></tr>
     <tr><td>新しく作ったお客さん</td><td>${tot.newCustomers} 人</td></tr>
