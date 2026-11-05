@@ -242,6 +242,7 @@
   .daadd{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:13px;font-weight:700;color:var(--sub);} .daadd input{font-family:inherit;font-size:13px;padding:4px 8px;border:1.5px solid var(--line);border-radius:8px;} #da_time{width:64px;} #da_text{width:220px;max-width:60vw;}
   .daadd button{font-family:inherit;font-size:13px;font-weight:800;background:#fff;border:1.5px solid #FFB547;color:#a35a00;border-radius:99px;padding:4px 12px;cursor:pointer;}
   .snchip.uns{border-color:#F2B705;background:#FFF8DC;}
+  .nevents{margin:0 0 8px} .nevhd{font-weight:900;font-size:13.5px;color:#2B4C8C;margin:4px 0} .nev{background:#EEF4FF;border:1.5px solid #BCD0F5;border-radius:12px;padding:6px 12px;margin:4px 0;font-size:14px;color:#23375e} .nev small{color:#557;margin-left:4px} .nevm{font-size:12.5px;color:#557;white-space:pre-wrap}
   #ntfBox{position:fixed;left:12px;bottom:104px;z-index:955;font-family:inherit;}
   #ntfBox .ntfopen{background:#fff;border:1.5px solid #8FB0EE;color:#2B4C8C;border-radius:99px;padding:7px 12px;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(43,76,140,.18);}
   #ntfBox.open{width:min(300px,calc(100vw - 24px));background:#fff;border:2px solid #8FB0EE;border-radius:14px;box-shadow:0 8px 24px rgba(43,76,140,.25);}
@@ -444,6 +445,7 @@
     <div id="shiftAlerts"></div>
     <div class="notice"><textarea id="notice" placeholder="📢 本日のお知らせ（ここに書くと赤く大きく出ます）" onchange="saveNotice()"></textarea></div>
     <div class="dayalarms" id="dayAlarms"></div>
+    <div class="nevents" id="nEvents"></div><!-- 📅 内勤カレンダーのその日の予定 -->
     <!-- 📊 今日の数字（内勤用・ふだんはしまっておく） -->
     <details class="fold" id="todayBox"><summary>📊 今日の数字</summary><div class="todaygrid" id="todayGrid"></div></details>
     <!-- 💴 内勤の日払い（その日の分） -->
@@ -3499,9 +3501,11 @@ renderBoard = function(){
   tlRows().forEach(x=>{
     const st = boardState(x), col = boardCol(x, st);
     if(st !== "gone" && col) (cell[st + "|" + col] = cell[st + "|" + col] || []).push(x); else gone.push(x);
-    // 鶯谷で待機中でなくなった人は、自動で退席
-    const s = x.c && seatsOk ? seatOf(x.c.id) : null;
-    if(s && KB.CAN_EDIT && !(st === "wait" && col === "鶯谷") && !autoLeft.has(s.id)){ autoLeft.add(s.id); leaveSeat(s.id, true); }
+    // 自動で退席するのは、はっきりしたときだけ：予約を「接客中」にした・お茶・欠勤・不在・精算済（2026/11/5）
+    //   前は「鶯谷で待機中でなくなったら」で、次の予約の時刻になっただけ・別のPCの古い画面が描きなおしただけでも席が外れていた（1時間くらいで外れる）
+    const s = x.c && seatsOk ? seatOf(x.c.id) : null, cd0 = x.cd || {};
+    const clearlyOut = x.bks.some(b => b.r.status === "working") || cd0.settled || ["お茶", "欠勤", "不在"].includes(cd0.status);
+    if(s && KB.CAN_EDIT && clearlyOut && !autoLeft.has(s.id)){ autoLeft.add(s.id); leaveSeat(s.id, true); }
   });
   const used = seatLogs.filter(l=>!l.end_at);
   const chip = (x, st, col)=>{
@@ -3846,6 +3850,7 @@ const NTF_KINDS = {
   out:     { label: "🌙 退勤の時間",                   def: "pon",   voice: false, text: "🌙 {名前}　退勤の時間（{時間}）", say: "{名前}さん、退勤の時間です" },
   notice:  { label: "📢 本日のお知らせ（書きかわった・まだ見ていない）", def: "up", voice: true, text: "📢 お知らせ（{名前}）：{内容}", say: "本日のお知らせです。{内容}" },
   uns:     { label: "🧾 未精算・領収書（次の出勤日の出勤／退勤時刻）", def: "triple", voice: true, text: "🧾 {名前}　未精算・領収書の回収（{時間}）：{内容}", say: "{名前}さんの未精算と領収書を回収してください" },
+  nevent:  { label: "📅 内勤カレンダーの予定（時刻のあるもの）", def: "chime", voice: true, text: "📅 {時間}　{内容}（{名前}）", say: "{時間}の予定です。{内容}" },
   alarm:   { label: "⏰ 時刻アラート（お知らせの下で足したもの）", def: "triple", voice: true, text: "⏰ {時間}　{内容}（{名前}）", say: "{時間}です。{内容}" },
 };
 const SOUNDS = {
@@ -3893,6 +3898,11 @@ function checkCustomNtfs(){
     if(due == null || fired[key] || now < due || now > due + 10 * 60000) return;
     fired[key] = 1; notify("alarm", { 時間: a.now ? "お知らせ" : lateHM(Math.round((due - Date.parse(bd + "T00:00:00+09:00")) / 60000)), 内容: a.text, 名前: a.by || "" }, `document.getElementById('dayAlarms').scrollIntoView({block:'center',behavior:'smooth'})`);
     renderDayAlarms();
+  });
+  nEvents.filter(e => e.time).forEach(e => {   // 📅 内勤カレンダーの予定：その時刻に1回知らせる
+    const due = Date.parse(e.date + "T" + e.time.padStart(5, "0") + ":00+09:00"), key = bd + "|e" + e.id;
+    if(!isFinite(due) || fired[key] || now < due || now > due + 10 * 60000) return;
+    fired[key] = 1; notify("nevent", { 時間: e.time, 内容: e.title + (e.memo ? "（" + e.memo + "）" : ""), 名前: (e.members || []).map(m => NAIKIN_NAME[m] || m).join("・") }, `document.getElementById('nEvents').scrollIntoView({block:'center',behavior:'smooth'})`);
   });
   Object.keys(fired).forEach(k=>{ if(k.slice(0, 10) < bd) delete fired[k]; });   // 前の日の印は消す
   lsSet("kbFired", fired);
@@ -3953,6 +3963,24 @@ async function saveDayAlarms(change){
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
 setInterval(renderDayAlarms, 60000);
+/* ---------- 📅 内勤カレンダーの予定を、記録簿のその日に出す（お知らせの下）。時刻のある予定は、その時刻に 🔔 で知らせる（2026/11/5）
+   営業日 day の予定 ＝ カレンダーの day の予定 ＋ 次の日の朝6時より前の予定 ---------- */
+let nEvents = [], nEventsDay = "";
+async function loadNEvents(){
+  const d = day;
+  try{
+    const r = q(await sb.from("naikin_events").select("id,date,time,title,members,memo").in("date", [d, addDays(d, 1)])) || [];
+    nEvents = r.filter(e => e.date === d || (e.time && Number(e.time.split(":")[0]) < 6))
+      .sort((a, b) => (a.date + (a.time || "99")).localeCompare(b.date + (b.time || "99")));
+  }catch(e){ nEvents = []; }
+  nEventsDay = d; renderNEvents();
+}
+function renderNEvents(){
+  const el = $("nEvents"); if(!el) return;
+  el.innerHTML = nEvents.length ? `<div class="nevhd">📅 内勤カレンダーの予定</div>` + nEvents.map(e => `<div class="nev"><b>${e.time ? esc(e.date !== day ? lateHM(Number(e.time.split(":")[0]) * 60 + 24 * 60 + Number(e.time.split(":")[1])) : e.time) : "終日"}</b> ${esc(e.title)}${(e.members || []).length ? `<small>（${esc(e.members.map(m => NAIKIN_NAME[m] || m).join("・"))}）</small>` : ""}${e.memo ? `<div class="nevm">${esc(e.memo)}</div>` : ""}</div>`).join("") : "";
+}
+{ const __ldNE = loadDay; loadDay = async function(){ const r = await __ldNE.apply(this, arguments); loadNEvents(); return r; }; }
+setInterval(() => { if(day === KB.bizDateOf()) loadNEvents(); }, 5 * 60000);
 function playSound(id){
   const s = SOUNDS[id]; if(!s || !s.notes.length) return;
   try{
