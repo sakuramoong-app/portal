@@ -186,6 +186,7 @@
   .st.done{background:#E5E3E4;color:#777;}
   .st.cancel{background:#FFE0C2;color:#c25e00;}
   .st.tobi{background:#FFD0D0;color:#c62828;}
+  .st.flowed{background:#D9F2DC;color:#2E7A35;}   /* 流れた（予約不成立）＝台帳エクセルと同じ緑 */
   .st.checking,.st.wait_hotel{background:#F2F2F2;color:#999;}
   /* 予約の帯・札も、予約一覧と同じ色 */
   .tlg .bk.st,.tl .bk.st{border:1.5px solid rgba(0,0,0,.10);border-radius:8px;}
@@ -242,6 +243,7 @@
   .daadd{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:13px;font-weight:700;color:var(--sub);} .daadd input{font-family:inherit;font-size:13px;padding:4px 8px;border:1.5px solid var(--line);border-radius:8px;} #da_time{width:64px;} #da_text{width:220px;max-width:60vw;}
   .daadd button{font-family:inherit;font-size:13px;font-weight:800;background:#fff;border:1.5px solid #FFB547;color:#a35a00;border-radius:99px;padding:4px 12px;cursor:pointer;}
   .snchip.uns{border-color:#F2B705;background:#FFF8DC;}
+  .l4list{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px} .l4{font-family:inherit;background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:5px 10px;cursor:pointer;color:#5C4B4F;font-size:13.5px} .l4 small{color:var(--sub)}
   .nevents{margin:0 0 8px} .nevhd{font-weight:900;font-size:13.5px;color:#2B4C8C;margin:4px 0} .nev{background:#EEF4FF;border:1.5px solid #BCD0F5;border-radius:12px;padding:6px 12px;margin:4px 0;font-size:14px;color:#23375e} .nev small{color:#557;margin-left:4px} .nevm{font-size:12.5px;color:#557;white-space:pre-wrap}
   #ntfBox{position:fixed;left:12px;bottom:104px;z-index:955;font-family:inherit;}
   #ntfBox .ntfopen{background:#fff;border:1.5px solid #8FB0EE;color:#2B4C8C;border-radius:99px;padding:7px 12px;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(43,76,140,.18);}
@@ -823,7 +825,7 @@
 const { sb, q, esc, yen, toast } = KB;
 const $ = id => document.getElementById(id);
 const DOW = ["日","月","火","水","木","金","土"];
-const STATUS = { pre_call:"前日確認電話", pre_mail:"前日確認メール", hour_call:"1H前確認電話", hour_mail:"1H前確認メール", moving:"移動中", arrive_call:"到着連絡", wait_guest:"客ホテル入室待ち", wait_cast:"キャストホテル入室待ち", working:"仕事中", done:"終了", wait_cast_reply:"キャスト返事待ち", wait_guest_reply:"お客様返事待ち", wait_foreign_call:"外国人1コール待ち", cancel:"キャンセル", tobi:"トビ", checking:"確認中（旧）", wait_hotel:"ホテル連絡待ち（旧）" };   // 並び：前日確認〜終了 → 返事待ち → キャンセル・トビ
+const STATUS = { pre_call:"前日確認電話", pre_mail:"前日確認メール", hour_call:"1H前確認電話", hour_mail:"1H前確認メール", moving:"移動中", arrive_call:"到着連絡", wait_guest:"客ホテル入室待ち", wait_cast:"キャストホテル入室待ち", working:"仕事中", done:"終了", wait_cast_reply:"キャスト返事待ち", wait_guest_reply:"お客様返事待ち", wait_foreign_call:"外国人1コール待ち", cancel:"キャンセル", tobi:"トビ", flowed:"流れた（予約不成立）", checking:"確認中（旧）", wait_hotel:"ホテル連絡待ち（旧）" };   // 並び：前日確認〜終了 → 返事待ち → キャンセル・トビ
 const STATUS_OLD = ["checking", "wait_hotel"];   // 今は選べない（前の予約のために残している）
 const VISIT = [["new","新規"],["repeat","店リピ"],["honshi","本指名"]];
 const FREE_SUFFIX = { "":"", free:"フリー", special_free:"特別フリー", event_free:"イベフリー" };
@@ -907,7 +909,7 @@ function lateHM(t){ t = Math.round(t); let h = Math.floor(t / 60) % 24; const m 
 function backOf(r){ return r.back_override != null ? r.back_override : (r.course_back + r.option_back + r.extra_back); }
 
 function renderList(){
-  const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi");
+  const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed");
   const total = live.reduce((a,r)=>a + r.total, 0), back = live.reduce((a,r)=>a + backOf(r), 0);
   $("sum").innerHTML = `<div class="s">件数<b>${live.length}件</b></div>
     <div class="s ${showMoney?"":"hide"}">売上総額<b>${yen(total)}</b></div>
@@ -1446,7 +1448,7 @@ function dmBlocked(store){
   const out = {};
   if(!Array.isArray(custSeen) && !Array.isArray(custPast)) return out;
   const by = {};
-  seenNorm().filter(p => p.store_key === store && p.dummy_name && p.cast_id && !["cancel", "tobi"].includes(p.status) && !(editing && p.id === editing.id))
+  seenNorm().filter(p => p.store_key === store && p.dummy_name && p.cast_id && !["cancel", "tobi", "flowed"].includes(p.status) && !(editing && p.id === editing.id))
     .forEach(p => { (by[p.dummy_name] = by[p.dummy_name] || new Set()).add(p.cast_id); });
   Object.entries(by).forEach(([n, ids]) => { const l = [...ids]; if(!l.some(dmWorking)) out[n] = l.map(castName).join("・") + " お休み"; });
   return out;
@@ -1649,7 +1651,7 @@ function renderCastChecks(c){
   if(dmNow && Array.isArray(custPast)){
     // 記録簿の予約＋台帳エクセル（「雪（A」なども読む）の両方で見る
     const seenX = typeof seenNorm === "function" ? seenNorm() : custPast;
-    const been = seenX.filter(p => p.store_key === $("f_store").value && p.dummy_name === dmNow && !["cancel", "tobi"].includes(p.status) && (!editing || p.id !== editing.id))
+    const been = seenX.filter(p => p.store_key === $("f_store").value && p.dummy_name === dmNow && !["cancel", "tobi", "flowed"].includes(p.status) && (!editing || p.id !== editing.id))
       .sort((a, b) => String(b.biz_date).localeCompare(String(a.biz_date)));
     const who = [...new Set(been.map(p => p.cast_id).filter(Boolean))];
     const rawWho = [...new Set(been.filter(p => !p.cast_id).map(p => p.cast_raw).filter(Boolean))];
@@ -1661,7 +1663,7 @@ function renderCastChecks(c){
     // 前に18・極門でこの子が（ちがう名前で）行っていたら、ダミー指名では行けない（顔でばれる）
     if(!who.length){
       const dsx = M.stores.filter(s => s.dummy).map(s => s.key);
-      const met = seenX.filter(p => dsx.includes(p.store_key) && p.cast_id === c.id && !["cancel", "tobi"].includes(p.status) && (!editing || p.id !== editing.id));
+      const met = seenX.filter(p => dsx.includes(p.store_key) && p.cast_id === c.id && !["cancel", "tobi", "flowed"].includes(p.status) && (!editing || p.id !== editing.id));
       if(met.length){ longNg = true; warn.unshift(`🎭 ${castName(c.id)} は、このお客さんに18・極門で行ったことがあります（${met[0].biz_date.slice(5).replace("-", "/")} ${storeLabel(met[0].store_key)}${met[0].dummy_name ? "🎭" + met[0].dummy_name : ""}）。ダミー「${dmNow}」では行けません`); }
     }
   }
@@ -1732,6 +1734,19 @@ async function custByPhone(phone, cols){
 async function lookupCustomer(keepName){
   const phone = phoneNorm($("f_phone").value);
   $("f_phone").value = phone;
+  // 📞 下4けただけで調べる：その4けたで終わる番号のお客さんを出して、えらぶ（2026/11/5）
+  if(/^\d{4}$/.test(phone) && !/^0+$/.test(phone)){
+    curCustomer = null; custPast = null; custSeen = null;
+    $("custInfo").innerHTML = `<div class="info">🔎 下4けた ${esc(phone)} で探しています…</div>`;
+    try{
+      const l = q(await sb.from("kb_customers").select("id,name,phone,ng").like("phone", "%" + phone).order("id", { ascending: false }).limit(15)) || [];
+      if(digits($("f_phone").value) !== phone) return;   // とちゅうで番号を変えた
+      $("custInfo").innerHTML = l.length ? `<div class="info">🔎 下4けたが <b>${esc(phone)}</b> のお客さん（${l.length >= 15 ? "15人以上・新しい15人" : l.length + "人"}）。押すと、その番号で調べます
+        <div class="l4list">${l.map(c => `<button type="button" class="l4" onclick="$('f_phone').value='${esc(c.phone)}';lookupCustomer()">${c.ng ? "⚠️" : ""}<b>${esc(c.name || "名前なし")}</b> <small>${esc(c.phone)}</small></button>`).join("")}</div></div>`
+        : `<div class="info">下4けたが ${esc(phone)} のお客さんはいません（全部の番号を入れると、新しいお客さんとして登録できます）</div>`;
+    }catch(e){ $("custInfo").innerHTML = `<div class="warn">探せませんでした：${esc(e.message || e)}</div>`; }
+    return;
+  }
   if(phone.length < 6){ curCustomer = null; custPast = null; custSeen = null; $("custInfo").innerHTML = ""; return; }
   try{
     const c = await custByPhone(phone, "*");
@@ -1767,7 +1782,7 @@ async function lookupCustomer(keepName){
     custSeen = pastAll.concat(xl).sort((a, b) => String(b.biz_date).localeCompare(String(a.biz_date)));
     const seenAll = custSeen;
     const past = seenAll.slice(0, 10);
-    const casts = [...new Set(seenAll.filter(p => !["cancel", "tobi"].includes(p.status)).map(p => p.cast_id ? castName(p.cast_id) : p.cast_raw).filter(Boolean))];
+    const casts = [...new Set(seenAll.filter(p => !["cancel", "tobi", "flowed"].includes(p.status)).map(p => p.cast_id ? castName(p.cast_id) : p.cast_raw).filter(Boolean))];
     $("custInfo").innerHTML = (c.ng && c.ng_ask ? `<div class="ngask">🤔 <b>出禁・店NG？</b>（台帳エクセルの備考から見分けました。条件つきの書き方なので、内勤が決めてください）<div class="q">${esc(c.ng_reason || "")}</div>
         <button type="button" class="btn btn-danger btn-sm" onclick="custNgDecide(${c.id},true)">⚠️ 店NG（受けない）</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="custNgDecide(${c.id},false)">NGではない（受けてOK）</button></div>`
@@ -2136,7 +2151,7 @@ async function saveRes(){
   if(isDummyStore($("f_store").value) && !$("f_dummy").value){ toast("ダミー名を選んでください（一覧になければ ⚙️ から足せます）"); return; }
   // 受付ルール：📣は全部チェック／✅はチェックするまで「〜待ち」でしか保存できない／⌛受けない長さは保存できない（キャンセル・トビは除く）
   if(!$("f_status").value){ toast("⚠️ 状態を選んでください"); $("f_status").scrollIntoView({ block: "center" }); return; }
-  const cancelLike = ["cancel", "tobi"].includes($("f_status").value);
+  const cancelLike = ["cancel", "tobi", "flowed"].includes($("f_status").value);
   // 必須の項目（キャンセル・トビにするときは、なくても保存できる）
   const miss = cancelLike ? [] : missingRequired();
   if(miss.length){ toast("⚠️ まだ入っていない必須の項目：" + miss.map(x=>x[0]).join("・")); markMissing(miss); return; }
@@ -2253,7 +2268,7 @@ $("navArea").innerHTML = KB.nav("kiroku.html");
 const __renderList = renderList;
 renderList = function(){
   __renderList();
-  const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi");
+  const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed");
   const total = live.reduce((a, r)=>a + (r.total || 0), 0), back = live.reduce((a, r)=>a + backOf(r), 0);
   const casts = new Set(live.map(r=>r.cast_id).filter(Boolean)).size;
   const tax = live.reduce((a, r)=>a + Math.round(backOf(r) / 9), 0);
@@ -2350,7 +2365,7 @@ function drawTimeline(){
   const sh = bd ? (od && od.sh) : shiftCache[day];
   if(!sh && !bd){ loadShifts(day).then(()=>drawTimeline()).catch(()=>{}); }
   const shift = sh ? (sh[c.shift_name] || sh[c.official_name]) : null;
-  const others = (bd ? (od ? od.rows : []) : rows).filter(r=>r.cast_id === c.id && (!editing || r.id !== editing.id) && r.status !== "cancel" && r.status !== "tobi" && r.start_at && r.end_at)
+  const others = (bd ? (od ? od.rows : []) : rows).filter(r=>r.cast_id === c.id && (!editing || r.id !== editing.id) && r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed" && r.start_at && r.end_at)
     .map(r=>{ const s = hourOf(r.start_at); let e = hourOf(r.end_at); if(e < s) e += 24; return { s, e, label: hm(r.start_at) + "〜" + hm(r.end_at) + (r.area ? " " + r.area : ""), st: r.status }; });
   let cur = null;
   const st = $("f_start").value;
@@ -2466,7 +2481,7 @@ renderList = function(){ __renderList2(); renderTL(); };
 function tlHour(s){ if(!s) return null; const [h, m] = s.split(":").map(Number); let v = h + m / 60; if(v < 8) v += 24; return v; }
 function tlLabel(v){ let h = Math.floor(v + 1e-6), m = Math.round((v - h) * 60); if(m === 60){ h++; m = 0; } return (h >= 24 ? "翌" + (h - 24) : h) + ":" + String(m).padStart(2, "0"); }
 function bookingsOf(castId){
-  return rows.filter(r=>r.cast_id === castId && r.status !== "cancel" && r.status !== "tobi" && r.start_at && r.end_at)
+  return rows.filter(r=>r.cast_id === castId && r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed" && r.start_at && r.end_at)
     .map(r=>{ const s = hourOf(r.start_at); let e = hourOf(r.end_at); if(e < s) e += 24; return { id: r.id, s, e, r }; });
 }
 function gapOf(x){ return ((x.c && x.c.interval_min) || 0) / 60; }   // インターバル（時間）
@@ -2479,7 +2494,7 @@ function tlRows(){
   });
   // 予約だけあって、シフトにないキャストも出す
   rows.forEach(r=>{
-    if(!r.cast_id || r.status === "cancel" || r.status === "tobi" || out.some(x=>x.c && x.c.id === r.cast_id)) return;
+    if(!r.cast_id || r.status === "cancel" || r.status === "tobi" || r.status === "flowed" || out.some(x=>x.c && x.c.id === r.cast_id)) return;
     const c = M.casts.find(x=>x.id === r.cast_id);
     out.push({ name: c ? (c.official_name || c.temp_name) : r.cast_id, c, shift: null, bks: bookingsOf(r.cast_id), cd: castDays[r.cast_id] });
   });
@@ -2664,7 +2679,7 @@ function renderBoard(){
     const sh = x.shift ? `${hShort(x.shift.start)}-${hShort(x.shift.end)}` : "";
     const cds = (x.cd && x.cd.status) || "";
     const note = cds ? cds : (x.cd && x.cd.settled ? "精算済" : "");
-    const now = nowHour(), live = x.bks.filter(b=>!["done", "cancel", "tobi"].includes(b.r.status));
+    const now = nowHour(), live = x.bks.filter(b=>!["done", "cancel", "tobi", "flowed"].includes(b.r.status));
     const rel = x.bks.find(b=>b.r.status === "working") || live.filter(b=>b.e > now).sort((a, b)=>a.s - b.s)[0] || live.sort((a, b)=>b.s - a.s)[0];
     // 仕事中は、終わる時刻も出す（12:00〜13:30 接客中）2026/11/5
     const pill = rel ? `<span class="st ${rel.r.status}">${esc(hm(rel.r.start_at))}${st === "work" && rel.r.end_at ? "〜" + esc(hm(rel.r.end_at)) : ""} ${esc(STATUS[rel.r.status] || "")}</span>` : "";
@@ -2745,7 +2760,7 @@ renderTL = function(){ __renderTL(); renderBoard(); };
 const PLACES = ["池袋", "鶯谷", "五反田", "回収"];
 function calcCast(castId){
   const all = rows.filter(r=>r.cast_id === castId);
-  const allLive = all.filter(r=>r.status !== "cancel" && r.status !== "tobi");
+  const allLive = all.filter(r=>r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed");
   const cd = castDays[castId] || {};
   // ② 先精算のあとの追加分：前の精算（①…）に入った予約は数えない（unsettled.js の kbSnapParts・kbPartIds）2026/11/4
   //   精算済のあとでふえた予約があるときも、ふえた予約だけで計算する（チェックを外した予約＝今日は精算しない も入れない）
@@ -2805,7 +2820,7 @@ function calcCast(castId){
 function cardHtml(id, c){
   const cd = c.cd, done = !!cd.settled, dis = (!KB.CAN_EDIT || done) ? "disabled" : "";
   const res = c.all.map(r=>{
-    const off = r.status === "cancel" || r.status === "tobi";
+    const off = r.status === "cancel" || r.status === "tobi" || r.status === "flowed";
     return `<tr class="${off ? "off" : ""}"><td>${hm(r.start_at)}</td><td>${esc(storeLabel(r.store_key))}${r.dummy_name ? " 🎭" + esc(r.dummy_name) : ""}</td>
       <td>${esc(r.course)}${r.extension_count ? " 延長" + r.extension_count : ""}${off ? (r.status === "cancel" ? "（キャンセル）" : "（トビ）") : ""}</td>
       <td class="money">${yen(r.total)}${r.payment === "card_paid" ? " 💳" : ""}</td><td class="money">${off ? "－" : yen(backOf(r))}</td></tr>`;
@@ -2914,8 +2929,8 @@ function settleCanvas(id){
   const c = calcCast(id), d = new Date(day + "T12:00:00Z");
   const L = [];   // [左, 右, 種類]
   c.all.forEach(r=>{
-    const off = r.status === "cancel" || r.status === "tobi";
-    L.push([`${hm(r.start_at)} ${storeLabel(r.store_key)} ${r.course}${/^\d+$/.test(r.course) ? "分" : ""}${r.extension_count ? " 延長" + r.extension_count : ""}`, off ? (r.status === "cancel" ? "キャンセル" : "トビ") : yen(backOf(r)), off ? "off" : "res"]);
+    const off = r.status === "cancel" || r.status === "tobi" || r.status === "flowed";
+    L.push([`${hm(r.start_at)} ${storeLabel(r.store_key)} ${r.course}${/^\d+$/.test(r.course) ? "分" : ""}${r.extension_count ? " 延長" + r.extension_count : ""}`, off ? (r.status === "cancel" ? "キャンセル" : r.status === "flowed" ? "流れた" : "トビ") : yen(backOf(r)), off ? "off" : "res"]);
   });
   L.push(["", "", "line"]);
   L.push(["報酬", yen(c.reward)]);
@@ -2999,8 +3014,8 @@ function copyDetail(id){
   const c = calcCast(id), d = new Date(day + "T12:00:00Z");
   const lines = [`【精算】${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${castName(id)}さん`, ""];
   c.all.forEach(r=>{
-    const off = r.status === "cancel" || r.status === "tobi";
-    lines.push(`・${hm(r.start_at)} ${storeLabel(r.store_key)} ${r.course}${/^\d+$/.test(r.course) ? "分" : ""}${r.extension_count ? " 延長" + r.extension_count : ""}　${off ? (r.status === "cancel" ? "キャンセル" : "トビ") : "報酬 " + yen(backOf(r))}`);
+    const off = r.status === "cancel" || r.status === "tobi" || r.status === "flowed";
+    lines.push(`・${hm(r.start_at)} ${storeLabel(r.store_key)} ${r.course}${/^\d+$/.test(r.course) ? "分" : ""}${r.extension_count ? " 延長" + r.extension_count : ""}　${off ? (r.status === "cancel" ? "キャンセル" : r.status === "flowed" ? "流れた" : "トビ") : "報酬 " + yen(backOf(r))}`);
   });
   lines.push("", `報酬　${yen(c.reward)}`);
   if(c.option) lines.push(`OP　${yen(c.option)}`);
@@ -3211,7 +3226,7 @@ async function toggleTodo(id, i){
 /* ---------- 📊 今日の数字（内勤用）：店落ち（暫定＋雑費・22時まで／22時から）・カード・件数・人数・お茶・欠勤 ---------- */
 function renderToday(){
   const el = $("todayGrid"); if(!el) return;
-  const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi");
+  const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed");
   const ids = [...new Set(live.map(r=>r.cast_id).filter(Boolean))];
   const card = live.filter(r=>r.payment !== "cash").reduce((a, r)=>a + (r.total || 0), 0);
   const st = Object.values(castDays || {}).map(c=>c.status || "");
@@ -3241,7 +3256,7 @@ function renderOwner(){
   const box = $("ownerBox"); if(!box) return;
   if(!KB.IS_OWNER){ box.style.display = "none"; return; }   // 社長（内勤の一覧の役わり「社長」。きぬ・はな）だけ
   box.style.display = "";
-  const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi").sort((a, b)=>String(a.start_at).localeCompare(String(b.start_at)));
+  const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed").sort((a, b)=>String(a.start_at).localeCompare(String(b.start_at)));
   const cols = [["基本額", r=>r.base_price], ["入会金", r=>r.admission], ["指名料", r=>r.nomination_fee], ["延長", r=>r.extension_fee], ["交通費", r=>r.transport],
     ["オプション額", r=>r.option_total], ["割引", r=>r.discount], ["総額", r=>r.total], ["キャスト報酬", r=>backOf(r)],
     ["暫定的な残額（源泉含む）", r=>(r.total || 0) - backOf(r)], ["【税務用】源泉徴収", r=>Math.round(backOf(r) / 9)],
@@ -3512,7 +3527,7 @@ renderBoard = function(){
     const cid = x.c ? x.c.id : "";
     const sh = x.shift ? `${hShort(x.shift.start)}-${hShort(x.shift.end)}` : "";
     const gk = goneKind(x.cd);
-    const now = nowHour(), live = x.bks.filter(b=>!["done", "cancel", "tobi"].includes(b.r.status));
+    const now = nowHour(), live = x.bks.filter(b=>!["done", "cancel", "tobi", "flowed"].includes(b.r.status));
     const rel = x.bks.find(b=>b.r.status === "working") || live.filter(b=>b.e > now).sort((a, b)=>a.s - b.s)[0];
     // 予約スタート：最初の予約の時刻を大きめに
     const first = live.slice().sort((a, b)=>a.s - b.s)[0];
@@ -3526,7 +3541,7 @@ renderBoard = function(){
         ${mine ? `<button type="button" class="out" onclick="leaveSeat(${mine.id})">退席</button><small>${hm(mine.start_at)}〜</small>` : ""}</div>`;
     }
     // その子の今日の予約（何時から・場所・コース・お客さん）を箇条書きで
-    const bl = x.bks.filter(b=>!["cancel", "tobi"].includes(b.r.status)).sort((a, b)=>a.s - b.s)
+    const bl = x.bks.filter(b=>!["cancel", "tobi", "flowed"].includes(b.r.status)).sort((a, b)=>a.s - b.s)
       .map(b=>`<li class="${b.r.status === "done" ? "dn" : ""}">${esc(hm(b.r.start_at))} ${esc(b.r.area || "")} ${esc(b.r.course || "")}${/^\d+$/.test(b.r.course || "") ? "分" : ""} ${esc((b.r.kb_customers || {}).name || "")} <span class="st ${b.r.status}" style="font-size:10.5px;padding:0 6px">${esc(STATUS[b.r.status] || "")}</span></li>`).join("");
     return `<div class="chipc ${cls}" data-cid="${cid}" data-st="${st}">【${esc(castLabel(x))}】${esc(sh)}${st === "gone" && gk ? `<small>（${gk}）</small>` : x.cd && x.cd.status ? `<small class="cdst">（${esc(x.cd.status)}）</small>` : ""}${x.cd && x.cd.settled ? "<small>（精算済）</small>" : ""}${pill}${bl ? `<ul class="bkl">${bl}</ul>` : ""}${movingHtml(x)}${seat}</div>`;
   };
@@ -3735,7 +3750,7 @@ renderListTable = function(){
   const block = (title, sub, list, cid, cls)=>`<div class="cblock ${cls || ""}" ${cid ? `id="cb-${cid}"` : ""}>
       <div class="ch"><b>${title}</b>${cid && KB.CAN_EDIT ? whereSel(cid) + dayStatusSel(cid) : ""}<small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="editInfoNote('${cid}')">📌 今日のこと</button><button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button>` : ""}${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
       ${cid ? attendHtml(cid) : ""}
-      ${list.length ? `<div class="wrapx"><table class="list">${head}${list.map(r=>`<tr class="r ${["cancel", "tobi"].includes(r.status) ? "cx" : ""}" onclick="openForm(${r.id})">${resCells(r)}</tr>`).join("")}</table></div>` : `<div class="none">予約なし</div>`}</div>`;
+      ${list.length ? `<div class="wrapx"><table class="list">${head}${list.map(r=>`<tr class="r ${["cancel", "tobi", "flowed"].includes(r.status) ? "cx" : ""}" onclick="openForm(${r.id})">${resCells(r)}</tr>`).join("")}</table></div>` : `<div class="none">予約なし</div>`}</div>`;
   const noCast = rows.filter(r=>!r.cast_id).sort(byStart);
   const mode = $("s_sort").value;
   el.innerHTML = (noCast.length ? block("キャスト未定", "", noCast, "") : "")
@@ -3797,7 +3812,7 @@ async function loadCallAlerts(){
   try{
     const today = KB.bizDateOf();
     callAlertRows = q(await sb.from("kb_reservations").select("*")
-      .in("biz_date", [addDays(today, -1), today, addDays(today, 1)]).not("status", "in", "(done,cancel,tobi)").eq("deleted", false)) || [];   // ほかの状態は「⏰ 時刻」をすぎたかを見る（SQL 182）
+      .in("biz_date", [addDays(today, -1), today, addDays(today, 1)]).not("status", "in", "(done,cancel,tobi,flowed)").eq("deleted", false)) || [];   // ほかの状態は「⏰ 時刻」をすぎたかを見る（SQL 182）
   }catch(e){ callAlertRows = []; }
   renderCallAlerts();
 }
@@ -4353,10 +4368,10 @@ async function setCardStep(id, v){
 
 /* ---------- 🚫 キャンセル・トビ（売上には入れない。あったことは見えるように） ---------- */
 function cancelSection(){
-  const list = rows.filter(r=>r.status === "cancel" || r.status === "tobi").sort((a, b)=>String(a.start_at).localeCompare(String(b.start_at)));
+  const list = rows.filter(r=>r.status === "cancel" || r.status === "tobi" || r.status === "flowed").sort((a, b)=>String(a.start_at).localeCompare(String(b.start_at)));
   if(!list.length) return "";
   const n = s => list.filter(r=>r.status === s).length;
-  return `<div class="cblock cxbox"><div class="ch"><b>🚫 キャンセル・トビ</b><small>キャンセル ${n("cancel")}件・トビ ${n("tobi")}件（売上・報酬には入りません）</small></div>
+  return `<div class="cblock cxbox"><div class="ch"><b>🚫 キャンセル・トビ</b><small>キャンセル ${n("cancel")}件・トビ ${n("tobi")}件${n("flowed") ? "・流れた " + n("flowed") + "件" : ""}（売上・報酬には入りません）</small></div>
     <div class="wrapx"><table class="list"><tr><th>時間</th><th>キャスト</th><th>状態</th><th>コース</th><th>お客さん</th><th>📝 備考（新しい順）</th></tr>
     ${list.map(r=>{ const c = r.kb_customers || {}, lg = logOf(r).slice().reverse()[0];
       return `<tr class="r" onclick="openForm(${r.id})"><td>${hm(r.start_at)}〜${hm(r.end_at)}</td><td><b>${esc(castName(r.cast_id))}</b></td>
@@ -4653,7 +4668,7 @@ let lastFDay = "";
 function dmConflict(cid, name, store){
   if(!cid || !name || !isDummyStore(store) || (!Array.isArray(custSeen) && !Array.isArray(custPast))) return "";
   if(ownersOf(store, name).some(o => o.id === cid)) return "";   // 専用の名前は、その子なら OK
-  const seen = seenNorm().filter(p => p.cast_id && p.dummy_name && isDummyStore(p.store_key) && !["cancel", "tobi"].includes(p.status) && !(editing && p.id === editing.id));
+  const seen = seenNorm().filter(p => p.cast_id && p.dummy_name && isDummyStore(p.store_key) && !["cancel", "tobi", "flowed"].includes(p.status) && !(editing && p.id === editing.id));
   const fmt = d => String(d || "").replace(/^\d\d(\d\d)-(\d\d)-(\d\d)$/, "$1/$2/$3") || "日付なし";
   const byName = seen.filter(p => p.store_key === store && p.dummy_name === name), ids = [...new Set(byName.map(p => p.cast_id))];
   if(ids.length && !ids.includes(cid)) return `このお客さんは前に「${name}」で ${ids.map(castName).join("・")} が行っています（${fmt(byName[0].biz_date)}）。\n${castName(cid)} を「${name}」で行かせることはできません。`;
@@ -4669,7 +4684,7 @@ document.addEventListener("change", e => {
   // ダミー名を選んで、前にその名前で行った子がいるときは、キャストは自動でその子になる（下の一覧で）。ここではキャストを手で変えたときと、ダミー名×今のキャストを見る
   const name = $("f_dummy").value, cid = $("f_cast").value;
   if(id === "f_dummy"){
-    const hist = seenNorm().filter(p => p.store_key === store && p.dummy_name === name && p.cast_id && !["cancel", "tobi"].includes(p.status));
+    const hist = seenNorm().filter(p => p.store_key === store && p.dummy_name === name && p.cast_id && !["cancel", "tobi", "flowed"].includes(p.status));
     if(hist.length) return;   // 前にこの名前で行った子がいる → その子に自動で切りかわる
   }
   const msg = dmConflict(cid, name, store);
@@ -4694,7 +4709,7 @@ document.addEventListener("pointerdown", e => { if(e.target && e.target.id === "
 /* ---------- 💗 本指名：前回その子を指名したのはいつか（記録簿＋台帳エクセル）。種別のボタンの横と、予約連絡の【名前】の行に ---------- */
 function lastNomiOf(cid){
   if(!cid || (!Array.isArray(custSeen) && !Array.isArray(custPast))) return "";
-  const l = seenNorm().filter(p => p.cast_id === cid && !["cancel", "tobi"].includes(p.status) && !(editing && p.id === editing.id) && p.biz_date && p.biz_date < (($("f_day") && $("f_day").value) || day))
+  const l = seenNorm().filter(p => p.cast_id === cid && !["cancel", "tobi", "flowed"].includes(p.status) && !(editing && p.id === editing.id) && p.biz_date && p.biz_date < (($("f_day") && $("f_day").value) || day))
     .map(p => p.biz_date).sort();
   const d = l.pop(); return d ? d.replace(/^(\d{4})-(\d\d)-(\d\d)$/, (m, y, mo, da) => `${y}/${Number(mo)}/${Number(da)}`) : "";
 }
@@ -5133,7 +5148,7 @@ saveRes = async function(){
   const kind = $("f_place") ? $("f_place").value : "", map = $("f_map") ? $("f_map").value.trim() : "", st = $("f_status").value;
   await __saveResP();
   if($("formBg").classList.contains("show")) return;   // 保存できなかった
-  if(!phone || (!area && !address) || ["cancel", "tobi"].includes(st)) return;
+  if(!phone || (!area && !address) || ["cancel", "tobi", "flowed"].includes(st)) return;
   try{
     const cu = await custByPhone(phone, "id");
     if(!cu) return;
@@ -5231,11 +5246,11 @@ function trRow(r, ed){   // 振込にしたときだけ、カードの行の下�
   return `<div class="rc-tr">🏦 振込（${(TR_ST.find(x=>x[0] === st) || [])[1] || ""}）
     <span>額 ${lock ? `<b>${yen(r.transfer_amount)}</b>` : `<input type="number" min="0" class="rc-num" style="width:84px" value="${r.transfer_amount || ""}" placeholder="振込の額" onchange="trSet(${r.id},'transfer_amount',this.value)">`}</span>
     <span>キャストバック ${lock ? `<b>${yen(r.transfer_back)}</b>` : `<input type="number" min="0" class="rc-num" style="width:84px" value="${r.transfer_back || ""}" placeholder="0" onchange="trSet(${r.id},'transfer_back',this.value)">`}</span>
-    ${!lock && ["cancel", "tobi"].includes(r.status) ? `<small style="font-weight:700;color:#777">額を入れるとバックは自動（通常料金 ${yen(r.total)} 全額→通常バック ${yen(backOf(r))}／減額→半額）</small>` : ""}</div>`;
+    ${!lock && ["cancel", "tobi", "flowed"].includes(r.status) ? `<small style="font-weight:700;color:#777">額を入れるとバックは自動（通常料金 ${yen(r.total)} 全額→通常バック ${yen(backOf(r))}／減額→半額）</small>` : ""}</div>`;
 }
 // キャンセル料のキャストバック：通常料金を全額 → 通常バック／減額 → 通常バックの半額／0円 → なし。もらい忘れ（キャンセルでない）は、もとの予約にバックが入っているので 0
 function trAutoBack(r, amt){
-  if(!["cancel", "tobi"].includes(r.status) || !(amt > 0)) return 0;
+  if(!["cancel", "tobi", "flowed"].includes(r.status) || !(amt > 0)) return 0;
   let b = Number(backOf(r)) || 0;
   if(!b){   // 予約にバックが入っていない（キャンセルのまま保存など）→ バック表（ランク×コース）から
     const cast = M.casts.find(x=>x.id === r.cast_id), g = storeGroup(r.store_key);
@@ -5258,7 +5273,7 @@ async function trStatus(id, st){
   try{
     if(st === "done"){
       if(!Number(r.transfer_amount)){ toast("先に振込の額を入れてください"); renderList(); return; }
-      const live = !["cancel", "tobi"].includes(r.status);
+      const live = !["cancel", "tobi", "flowed"].includes(r.status);
       if(!live && !Number(r.transfer_back)){   // キャンセル料のバックが0のまま → 完了の前にもう一度自動で入れる
         const b = trAutoBack(r, Number(r.transfer_amount));
         if(b){ q(await sb.from("kb_reservations").update({ transfer_back: b }).eq("id", r.id)); r.transfer_back = b; }
@@ -5295,7 +5310,7 @@ async function trStatus(id, st){
         }
       }
       // はじめて振込にしたキャンセル：通常料金を全額もらう前提で、額と通常バックを入れておく（減額したら額を直すとバックも半額に）
-      const first = !prev && st && ["cancel", "tobi"].includes(r.status) && !Number(r.transfer_amount);
+      const first = !prev && st && ["cancel", "tobi", "flowed"].includes(r.status) && !Number(r.transfer_amount);
       const fill = first ? { transfer_amount: Number(r.total) || 0, transfer_back: trAutoBack(r, Number(r.total) || 0) } : {};
       await pushLog(id, `🏦 振込 → ${label}` + (first ? `（額 ${yen(fill.transfer_amount)}・キャストバック ${yen(fill.transfer_back)}）` : ""), Object.assign({ transfer_status: st, transfer_uns_id: null }, fill, st ? {} : { transfer_amount: 0, transfer_back: 0 }));
     }
@@ -5310,7 +5325,7 @@ function memoBoxes(r){
     ${KB.CAN_EDIT ? `<button type="button" class="addbiko" onclick="event.stopPropagation();addLogPrompt(${r.id})">＋ 備考を書く</button>` : ""}`;
 }
 function resCard(r, i){
-  const c = r.kb_customers || {}, ed = KB.CAN_EDIT, cx = ["cancel", "tobi"].includes(r.status);
+  const c = r.kb_customers || {}, ed = KB.CAN_EDIT, cx = ["cancel", "tobi", "flowed"].includes(r.status);
   // キャストの枠の中の何番目の予約か：予約①〜⑥（色も6色。7件目からは色をくり返す）2026/11/4
   const no = Number.isInteger(i) ? i : null, noTxt = no == null ? "" : "予約" + ("①②③④⑤⑥⑦⑧⑨⑩"[no] || "(" + (no + 1) + ")");
   const prices = M.prices.filter(p=>p.store_key === r.store_key);
@@ -5330,9 +5345,9 @@ function resCard(r, i){
   const lastLogs = logOf(r).filter(x => x.text && String(x.text).trim()).slice(-2).reverse();
   const memoInline = lastLogs.length ? `<div class="rc-memo" title="${esc(lastLogs.map(l => String(l.text).trim() + "（" + (l.by || "") + " " + whenShort(l.at) + "）").join("\n"))}">📝 ${lastLogs.map(l => esc(String(l.text).trim())).join("<i>／</i>")}</div>` : "";
   const mates = partyMates(r);
-  return `<div class="rescard ${cx ? "cx" : ""} ${no == null ? "" : "rcn" + (no % 6 + 1)}" id="rc-${r.id}">
+  return `<div class="rescard ${cx ? "cx" : ""} ${no == null ? "" : "rcs rs-" + r.status}" id="rc-${r.id}">   <!-- ①〜⑥の色は、予約の状態の色（2026/11/5） -->
     <div class="rc-top">
-      ${noTxt ? `<span class="rc-no">${noTxt}</span>` : ""}
+      ${noTxt ? `<span class="rc-no st ${r.status}">${noTxt}</span>` : ""}
       <span class="stbox">${stSel}${statusAtChip(r, ed)}</span>
       <small class="rc-lbl">開始</small>${ed ? `<input type="time" class="rc-time" value="${hmIn(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>
       ${r.phone_draft ? `<span class="rc-draft" title="スマホで仮入力。PCで開いて確かめると取り入れます">📱仮入力</span>` : ""}${r.dummy_name ? `<span class="rc-store">🎭${esc(r.dummy_name)}</span>` : ""}
@@ -5548,7 +5563,7 @@ openForm = function(id){
 };
 const __saveResB = saveRes;
 saveRes = async function(){
-  const cx = ["cancel", "tobi"].includes($("f_status").value);
+  const cx = ["cancel", "tobi", "flowed"].includes($("f_status").value);
   if(!cx && bizMissing()){ paintBiz(); toast("🏢 ビジホの確認（2名部屋・下迎え・タオル）を選んでください"); $("bizBox").scrollIntoView({ block: "center" }); return; }
   return __saveResB();
 };
@@ -5634,7 +5649,7 @@ const __saveResBz = saveRes;
 saveRes = async function(){
   const biz = isBiz(), area = $("f_area").value.trim(), name = hotelNameFromAddr($("f_address").value).slice(0, 80);
   const map = $("f_map") ? $("f_map").value.trim() : "", chk = Object.assign({}, bizState), wasEdit = !!editing;
-  const cx = ["cancel", "tobi"].includes($("f_status").value);
+  const cx = ["cancel", "tobi", "flowed"].includes($("f_status").value);
   await __saveResBz();
   if(!biz || cx || !name || $("formBg").classList.contains("show")) return;   // 保存できなかったときは何もしない
   try{
@@ -6009,7 +6024,7 @@ function renderNeighbors(){
     shiftNote = od.err ? `<div style="font-size:12.5px;color:#B0213F">その日の予約が読めませんでした。その日を開いて確かめてください</div>`
       : `<div style="font-size:12.5px;padding:2px 0">📅 ${Number(bd.slice(5, 7))}/${Number(bd.slice(8))} の出勤：${s ? `<b>${fmtHour(s.start)}〜${fmtHour(s.end)}</b>` : `<b style="color:#B0213F">シフトなし</b>`}</div>`;
   }
-  const list = src.filter(r=>r.cast_id === c.id && (!editing || r.id !== editing.id) && !["cancel", "tobi"].includes(r.status) && r.start_at && r.end_at)
+  const list = src.filter(r=>r.cast_id === c.id && (!editing || r.id !== editing.id) && !["cancel", "tobi", "flowed"].includes(r.status) && r.start_at && r.end_at)
     .map(r=>{ const s = hourOf(r.start_at); let e = hourOf(r.end_at); if(e < s) e += 24; return { r, s, e }; }).sort((a, b)=>a.s - b.s);
   if(!list.length){ el.innerHTML = shiftNote + `<div class="info" style="font-size:13px">📭 この日、このキャストのほかの予約はありません</div>`; return; }
   const need = c.interval_min || 0;
@@ -6248,7 +6263,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 function refreshNeed(){
   if(!$("formBg").classList.contains("show")) return;
   document.querySelectorAll("#formBg .need").forEach(el => el.classList.remove("need"));
-  if(["cancel", "tobi"].includes($("f_status").value)) return;   // キャンセル・トビのときは光らせない
+  if(["cancel", "tobi", "flowed"].includes($("f_status").value)) return;   // キャンセル・トビのときは光らせない
   let list = [];
   try{ list = missingRequired(true); }catch(e){}
   list.forEach(([, id]) => { const el = $(id); if(el) el.classList.add("need"); });
@@ -6297,7 +6312,7 @@ function onNamedPick(quiet){
 // このお客さんの18・極門・ほかのお店の履歴（キャストごと）
 function custHistByCast(){
   const ds = DUMMY_STORES(), out = {};
-  seenNorm().filter(p => p.cast_id && !["cancel", "tobi"].includes(p.status)).forEach(p => {
+  seenNorm().filter(p => p.cast_id && !["cancel", "tobi", "flowed"].includes(p.status)).forEach(p => {
     const o = out[p.cast_id] = out[p.cast_id] || { dummy: [], other: [] };
     (ds.includes(p.store_key) ? o.dummy : o.other).push(p);
   });
@@ -6338,7 +6353,7 @@ renderDummyMatch = async function(){
   const list = el.querySelector("div[style*='font-weight:800;margin:6px 0 2px']");
   // ⚠️ 同じダミー名で、前に2人以上の子が行っている（お客さんから見ると同じ名前なのに顔がちがう）
   const multi = same.length >= 2 ? `<div class="warn" style="margin:6px 0 2px;font-size:13.5px;font-weight:800;background:#FFF1E0;border:2px solid #F0A040;color:#8a4a00">⚠️ 注意：このお客さんは前に「${esc(name)}」で <b>${same.length}人</b> の子が行っています<br>
-      ${same.map(id => { const ds = seenNorm().filter(p => p.cast_id === id && p.store_key === store && p.dummy_name === name && !["cancel", "tobi"].includes(p.status)).map(p => (p.biz_date || "").replace(/^\d\d(\d\d)-(\d\d)-(\d\d)$/, "$1/$2/$3")).sort().reverse();
+      ${same.map(id => { const ds = seenNorm().filter(p => p.cast_id === id && p.store_key === store && p.dummy_name === name && !["cancel", "tobi", "flowed"].includes(p.status)).map(p => (p.biz_date || "").replace(/^\d\d(\d\d)-(\d\d)-(\d\d)$/, "$1/$2/$3")).sort().reverse();
         return `・<b>${esc(castName(id))}</b>（${ds.slice(0, 3).join("、")}${ds.length > 3 ? " ほか" + (ds.length - 3) + "回" : ""}）${dmWorking(id) ? "" : "　…この日はお休み"}`; }).join("<br>")}
       <br><span style="font-weight:600">いちばん最近に行った子にするか、お客さんの記憶に近い子にするか、確かめてから受けてください</span></div>` : "";
   if(list) list.insertAdjacentHTML("beforebegin", multi + head);
@@ -6397,7 +6412,7 @@ function seenNorm(){
   });
 }
 function crCtx(store){
-  return { hist: custHistByCast(), past: seenNorm().filter(p => p.store_key === store && p.dummy_name && !["cancel", "tobi"].includes(p.status) && (!editing || p.id !== editing.id)) };
+  return { hist: custHistByCast(), past: seenNorm().filter(p => p.store_key === store && p.dummy_name && !["cancel", "tobi", "flowed"].includes(p.status) && (!editing || p.id !== editing.id)) };
 }
 // この子が出せる名前（近い順）。出せない名前は why に理由
 function crList(c, store, sp, ctx){
@@ -6436,7 +6451,7 @@ async function tmPaint(){
     const free = c => {
       const sh = shifts[c.shift_name] || shifts[c.official_name]; if(!sh || s < sh.start || e > sh.end) return false;
       const gap = (c.interval_min || 0) / 60;
-      return !rs.some(r => r.cast_id === c.id && (!editing || r.id !== editing.id) && !["cancel", "tobi"].includes(r.status) && r.start_at && r.end_at &&
+      return !rs.some(r => r.cast_id === c.id && (!editing || r.id !== editing.id) && !["cancel", "tobi", "flowed"].includes(r.status) && r.start_at && r.end_at &&
         (() => { const a = hourOf(r.start_at); let b = hourOf(r.end_at); if(b < a) b += 24; return a - gap < e && s < b + gap; })());
     };
     const okCasts = M.casts.filter(c => c.status !== "left" && free(c) && dmGoer(c, store));
@@ -6539,7 +6554,7 @@ let dmSuggest = null;   // { p, md, owner, off }
 function dmAutoPick(){
   const store = $("f_store").value, box = dmSuggestBox();
   if(editing || !isDummyStore(store) || !Array.isArray(custSeen) || !curCustomer){ box.innerHTML = ""; dmSuggest = null; return; }
-  const p = seenNorm().filter(x => x.store_key === store && x.dummy_name && !["cancel", "tobi"].includes(x.status)).sort((a, b) => String(b.biz_date).localeCompare(String(a.biz_date)))[0];
+  const p = seenNorm().filter(x => x.store_key === store && x.dummy_name && !["cancel", "tobi", "flowed"].includes(x.status)).sort((a, b) => String(b.biz_date).localeCompare(String(a.biz_date)))[0];
   if(!p){ box.innerHTML = ""; dmSuggest = null; return; }
   const md = (p.biz_date || "").replace(/^\d\d(\d\d)-(\d\d)-(\d\d)$/, "$1/$2/$3");
   const owners = ownersOf(store, p.dummy_name), owner = owners.find(o => o.id === p.cast_id) || owners[0] || null;
@@ -6712,7 +6727,7 @@ async function cfPaint(){
     const rowsH = ymds.map(ymd => {
       const s = sh[ymd], d = new Date(ymd + "T12:00:00Z"), lab = `${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOWJ[d.getUTCDay()]})`;
       if(!s) return `<div class="cf-row off"><b>${lab}</b><span>お休み</span></div>`;
-      const bk = rs.filter(r => r.biz_date === ymd && !["cancel", "tobi"].includes(r.status) && r.start_at && r.end_at)
+      const bk = rs.filter(r => r.biz_date === ymd && !["cancel", "tobi", "flowed"].includes(r.status) && r.start_at && r.end_at)
         .map(r => { const a = hourOf(r.start_at); let b = hourOf(r.end_at); if(b < a) b += 24; return { a, b, r }; }).sort((x, y) => x.a - y.a);
       // あいている時間＝出勤時間から、予約（＋このキャストの「予約の間」）を引いたもの。30分より短いすき間は出さない
       const free = []; let t = s.start;
@@ -6813,7 +6828,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    ・予約カードでは状態のすぐ右に、黄色い「⏰ 時刻」でくっつけて出す（開始時刻とまちがえないように）
    ・確認電話・確認メールの赤い帯は、時刻が入っていればその時刻で出す。ほかの状態も、時刻をすぎたら帯に出す
    ・状態を変えたら、時刻は消える ---------- */
-const ST_DONE = ["done", "cancel", "tobi", "working"];
+const ST_DONE = ["done", "cancel", "tobi", "flowed", "working"];
 function statusAtIso(bd, st, v){
   if(!v) return null;
   let [h, m] = v.split(":").map(Number);
@@ -7010,6 +7025,12 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .rescard.rcn4{border-left:6px solid #A6CDF0;} .rescard.rcn4 .rc-no{background:#E4F0FB;color:#2F6699;border-color:#A6CDF0;}
   .rescard.rcn5{border-left:6px solid #C5B5F0;} .rescard.rcn5 .rc-no{background:#EEE9FC;color:#6650A8;border-color:#C5B5F0;}
   .rescard.rcn6{border-left:6px solid #EFD98A;} .rescard.rcn6 .rc-no{background:#FCF5D8;color:#8A6D12;border-color:#EFD98A;}
+  /* ①〜⑥：予約の状態の色（2026/11/5） */
+  .rescard.rcs{border-left:6px solid #ddd;} .rescard .rc-no.st{border-color:rgba(0,0,0,.12);}
+  .rescard.rs-wait_cast_reply{border-left-color:#8DB8F2;} .rescard.rs-wait_guest_reply,.rescard.rs-wait_foreign_call{border-left-color:#A9D98A;}
+  .rescard.rs-pre_call,.rescard.rs-pre_mail{border-left-color:#F2D24B;} .rescard.rs-hour_call,.rescard.rs-hour_mail{border-left-color:#F08BB0;}
+  .rescard.rs-wait_guest,.rescard.rs-wait_cast{border-left-color:#cfc7ca;} .rescard.rs-working{border-left-color:#B99BEB;} .rescard.rs-moving{border-left-color:#7FCCD6;}
+  .rescard.rs-arrive_call{border-left-color:#8CCFA5;} .rescard.rs-done{border-left-color:#C9C5C7;} .rescard.rs-cancel{border-left-color:#F5B37A;} .rescard.rs-tobi{border-left-color:#F08A8A;}
   .cardamt{display:inline-block;background:#E4F0FB;border:1.5px solid #A6CDF0;color:#2F6699;border-radius:99px;padding:1px 9px;font-size:12px;font-weight:800;margin-right:4px}
   .part2chip{background:#FFF4E5;border:1.5px solid #FFB547;color:#8a4b00;border-radius:99px;padding:1px 9px;font-size:12px;font-weight:800;margin-left:6px;animation:livePulse 1.6s ease-in-out infinite}
   .rc-no{font-weight:900;font-size:12.5px;border-radius:99px;padding:1px 9px;border:1.5px solid;white-space:nowrap;align-self:center;}
@@ -7056,6 +7077,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>#list > .cblock.sdone{back
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 <script src="kb_cal.js?v=1"></script>
-<script src="unsettled.js?v=51"></script>
+<script src="unsettled.js?v=52"></script>
 </body>
 </html>

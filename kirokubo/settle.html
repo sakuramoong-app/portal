@@ -146,7 +146,7 @@ async function loadDay(){
 // キャスト1人分の計算
 function calcCast(castId){
   const all = rows.filter(r=>r.cast_id === castId);
-  const allLive = all.filter(r=>r.status !== "cancel" && r.status !== "tobi");
+  const allLive = all.filter(r=>r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed");
   const cd = days[castId] || {};
   // ② 先精算のあとの追加分：前の精算（①…）に入った予約は数えない（unsettled.js の kbSnapParts・kbPartIds）2026/11/4
   //   精算済のあとでふえた予約があるときも、ふえた予約だけで計算する（チェックを外した予約＝今日は精算しない も入れない）
@@ -242,7 +242,7 @@ function render(){
 function cardHtml(id, c){
   const cd = c.cd, done = !!cd.settled, dis = (!KB.CAN_EDIT || done) ? "disabled" : "";
   const res = c.all.map(r=>{
-    const off = r.status === "cancel" || r.status === "tobi";
+    const off = r.status === "cancel" || r.status === "tobi" || r.status === "flowed";
     return `<tr class="${off ? "off" : ""}"><td>${hm(r.start_at)}</td><td>${esc(storeLabel(r.store_key))}${r.dummy_name ? " 🎭" + esc(r.dummy_name) : ""}</td>
       <td>${esc(r.course)}${r.extension_count ? " 延長" + r.extension_count : ""}${off ? (r.status === "cancel" ? "（キャンセル）" : "（トビ）") : ""}</td>
       <td class="money">${yen(r.total)}${r.payment === "card_paid" ? " 💳" : ""}</td><td class="money">${off ? "－" : yen(backOf(r))}</td></tr>`;
@@ -351,8 +351,8 @@ function settleCanvas(id){
   const c = calcCast(id), d = new Date(day + "T12:00:00Z");
   const L = [];   // [左, 右, 種類]
   c.all.forEach(r=>{
-    const off = r.status === "cancel" || r.status === "tobi";
-    L.push([`${hm(r.start_at)} ${storeLabel(r.store_key)} ${r.course}${/^\d+$/.test(r.course) ? "分" : ""}${r.extension_count ? " 延長" + r.extension_count : ""}`, off ? (r.status === "cancel" ? "キャンセル" : "トビ") : yen(backOf(r)), off ? "off" : "res"]);
+    const off = r.status === "cancel" || r.status === "tobi" || r.status === "flowed";
+    L.push([`${hm(r.start_at)} ${storeLabel(r.store_key)} ${r.course}${/^\d+$/.test(r.course) ? "分" : ""}${r.extension_count ? " 延長" + r.extension_count : ""}`, off ? (r.status === "cancel" ? "キャンセル" : r.status === "flowed" ? "流れた" : "トビ") : yen(backOf(r)), off ? "off" : "res"]);
   });
   L.push(["", "", "line"]);
   L.push(["報酬", yen(c.reward)]);
@@ -436,8 +436,8 @@ function copyDetail(id){
   const c = calcCast(id), d = new Date(day + "T12:00:00Z");
   const lines = [`【精算】${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${castName(id)}さん`, ""];
   c.all.forEach(r=>{
-    const off = r.status === "cancel" || r.status === "tobi";
-    lines.push(`・${hm(r.start_at)} ${storeLabel(r.store_key)} ${r.course}${/^\d+$/.test(r.course) ? "分" : ""}${r.extension_count ? " 延長" + r.extension_count : ""}　${off ? (r.status === "cancel" ? "キャンセル" : "トビ") : "報酬 " + yen(backOf(r))}`);
+    const off = r.status === "cancel" || r.status === "tobi" || r.status === "flowed";
+    lines.push(`・${hm(r.start_at)} ${storeLabel(r.store_key)} ${r.course}${/^\d+$/.test(r.course) ? "分" : ""}${r.extension_count ? " 延長" + r.extension_count : ""}　${off ? (r.status === "cancel" ? "キャンセル" : r.status === "flowed" ? "流れた" : "トビ") : "報酬 " + yen(backOf(r))}`);
   });
   lines.push("", `報酬　${yen(c.reward)}`);
   if(c.option) lines.push(`OP　${yen(c.option)}`);
@@ -558,6 +558,6 @@ init();
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 <script src="kb_cal.js?v=1"></script>
-<script src="unsettled.js?v=51"></script>
+<script src="unsettled.js?v=52"></script>
 </body>
 </html>

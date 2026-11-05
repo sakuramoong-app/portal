@@ -156,7 +156,7 @@ function rowsOf(c){
   // 新しい記録簿の予約と、台帳エクセルの過去の利用を、同じ形にして新しい順に
   const a = c._res.map(r=>({ src: "new", date: r.biz_date, store: storeLabel(r.store_key) + (r.dummy_name ? " 🎭" + r.dummy_name : ""), cast: castLabel(r.cast_id), cast_id: r.cast_id,
     course: r.course + (/^\d+$/.test(r.course) ? "分" : "") + (r.extension_count ? " 延長" + r.extension_count : ""), place: [r.area, r.address].filter(Boolean).join(" "), total: r.total,
-    status: ["cancel", "tobi"].includes(r.status) ? r.status : r.status === "done" ? "done" : "yet", card: r.payment !== "cash",
+    status: ["cancel", "tobi", "flowed"].includes(r.status) ? r.status : r.status === "done" ? "done" : "yet", card: r.payment !== "cash",
     memo: (r.memo_log || []).map(m=>m.text).join("\n"), castng: false, marks: null }));
   const b = c._hist.map(h=>({ src: "excel", row: h.src_row, date: h.biz_date, store: h.store_key ? storeLabel(h.store_key) : h.store_raw, cast: h.cast_id ? castLabel(h.cast_id) : h.cast_raw, cast_id: h.cast_id,
     course: h.course, place: [h.area, h.place].filter(Boolean).join(" "), total: h.total, status: h.status, card: h.card, memo: h.memo, castng: h.cast_ng, marks: h.marks, hid: h.id }));

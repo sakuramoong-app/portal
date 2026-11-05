@@ -47,7 +47,7 @@ function kbSumParts(parts){
 function kbPendingAfterSettle(cd, all){
   if(!cd || !cd.settled) return [];
   const ids = kbPartIds(cd, all);
-  return all.filter(r => r.status !== "cancel" && r.status !== "tobi" && !ids.has(r.id));
+  return all.filter(r => r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed" && !ids.has(r.id));
 }
 async function startNextPart(id){
   const cd = unsCD()[id] || {}, all = (typeof rows !== "undefined" ? rows : []).filter(r => r.cast_id === id);
@@ -69,7 +69,7 @@ function settlePick(id, rid, on){
   unsRedraw(id);
 }
 function resPickHtml(id, c){
-  const cd = c.cd || {}, all = (c.all || []).filter(r => r.status !== "cancel" && r.status !== "tobi").sort((a, b) => String(a.start_at).localeCompare(String(b.start_at)));
+  const cd = c.cd || {}, all = (c.all || []).filter(r => r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed").sort((a, b) => String(a.start_at).localeCompare(String(b.start_at)));
   if(!all.length) return "";
   const parts = kbSnapParts(cd), ids = parts.length ? kbPartIds(cd, c.all, parts) : new Set();
   const partOf = rid => { for(let i = 0; i < parts.length; i++){ const p = parts[i]; if(Array.isArray(p.resIds) ? p.resIds.includes(rid) : ids.has(rid)) return i; } return -1; };
@@ -120,7 +120,7 @@ async function unsLoad(){
     const byDay = {}; resv.forEach(x => { (byDay[x.biz_date] = byDay[x.biz_date] || []).push(x); });
     Object.keys(byDay).sort().forEach(d => {
       const list = byDay[d];
-      [...new Set(list.filter(x => !["cancel", "tobi"].includes(x.status)).map(x => x.cast_id))].forEach(cid => {
+      [...new Set(list.filter(x => !["cancel", "tobi", "flowed"].includes(x.status)).map(x => x.cast_id))].forEach(cid => {
         const cd = cds.find(x => x.biz_date === d && x.cast_id === cid);
         if(cd && cd.settled && !kbPendingAfterSettle(cd, list.filter(x => x.cast_id === cid)).length) return;   // 精算済でも、のこした予約（今日は精算しない）があれば未精算
         try{ const c = unsCalcDay(d, cid, list, cd); UNSD.push({ date: d, cid, c, cd: cd || null }); }catch(e){}
@@ -328,7 +328,7 @@ unsettle = async function(id){
 function unsSelfDay(){
   if(!day || typeof KB === "undefined" || typeof rows === "undefined") return [];
   const isToday = day >= KB.bizDateOf(), cds = unsCD() || {};
-  return [...new Set(rows.filter(r => r.cast_id && !["cancel", "tobi"].includes(r.status)).map(r => r.cast_id))]
+  return [...new Set(rows.filter(r => r.cast_id && !["cancel", "tobi", "flowed"].includes(r.status)).map(r => r.cast_id))]
     // 精算済でも、のこした予約（②がまだ）があれば出す（11/2 夏目あん：①だけ精算したら消えていた。2026/11/5）
     .filter(cid => { const cd = cds[cid] || {}, pend = cd.settled && kbPendingAfterSettle(cd, rows.filter(r => r.cast_id === cid)).length;
       return isToday ? (!cd.settled || pend) && !!cd.direct_home : !cd.settled || pend; })
@@ -528,8 +528,8 @@ function settleParts(id){
   // 精算メモ（1営業日に1枚）
   const memo = [[day, c.drop]]; uns.forEach(x => { const m = memo.find(y => y[0] === x.date); if(m) m[1] += x.amount; else memo.push([x.date, x.amount]); });
   memo.sort((p, q) => String(p[0]).localeCompare(String(q[0])));
-  const res = c.all.filter(r => r.status !== "cancel" && r.status !== "tobi").map((r, i) => {   // キャンセル・トビは出さない
-    const off = r.status === "cancel" || r.status === "tobi";
+  const res = c.all.filter(r => r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed").map((r, i) => {   // キャンセル・トビは出さない
+    const off = r.status === "cancel" || r.status === "tobi" || r.status === "flowed";
     const bo = off ? [] : (r.options || []).filter(o => (o.back || 0) > 0);
     const ops = bo.map(o => [`${o.label}${o.qty > 1 ? "×" + o.qty : ""}`, o.back * (o.qty || 1)]);
     const opSum = bo.reduce((a, o) => a + o.back * (o.qty || 1), 0);
@@ -561,7 +561,7 @@ copyDetail = function(id){
   const lines = [`【精算】${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${castName(id)}さん`];
   P.res.forEach(r => {
     lines.push("", `■ ${r.no}本目　${r.head}`);
-    if(r.off){ lines.push(`　${r.st === "cancel" ? "キャンセル" : "トビ"}（報酬なし）`); return; }
+    if(r.off){ lines.push(`　${r.st === "cancel" ? "キャンセル" : r.st === "flowed" ? "流れた" : "トビ"}（報酬なし）`); return; }
     lines.push(`　お客さんの総額${r.vk ? "（" + r.vk + "）" : ""}　${yen(r.guest)}`);
     lines.push(`　コース報酬　${yen(r.courseBack)}`);
     r.ops.forEach(o => lines.push(`　OP：${o[0]}　＋${yen(o[1])}`));
@@ -591,7 +591,7 @@ settleCanvas = function(id){
   // 描くもの： [種類, ...]。高さを先に数える
   const ops = [];
   P.res.forEach(r => {
-    ops.push(["job", `${r.no}本目`, r.head, r.off ? (r.st === "cancel" ? "キャンセル" : "トビ") : "", r.off]);
+    ops.push(["job", `${r.no}本目`, r.head, r.off ? (r.st === "cancel" ? "キャンセル" : r.st === "flowed" ? "流れた" : "トビ") : "", r.off]);
     if(r.off) return;
     ops.push(["jrow", "お客さんの総額" + (r.vk ? "（" + r.vk + "）" : ""), yen(r.guest)]);
     ops.push(["jrow", "コース報酬", yen(r.courseBack)]);
@@ -744,7 +744,7 @@ function settleViewHtml(id, c){
     if(pend.length) h += `<div class="part2warn">⚠️ 精算済のあとで予約が <b>${pend.length}件</b>ふえました（${pend.map(r => typeof hm === "function" ? hm(r.start_at) : "").join("・")}）　→ 上の「✅ 精算する予約」でチェックして、「${PART_MARK[nParts] || "次"}」として精算済にしてください</div>`;
     if(!done && c.partNo > 1) h += `<div class="part2info">${PART_MARK[c.partNo - 1]} の精算（ふえた予約だけで計算しています）　前の精算：${(c.prevParts || []).map((p, i) => PART_MARK[i] + " 投函 " + yen(p.drop || 0)).join("・")}</div>`; }
   P.res.forEach(r => {
-    h += `<div class="job ${r.off ? "off" : ""}"><span class="no">${r.no}本目</span><span>${esc(r.head)}</span>${r.off ? `<span style="margin-left:auto">${r.st === "cancel" ? "キャンセル" : "トビ"}</span>` : ""}</div>`;
+    h += `<div class="job ${r.off ? "off" : ""}"><span class="no">${r.no}本目</span><span>${esc(r.head)}</span>${r.off ? `<span style="margin-left:auto">${r.st === "cancel" ? "キャンセル" : r.st === "flowed" ? "流れた" : "トビ"}</span>` : ""}</div>`;
     if(r.off) return;
     h += R("お客さんの総額" + (r.vk ? "（" + r.vk + "）" : ""), yen(r.guest), "gst") + R("コース報酬", yen(r.courseBack)) + r.ops.map(o => R("OP：" + o[0], "＋" + yen(o[1]), "op")).join("") + R("▶ この仕事の報酬（OP込み）", yen(r.total), "ans");
   });
@@ -809,7 +809,7 @@ cardHtml = function(id, c){
   // 精算済にする か 🏠 直帰 のどちらも押していない → 右の枠をピカピカ
   const off = cd.status === "お茶" || cd.status === "欠勤";   // お茶・欠勤は、枠ぜんたいを色に（ピカピカはなし）
   // キャンセル・トビだけ（お金も報酬もない）の子は「精算なし」（11/1 ゆい：欠勤でキャンセル2件なのに未精算と出ていた）
-  const nothing = !done && !(c.all || []).some(r => r.status !== "cancel" && r.status !== "tobi") && !c.total && !c.reward && !c.option && !c.plus && !c.minus;
+  const nothing = !done && !(c.all || []).some(r => r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed") && !c.total && !c.reward && !c.option && !c.plus && !c.minus;
   const need = KB.CAN_EDIT && !done && !home && !off && !nothing;
   const cam = cd.camera_check || "", plNow = (done ? cd.settle_place : plSel[id]) || cd.settle_place || PLACES[0];   // 選んだ回収場所は、描きなおしても（カメラ・写真を押しても）そのまま
   return `<div class="card svc ${done ? "done" : ""} ${cd.status === "お茶" ? "tea" : cd.status === "欠勤" ? "absent" : ""}" id="card-${id}">

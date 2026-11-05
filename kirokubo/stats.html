@@ -254,7 +254,7 @@ async function loadLive(){
       Object.entries((r.data && r.data.shifts) || {}).forEach(([d, s])=>{ if(d >= start && d <= today && s && s.start != null && s.end != null) plan[d + "|" + id] = { start: Number(s.start), end: Number(s.end) }; });
     });
     const cdOf = {}; cds.forEach(c=>{ cdOf[c.biz_date + "|" + c.cast_id] = c; });
-    const live = res.filter(r=>r.status !== "cancel" && r.status !== "tobi" && r.cast_id);
+    const live = res.filter(r=>r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed" && r.cast_id);
     const resOf = {}; live.forEach(r=>{ (resOf[r.biz_date + "|" + r.cast_id] = resOf[r.biz_date + "|" + r.cast_id] || []).push(r); });
     const keys = new Set([...Object.keys(plan), ...Object.keys(resOf), ...cds.filter(c=>c.biz_date <= today).map(c=>c.biz_date + "|" + c.cast_id)]);
     keys.forEach(k=>{
