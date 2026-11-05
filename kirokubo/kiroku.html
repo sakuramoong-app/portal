@@ -2614,6 +2614,28 @@ async function markDroppedAbsent(){
     }
   }finally{ droppedBusy = false; }
 }
+// 🌐 そのあと公式HPにも入れる（その日だけ。キャスト台帳に在籍番号があるお店だけ）2026/11/6 店長OK
+//   ダミー名のお店（18・極門）と媒体（ヘブン・ぴゅあらば・情報局・NHF）は、今までどおりシフトアプリで
+//   入れられたお店は、サクラシフトのその日の入力チェックを ✅ に（SQL 220）
+const HP_SHIFT_MEDIA = { sakuramoon: "サクラムーン", lana_uguisu: "ラナ鶯谷", lana_kinshi: "ラナ錦糸町", dressgarden: "ドレスガーデン", peachmoon: "ピーチムーン", cutie: "キューティー", gyakuanal: "逆AF倶楽部" };
+async function hpPushDay(cid, shiftName, d){
+  const c = M.casts.find(x => x.id === cid); if(!c) return;
+  const targets = Object.entries(c.stores || {}).filter(([k, s]) => HP_SHIFT_MEDIA[k] && s && Number(s.siteNo)).map(([k, s]) => ({ key: k, no: Number(s.siteNo) }));
+  if(!targets.length) return;
+  toast("🌐 公式HPに入れています…（1分ほど）");
+  const ok = [], ng = [];
+  for(const t of targets){
+    try{
+      const { data, error } = await sb.functions.invoke("hp-shift-sync", { body: { action: "apply", store: t.key, by: KB.operatorName(), casts: [{ cast: shiftName, no: t.no, label: shiftName, days: [d] }] } });
+      let r = data; if(error){ try{ r = await error.context.json(); }catch(e){ r = { ok: false, error: error.message }; } }
+      const x = r && r.results && r.results[0];
+      if(r && r.ok && x && x.ok) ok.push(t); else ng.push(HP_SHIFT_MEDIA[t.key] + "（" + ((x && x.failedDates && x.failedDates.length) ? "入らなかった" : (r && (r.error || r.message)) || "入れられませんでした") + "）");
+    }catch(e){ ng.push(HP_SHIFT_MEDIA[t.key] + "（" + (e.message || e) + "）"); }
+  }
+  if(ok.length){ try{ await sb.rpc("kb_shift_check", { p_cast: shiftName, p_ds: day, p_media: ok.map(t => HP_SHIFT_MEDIA[t.key]).concat("記録簿"), p_by: KB.operatorName() }); }catch(e){} }
+  if(ng.length) alert("🌐 公式HPに入れられなかったお店があります：\n" + ng.join("\n") + "\n\nサクラシフトで入れなおしてください");
+  else toast("🌐 公式HPにも入れました（" + ok.map(t => HP_SHIFT_MEDIA[t.key]).join("・") + "）。媒体はシフトアプリで入れてください");
+}
 // 記録簿の欠勤・時間変更 → サクラシフトにも入れる（SQL 218。理由は入れない）2026/11/6 店長OK
 async function pushShiftChange(cid, kind, st, en){
   if(day === KB.PRACTICE_DAY) return;
@@ -2624,7 +2646,7 @@ async function pushShiftChange(cid, kind, st, en){
   if(kind === "time"){ p.p_start = st != null ? st : Number(orig.start); p.p_end = en != null ? en : Number(orig.end); }
   try{
     const r = q(await sb.rpc("kb_shift_from_kiroku", p)) || {};
-    if(r.success) toast(kind === "absent" ? "🗓 サクラシフトもお休みにしました" : "🗓 サクラシフトの時間も変えました");
+    if(r.success){ toast(kind === "absent" ? "🗓 サクラシフトもお休みにしました" : "🗓 サクラシフトの時間も変えました"); hpPushDay(cid, x.name, kind === "absent" ? { date: day, off: true } : { date: day, start: p.p_start, end: p.p_end }); }
     else if(r.error) toast("サクラシフトに入れられませんでした（" + r.error + "）。シフトアプリで直してください");
   }catch(e){ toast("サクラシフトに入れられませんでした：" + (e.message || e) + "（SQL 218 がまだかも）"); }
 }
