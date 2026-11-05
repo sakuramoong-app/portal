@@ -1090,6 +1090,12 @@ async function loadShifts(ymd){
     // 変更の申請中・入力中・変更確定も、受理したことがあるので出す。出さないのは「未提出」「提出済み（まだ受理していない）」だけ
     if(!["input_waiting", "inputting", "confirmed", "change_requested", "change_inputting", "change_confirmed"].includes(r.data && r.data.status)) return;
     if(sh && sh.start != null && sh.end != null) out[r.cast_name] = { start: sh.start, end: sh.end, confirmed: ["confirmed", "change_confirmed"].includes(r.data.status), kanzen: !!((r.data.kanzen || {})[src]) };   // kanzen＝完（完全終了。キャストがシフトで書く）2026/11/5
+    else {
+      // その日（営業日の朝6時より後）にシフトで消された子は、記録簿には「欠勤」として残す（元のシフトの時間で）2026/11/6 店長OK
+      const h = ((r.data.changeHistory || {})[src]) || [], first = h[0], last = h[h.length - 1];
+      if(first && first.before && last && !last.after && last.at && new Date(last.at) >= new Date(src + "T06:00:00+09:00"))
+        out[r.cast_name] = { start: first.before.start, end: first.before.end, confirmed: false, kanzen: false, dropped: true, droppedAt: last.at, droppedBy: last.by || "" };
+    }
   });
   return (shiftCache[ymd] = out);
 }
@@ -2585,7 +2591,43 @@ loadDay = async function(){
     castDays = {}; (q(cd) || []).forEach(x=>{ castDays[x.cast_id] = x; });
   }catch(e){ castDays = {}; }
   renderTL();
+  markDroppedAbsent();
 };
+// サクラシフトで当日に消された子 → 記録簿で「欠勤」の記録を自動で残す（理由は空。あとで内勤が書ける）2026/11/6
+let droppedBusy = false;
+async function markDroppedAbsent(){
+  if(droppedBusy || !KB.CAN_EDIT || day === KB.PRACTICE_DAY) return;
+  const sh = shiftCache[day] || {}, todo = [];
+  Object.keys(sh).forEach(name => {
+    if(!sh[name].dropped) return;
+    const c = M.casts.find(x => x.shift_name === name || x.official_name === name); if(!c) return;
+    const cd = castDays[c.id] || {};
+    if(cd.status === "欠勤" || (cd.attend_log || []).some(a => a.kind === "欠勤")) return;
+    todo.push({ c, s: sh[name] });
+  });
+  if(!todo.length) return;
+  droppedBusy = true;
+  try{
+    for(const { c, s } of todo){
+      const log = ((castDays[c.id] || {}).attend_log || []).concat([{ kind: "欠勤", reason: "", time: "", at: s.droppedAt || new Date().toISOString(), by: (s.droppedBy || "サクラシフト") + "（シフトで休みに）" }]);
+      await saveDayPart(c.id, { attend_log: log, status: "欠勤", standby: "" });
+    }
+  }finally{ droppedBusy = false; }
+}
+// 記録簿の欠勤・時間変更 → サクラシフトにも入れる（SQL 218。理由は入れない）2026/11/6 店長OK
+async function pushShiftChange(cid, kind, st, en){
+  if(day === KB.PRACTICE_DAY) return;
+  const x = tlRows().find(r => r.c && r.c.id === cid);
+  if(!x || !x.shift) return;   // シフトがない子（予約だけ）は、シフトアプリにさわらない
+  const orig = (shiftCache[day] || {})[x.name] || x.shift;
+  const p = { p_cast: x.name, p_ds: day, p_kind: kind, p_by: KB.operatorName() };
+  if(kind === "time"){ p.p_start = st != null ? st : Number(orig.start); p.p_end = en != null ? en : Number(orig.end); }
+  try{
+    const r = q(await sb.rpc("kb_shift_from_kiroku", p)) || {};
+    if(r.success) toast(kind === "absent" ? "🗓 サクラシフトもお休みにしました" : "🗓 サクラシフトの時間も変えました");
+    else if(r.error) toast("サクラシフトに入れられませんでした（" + r.error + "）。シフトアプリで直してください");
+  }catch(e){ toast("サクラシフトに入れられませんでした：" + (e.message || e) + "（SQL 218 がまだかも）"); }
+}
 const __renderList2 = renderList;
 renderList = function(){ __renderList2(); renderTL(); };
 
@@ -3926,6 +3968,8 @@ async function setWhere(cid, v){
 // 状態のプルダウン。不在・お茶・欠勤 → 今いない へ（場所も消す）。自動・待機中・仕事中・出勤前連絡 は場所はそのまま
 async function setDayStatus(cid, v){
   if(v === "_here") return;
+  // 欠勤は、今いないの札と同じく理由を聞く（記録を残して、サクラシフトもお休みにするため）2026/11/6
+  if(v === "欠勤" && (castDays[cid] || {}).status !== "欠勤"){ openAttend(cid, "欠勤"); if($("at_skip")) $("at_skip").style.display = ""; renderList(); return; }
   const keepPlace = ["", "待機中", "仕事中", "出勤前連絡"].includes(v);
   const seat = seatsOk && !keepPlace ? seatOf(cid) : null;
   if(seat) await leaveSeat(seat.id, true);
@@ -4713,7 +4757,12 @@ saveAttend = async function(){
   if(kind === "欠勤") Object.assign(patch, { status: "欠勤", standby: "" });
   if(st != null) patch.shift_start_ov = st;
   if(en != null) patch.shift_end_ov = en;
-  if(await saveDayPart(cid, patch)){ $("attendBg").classList.remove("show"); toast("記録しました"); }
+  if(await saveDayPart(cid, patch)){
+    $("attendBg").classList.remove("show"); toast("記録しました");
+    // サクラシフトにも（欠勤→お休み・時間を変えた→その時間）。理由は入れない
+    if(kind === "欠勤") pushShiftChange(cid, "absent");
+    else if(st != null || en != null) pushShiftChange(cid, "time", st, en);
+  }
 };
 
 /* ---------- 🚶 移動中：予約の状態を「移動中」にしたら、今どこに誰がの札に「移動前のエリア → ※移動中※」と今いる場所の欄 ---------- */
@@ -4999,7 +5048,13 @@ async function undoAttend(cid, i){
     if(sh.st != null) patch.shift_start_ov = st;
     if(sh.en != null) patch.shift_end_ov = en;
   }
-  if(await saveDayPart(cid, patch)) toast("取り消しました");
+  if(await saveDayPart(cid, patch)){
+    toast("取り消しました");
+    // サクラシフトも元にもどす（欠勤の取り消し → 元のシフト／時間の取り消し → 残っている記録の時間か、元のシフト）
+    const cdn = castDays[cid] || {};
+    if(a.kind === "欠勤" && !log.some(x => x.kind === "欠勤")) pushShiftChange(cid, "time", cdn.shift_start_ov != null ? Number(cdn.shift_start_ov) : null, cdn.shift_end_ov != null ? Number(cdn.shift_end_ov) : null);
+    else if(sh.st != null || sh.en != null) pushShiftChange(cid, "time", cdn.shift_start_ov != null ? Number(cdn.shift_start_ov) : null, cdn.shift_end_ov != null ? Number(cdn.shift_end_ov) : null);
+  }
 }
 
 // 今いないの札で「欠勤」の窓が出たけど、やっぱり欠勤にしない → ⬜不在 にもどす
