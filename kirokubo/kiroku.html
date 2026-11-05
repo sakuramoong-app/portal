@@ -701,10 +701,18 @@
       <h3><span class="n">3</span>プレイ・オプション・延長</h3>
       <div id="afBox" style="background:#FFF4E5;border:2px solid #FFB547;border-radius:12px;padding:8px 12px;margin-bottom:8px">
         <div style="font-weight:800;font-size:13.5px;color:#a35a00;margin-bottom:4px">🔸 AF・逆AF のご希望（必ず聞く）<span class="req" id="afReq">必須</span></div>
-        <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:14.5px;font-weight:700">
-          <span>AF：<label class="ynb"><input type="radio" name="f_afw" value="yes" onchange="onAfWish()"><span>〇</span></label><label class="ynb"><input type="radio" name="f_afw" value="no" onchange="onAfWish()"><span>×</span></label><span id="afMark" class="cmark"></span></span>
-          <span>逆AF：<label class="ynb"><input type="radio" name="f_rafw" value="yes" onchange="onAfWish()"><span>〇</span></label><label class="ynb"><input type="radio" name="f_rafw" value="no" onchange="onAfWish()"><span>×</span></label><span id="rafMark" class="cmark"></span></span>
+        <!-- 4つから1つ選ぶ（2026/11/5）。下のかくれた AF／逆AF の〇×は、選んだものから自動で入る（保存・料金の計算はこちらを使う） -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;font-size:14.5px;font-weight:700">
+          <label class="ynb afsel"><input type="radio" name="f_afsel" value="af" onchange="setAfSel(this.value)"><span>AF</span></label>
+          <label class="ynb afsel"><input type="radio" name="f_afsel" value="raf" onchange="setAfSel(this.value)"><span>逆AF</span></label>
+          <label class="ynb afsel"><input type="radio" name="f_afsel" value="both" onchange="setAfSel(this.value)"><span>AF・逆AF 両方</span></label>
+          <label class="ynb afsel"><input type="radio" name="f_afsel" value="none" onchange="setAfSel(this.value)"><span>アナルプレイなし</span></label>
         </div>
+        <div style="font-size:12.5px;font-weight:700;color:#7a5a20;margin-top:4px">この子：AF<span id="afMark" class="cmark"></span>　逆AF<span id="rafMark" class="cmark"></span></div>
+        <span style="display:none">
+          <input type="radio" name="f_afw" value="yes" onchange="onAfWish()"><input type="radio" name="f_afw" value="no" onchange="onAfWish()">
+          <input type="radio" name="f_rafw" value="yes" onchange="onAfWish()"><input type="radio" name="f_rafw" value="no" onchange="onAfWish()">
+        </span>
       </div>
       <div class="row1"><div class="f"><label>希望プレイ（無料の範囲）</label><input id="f_play" maxlength="200" placeholder="例：潮吹き・言葉責め など" oninput="recalc()"></div></div>
       <details id="optDetails" style="margin-bottom:10px">
@@ -727,6 +735,7 @@
           <input type="hidden" id="f_ext" value="0"><input type="hidden" id="f_date" value="0">
         </div>
         <div id="f_opts"></div>
+        <button type="button" class="btn btn-ghost btn-sm" style="margin-top:4px" onclick="openOptOrder()">↕ OPの並びを直す（よく出るものを上に）</button>
         <div class="opt" style="margin-top:4px">
           <span></span><input type="text" id="f_xop_label" placeholder="ほかのOP（自由入力）" oninput="recalc()">
           <span></span><input type="number" id="f_xop_price" placeholder="料金" oninput="recalc()"><input type="number" id="f_xop_back" placeholder="バック" oninput="recalc()">
@@ -773,7 +782,7 @@
       </div>
       <!-- 📩 ネット予約（ヘブン・ぴゅあ・風じゃ・公式メール）：お客さまへの返信の文 -->
       <div id="netReplyWrap" style="display:none;margin-top:10px">
-        <div class="f"><label>📩 お客さまへの返信（ネット予約・コピーして返信）</label></div>
+        <div class="f"><label>📩 お客さまへの返信（ネット予約・コピーして返信）<button type="button" class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="openNetTpl()">✏️ 返信の文を直す</button></label></div>
         <textarea class="msg" id="netReply" readonly style="min-height:240px"></textarea>
         <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="navigator.clipboard.writeText($('netReply').value).then(()=>toast('📋 返信の文をコピーしました'))">📋 返信の文をコピー</button>
       </div>
@@ -978,7 +987,7 @@ function openForm(id){
     party = { kind: po ? (po.code === "3p_guest" ? "guest" : "cast") : "", n: po && /4P/.test(po.label) ? 3 : 2, casts: [], af: [], grp: (po && po.grp) || "",
       note: ((r.memo_log || []).find(m => /^👥/.test(m.text || "")) || {}).text || "" }; }
   fillAreaSel(r.area || ""); $("f_address").value = r.address || "";
-  setRadio("f_afw", r.af_wish || ""); setRadio("f_rafw", r.rev_af_wish || "");
+  setRadio("f_afw", r.af_wish || ""); setRadio("f_rafw", r.rev_af_wish || ""); syncAfSel();
   $("optDetails").open = false;
   $("f_transport").value = r.transport || 0; $("f_discount").value = r.discount || 0; $("f_discnote").value = r.discount_note || "";
   $("f_pay").value = id ? (r.payment === "card_paid" ? "card" : r.payment === "cash" && Number(r.card_total) > 0 ? "split" : (r.payment || "cash")) : "";
@@ -1231,7 +1240,7 @@ function withAf0(w, fn){
     if(has("gyakuaf")){ if(has("af")) $("o_af").checked = af; $("o_gyakuaf").checked = raf; } else if(has("af")) $("o_af").checked = af || raf;
   }
   try{ return fn(); }
-  finally{ setRadio("f_afw", keep.af); setRadio("f_rafw", keep.raf); if(keep.o1 !== null) $("o_af").checked = keep.o1; if(keep.o2 !== null) $("o_gyakuaf").checked = keep.o2; }
+  finally{ setRadio("f_afw", keep.af); setRadio("f_rafw", keep.raf); syncAfSel(); if(keep.o1 !== null) $("o_af").checked = keep.o1; if(keep.o2 !== null) $("o_gyakuaf").checked = keep.o2; }
 }
 // 1人ずつの料金（その子で計算しなおす）
 function partyShares(){
@@ -1316,7 +1325,16 @@ function dressKit(d){   // キューティーはいつもメイク道具を持�
 function radioVal(name){ const el = document.querySelector('input[name="' + name + '"]:checked'); return el ? el.value : ""; }
 function setRadio(name, v){ document.querySelectorAll('input[name="' + name + '"]').forEach(el=>{ el.checked = el.value === v; }); }
 // 希望ありなら、そのお店の AF／逆AF のオプションにチェックを入れる（サクラナは「AF・逆AF」1つ・極門は別々）
+// 🔸 4択（AF／逆AF／両方／アナルプレイなし）→ AF・逆AF の〇× に入れる。〇×から4択の表示ももどす
+const AF_SEL = { af: ["yes", "no"], raf: ["no", "yes"], both: ["yes", "yes"], none: ["no", "no"] };
+function setAfSel(v){ const p = AF_SEL[v]; if(!p) return; setRadio("f_afw", p[0]); setRadio("f_rafw", p[1]); onAfWish(); }
+function syncAfSel(){
+  const a = radioVal("f_afw"), r = radioVal("f_rafw");
+  const v = Object.keys(AF_SEL).find(k => AF_SEL[k][0] === a && AF_SEL[k][1] === r) || "";
+  setRadio("f_afsel", v);
+}
 function onAfWish(){
+  syncAfSel();
   const g = storeGroup($("f_store").value), af = radioVal("f_afw") === "yes", raf = radioVal("f_rafw") === "yes";
   const has = code => !!$("o_" + code) && M.options.some(o=>o.store_group === g && o.code === code);
   if(has("gyakuaf")){ if(has("af")) $("o_af").checked = af; $("o_gyakuaf").checked = raf; }
@@ -1692,11 +1710,22 @@ const digits = s => String(s||"").normalize("NFKC").replace(/[^\d]/g, "");
 const phoneNorm = s => { const t = String(s||"").normalize("NFKC").trim(), d = digits(t); if(/^0+$/.test(d) && d.length <= 4) return d;   // 「00」＝電話番号不明は、そのまま残す（国番号の00とまちがえない）
   if(!/^(\+|00)/.test(t)) return d; const n = t.startsWith("00") ? d.slice(2) : d; return n.startsWith("81") ? "0" + n.slice(2) : (n ? "+" + n : ""); };
 // 電話番号でお客さんを探す：主の番号 → 副番号（SQL 179。まだなら主の番号だけ）
+//   同じ番号のお客さんが何人もいるとき（台帳から入れた同じ人など）は、いちばん新しく予約した人を出す（2026/11/5）
 async function custByPhone(phone, cols){
-  const a = q(await sb.from("kb_customers").select(cols).eq("phone", phone).order("id").limit(1).maybeSingle());
+  const pick = async list => {
+    if(!list || !list.length) return null;
+    if(list.length === 1) return list[0];
+    try{
+      const r = q(await sb.from("kb_reservations").select("customer_id,biz_date").in("customer_id", list.map(c => c.id)).eq("deleted", false).order("biz_date", { ascending: false }).limit(1).maybeSingle());
+      if(r) return list.find(c => c.id === r.customer_id) || list[0];
+    }catch(e){}
+    return list.slice().sort((x, y) => String(y.updated_at || "").localeCompare(String(x.updated_at || "")))[0];
+  };
+  const sel = cols === "*" ? "*" : cols + ",updated_at";
+  const a = await pick(q(await sb.from("kb_customers").select(sel).eq("phone", phone).order("id").limit(20)));
   if(a) return a;
-  const b = await sb.from("kb_customers").select(cols).contains("phones", [phone]).order("id").limit(1).maybeSingle();
-  return b.error ? null : b.data;
+  const b = await sb.from("kb_customers").select(sel).contains("phones", [phone]).order("id").limit(20);
+  return b.error ? null : pick(b.data);
 }
 async function lookupCustomer(keepName){
   const phone = phoneNorm($("f_phone").value);
@@ -1801,6 +1830,36 @@ function courseIncludesOp(store, course, label){
   const m = String(info.description || "").match(/【プレイ内容】\s*\n?([^\n]*)/);
   return !!m && m[1].split(/[・、,\s]+/).map(s => s.trim()).includes(label);
 }
+/* ---------- ↕ OPの並びを直す（お店のグループごと。kb_options.sort）2026/11/5 ---------- */
+let optOrder = null;
+function openOptOrder(g){
+  g = g || storeGroup($("f_store").value);
+  if(!optOrder || optOrder.g !== g) optOrder = { g, list: M.options.filter(o => o.store_group === g).map(o => o.code) };
+  let bg = $("ooBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "ooBg"; bg.className = "modal-bg"; document.body.appendChild(bg); KB.closeOnBackdrop(bg, () => { bg.classList.remove("show"); optOrder = null; }); }
+  const lab = code => (M.options.find(o => o.store_group === g && o.code === code) || {}).label || code;
+  const groups = [...new Set(M.options.map(o => o.store_group))];
+  bg.innerHTML = `<div class="modal" style="max-width:520px"><button class="x" onclick="$('ooBg').classList.remove('show');optOrder=null">×</button>
+    <h2>↕ OPの並びを直す</h2>
+    <div class="f" style="margin:6px 0"><label>お店のグループ</label><select onchange="optOrder=null;openOptOrder(this.value)">${groups.map(x => `<option value="${x}" ${x === g ? "selected" : ""}>${({ sakurana: "サクラ系（サクラムーン・ラナ など）", cutie: "キューティ", gokumon: "極門" })[x] || x}</option>`).join("")}</select></div>
+    <div class="oolist">${optOrder.list.map((code, i) => `<div class="oorow"><b>${i + 1}</b><span>${esc(lab(code))}</span>
+      <button type="button" class="btn btn-ghost btn-sm" ${i ? "" : "disabled"} onclick="moveOpt(${i},-1)">▲</button><button type="button" class="btn btn-ghost btn-sm" ${i < optOrder.list.length - 1 ? "" : "disabled"} onclick="moveOpt(${i},1)">▼</button></div>`).join("")}</div>
+    ${KB.CAN_EDIT ? `<button type="button" class="btn btn-primary" style="margin-top:10px;width:100%" onclick="saveOptOrder()">この並びで保存（内勤みんな）</button>` : ""}</div>`;
+  bg.classList.add("show");
+}
+function moveOpt(i, d){ const l = optOrder.list, j = i + d; if(j < 0 || j >= l.length) return; [l[i], l[j]] = [l[j], l[i]]; openOptOrder(optOrder.g); }
+async function saveOptOrder(){
+  if(!KB.CAN_EDIT || !optOrder) return;
+  const { g, list } = optOrder;
+  try{
+    for(let i = 0; i < list.length; i++) q(await sb.from("kb_options").update({ sort: i + 1 }).eq("store_group", g).eq("code", list[i]));
+    list.forEach((code, i) => { const o = M.options.find(x => x.store_group === g && x.code === code); if(o) o.sort = i + 1; });
+    M.options.sort((a, b) => (a.sort || 0) - (b.sort || 0));
+    $("ooBg").classList.remove("show"); optOrder = null;
+    toast("OPの並びを保存しました（次に受付を開いたときから、この並びです）");
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+document.head.insertAdjacentHTML("beforeend", `<style>.oorow{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px dashed var(--line)} .oorow b{width:24px;color:var(--sub)} .oorow span{flex:1;font-weight:700}</style>`);
 /* ---------- 計算 ---------- */
 function calc(){
   const store = $("f_store").value, g = storeGroup(store), course = $("f_course").value;
@@ -2013,23 +2072,48 @@ function netReply(){
   const who = isDummyStore(store) && $("f_dummy").value ? $("f_dummy").value : cast ? ((cast.stores && cast.stores[store] && cast.stores[store].name) || cast.official_name || cast.temp_name) : "（キャスト）";
   const ops = c.opts.map(o => o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・");
   const place = [$("f_area").value, $("f_address").value].filter(Boolean).join(" ");
-  $("netReply").value =
-`${$("f_name").value || "お客"}様
+  // 文は「✏️ 返信の文を直す」で、内勤みんなで直せる（kb_settings 'net_reply_tpl'。2026/11/5）
+  const V = { 名前: $("f_name").value || "お客", 店名: storeLabel(store), 日時: `${cd2.getUTCMonth() + 1}/${cd2.getUTCDate()}(${DOW[cd2.getUTCDay()]}) ${st2 || "--:--"}〜${en || "--:--"}`,
+    キャスト: who, コース: `${c.course}${/^\d+$/.test(c.course) ? "分" : ""}${c.ext ? "（延長" + c.ext * 30 + "分）" : ""}`, 場所: place || "（未定）",
+    オプション行: ops ? "\n■オプション：" + ops : "", 料金: c.total.toLocaleString("ja-JP") + "円", 支払: c.pay === "cash" ? "現金" : c.pay === "split" ? "現金＋カード" : "カード", 電話: STORE_TEL[store] || "" };
+  $("netReply").value = netTpl().replace(/\{(名前|店名|日時|キャスト|コース|場所|オプション行|料金|支払|電話)\}/g, (m, k) => V[k]);
+}
+const NET_TPL_DEF = `{名前}様
 
-この度は${storeLabel(store)}をご利用いただき、誠にありがとうございます。
+この度は{店名}をご利用いただき、誠にありがとうございます。
 下記の内容でご予約を承りました。
 
-■ご予約日時：${cd2.getUTCMonth() + 1}/${cd2.getUTCDate()}(${DOW[cd2.getUTCDay()]}) ${st2 || "--:--"}〜${en || "--:--"}
-■キャスト：${who}
-■コース：${c.course}${/^\d+$/.test(c.course) ? "分" : ""}${c.ext ? "（延長" + c.ext * 30 + "分）" : ""}
-■ご利用場所：${place || "（未定）"}${ops ? "\n■オプション：" + ops : ""}
-■料金総額：${c.total.toLocaleString("ja-JP")}円（${c.pay === "cash" ? "現金" : c.pay === "split" ? "現金＋カード" : "カード"}）
+■ご予約日時：{日時}
+■キャスト：{キャスト}
+■コース：{コース}
+■ご利用場所：{場所}{オプション行}
+■料金総額：{料金}（{支払}）
 
 ご不明な点やご変更がございましたら、お気軽にお電話ください。
 当日はどうぞよろしくお願いいたします。
 
-${storeLabel(store)}
-TEL：${STORE_TEL[store] || ""}`;
+{店名}
+TEL：{電話}`;
+function netTpl(){ const v = M.set && M.set.net_reply_tpl; return typeof v === "string" && v.trim() ? v : NET_TPL_DEF; }
+function openNetTpl(){
+  let bg = $("ntBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "ntBg"; bg.className = "modal-bg"; document.body.appendChild(bg); KB.closeOnBackdrop(bg, () => bg.classList.remove("show")); }
+  bg.innerHTML = `<div class="modal" style="max-width:640px"><button class="x" onclick="$('ntBg').classList.remove('show')">×</button>
+    <h2>✏️ 📩 お客さまへの返信の文</h2>
+    <p style="font-size:12.5px;color:var(--sub);line-height:1.7;margin:0 0 8px">いつもの注意事項なども、ここに書けば毎回入ります（内勤みんな同じ文）。<br>
+      {名前} {店名} {日時} {キャスト} {コース} {場所} {オプション行} {料金} {支払} {電話} は、その予約の内容になります。</p>
+    <textarea id="nt_text" rows="18" style="width:100%;font-family:inherit;font-size:13.5px">${esc(netTpl())}</textarea>
+    ${KB.CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:8px"><button type="button" class="btn btn-primary" style="flex:1" onclick="saveNetTpl()">保存</button>
+      <button type="button" class="btn btn-ghost" onclick="if(confirm('はじめの文にもどしますか？'))$('nt_text').value=NET_TPL_DEF">はじめの文にもどす</button></div>` : ""}</div>`;
+  bg.classList.add("show");
+}
+async function saveNetTpl(){
+  if(!KB.CAN_EDIT) return;
+  const v = $("nt_text").value;
+  try{
+    q(await sb.from("kb_settings").upsert({ key: "net_reply_tpl", value: v, note: "📩 ネット予約のお客さまへの返信の文（受付の ✏️ 返信の文を直す）" }));
+    M.set.net_reply_tpl = v; $("ntBg").classList.remove("show"); toast("保存しました"); netReply();
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
 
 /* ---------- 保存・削除 ---------- */
@@ -4100,7 +4184,27 @@ function unsAlertDone(cid, at){ const d = lsGet("kbUnsAlertDone"), today = KB.bi
 function tplList(){ const v = M.set && M.set.msg_templates; return Array.isArray(v) ? v : []; }
 function tplFill(t, cid){
   if(cid == null) cid = $("tpl_cast") ? $("tpl_cast").value : ""; const c = M.casts.find(x=>x.id === cid), d = new Date();
-  return String(t || "").replace(/\{名前\}/g, c ? (c.official_name || c.temp_name) : "{名前}").replace(/\{時間\}/g, lateHM(d.getHours() * 60 + d.getMinutes()));
+  const s = String(t || "");
+  if(s.includes("{内勤シフト}") && naikinWeek === null){ naikinWeek = "（読みこみ中…）"; loadNaikinWeek(); }
+  return s.replace(/\{名前\}/g, c ? (c.official_name || c.temp_name) : "{名前}").replace(/\{時間\}/g, lateHM(d.getHours() * 60 + d.getMinutes()))
+    .replace(/\{内勤シフト\}/g, naikinWeek || "");
+}
+// {内勤シフト}：今日から7日分の内勤のシフト（内勤カレンダー）。美咲などに送るとき用（2026/11/5）
+let naikinWeek = null;
+const NAIKIN_NAME = { kya: "きゃ", suya: "すや", ran: "らん", kami: "かみ", waka: "わか" };
+async function loadNaikinWeek(){
+  try{
+    const from = KB.realBizDateOf(), to = addDays(from, 6);
+    const rows2 = q(await sb.from("naikin_shifts").select("staff_id,date,time").gte("date", from).lte("date", to).order("date")) || [];
+    const lines = [];
+    for(let i = 0; i < 7; i++){
+      const dd = addDays(from, i), dt = new Date(dd + "T12:00:00Z");
+      const who = rows2.filter(r => r.date === dd && r.time).map(r => (NAIKIN_NAME[r.staff_id] || r.staff_id) + " " + r.time);
+      lines.push(`${dt.getUTCMonth() + 1}/${dt.getUTCDate()}(${DOW[dt.getUTCDay()]})　${who.length ? who.join("・") : "—"}`);
+    }
+    naikinWeek = lines.join("\n");
+  }catch(e){ naikinWeek = "（内勤のシフトを読めませんでした）"; }
+  if($("tplBg") && $("tplBg").classList.contains("show")) openTplBox();
 }
 let tplScene = "";   // えらんでいる種類（"" = ぜんぶ）
 const TPL_BASE_SCENES = ["出勤", "退勤"];
@@ -4120,7 +4224,7 @@ function openTplBox(editId, castId, scene){
     <div class="tplkinds"><span>種類：</span><button type="button" class="${tplScene ? "" : "on"}" onclick="openTplBox(null,null,'')">ぜんぶ</button>${scenes.map(s=>`<button type="button" class="${s === tplScene ? "on" : ""}" onclick="openTplBox(null,null,'${esc(s)}')">${esc(s)}</button>`).join("")}</div>
     ${ed ? `<div class="tpled"><div class="f"><label>種類（あたらしい種類も書けます）</label><input id="tpl_scene" list="tplScenes" value="${esc(ed.scene)}" placeholder="例：出勤 / 退勤 / 遅刻 / お客さん"><datalist id="tplScenes">${scenes.map(s=>`<option value="${esc(s)}">`).join("")}</datalist></div>
       <div class="f"><label>名前（ボタンに出る）</label><input id="tpl_title" value="${esc(ed.title)}" placeholder="例：美咲 退勤のお礼"></div>
-      <div class="f"><label>文</label><textarea id="tpl_text" rows="5" placeholder="{名前}さん、お疲れさまでした！…">${esc(ed.text)}</textarea></div>
+      <div class="f"><label>文 <small style="font-weight:600;color:var(--sub)">{名前} {時間} {内勤シフト}（今日から7日分の内勤のシフト）が使えます</small></label><textarea id="tpl_text" rows="5" placeholder="{名前}さん、お疲れさまでした！…">${esc(ed.text)}</textarea></div>
       <button type="button" class="btn btn-primary btn-sm" onclick="saveTpl('${esc(ed.id)}')">保存</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="openTplBox()">やめる</button>
       ${ed.id ? `<button type="button" class="btn btn-ghost btn-sm" style="float:right" onclick="delTpl('${esc(ed.id)}')">消す</button>` : ""}</div>` : ""}
