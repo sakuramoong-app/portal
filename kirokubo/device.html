@@ -49,6 +49,21 @@
       <h2>登録した端末</h2>
       <div id="list">読み込み中…</div>
     </div>
+    <div class="box" id="mgrBox" style="display:none">
+      <h2>👑 店長のGoogleアカウント（端末の登録なしで入れる）</h2>
+      <p class="lead">店長がGoogleでログインしているときは、登録していない端末（プライベートウィンドウなど）でも開けます。<br>
+        そのかわり、登録していない端末で開いたら下の履歴に残ります。<b>いつもの場所</b>（お店・家の回線）以外からなら、店長のメールに知らせます。<br>
+        守りは「Googleの2段階認証（ログインのときにスマホで『はい』）」です。オフにしないでください。</p>
+      <h3 style="font-size:15px;margin:12px 0 4px">🏠 いつもの場所（この回線から入ってもメールしない）</h3>
+      <div id="places">読み込み中…</div>
+      <div class="row" style="margin-top:6px">
+        <div class="f"><label>今いる場所の名前</label><input id="placeLabel" maxlength="30" placeholder="例：お店／家"></div>
+        <button class="btn btn-primary" onclick="placeAdd()">＋ 今いる場所（この回線）を足す</button>
+      </div>
+      <p class="lead" style="font-size:12px">※ スマホのモバイル回線や外のWi-Fiは、毎回ちがう回線になるので足さないでください。家のWi-Fiも、たまに回線の番号が変わることがあります（そのときは、もう一度足す）。</p>
+      <h3 style="font-size:15px;margin:14px 0 4px">📜 店長のログイン履歴（登録していない端末で開いたとき・新しい50件）</h3>
+      <div id="loginLog">読み込み中…</div>
+    </div>
     <div class="box">
       <h2>🏠 このPCは退勤で自動ログアウトしない（店長の家のPC用）</h2>
       <p class="lead">ふつうは、内勤カレンダーの退勤時刻＋5分で自動でログアウトします。<br>
@@ -104,6 +119,38 @@ async function refresh(){
       ・登録したときと<b>ちがうブラウザ</b>で開いている（Edge と Chrome、ふつうの画面とシークレット／InPrivate）<br>
       ・スマホは、<b>LINEの中で開いた画面</b>・Safari・ホーム画面のアイコンが、それぞれ別あつかい（いつも同じものから開く）</div>`);
   }catch(e){ $("list").innerHTML = `<span class="ng">一覧を読めませんでした：${esc(e.message || e)}</span>`; }
+  paintMgr();
+}
+// 👑 店長：いつもの場所・ログイン履歴（SQL 213）。社長は履歴だけ見られる
+async function paintMgr(){
+  if(!KB.IS_BOSS) return;
+  $("mgrBox").style.display = "";
+  try{
+    const p = await sb.rpc("kb_place_list");
+    if(p.error) throw p.error;
+    const l = p.data || [];
+    $("places").innerHTML = l.length ? `<table><tr><th>名前</th><th>回線</th><th></th></tr>${l.map(x => `<tr><td>${esc(x.label)}${x.here ? " <b>（今ここ）</b>" : ""}</td><td><small>${esc(x.ip)}</small></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="placeDel('${esc(x.ip)}')">消す</button></td></tr>`).join("")}</table>` : `<span class="lead">まだありません（お店・家で「＋ 今いる場所を足す」を押してください）</span>`;
+  }catch(e){ $("places").innerHTML = `<span class="lead">${/店長だけ/.test(e.message || "") ? "店長だけが見られます" : "読めませんでした（SQL 213 は実行ずみ？）：" + esc(e.message || e)}</span>`; }
+  try{
+    const r = await sb.rpc("kb_login_log_list");
+    if(r.error) throw r.error;
+    const l = r.data || [];
+    const br = ua => /Firefox/.test(ua) ? "Firefox" : /Edg\//.test(ua) ? "Edge" : /Chrome/.test(ua) ? "Chrome" : /Safari/.test(ua) ? "Safari" : "ブラウザ";
+    const os = ua => /iPhone|iPad/.test(ua) ? "iPhone" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac/.test(ua) ? "Mac" : "";
+    $("loginLog").innerHTML = l.length ? `<table><tr><th>いつ</th><th>どこ</th><th>ブラウザ</th><th></th></tr>${l.map(x => `<tr><td>${when(x.at)}</td><td>${x.place ? "🏠 " + esc(x.place) : `<b style="color:#c0392b">知らない回線</b> <small>${esc(x.ip)}</small>`}</td>
+      <td><small>${esc(os(x.ua) + " " + br(x.ua))}</small></td><td>${x.notified ? "📧 メールした" : ""}</td></tr>`).join("")}</table>` : `<span class="lead">まだありません</span>`;
+  }catch(e){ $("loginLog").innerHTML = `<span class="lead">読めませんでした（SQL 213 は実行ずみ？）：${esc(e.message || e)}</span>`; }
+}
+async function placeAdd(){
+  const lb = $("placeLabel").value.trim(); if(!lb){ toast("場所の名前を入れてください（例：お店）"); return; }
+  try{ q(await sb.rpc("kb_place_add_here", { p_label: lb })); $("placeLabel").value = ""; toast("🏠 「" + lb + "」を、いつもの場所にしました"); paintMgr(); }
+  catch(e){ toast("足せませんでした：" + (e.message || e)); }
+}
+async function placeDel(ip){
+  if(!confirm("この場所を消しますか？（この回線から入ると、メールが来るようになります）")) return;
+  try{ q(await sb.rpc("kb_place_del", { p_ip: ip })); toast("消しました"); paintMgr(); }
+  catch(e){ toast("消せませんでした：" + (e.message || e)); }
 }
 async function register(){
   const label = $("label").value.trim(), pass = $("pass1").value;
