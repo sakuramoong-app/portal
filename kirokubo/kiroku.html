@@ -484,7 +484,7 @@
       <label>並び・絞り <select id="s_sort" onchange="setSort(this.value)">
         <option value="kana">あいうえお順</option><option value="start">出勤が早い順</option><option value="endEarly">退勤が早い順</option><option value="endLate">退勤が遅い順</option>
         <option value="booked">予約があるキャストのみ</option><option value="freeNow">今すぐ行けるキャスト</option></select></label>
-      <label style="font-size:13px;font-weight:700;cursor:pointer"><input type="checkbox" id="rcAllOpenChk" onchange="rcAllOpenToggle(this.checked)" style="width:auto;display:inline;vertical-align:middle"> 📄 予約の「くわしく」をいつも開いておく</label>
+      <span style="font-size:13px;font-weight:700">📄 予約の「くわしく」：<button type="button" class="btn btn-ghost btn-sm" onclick="rcAllOpenToggle(true)">全部開く</button><button type="button" class="btn btn-ghost btn-sm" onclick="rcAllOpenToggle(false)">全部閉じる</button></span>
       <div class="kanabar" id="kanaBar"></div>
       <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openForm(null)">＋ 受付を開く（キャスト未定）</button>
     </div>
@@ -492,9 +492,10 @@
     <div class="sum" id="sum"></div>
     <!-- ＋ 新規予約・全体を見たい の両方：🔎 フィルター（ふだんは閉じる）→ その下に ＋ 受付を開く -->
     <div id="sharedFilter" style="display:none">
-      <details class="fltbig" id="fltAll"><summary>🔎 フィルター</summary>
+      <details class="fltbig" id="fltAll" ontoggle="if(this.open){ const f = $('fltFuture'); if(f && !f.open) f.open = true; }"><summary>🔎 フィルター</summary>
       <details class="fltsub" id="fltToday" open><summary>📅 当日フィルター（時間・キャスト・希望プレイ）</summary>
       <div id="nfModes" style="display:none"></div>
+      <div class="search" id="nf_tel"><span class="lbl">📞 電話番号</span><input id="s_tel" inputmode="numeric" placeholder="一部でもOK（例 5283・0805）" oninput="telFind()" style="max-width:220px"><button class="btn btn-ghost btn-sm" onclick="$('s_tel').value='';telFind()">クリア</button><div id="telResult" style="flex-basis:100%"></div></div>
       <div class="search" id="nf_time">
         <span class="lbl">🔍 探す</span>
         <label>何時から <input type="time" id="s_time" step="300" oninput="renderList()"></label>
@@ -4973,8 +4974,18 @@ openForm = function(id){
 /* ---------- 📄 くわしく（予約カードの中）に「🧾 料金の内訳・報酬」も出す。「くわしくをいつも開いておく」も選べる（この端末だけ）2026/11/5
    時刻・状態・コース・延長・支払い・ホテル・メモはカードのまま直せる。OP・交通費・割引は「✏️ 開く」から（金額を計算しなおすため） ---------- */
 function rcAllOpen(){ try{ return localStorage.getItem("kbRcAllOpen") === "1"; }catch(e){ return false; } }
-function rcAllOpenToggle(on){ try{ localStorage.setItem("kbRcAllOpen", on ? "1" : "0"); }catch(e){} renderList(); }
-setTimeout(() => { const ck = document.getElementById("rcAllOpenChk"); if(ck) ck.checked = rcAllOpen(); }, 0);
+// 「全部開く／全部閉じる」ボタン（その日の予約ぜんぶ。ひとつずつ開け閉めもそのまま）2026/11/5
+function rcAllOpenToggle(on){ try{ localStorage.removeItem("kbRcAllOpen"); }catch(e){} if(on) rows.forEach(r => rcOpen.add(r.id)); else rcOpen.clear(); renderList(); }
+// 📞 フィルターの電話番号：この日の予約のお客さんの番号に、入れた数字が入っていれば出す（一部でもOK）。押すとその予約へ
+function telFind(){
+  const el = $("telResult"); if(!el) return;
+  const d = digits($("s_tel").value);
+  if(d.length < 3){ el.innerHTML = d ? `<div class="hint2">3けた以上入れてください</div>` : ""; return; }
+  const hit = rows.filter(r => r.kb_customers && digits(r.kb_customers.phone || "").includes(d)).sort((a, b) => String(a.start_at).localeCompare(String(b.start_at)));
+  el.innerHTML = hit.length ? `<div class="l4list">${hit.map(r => `<button type="button" class="l4" onclick="jumpToRes(${r.id},'${r.biz_date}')">${r.kb_customers.ng ? "⚠️" : ""}<b>${esc(r.kb_customers.name || "名前なし")}</b> <small>${esc(r.kb_customers.phone || "")}　${r.start_at ? hm(r.start_at) : "時間未定"} ${esc(castName(r.cast_id))}${["cancel", "tobi", "flowed"].includes(r.status) ? "（" + esc(STATUS[r.status]) + "）" : ""}</small></button>`).join("")}</div>`
+    : `<div class="hint2">この日の予約に、${esc(d)} が入った電話番号のお客さんはいません</div>`;
+}
+{ const __ldTel = loadDay; loadDay = async function(){ const r = await __ldTel.apply(this, arguments); telFind(); return r; }; }   // 日を変えたら探しなおす
 function rcMoneyRows(r){
   const Y = n => yen(Number(n) || 0), row = (k, v) => v ? `<div class="rm-r"><span>${k}</span><b>${v}</b></div>` : "";
   const ops = (r.options || []).map(o => `${esc(o.label)}${o.qty > 1 ? "×" + o.qty : ""} ${Y(o.price * (o.qty || 1))}${o.back ? `<small>（バック ${Y(o.back * (o.qty || 1))}）</small>` : ""}`);
