@@ -232,14 +232,16 @@ async function loadLive(){
   if(!liveYm) return;
   const start = liveYm + "-01";
   try{
-    const [res, cds, shifts, casts, rules, media] = await Promise.all([
-      fetchAll("kb_reservations", "id,biz_date,cast_id,area,start_at,status,visit_kind,media,total,course_back,option_back,extra_back,back_override", "id", x=>x.gte("biz_date", start).eq("deleted", false)),
+    const [res, cds, shifts, casts, rules, media, stores] = await Promise.all([
+      fetchAll("kb_reservations", "id,biz_date,cast_id,store_key,area,start_at,status,visit_kind,media,total,course_back,option_back,extra_back,back_override", "id", x=>x.gte("biz_date", start).eq("deleted", false)),
       fetchAll("kb_cast_days", "*", "biz_date", x=>x.gte("biz_date", start)),
       fetchAll("shift_weeks", "cast_name,wk,data", "wk", x=>x.gte("wk", weekKeyOfYmd(start))),
       fetchAll("master_casts", "id,official_name,temp_name,shift_name", "id"),
       fetchAll("kb_cast_rules", "*", "id", x=>x.eq("active", true)),
       fetchAll("kb_media", "code,label", "code"),
+      fetchAll("master_stores", "key,label", "key").catch(() => []),
     ]);
+    const storeLabel = k => { const s = (stores || []).find(x=>x.key === k); return s ? s.label : (k || "（店なし）"); };
     // 内勤の日払い（払った分）：日ごとに足しておいて、店落ちから引く
     try{ (await fetchAll("kb_staff_work", "biz_date,day_paid,paid", "biz_date", x=>x.gte("biz_date", start).eq("paid", true))).forEach(w=>{ L.pay[w.biz_date] = (L.pay[w.biz_date] || 0) + n0(w.day_paid); }); }catch(e){}
     const nameOf = id => { const c = casts.find(x=>x.id === id); return c ? (c.official_name || c.temp_name || c.shift_name) : "（不明）"; };
@@ -281,7 +283,7 @@ async function loadLive(){
       rs.forEach(r=>{
         const back = r.back_override != null ? n0(r.back_override) : n0(r.course_back) + n0(r.extra_back) + n0(r.option_back);
         const j = new Date(new Date(r.start_at).getTime() + 9 * 3600 * 1000).getUTCHours();
-        L.res.push({ d, ym: ymOf(d), cast, area: r.area || "（なし）", band: r.start_at && (j >= 22 || j < 6) ? "深夜" : "昼",
+        L.res.push({ d, ym: ymOf(d), cast, store: storeLabel(r.store_key), area: r.area || "（なし）", band: r.start_at && (j >= 22 || j < 6) ? "深夜" : "昼",
           visit: r.visit_kind, media: (r.media || []).map(mediaLabel), total: n0(r.total), prov: n0(r.total) - back, drop: n0(r.total) - back + zappi / rs.length });
       });
     });
@@ -550,6 +552,28 @@ function renderArea(){
 
 /* ---------- 📣 媒体 ---------- */
 let mediaMetric = "cnt";
+// 🏪 店舗 × 媒体（月ごと）：本数・売上・店落ち。新しい記録簿の数字だけ（過去のエクセルには店舗×媒体がない）2026/11/6
+let smMetric = "cnt";
+function storeMediaHtml(R){
+  const rows = [];
+  L.res.forEach(r=>{
+    if(!R.months.includes(r.ym) || !isLive(r.ym)) return;
+    const ms = r.media.length ? r.media : ["媒体未記入"];
+    ms.forEach(m=>rows.push({ ym: r.ym, key: r.store + "|" + m, cnt: 1 / ms.length, total: r.total / ms.length, drop: r.drop / ms.length }));
+  });
+  const ms = R.months.filter(ym=>rows.some(r=>r.ym === ym));
+  const fmt = v=>smMetric === "cnt" ? (Math.round(v * 10) / 10 || "") : (v ? yen0(v) : "");
+  const sum = sumBy(rows, r=>r.key, r=>r[smMetric]);
+  const keys = Object.keys(sum).sort((a, b)=>{ const [sa] = a.split("|"), [sb] = b.split("|"); return sa === sb ? sum[b] - sum[a] : sa.localeCompare(sb, "ja"); });
+  const cell = (ym, k)=>rows.filter(r=>r.ym === ym && r.key === k).reduce((s, r)=>s + r[smMetric], 0);
+  let last = "";
+  return `<div class="box"><h3>🏪 店舗 × 媒体 <small>${ymLabel(R.from)}〜${ymLabel(R.to)}・月ごと</small>
+      <span class="r seg">${[["cnt", "本数"], ["total", "売上"], ["drop", "店落ち"]].map(([k, l])=>`<button type="button" class="${smMetric === k ? "on" : ""}" onclick="smMetric='${k}';renderMedia()">${l}</button>`).join("")}</span></h3>
+    ${keys.length ? `<div class="tw"><table class="t"><tr><th class="l">店舗</th><th class="l">媒体</th>${ms.map(ym=>`<th>${ymLabel(ym)}</th>`).join("")}<th>合計</th></tr>
+      ${keys.map(k=>{ const [s, m] = k.split("|"); const head = s !== last; last = s; return `<tr${head ? ' style="border-top:2px solid #E9C9D3"' : ""}><td class="l">${head ? `<b>${esc(s)}</b>` : ""}</td><td class="l">${esc(m)}</td>${ms.map(ym=>`<td>${fmt(cell(ym, k))}</td>`).join("")}<td><b>${fmt(sum[k])}</b></td></tr>`; }).join("")}</table></div>`
+      : `<div class="hint">この期間の数字はまだありません（店舗×媒体は、新しい記録簿の${liveYm ? ymLabel(liveYm) : ""}からです）</div>`}
+    <div class="hint">媒体が2つ入っている予約は、半分ずつ数えています。店落ち＝総額−報酬＋雑費（内勤の日払いは引いていません）</div></div>`;
+}
 function feeOf(media, area, ym){
   const list = H.fees.filter(f=>f.media === media && f.area === area && ymOf(f.from_ym) <= ym).sort((a, b)=>String(b.from_ym).localeCompare(String(a.from_ym)));
   return list[0] ? n0(list[0].monthly_fee) : null;
@@ -576,6 +600,7 @@ function renderMedia(){
       <div class="tw" style="margin-top:8px"><table class="t"><tr><th class="l">媒体</th>${ms.map(ym=>`<th>${ymLabel(ym)}</th>`).join("")}<th>合計</th><th>月平均</th></tr>
         ${medias.map(m=>`<tr><td class="l">${esc(m)}</td>${ms.map(ym=>`<td>${fmt(val(ym, m)) || ""}</td>`).join("")}<td>${fmt(byMedia[m])}</td><td>${ms.length ? fmt(byMedia[m] / ms.length) : ""}</td></tr>`).join("")}</table></div>
       ${ms.length ? "" : `<div class="hint">この期間の媒体の数字はありません（過去の数字は2026年1月から）</div>`}</div>
+    ${storeMediaHtml(R)}
     <div class="grid2x">
       <div class="box"><h3>🗂 媒体 × 登録エリア（期間の合計）</h3><div class="tw"><table class="t"><tr><th class="l">媒体</th><th class="l">エリア</th><th>本数</th><th>店落ち</th><th>1本あたり</th></tr>
         ${pairs.map(k=>{ const [m, a] = k.split("|"); const c = ma[k] || 0, d = md[k] || 0; return `<tr><td class="l">${esc(m)}</td><td class="l">${esc(a)}</td><td>${Math.round(c) || ""}</td><td>${yen0(d)}</td><td>${c ? yen0(d / c) : ""}</td></tr>`; }).join("")}</table></div></div>
