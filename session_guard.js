@@ -142,7 +142,7 @@
   const IS_PHONE = /iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent) || (matchMedia("(max-width:640px)").matches && matchMedia("(pointer:coarse)").matches);
   const PHONE_OK = [/^\/portal\/?$/, /^\/portal\/index\.html$/, /^\/portal\/kirokubo\/(kiroku|settle|index|device)\.html$/, /^\/portal\/kirokubo\/?$/, /^\/naikin-shift\//, /^\/sakura-newcast\//];
   const LOCK_KEY = "phoneLockAt", LOCK_MIN = 1;
-  const BOSS_OK = /^\/portal\/kirokubo\/kaishu\.html$/;   // 店長・社長だけ
+  const BOSS_OK = /^\/portal\/(kirokubo\/kaishu|worklog)\.html$/;   // 店長・社長だけ（店長作業ログもスマホで開ける。2026/11/6）
   const overlay = (html) => {
     let el = document.getElementById("phoneGuard");
     if (!el) { el = document.createElement("div"); el.id = "phoneGuard"; el.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#FFF0F5;display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit"; document.body.appendChild(el); }
