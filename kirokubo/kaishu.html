@@ -37,7 +37,7 @@
   .flow .ref{font-size:12px;color:var(--sub);}
   .ex{width:100%;margin-top:6px;} .ex td{font-size:13px;padding:5px 6px;white-space:normal;}
   .ex input,.ex select{font-family:inherit;font-size:13px;padding:3px 6px;border:1.5px solid #ddd;border-radius:6px;max-width:100%;}
-  .coltbl tr.sgrp td{background:#FFE4EC;font-weight:900;color:#c2185b;padding:5px 8px;border-top:2px solid #e5638c}
+  .coltbl tr.sgrp td{background:#FFE4EC;font-weight:900;color:#c2185b;padding:5px 8px;border-top:2px solid #e5638c;border-left:8px solid var(--pc,#e5638c)}
   .kanabar{display:flex;gap:4px;flex-wrap:wrap;margin:0 0 8px} .kanabar .kb{font-family:inherit;font-size:15px;font-weight:800;min-width:36px;padding:5px 8px;border:1.5px solid #FFC2D1;border-radius:9px;background:#fff;color:#e5638c;cursor:pointer} .kanabar .kb:hover{background:#FFE4EC} .kanabar .kb.off{opacity:.35} .kanabar .kb.on{background:#e5638c;color:#fff;border-color:#e5638c}
   .rowlinks{font-size:12px;font-weight:700;margin-top:3px;white-space:nowrap}
   .envres{margin-top:6px;font-weight:900;font-size:14px} .envres .ok{color:#2e8b57} .envres .ng{color:#c0392b}
@@ -350,23 +350,28 @@ function paintDay(){
      だれが・いつ・どこで精算したかは、精算のときの記録から自動で出す */
   h += `<div class="card"><h2>👛 回収明細（${md(D.day)}(${DOW[dt.getUTCDay()]})${place ? "・" + esc(place) : ""}）</h2>` + kanaBarK(rows);
   // 並べ替え：いつもの順／担当内勤ごと（精算を受けた内勤。まだ精算していない子は最後）。表の形はそのまま（2026/11/7）
+  // エリアごと：投函した待機場（池袋・鶯谷・五反田）→ 手渡し（回収）→ まだ精算していない（2026/11/7）
   const staffOf = r => r.cd.settled ? (r.cd.settled_by || "（名前なし）") : "";
+  const placeOf = r => r.cd.settled ? (r.place || "（場所なし）") : "";
+  const keyOf = sortMode === "staff" ? staffOf : sortMode === "place" ? placeOf : null;
   let shown = rows.filter(kana);
-  if(sortMode === "staff"){
-    const order = [...new Set(shown.map(staffOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
-    shown = shown.map((r, i) => ({ r, i })).sort((a, b) => { const ka = staffOf(a.r), kb = staffOf(b.r); const ia = ka ? order.indexOf(ka) : 1e9, ib = kb ? order.indexOf(kb) : 1e9; return ia - ib || a.i - b.i; }).map(o => o.r);
+  if(keyOf){
+    const ks = [...new Set(shown.map(keyOf).filter(Boolean))];
+    const order = sortMode === "place" ? ALL_PLACES.filter(p => ks.includes(p)).concat(ks.filter(p => !ALL_PLACES.includes(p))) : ks.sort((a, b) => a.localeCompare(b, "ja"));
+    shown = shown.map((r, i) => ({ r, i })).sort((a, b) => { const ka = keyOf(a.r), kb = keyOf(b.r); const ia = ka ? order.indexOf(ka) : 1e9, ib = kb ? order.indexOf(kb) : 1e9; return ia - ib || a.i - b.i; }).map(o => o.r);
   }
   let lastS = null;
   const bodyRows = shown.map(r => {
     let pre = "";
-    if(sortMode === "staff" && staffOf(r) !== lastS){
-      lastS = staffOf(r);
-      const grp = shown.filter(x => staffOf(x) === lastS);
-      pre = `<tr class="sgrp"><td class="l" colspan="5">🙋 ${lastS ? esc(lastS) : "⏳ まだ精算していない"}　<small>${grp.length}人　回収するはず ${yen(grp.reduce((a, x) => a + x.amt, 0))}</small></td></tr>`;
+    if(keyOf && keyOf(r) !== lastS){
+      lastS = keyOf(r);
+      const grp = shown.filter(x => keyOf(x) === lastS);
+      const ttl = !lastS ? "⏳ まだ精算していない" : sortMode === "place" ? (lastS === "回収" ? "🤝 手渡し（回収）" : "📮 " + esc(lastS) + "に投函") : "🙋 " + esc(lastS);
+      pre = `<tr class="sgrp"${sortMode === "place" && PLACE_COLOR[lastS] ? ` style="--pc:${PLACE_COLOR[lastS]}"` : ""}><td class="l" colspan="5">${ttl}　<small>${grp.length}人　回収するはず ${yen(grp.reduce((a, x) => a + x.amt, 0))}</small></td></tr>`;
     }
     return pre + rowHtml(r, ed);
   }).join("");
-  h += `<div class="kanabar sortbar"><span style="font-weight:800;align-self:center;margin-right:4px">並び：</span><button type="button" class="kb ${sortMode === "staff" ? "" : "on"}" onclick="setSort('')">いつもの順</button><button type="button" class="kb ${sortMode === "staff" ? "on" : ""}" onclick="setSort('staff')">🙋 担当内勤ごと</button></div>`;
+  h += `<div class="kanabar sortbar"><span style="font-weight:800;align-self:center;margin-right:4px">並び：</span>` + [["", "いつもの順"], ["staff", "🙋 担当内勤ごと"], ["place", "📍 エリアごと"]].map(([k, t]) => `<button type="button" class="kb ${(sortMode || "") === k ? "on" : ""}" onclick="setSort('${k}')">${t}</button>`).join("") + `</div>`;
   h += rows.length ? `<div class="tbl"><table class="coltbl">
     <tr><th class="l">キャスト名</th><th>店落ち（Z列＋雑費）／カード</th><th class="l">回収サイン・だれが いつ どこで</th><th>封筒の中（数えた額）</th><th class="l">交通費・経費・精算ミス（処理したら ✓）</th></tr>
     ${bodyRows}</table></div>` : `<div class="lead">この日の回収はありません。</div>`;
