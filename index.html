@@ -203,7 +203,7 @@
         <a href="kirokubo/stats.html" target="_blank" rel="noopener">📊 集計</a>　<a href="kirokubo/daicho_import.html" target="_blank" rel="noopener">📥 台帳エクセルの取りこみ</a>　<a href="kirokubo/kiroku_xl_import.html" target="_blank" rel="noopener">📥 記録簿エクセルの取りこみ</a>　<a href="kirokubo/rules_pick.html" target="_blank" rel="noopener">✅ 特例の候補</a><br>
         <a href="kirokubo/device.html" target="_blank" rel="noopener">🔐 端末の登録</a>　<a href="hpsync.html" target="_blank" rel="noopener">🌐 公式HP自動反映</a><br>
         <a href="kirokubo/backup.html" target="_blank" rel="noopener">💾 バックアップ（手動）</a>　<a href="kirokubo/backup_open.html" target="_blank" rel="noopener">🔓 自動バックアップを開く</a><br>
-        <a href="staff_admin.html" target="_blank" rel="noopener">👥 内勤の一覧（Googleログイン）</a>
+        <a href="staff_admin.html" target="_blank" rel="noopener">👥 内勤の一覧（Googleログイン）</a>　<a href="javascript:void 0" id="profAppLink" title="キャストプロフ（ふだんは キャスト台帳の 📨 届いた答え で直せます）">📝 キャストプロフ</a>
         <div id="backupWarn" style="display:none;margin-top:6px;padding:8px 12px;background:#FFF1F1;border:2px solid #E5484D;border-radius:12px;color:#C62828;font-weight:900"></div>
       </div>
     </div>
@@ -427,6 +427,8 @@
   document.addEventListener("click", (e) => { if (!ring.contains(e.target)) setOpen(false); });
 
   renderRing();
+  // 📝 キャストプロフ（店長・社長だけのリンク。ふだんはキャスト台帳の「届いた答え」の中で直す）2026/11/7
+  { const pl = document.getElementById("profAppLink"); if (pl) pl.addEventListener("click", (e) => { e.preventDefault(); openApp({ url: "https://sakuramoong-app.github.io/cast-sakura-profile/staff.html" }, pl); }); }
 
   // ---------- 各アプリを開く ----------
   // 開く直前に refreshSession() で「毎回新しい」トークンを取り、# 以降に付けて開く。
