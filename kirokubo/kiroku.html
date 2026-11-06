@@ -2347,6 +2347,15 @@ async function saveRes(){
       ...(() => { const v = $("f_castnote") ? $("f_castnote").value.trim() : ""; return v || rows.some(x => "cast_note" in x) || (editing && "cast_note" in editing) ? { cast_note: v } : {}; })(),   // 📝 キャストに伝える特記事項（SQL 187）
       ...(() => { const lg = statusLog(editing ? (rows.find(x => x.id === editing.id) || editing) : null, $("f_status").value, by); const all = editing ? lg : (lg || []).concat(formPendingNow()); return all && all.length ? { memo_log: all } : {}; })(),   // 備考に状態の経緯
     };
+    // 🔒 精算済の予約・エクセルから取りこんだ予約は、お金の数字を前のまま残す（料金表を変えても、過去の売上・バック・店落ちが変わらないように）2026/11/6 店長
+    //   金額を本当に直したいときは、先に精算済をもどしてから
+    if(editing && moneyLocked(editing)){
+      const old = rows.find(x => x.id === editing.id) || editing;
+      const same = (a, b) => (a == null || a === "" || a === 0 || a === false) && (b == null || b === "" || b === 0 || b === false) || JSON.stringify(a) === JSON.stringify(b) || (typeof a !== "object" && Number(a) === Number(b) && !isNaN(Number(a)));
+      const changed = MONEY_KEYS.filter(k => k in old && !same(row[k], old[k]));
+      MONEY_KEYS.forEach(k => { if(k in old) row[k] = old[k]; });
+      if(changed.length) toast("🔒 精算済（またはエクセルから取りこんだ）予約なので、金額は前のまま保存しました");
+    }
     if(editing) q(await sb.from("kb_reservations").update(row).eq("id", editing.id));
     else { row.created_by = by; const extra = partyExtraRows(row); q(await sb.from("kb_reservations").insert([row, ...extra])); if(extra.length) toast(`👥 ${extra.length + 1}人のキャストの予約を作りました`); }
     { const bd = $("f_day") && $("f_day").value; closeForm();
@@ -2613,6 +2622,16 @@ async function markDroppedAbsent(){
       await saveDayPart(c.id, { attend_log: log, status: "欠勤", standby: "" });
     }
   }finally{ droppedBusy = false; }
+}
+// 🔒 お金の数字（精算済・エクセルから取りこんだ予約では変えない）2026/11/6
+const MONEY_KEYS = ["base_price", "admission", "nomination_fee", "extension_fee", "transport", "option_total", "discount", "total", "payment", "card_total",
+  "course_back", "option_back", "extra_back", "back_override", "options", "extension_count", "date_count", "nh_rate", "free_kind"];
+function moneyLocked(r){
+  if(!r) return false;
+  if(/^xl\d/.test(String(r.src || ""))) return true;   // エクセルから取りこんだ予約
+  const cd = (typeof castDays !== "undefined" && castDays[r.cast_id]) || null;
+  if(!cd || !cd.settled || typeof kbPartIds !== "function") return false;
+  return kbPartIds(cd, rows.filter(x => x.cast_id === r.cast_id)).has(r.id);   // その日の精算に入った予約
 }
 // 🌐 そのあと公式HPにも入れる（その日だけ。キャスト台帳に在籍番号があるお店だけ）2026/11/6 店長OK
 //   ダミー名のお店（18・極門）と媒体（ヘブン・ぴゅあらば・情報局・NHF）は、今までどおりシフトアプリで
@@ -6851,6 +6870,16 @@ async function crPaint(){
 }
 const __onCastCr = onCast;   // 🙋 のとき、キャストを変えたら出しなおす
 onCast = function(){ const r = __onCastCr.apply(this, arguments); if(dmMode === "cast" && isDummyStore($("f_store").value)) crPaint(); return r; };
+// 💗 キューティー：バックのランクに「NH」と書いてある子（例：A+NH指名）は、はじめから NH料金（指名料 5,000円）にチェック 2026/11/6 店長
+//   新しい予約のときだけ（前の予約は、保存したときのまま）。外したいときはチェックを外せる
+function autoNhRate(){
+  if(editing || !$("f_nh") || $("f_store").value !== "cutie") return;
+  const c = M.casts.find(x => x.id === $("f_cast").value); if(!c) return;
+  const rk = String((ranksOn(c) || {}).cutie || "");
+  if(/NH/i.test(rk.normalize("NFKC")) && !$("f_nh").checked){ $("f_nh").checked = true; recalc(); toast("💗 CCのランクが NH指名 の子なので、NH料金（指名料 5,000円）にしました"); }
+}
+{ const __onCastNh = onCast; onCast = function(){ const r = __onCastNh.apply(this, arguments); try{ autoNhRate(); }catch(e){} return r; }; }
+{ const __sofNh = storeOnlyFields; storeOnlyFields = function(){ const r = __sofNh.apply(this, arguments); try{ autoNhRate(); }catch(e){} return r; }; }
 function crChoose(name){
   if(![...$("f_dummy").options].some(o => o.value === name)) $("f_dummy").insertAdjacentHTML("beforeend", `<option>${esc(name)}</option>`);
   $("f_dummy").value = name; recalc(); toast(`🎭${name} → ${castName($("f_cast").value)} にしました`); crPaint();
