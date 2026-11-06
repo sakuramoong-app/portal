@@ -24,7 +24,8 @@ const unsCD = () => (typeof castDays !== "undefined" ? castDays : days);
    ・前の版の精算（resIds がない）は、精算した時刻より前に作った予約を ① とみなす ---------- */
 const PART_SUM_KEYS = ["reward", "option", "transportBack", "plus", "zappi", "minus", "takeHome", "total", "cardPaid", "drop", "withholding", "shopDrop", "realDrop", "deposited", "transferPaid", "due"];
 const PART_MARK = "①②③④⑤⑥";
-function kbSnapParts(cd){ const s = cd && cd.settle_snapshot; if(!s) return []; if(Array.isArray(s.parts)) return s.parts; return cd.settled ? [s] : []; }
+// エクセルから取りこんだ日（settled_by＝エクセル）は精算済だが、精算のときの記録（settle_snapshot）がない → その日の予約はぜんぶ精算したものとする（2026/11/6 10月の取りこみで未精算に出ていた）
+function kbSnapParts(cd){ const s = cd && cd.settle_snapshot; if(!s) return cd && cd.settled ? [{}] : []; if(Array.isArray(s.parts)) return s.parts; return cd.settled ? [s] : []; }
 function kbPartIds(cd, all, parts){
   const ids = new Set();
   (parts || kbSnapParts(cd)).forEach(p => {
