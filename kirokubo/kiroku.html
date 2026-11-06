@@ -6020,7 +6020,7 @@ showView = function(v){ const r = __showViewNow.apply(this, arguments); if(v ===
    ・金額＝時間×時給。「払った」にして、どこから払ったか（その日の回収金／キキララ）も残す
    ・集計の店落ちから引く（SQL 127）。いまは内勤みんなが見られる・直せる */
 let staffPay = { rates: [], rows: [] };
-const PAY_SRC = { drop: "その日の回収金", kikirara: "キキララ（両替金）" };
+const PAY_SRC = { drop: "その日の回収金", kikirara: "キキララ（両替金）", split: "両方（回収金＋キキララ）" };   // split：一部を回収金・残りをキキララ（SQL 224。2026/11/6）
 function parseShiftTime(t){   // 内勤カレンダーの「20-5」「12:30-22」→ { in, out }（日をまたいだら +24）
   const m = String(t || "").match(/^(\d{1,2})(?::(\d{2}))?-(\d{1,2})(?::(\d{2}))?$/); if(!m) return null;
   const a = Number(m[1]) + (Number(m[2]) || 0) / 60; let b = Number(m[3]) + (Number(m[4]) || 0) / 60;
@@ -6043,7 +6043,7 @@ async function loadStaffPay(){
       const w = wk.find(x=>x.staff_id === id), s = sh.find(x=>x.staff_id === id), p = s && parseShiftTime(s.time);
       return { id, name: r.record_name || id, hourly: (w && w.hourly) || r.hourly,
         in: w && w.clock_in != null ? Number(w.clock_in) : p ? p.in : null, out: w && w.clock_out != null ? Number(w.clock_out) : p ? p.out : null,
-        saved: !!w, fromShift: !w && !!p, paid: !!(w && w.paid), src: (w && w.pay_source) || "", amount: w && w.day_paid ? w.day_paid : null, note: (w && w.note) || "", by: (w && w.paid_by) || "", at: w && w.paid_at };
+        saved: !!w, fromShift: !w && !!p, paid: !!(w && w.paid), src: (w && w.pay_source) || "", kiki: w && w.paid_kiki != null ? Number(w.paid_kiki) : null, amount: w && w.day_paid ? w.day_paid : null, note: (w && w.note) || "", by: (w && w.paid_by) || "", at: w && w.paid_at };
     });
     // 内勤は、自分の日払いだけ見える（店長・社長は全員）。共通ログインもGoogleログインも、ポータルの担当者の名前で決める 2026/11/4
     if(!KB.IS_BOSS){
@@ -6070,7 +6070,9 @@ function paintStaffPay(){
       <td>${hrs ? hrs + "時間" : ""}</td><td>${yen(r.hourly)}</td>
       <td><input type="number" value="${amt || ""}" style="width:90px" onchange="spSet(${i},'amount',this.value)"></td>
       <td><label><input type="checkbox" ${r.paid ? "checked" : ""} onchange="spSet(${i},'paid',this.checked)"> 払った</label>${r.paid && r.by ? `<br><small style="color:var(--sub)">${esc(r.by)}</small>` : ""}</td>
-      <td><select onchange="spSet(${i},'src',this.value)"><option value="">--</option>${Object.entries(PAY_SRC).map(([k, l])=>`<option value="${k}" ${r.src === k ? "selected" : ""}>${l}</option>`).join("")}</select></td>
+      <td><select onchange="spSet(${i},'src',this.value)"><option value="">--</option>${Object.entries(PAY_SRC).map(([k, l])=>`<option value="${k}" ${r.src === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+        ${r.src === "split" ? `<div style="margin-top:4px;font-size:12.5px;white-space:nowrap">🪙 キキララから <input type="number" value="${r.kiki != null ? r.kiki : ""}" style="width:80px" onchange="spSet(${i},'kiki',this.value)">円
+          <br>💴 回収金から <b>${amt && r.kiki != null ? yen(Math.max(0, amt - r.kiki)) : "−"}</b></div>` : ""}</td>
       <td><input value="${esc(r.note)}" maxlength="100" style="width:120px" onchange="spSet(${i},'note',this.value)"></td>
       <td><button type="button" class="btn btn-primary btn-sm" onclick="spSave(${i})">保存</button></td></tr>`; }).join("")}</table></div>
     ${KB.IS_BOSS ? "" : `<div class="warn" style="margin-top:6px;font-weight:800">👛 自分の日払いは、自分で入れて「払った」にしてください（ほかの人の日払いは見えません）</div>`}
@@ -6081,6 +6083,7 @@ function spSet(i, k, v){
   const r = staffPay.rows[i]; if(!r) return;
   if(k === "in" || k === "out"){ r[k] = v === "" ? null : Number(v); r.amount = null; }
   else if(k === "amount") r.amount = v === "" ? null : Math.max(0, Number(v) || 0);
+  else if(k === "kiki") r.kiki = v === "" ? null : Math.max(0, Number(v) || 0);
   else if(k === "paid"){ r.paid = !!v; if(r.paid && !r.src) r.src = "drop"; }
   else r[k] = v;
   paintStaffPay();
@@ -6090,11 +6093,15 @@ async function spSave(i){
   if(r.in != null && r.out != null && r.out <= r.in){ toast("退勤は出勤より後にしてください"); return; }
   if(r.paid && !r.src){ toast("どこから払ったか選んでください"); return; }
   const hrs = r.in != null && r.out != null ? r.out - r.in : null, amt = r.amount != null ? r.amount : spAuto(r);
+  // 両方から払った：キキララの分は 1円〜日払いの額より少なく（回収金の分＝日払い−キキララ）。合計（日払い）は変わらないので、店落ちも変わらない
+  if(r.paid && r.src === "split" && !(r.kiki > 0 && r.kiki < amt)){ toast("キキララから取った額を入れてください（日払いの額より少なく）。全部キキララなら「キキララ」を選んでください"); return; }
   const by = KB.operatorName();
-  try{
-    q(await sb.from("kb_staff_work").upsert({ biz_date: day, staff_id: r.id, clock_in: r.in, clock_out: r.out, hours: hrs, hourly: r.hourly, day_paid: amt,
+  const row = { biz_date: day, staff_id: r.id, clock_in: r.in, clock_out: r.out, hours: hrs, hourly: r.hourly, day_paid: amt,
       paid: r.paid, pay_source: r.src || "", paid_by: r.paid ? (r.by || by) : "", paid_at: r.paid ? (r.at || new Date().toISOString()) : null,
-      from_shift: r.fromShift, note: r.note || "", updated_by: by, updated_at: new Date().toISOString() }, { onConflict: "biz_date,staff_id" }));
+      from_shift: r.fromShift, note: r.note || "", updated_by: by, updated_at: new Date().toISOString() };
+  if(r.src === "split") row.paid_kiki = r.kiki;   // SQL 224 の列（分けたときだけ送る）
+  try{
+    q(await sb.from("kb_staff_work").upsert(row, { onConflict: "biz_date,staff_id" }));
     toast(r.name + " の日払いを保存しました"); loadStaffPay();
   }catch(e){ toast("保存できませんでした（SQL 127 は実行ずみ？）：" + (e.message || e)); }
 }

@@ -169,15 +169,15 @@ async function readRange(from, to){
   const [a, b, c] = await Promise.all([
     sb.from("kb_cast_days").select("*").gte("biz_date", from).lt("biz_date", to),
     sb.from("kb_reservations").select(RESV_COLS).gte("biz_date", from).lt("biz_date", to).eq("deleted", false),
-    sb.from("kb_staff_work").select("biz_date,staff_id,day_paid,paid,pay_source").gte("biz_date", from).lt("biz_date", to),
+    sb.from("kb_staff_work").select("*").gte("biz_date", from).lt("biz_date", to),
   ]);
   // 内勤日払い：想定店落ち（F）からは、どこから払ったか（回収金・キキララ）に関係なく全部引く（記録簿の「今日の店落ち」と同じ）
   R.cds = q(a) || []; R.resv = q(b) || []; R.staff = (c.error ? [] : (c.data || [])).filter(x => Number(x.day_paid));   // まだ払っていない日払いも（店落ちからは引く・回収金には残っている）
   // 🪙 キキララ：その期間に「キキララから払った」日払いと、その期間に「キキララへ返した」日払い（SQL 185）
-  R.kikiPaid = R.staff.filter(x => x.paid && x.pay_source === "kikirara");
+  R.kikiPaid = R.staff.filter(x => x.paid && kikiAmt(x) > 0);
   R.kikiRet = []; R.no185 = false;
   try{
-    const kr = await sb.from("kb_staff_work").select("biz_date,staff_id,day_paid,kiki_returned_on,kiki_returned_by").eq("paid", true).eq("pay_source", "kikirara").gte("kiki_returned_on", from).lt("kiki_returned_on", to);
+    const kr = await sb.from("kb_staff_work").select("*").eq("paid", true).in("pay_source", ["kikirara", "split"]).gte("kiki_returned_on", from).lt("kiki_returned_on", to);
     if(kr.error) R.no185 = true; else R.kikiRet = kr.data || [];
   }catch(e){ R.no185 = true; }
   try{
@@ -185,6 +185,14 @@ async function readRange(from, to){
     R.ho = q(await sb.from("kb_handovers").select("*").gte("biz_date", from).lt("biz_date", to)) || [];
   }catch(e){ R.no171 = true; }
   return R;
+}
+// 🪙 日払いのうち、キキララ（両替金）から取った額（SQL 224）。全部キキララ＝日払い全額／分けた（split）＝キキララの分だけ／回収金＝0
+//   店落ち（F）からは、どこから払ったかに関係なく日払いの全額を引く（ここは変えない）。キキララの分だけ「回収金に残っている」になる
+function kikiAmt(x){
+  if(!x) return 0;
+  if(x.pay_source === "kikirara") return Number(x.day_paid) || 0;
+  if(x.pay_source === "split") return Math.max(0, Math.min(Number(x.day_paid) || 0, Number(x.paid_kiki) || 0));
+  return 0;
 }
 const nextDay = d => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); };
 
@@ -265,8 +273,8 @@ function totalsFor(day, R, rows){
   const B = A.shop + tr, F = B - staffSum, fin = F - A.card - A.tr - tr - ex;
   // 🪙 キキララから払った日払いは、その日の回収金からは出ていない（回収金に残っている）→ 足す。
   //    キキララへ返した日に、はじめてその日の回収金から引く
-  const kikiPaid = (R.kikiPaid || []).filter(x => x.biz_date === day), kikiPaidSum = sum(kikiPaid, x => Number(x.day_paid) || 0);
-  const kikiRet = (R.kikiRet || []).filter(x => x.kiki_returned_on === day), kikiRetSum = sum(kikiRet, x => Number(x.day_paid) || 0);
+  const kikiPaid = (R.kikiPaid || []).filter(x => x.biz_date === day), kikiPaidSum = sum(kikiPaid, kikiAmt);
+  const kikiRet = (R.kikiRet || []).filter(x => x.kiki_returned_on === day), kikiRetSum = sum(kikiRet, kikiAmt);
   const unpaid = staff.filter(x => !x.paid), unpaidSum = sum(unpaid, x => Number(x.day_paid) || 0);   // まだ払っていない日払いは、回収金に残っている
   const hand = fin - A.notCol + kikiPaidSum - kikiRetSum + unpaidSum - advOpen;   // 随時の回収合計（未回収 ■ を引いた、今渡す額・実際のお金）
   return { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand, all, kikiPaid, kikiPaidSum, kikiRet, kikiRetSum, unpaid, unpaidSum, adv, advOpen };
@@ -285,7 +293,7 @@ async function loadDay(){
     R.unsOpen = [];
     try{ const uo = await sb.from("kb_unsettled").select("cast_id,biz_date,amount").is("done_on", null).order("biz_date"); R.unsOpen = uo.error ? [] : (uo.data || []).filter(x => Number(x.amount)); }catch(e){}
     R.kikiOpen = [];
-    if(!R.no185){ try{ const ko = await sb.from("kb_staff_work").select("biz_date,staff_id,day_paid").eq("paid", true).eq("pay_source", "kikirara").is("kiki_returned_on", null).lte("biz_date", day).order("biz_date"); R.kikiOpen = ko.error ? [] : (ko.data || []).filter(x => Number(x.day_paid)); }catch(e){} }
+    if(!R.no185){ try{ const ko = await sb.from("kb_staff_work").select("*").eq("paid", true).in("pay_source", ["kikirara", "split"]).is("kiki_returned_on", null).lte("biz_date", day).order("biz_date"); R.kikiOpen = ko.error ? [] : (ko.data || []).filter(x => Number(x.day_paid)); }catch(e){} }
     D = Object.assign(R, { day });
   }catch(e){ $("dayArea").innerHTML = `<div class="warn">読めませんでした：${esc(e.message || e)}</div>`; return; }
   paintDay();
@@ -329,7 +337,7 @@ function paintDay(){
       ${extra || ""}</div>`;
   // 内勤の日払い：この内勤の回収金から取ったか（取っていなければ、回収金に残っている）
   const payLine = nm => staffOfName(nm).map(x => `<div class="payline">👛 ${esc(nm)}の日払い ${yen(x.day_paid)}：${!x.paid ? `<b style="color:#c0392b">⚠️ まだ取っていない（回収金に残っている・合計に入っています）</b>`
-      : x.pay_source === "kikirara" ? `🪙 キキララから取った${!(D.kikiOpen || []).some(k => k.biz_date === x.biz_date && k.staff_id === x.staff_id) ? `<b style="color:#2e8b57">（✅ 返金ずみ）</b>` : `<b style="color:#c0392b">（まだ返していない → 下の 🪙 キキララで「返金完了」）</b>`}`
+      : x.pay_source === "kikirara" || x.pay_source === "split" ? `${x.pay_source === "split" ? `💴 回収金から ${yen(Number(x.day_paid) - kikiAmt(x))}＋🪙 キキララから ${yen(kikiAmt(x))}` : "🪙 キキララから取った"}${!(D.kikiOpen || []).some(k => k.biz_date === x.biz_date && k.staff_id === x.staff_id) ? `<b style="color:#2e8b57">（✅ 返金ずみ）</b>` : `<b style="color:#c0392b">（まだ返していない → 下の 🪙 キキララで「返金完了」）</b>`}`
       : `<b style="color:#2e8b57">✅ この日の回収金から取った</b>`}</div>`).join("");
   h += `<div class="card"><h2>👛 回収（${md(D.day)}(${DOW[dt.getUTCDay()]})${place ? "・" + esc(place) : ""}）</h2>` + kanaBarK(rows);
   h += `<h3 class="sec">① 内勤者ごと（その場で受け取った分）</h3>`;
@@ -368,7 +376,7 @@ function paintDay(){
     <div class="flow">
       <span>キャスト全員の店落ち（暫定的な残額＋雑費）の合計</span><span class="v">${yen(A.shop)}</span>
       ${tr ? `<span>＋ 振込（キャンセル料など）</span><span class="v">＋${yen(tr)}</span>` : ""}
-      ${staff.map(x => `<span>− 内勤日払い ${esc(staffNames[x.staff_id] || x.staff_id)}${!x.paid ? `<b style="color:#c0392b">（⚠️ まだ払っていない）</b>` : x.pay_source === "kikirara" ? "（🪙 キキララから払った）" : ""}</span><span class="v">−${yen(x.day_paid)}</span>`).join("")}
+      ${staff.map(x => `<span>− 内勤日払い ${esc(staffNames[x.staff_id] || x.staff_id)}${!x.paid ? `<b style="color:#c0392b">（⚠️ まだ払っていない）</b>` : x.pay_source === "kikirara" ? "（🪙 キキララから払った）" : x.pay_source === "split" ? `（💴 回収金から ${yen(Number(x.day_paid) - kikiAmt(x))}＋🪙 キキララから ${yen(kikiAmt(x))}）` : ""}</span><span class="v">−${yen(x.day_paid)}</span>`).join("")}
       <span class="eq">＝ 想定店落ち 1日の粗利（F）</span><span class="v eq">${yen(F)}</span>
       <span>− クレジットカード総額（D）</span><span class="v">−${yen(A.card)}</span>
       ${rowsFor(D.day, D).filter(r => r.tr).map(r => `<span>− 🏦 振込（もらい忘れ）：${esc(names[r.id] || r.id)}</span><span class="v">−${yen(r.tr)}</span>`).join("")}
@@ -377,9 +385,9 @@ function paintDay(){
       <span>− 経費（E：キャッシュフローに補充）</span><span class="v">−${yen(ex)}</span>
       <span class="eq">＝ 全部回収したときに社長に渡す額</span><span class="v eq">${yen(fin)}</span>
       ${notColRows.map(r => `<span>− 未回収 <b class="mk none">■</b> ${esc(names[r.id] || r.id)}${r.state ? "" : "（まだチェックしていない）"}</span><span class="v">−${yen(r.amt)}</span>`).join("")}
-      ${kikiPaid.map(x => `<span>＋ 🪙 キキララから払った日払い ${esc(staffNames[x.staff_id] || x.staff_id)}（回収金には残っている）</span><span class="v">＋${yen(x.day_paid)}</span>`).join("")}
+      ${kikiPaid.map(x => `<span>＋ 🪙 キキララから払った日払い ${esc(staffNames[x.staff_id] || x.staff_id)}（回収金には残っている）</span><span class="v">＋${yen(kikiAmt(x))}</span>`).join("")}
       ${unpaid.map(x => `<span style="color:#c0392b">＋ ⚠️ まだ払っていない日払い ${esc(staffNames[x.staff_id] || x.staff_id)}（回収金に残っている）</span><span class="v" style="color:#c0392b">＋${yen(x.day_paid)}</span>`).join("")}
-      ${kikiRet.map(x => `<span>− 🪙 キキララへ返金 ${md(x.biz_date)}の ${esc(staffNames[x.staff_id] || x.staff_id)}</span><span class="v">−${yen(x.day_paid)}</span>`).join("")}
+      ${kikiRet.map(x => `<span>− 🪙 キキララへ返金 ${md(x.biz_date)}の ${esc(staffNames[x.staff_id] || x.staff_id)}</span><span class="v">−${yen(kikiAmt(x))}</span>`).join("")}
       ${adv.filter(x => !x.settled && Number(x.amount)).map(x => `<span style="color:#c0392b">− 🪙 キキララへ立て替え（まだ精算していない）${esc(x.memo || "")}</span><span class="v" style="color:#c0392b">−${yen(x.amount)}</span>`).join("")}
       <div class="handrow"><span>＝ 🤝 随時の回収合計（今、社長に渡す額）</span><span style="color:#E0001B;font-size:18px">${yen(hand)}</span></div>
     </div>
@@ -398,9 +406,9 @@ function paintDay(){
     <h2 style="margin-top:12px">🪙 キキララ（内勤日払いを両替金から払った分）</h2>
     <div class="leg" style="margin:0 0 6px">記録簿の内勤日払いで「キキララ」にした分です。店落ち（F）からはもう引いてあります。回収金からキキララへ返したら「返金完了」を押すと、この日の回収金から引きます。</div>
     ${D.no185 ? `<div class="warn">⚠️ 返金を記録するには、SQL 185 の実行が必要です。</div>` : `<table class="ex">
-      ${(D.kikiOpen || []).map(x => `<tr><td class="l">${md(x.biz_date)} ${esc(staffNames[x.staff_id] || x.staff_id)}<small style="color:#c0392b">（まだ返していない）</small></td><td>${num(x.day_paid)}</td>
+      ${(D.kikiOpen || []).map(x => `<tr><td class="l">${md(x.biz_date)} ${esc(staffNames[x.staff_id] || x.staff_id)}<small style="color:#c0392b">（まだ返していない）</small></td><td>${num(kikiAmt(x))}</td>
         <td class="l" style="white-space:nowrap">${ed ? `<button class="btn btn-primary btn-sm" onclick="kikiReturn('${x.biz_date}','${esc(x.staff_id)}',true)">返金完了</button>` : ""}</td></tr>`).join("")}
-      ${kikiRet.map(x => `<tr><td class="l">${md(x.biz_date)} ${esc(staffNames[x.staff_id] || x.staff_id)}<small style="color:#2e8b57">（✅ この日に返した${x.kiki_returned_by ? "・" + esc(x.kiki_returned_by) : ""}）</small></td><td>${num(x.day_paid)}</td>
+      ${kikiRet.map(x => `<tr><td class="l">${md(x.biz_date)} ${esc(staffNames[x.staff_id] || x.staff_id)}<small style="color:#2e8b57">（✅ この日に返した${x.kiki_returned_by ? "・" + esc(x.kiki_returned_by) : ""}）</small></td><td>${num(kikiAmt(x))}</td>
         <td class="l">${ed ? `<a class="j" href="javascript:void 0" onclick="kikiReturn('${x.biz_date}','${esc(x.staff_id)}',false)">取り消し</a>` : ""}</td></tr>`).join("")}
       ${!(D.kikiOpen || []).length && !kikiRet.length ? `<tr><td class="l" colspan="3" style="color:var(--sub)">返していないキキララの日払いはありません</td></tr>` : ""}</table>`}
     <h2 style="margin-top:12px">🪙 キキララが足りない → 売上金から立て替え</h2>
