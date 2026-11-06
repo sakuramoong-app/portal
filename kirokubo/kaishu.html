@@ -37,6 +37,7 @@
   .flow .ref{font-size:12px;color:var(--sub);}
   .ex{width:100%;margin-top:6px;} .ex td{font-size:13px;padding:5px 6px;white-space:normal;}
   .ex input,.ex select{font-family:inherit;font-size:13px;padding:3px 6px;border:1.5px solid #ddd;border-radius:6px;max-width:100%;}
+  .coltbl tr.sgrp td{background:#FFE4EC;font-weight:900;color:#c2185b;padding:5px 8px;border-top:2px solid #e5638c}
   .kanabar{display:flex;gap:4px;flex-wrap:wrap;margin:0 0 8px} .kanabar .kb{font-family:inherit;font-size:15px;font-weight:800;min-width:36px;padding:5px 8px;border:1.5px solid #FFC2D1;border-radius:9px;background:#fff;color:#e5638c;cursor:pointer} .kanabar .kb:hover{background:#FFE4EC} .kanabar .kb.off{opacity:.35} .kanabar .kb.on{background:#e5638c;color:#fff;border-color:#e5638c}
   .rowlinks{font-size:12px;font-weight:700;margin-top:3px;white-space:nowrap}
   .envres{margin-top:6px;font-weight:900;font-size:14px} .envres .ok{color:#2e8b57} .envres .ng{color:#c0392b}
@@ -134,6 +135,7 @@ function zappiOf(id, day, cd, mine){
   return Math.min(3000, Math.floor(mine.reduce((a, r) => a + backOf(r), 0) / 10500) * 500);
 }
 const RESV_COLS = "*";   // 振込（SQL 173）の欄もあるので全部
+let sortMode = (() => { try{ return localStorage.getItem("kaishuSort") || ""; }catch(e){ return ""; } })();
 let names = {}, kanas = {}, kanaSel = "", staffNames = {}, ENV = {}, D = null, MO = null, place = "", mode = "day";
 
 async function init(){
@@ -347,9 +349,27 @@ function paintDay(){
      回収サインは3択：✔ 当日回収（その日に内勤が受け取った）／✔ 後日内勤回収（あとの日に内勤が受け取った）／✔ 店長回収（ポスティングの金庫から店長が回収して、日ごとの売上袋へ）
      だれが・いつ・どこで精算したかは、精算のときの記録から自動で出す */
   h += `<div class="card"><h2>👛 回収明細（${md(D.day)}(${DOW[dt.getUTCDay()]})${place ? "・" + esc(place) : ""}）</h2>` + kanaBarK(rows);
+  // 並べ替え：いつもの順／担当内勤ごと（精算を受けた内勤。まだ精算していない子は最後）。表の形はそのまま（2026/11/7）
+  const staffOf = r => r.cd.settled ? (r.cd.settled_by || "（名前なし）") : "";
+  let shown = rows.filter(kana);
+  if(sortMode === "staff"){
+    const order = [...new Set(shown.map(staffOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
+    shown = shown.map((r, i) => ({ r, i })).sort((a, b) => { const ka = staffOf(a.r), kb = staffOf(b.r); const ia = ka ? order.indexOf(ka) : 1e9, ib = kb ? order.indexOf(kb) : 1e9; return ia - ib || a.i - b.i; }).map(o => o.r);
+  }
+  let lastS = null;
+  const bodyRows = shown.map(r => {
+    let pre = "";
+    if(sortMode === "staff" && staffOf(r) !== lastS){
+      lastS = staffOf(r);
+      const grp = shown.filter(x => staffOf(x) === lastS);
+      pre = `<tr class="sgrp"><td class="l" colspan="5">🙋 ${lastS ? esc(lastS) : "⏳ まだ精算していない"}　<small>${grp.length}人　回収するはず ${yen(grp.reduce((a, x) => a + x.amt, 0))}</small></td></tr>`;
+    }
+    return pre + rowHtml(r, ed);
+  }).join("");
+  h += `<div class="kanabar sortbar"><span style="font-weight:800;align-self:center;margin-right:4px">並び：</span><button type="button" class="kb ${sortMode === "staff" ? "" : "on"}" onclick="setSort('')">いつもの順</button><button type="button" class="kb ${sortMode === "staff" ? "on" : ""}" onclick="setSort('staff')">🙋 担当内勤ごと</button></div>`;
   h += rows.length ? `<div class="tbl"><table class="coltbl">
     <tr><th class="l">キャスト名</th><th>店落ち（Z列＋雑費）／カード</th><th class="l">回収サイン・だれが いつ どこで</th><th>封筒の中（数えた額）</th><th class="l">交通費・経費・精算ミス（処理したら ✓）</th></tr>
-    ${rows.filter(kana).map(r => rowHtml(r, ed)).join("")}</table></div>` : `<div class="lead">この日の回収はありません。</div>`;
+    ${bodyRows}</table></div>` : `<div class="lead">この日の回収はありません。</div>`;
   // 紙の下の欄と同じ：クレジットカード総額・経費・回収の合計・内勤日払い
   const byS = k => rows.filter(r => r.state === k), sAmt = l => l.reduce((a, r) => a + r.amt, 0);
   h += `<div class="paperfoot">
@@ -465,6 +485,7 @@ function kanaBarK(rows){
     + KANA_ROWS.map(([k]) => `<button type="button" class="kb ${kanaSel === k ? "on" : ""} ${have.has(k) ? "" : "off"}" onclick="pickKana('${k}')">${k}</button>`).join("") + `</div>`;
 }
 function pickKana(k){ kanaSel = !k || kanaSel === k ? "" : k; paintDay(); }
+function setSort(m){ sortMode = m; try{ localStorage.setItem("kaishuSort", m); }catch(e){} paintDay(); }
 // 🖼 その日のその子の精算の写真（精算画面で入れたもの。SQL 196：settle-photos／<営業日>/<キャストid>/…）
 async function phView(day, cid){
   const bg = document.createElement("div");
