@@ -7632,6 +7632,76 @@ function msgManualReset(){ ["msg", "netReply"].forEach(id => { msgManual[id] = n
     ["msg", "netReply"].forEach(id => { if(msgManual[id] != null && $(id)) $(id).value = msgManual[id]; });   // 書きかえている文は、そのまま
     return r; }; }
 { const __ofMan = openForm; openForm = function(){ msgManualReset(); const r = __ofMan.apply(this, arguments); setTimeout(paintReqBar, 400); return r; }; }
+/* ---------- 🎨 受付の見た目（2026/11/7 店長：見やすく）
+   中身（項目・id・自動の計算・検索・保存）は1つも変えない。見た目（色・丸み・余白）と、パソコンの左の目次・入力の進捗を足すだけ
+   ①〜⑥ の箱ごとに色の見出し。必須（赤い「必須」・赤い枠）は今のまま ---------- */
+const STEP_COLOR = ["pink", "blue", "yellow", "green", "lav", "peach"];
+function stepNavInit(){
+  const dr = document.querySelector("#formBg .drawer"); if(!dr) return;
+  const steps = [...dr.querySelectorAll(":scope > .step")];
+  steps.forEach((s, i) => { s.classList.add("sc-" + (STEP_COLOR[i] || "pink")); s.dataset.sn = i + 1; });
+  if(!$("stepNav")){
+    const title = s => { const h = s.querySelector("h3"); return h ? h.textContent.replace(/^\s*\d+\s*/, "").replace(/（.*$/, "").trim() : ""; };
+    $("formBg").insertAdjacentHTML("beforeend", `<nav id="stepNav"><div class="sn-list">${steps.map((s, i) => `<button type="button" class="sn-it" data-i="${i}" onclick="stepGo(${i})"><span class="sn-n">${i + 1}</span><span class="sn-t">${esc(title(s))}</span></button>`).join("")}</div>
+      <div class="sn-prog"><b>入力の進捗</b><div class="sn-bar"><i id="snBar"></i></div><span id="snTxt"></span></div></nav>`);
+    $("formBg").addEventListener("scroll", stepNavCur, { passive: true });
+  }
+}
+function stepGo(i){ const s = document.querySelectorAll("#formBg .drawer > .step")[i]; if(s) s.scrollIntoView({ block: "start", behavior: "smooth" }); }
+function stepNavCur(){
+  const steps = [...document.querySelectorAll("#formBg .drawer > .step")]; let cur = 0;
+  steps.forEach((s, i) => { if(s.getBoundingClientRect().top < 160) cur = i; });
+  document.querySelectorAll("#stepNav .sn-it").forEach((b, i) => b.classList.toggle("cur", i === cur));
+}
+function stepNavPaint(){
+  if(!$("stepNav")) return;
+  const steps = [...document.querySelectorAll("#formBg .drawer > .step")];
+  let miss = []; try{ miss = ["cancel", "tobi", "flowed"].includes(($("f_status") || {}).value) ? [] : missingRequired(true); }catch(e){}
+  const missStep = new Set(miss.map(([, id]) => { const el = $(id); const s = el && el.closest(".step"); return s ? steps.indexOf(s) : -1; }));
+  const hasReq = steps.map(s => !!s.querySelector(".req"));
+  document.querySelectorAll("#stepNav .sn-it").forEach((b, i) => { b.classList.toggle("ok", hasReq[i] && !missStep.has(i)); b.classList.toggle("ng", missStep.has(i)); });
+  const total = 12, done = Math.max(0, total - miss.length);
+  $("snBar").style.width = Math.round(done / total * 100) + "%"; $("snTxt").textContent = miss.length ? `必須のこり ${miss.length}` : "✅ 必須はぜんぶ入っています";
+  stepNavCur();
+}
+{ const __prbNav = paintReqBar; paintReqBar = function(){ const r = __prbNav.apply(this, arguments); try{ stepNavInit(); stepNavPaint(); }catch(e){} return r; }; }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  /* 箱：色の見出し・丸み・影 */
+  #formBg .drawer > .step{padding:0 16px 14px;border:1.5px solid #F1E3E7;border-radius:18px;box-shadow:0 2px 10px rgba(92,75,79,.06);overflow:visible;margin-bottom:16px;background:#fff}
+  #formBg .drawer > .step > h3{margin:0 -16px 12px;padding:12px 16px;border-radius:17px 17px 0 0;font-size:16.5px;font-weight:900;border-bottom:1.5px solid rgba(0,0,0,.04)}
+  #formBg .drawer > .step > h3 .n{width:32px;height:32px;font-size:16px;box-shadow:0 2px 6px rgba(0,0,0,.12)}
+  #formBg .step.sc-pink > h3{background:linear-gradient(90deg,#FFE3EC,#FFF5F8);color:#D94A7A} #formBg .step.sc-pink > h3 .n{background:#E5638C}
+  #formBg .step.sc-blue > h3{background:linear-gradient(90deg,#E1EEFC,#F4F9FF);color:#2E6BB0} #formBg .step.sc-blue > h3 .n{background:#4A86D0}
+  #formBg .step.sc-yellow > h3{background:linear-gradient(90deg,#FFF0D6,#FFFAF0);color:#C26A00} #formBg .step.sc-yellow > h3 .n{background:#F0A030}
+  #formBg .step.sc-green > h3{background:linear-gradient(90deg,#DFF3E5,#F4FBF6);color:#2E8B57} #formBg .step.sc-green > h3 .n{background:#3FA96A}
+  #formBg .step.sc-lav > h3{background:linear-gradient(90deg,#ECE4FA,#F8F5FE);color:#6A4FB0} #formBg .step.sc-lav > h3 .n{background:#8A6FD1}
+  #formBg .step.sc-peach > h3{background:linear-gradient(90deg,#FFE6DC,#FFF6F2);color:#C2552F} #formBg .step.sc-peach > h3 .n{background:#E8794F}
+  #formBg .step.sc-blue{border-color:#DCE8F6} #formBg .step.sc-yellow{border-color:#F6E6CB} #formBg .step.sc-green{border-color:#D3EBDC} #formBg .step.sc-lav{border-color:#E3DAF5} #formBg .step.sc-peach{border-color:#F6DDD3}
+  /* 項目名・入れる欄・ボタン */
+  #formBg .drawer .f > label{font-size:13.5px;color:#5C4B4F;font-weight:900;margin-bottom:6px}
+  #formBg .drawer .f + .f, #formBg .drawer .row1 + .row1{margin-top:10px}
+  #formBg .drawer input[type=text], #formBg .drawer input:not([type]), #formBg .drawer input[type=tel], #formBg .drawer input[type=email], #formBg .drawer input[type=time], #formBg .drawer input[type=date], #formBg .drawer input[type=number], #formBg .drawer select, #formBg .drawer textarea{border:1.5px solid #E6D7DC;border-radius:12px;background:#FFFEFE;box-shadow:inset 0 1px 2px rgba(0,0,0,.03)}
+  #formBg .drawer input:focus, #formBg .drawer select:focus, #formBg .drawer textarea:focus{outline:none;border-color:#E5638C;box-shadow:0 0 0 3px rgba(229,99,140,.15)}
+  #formBg .drawer .chip{padding:9px 18px;font-size:14.5px;border-color:#E6D7DC;box-shadow:0 1px 3px rgba(92,75,79,.06);transition:background .12s,border-color .12s}
+  #formBg .drawer .chip:hover{border-color:#E5638C}
+  #formBg .drawer .chip.on{box-shadow:0 3px 8px rgba(229,99,140,.3)}
+  #formBg .drawer .chip.on::before{content:"✓ ";font-weight:900}
+  /* 左の目次・入力の進捗（パソコンの広い画面だけ） */
+  #stepNav{display:none}
+  @media (min-width:1180px){
+    #formBg .drawer{max-width:980px;padding-left:232px}
+    #stepNav{display:block;position:fixed;top:84px;left:calc(50vw - 490px + 16px);width:196px;z-index:5}
+    #stepNav .sn-list{background:#fff;border:1.5px solid #F1E3E7;border-radius:16px;padding:8px;box-shadow:0 2px 10px rgba(92,75,79,.06)}
+    #stepNav .sn-it{display:flex;align-items:center;gap:8px;width:100%;font-family:inherit;font-size:13.5px;font-weight:800;color:#6b5a5f;background:none;border:0;border-radius:12px;padding:8px;cursor:pointer;text-align:left}
+    #stepNav .sn-it:hover{background:#FFF3F7}
+    #stepNav .sn-it.cur{background:#FFE3EC;color:#D94A7A}
+    #stepNav .sn-n{flex:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:99px;background:#E9E1E4;color:#fff;font-size:12.5px;font-weight:900}
+    #stepNav .sn-it.cur .sn-n{background:#E5638C} #stepNav .sn-it.ok .sn-n{background:#3FA96A} #stepNav .sn-it.ok .sn-n::after{content:""} #stepNav .sn-it.ng .sn-n{background:#E5486C}
+    #stepNav .sn-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    #stepNav .sn-prog{margin-top:10px;background:#fff;border:1.5px solid #F1E3E7;border-radius:16px;padding:10px 12px;font-size:12.5px;box-shadow:0 2px 10px rgba(92,75,79,.06)}
+    #stepNav .sn-bar{height:9px;border-radius:99px;background:#F1E9EC;margin:6px 0;overflow:hidden} #stepNav .sn-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#F59AB8,#E5638C);transition:width .3s}
+  }
+</style>`);
 document.head.insertAdjacentHTML("beforeend", `<style>textarea.msg.msgedit{background:#FFFBEA !important;border:2px solid #F2B705 !important}</style>`);
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
