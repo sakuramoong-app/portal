@@ -247,7 +247,10 @@ function paintDetail(){
         <div class="f"><label>NGの理由</label><input id="c_ngr" value="${esc(c.ng_reason)}" maxlength="200" ${ed}></div>
       </div>
       <div class="f" style="margin-top:6px"><label>メモ（好み・注意など）</label><textarea id="c_note" ${ed}>${esc(c.note)}</textarea></div>
-      ${KB.CAN_EDIT ? `<div style="display:flex;justify-content:space-between;margin-top:6px"><button class="btn btn-danger btn-sm" onclick="delCustomer()">🗑 このお客さんを消す（テストなど）</button><button class="btn btn-primary btn-sm" onclick="saveCustomer()">💾 保存</button></div>` : ""}
+      ${KB.CAN_EDIT ? `<div style="display:flex;justify-content:space-between;margin-top:6px"><button class="btn btn-danger btn-sm" onclick="delCustomer()">🗑 このお客さんを消す（テストなど）</button><button class="btn btn-primary btn-sm" onclick="saveCustomer()">💾 保存</button></div>
+        <div style="margin-top:10px;border:1.5px dashed #7FB2E5;border-radius:12px;padding:8px 10px;background:#F4F9FF"><b>🔗 同じ人をこのお客さんにまとめる</b> <small style="color:var(--sub)">（番号を変えた・2人に分かれて登録された など。予約・利用・NG・メモ・タグはこの人に移ります）</small>
+          <div style="display:flex;gap:6px;margin-top:6px"><input id="mg_q" placeholder="まとめる人の電話番号か名前" style="flex:1" onkeydown="if(event.key==='Enter')mergeSearch()"><button class="btn btn-ghost btn-sm" onclick="mergeSearch()">🔍 探す</button></div>
+          <div id="mg_list"></div></div>` : ""}
     </div>
 
     <div class="csec"><h3>🙅 キャストごとのNG（このキャストには付けない）</h3>
@@ -354,6 +357,24 @@ function custTagChips(){
   return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${list.map((t, i) => { const on = have.includes(t);
       return `<button type="button" class="ctag ${on ? "on" : ""} ${tagCls(t)}" ${ed ? `onclick="toggleCustTag(custTagAt(${i}))"` : "disabled"}>${on ? "✓ " : ""}${esc(t)}</button>`; }).join("")}
     ${ed ? `<button type="button" class="ctag add" onclick="addCustTag()">＋ タグを足す</button><button type="button" class="ctag add" onclick="editCustTags()">⚙️ タグの一覧を直す</button>` : ""}</div>${tagEditHtml()}`;
+}
+// 🔗 同じ人を1人にまとめる（SQL 231 kb_cust_merge）：開いているお客さんが残る。まとめた方は消える（記録は移る）2026/11/7
+async function mergeSearch(){
+  if(!cur) return;
+  const t = $("mg_q").value.trim(); if(!t){ toast("電話番号か名前を入れてください"); return; }
+  let l = [];
+  try{ l = (q(await sb.rpc("kb_customer_search", { p_q: t, p_limit: 20 })) || []).filter(x => x.id !== cur.id); }
+  catch(e){ $("mg_list").innerHTML = `<div class="warn">探せませんでした：${esc(e.message || e)}</div>`; return; }
+  $("mg_list").innerHTML = l.length ? l.map(x => `<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><b>${esc(x.name || "（名前なし）")}</b>${x.ng ? '<span class="badge b-ng">⚠️ 店NG</span>' : ""}
+      <small>📞 ${esc(fmtPhone(x.phone))}・${x.visits ? x.visits + "回" : "利用なし"}</small><button class="btn btn-primary btn-sm" onclick="doMerge(${x.id})">🔗 この人をまとめる</button></div>`).join("")
+    : `<div style="margin-top:6px;color:var(--sub)">見つかりません</div>`;
+}
+async function doMerge(oldId){
+  if(!cur) return;
+  const o = (q(await sb.from("kb_customers").select("id,name,phone").eq("id", oldId).maybeSingle())) || {};
+  if(!confirm(`「${o.name || "名前なし"}（${fmtPhone(o.phone)}）」を\n「${cur.name || "名前なし"}（${fmtPhone(cur.phone)}）」にまとめますか？\n\n・予約・利用・キャストNG・よく使う場所・メモ・タグは「${cur.name || "名前なし"}」に移ります\n・番号は副番号に入ります\n・「${o.name || "名前なし"}」のお客さんは消えます（元にもどせません）`)) return;
+  try{ const m = q(await sb.rpc("kb_cust_merge", { p_keep: cur.id, p_old: oldId, p_by: KB.operatorName() })); toast("🔗 " + (m || "まとめました")); results = results.filter(r => r.id !== oldId); paintList(); openCustomer(cur.id); }
+  catch(e){ toast("まとめられませんでした（SQL 231 は実行ずみ？）：" + (e.message || e)); }
 }
 // ⚙️ タグの一覧：名前を変える・消す（ついているお客さん全員に効く。SQL 229）2026/11/7
 var tagEditOpen = false;
