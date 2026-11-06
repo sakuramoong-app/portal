@@ -7680,6 +7680,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   /* 項目名・入れる欄・ボタン */
   #formBg .drawer .f > label{font-size:13.5px;color:#5C4B4F;font-weight:900;margin-bottom:6px}
   #formBg .drawer .f + .f, #formBg .drawer .row1 + .row1{margin-top:10px}
+  #formBg .drawer .row2 > .f + .f, #formBg .drawer .row3 > .f + .f{margin-top:0}   /* 横に並んだ欄は、上をそろえる（エリアとホテル・自宅が段ちがいになっていた）*/
+  #formBg .drawer .row2 > .f > label, #formBg .drawer .row3 > .f > label{min-height:22px;display:flex;align-items:center;flex-wrap:wrap;gap:0 2px}
   #formBg .drawer input[type=text], #formBg .drawer input:not([type]), #formBg .drawer input[type=tel], #formBg .drawer input[type=email], #formBg .drawer input[type=time], #formBg .drawer input[type=date], #formBg .drawer input[type=number], #formBg .drawer select, #formBg .drawer textarea{border:1.5px solid #E6D7DC;border-radius:12px;background:#FFFEFE;box-shadow:inset 0 1px 2px rgba(0,0,0,.03)}
   #formBg .drawer input:focus, #formBg .drawer select:focus, #formBg .drawer textarea:focus{outline:none;border-color:#E5638C;box-shadow:0 0 0 3px rgba(229,99,140,.15)}
   #formBg .drawer .chip{padding:9px 18px;font-size:14.5px;border-color:#E6D7DC;box-shadow:0 1px 3px rgba(92,75,79,.06);transition:background .12s,border-color .12s}
