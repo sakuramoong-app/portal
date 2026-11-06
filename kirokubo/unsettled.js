@@ -538,7 +538,9 @@ function settleParts(id){
     const courseBack = off ? 0 : r.back_override != null ? r.back_override : (r.course_back || 0) + (r.extra_back || 0);
     // お客さんの総額と、新規・店リピ・本指名（精算明細に出す。2026/11/4）
     const vk = ({ new: "新規", repeat: "店リピ", honshi: "本指名" })[r.visit_kind] || "";
-    return { no: i + 1, head, off, st: r.status, courseBack, ops, opSum, total: courseBack + opSum, guest: Number(r.total) || 0, vk };
+    // 本指名バック：コースのバックのうち本指名の分を別の行に（nomi_back。報酬を手で直した予約は分けない）2026/11/7
+    const nomi = !off && r.back_override == null && Number(r.nomi_back) > 0 && Number(r.nomi_back) <= courseBack ? Number(r.nomi_back) : 0;
+    return { no: i + 1, head, off, st: r.status, courseBack, nomi, ops, opSum, total: courseBack + opSum, guest: Number(r.total) || 0, vk };
   });
   return { c, d, pay, pm, uns, sum, due, memo, res, rest };
 }
@@ -564,7 +566,8 @@ copyDetail = function(id){
     lines.push("", `■ ${r.no}本目　${r.head}`);
     if(r.off){ lines.push(`　${r.st === "cancel" ? "キャンセル" : r.st === "flowed" ? "流れた" : "トビ"}（報酬なし）`); return; }
     lines.push(`　お客さんの総額${r.vk ? "（" + r.vk + "）" : ""}　${yen(r.guest)}`);
-    lines.push(`　コース報酬　${yen(r.courseBack)}`);
+    lines.push(`　コース報酬　${yen(r.courseBack - r.nomi)}`);
+    if(r.nomi) lines.push(`　本指名バック　＋${yen(r.nomi)}`);
     r.ops.forEach(o => lines.push(`　OP：${o[0]}　＋${yen(o[1])}`));
     lines.push(`　▶ この仕事の報酬（OP込み）　${yen(r.total)}`);
   });
@@ -595,7 +598,8 @@ settleCanvas = function(id){
     ops.push(["job", `${r.no}本目`, r.head, r.off ? (r.st === "cancel" ? "キャンセル" : r.st === "flowed" ? "流れた" : "トビ") : "", r.off]);
     if(r.off) return;
     ops.push(["jrow", "お客さんの総額" + (r.vk ? "（" + r.vk + "）" : ""), yen(r.guest)]);
-    ops.push(["jrow", "コース報酬", yen(r.courseBack)]);
+    ops.push(["jrow", "コース報酬", yen(r.courseBack - r.nomi)]);
+    if(r.nomi) ops.push(["jrow", "本指名バック", "＋" + yen(r.nomi), "op"]);
     r.ops.forEach(o => ops.push(["jrow", "OP：" + o[0], "＋" + yen(o[1]), "op"]));
     ops.push(["jsum", "この仕事の報酬（OP込み）", yen(r.total)]);
   });

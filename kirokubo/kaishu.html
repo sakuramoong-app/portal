@@ -37,6 +37,7 @@
   .flow .ref{font-size:12px;color:var(--sub);}
   .ex{width:100%;margin-top:6px;} .ex td{font-size:13px;padding:5px 6px;white-space:normal;}
   .ex input,.ex select{font-family:inherit;font-size:13px;padding:3px 6px;border:1.5px solid #ddd;border-radius:6px;max-width:100%;}
+  .envhist{font-size:12.5px;color:#555;margin-top:4px;line-height:1.7} .envhist .ng{color:#c0392b}
   .coltbl tr.sgrp td{background:#FFE4EC;font-weight:900;color:#c2185b;padding:5px 8px;border-top:2px solid #e5638c;border-left:8px solid var(--pc,#e5638c)}
   .kanabar{display:flex;gap:4px;flex-wrap:wrap;margin:0 0 8px} .kanabar .kb{font-family:inherit;font-size:15px;font-weight:800;min-width:36px;padding:5px 8px;border:1.5px solid #FFC2D1;border-radius:9px;background:#fff;color:#e5638c;cursor:pointer} .kanabar .kb:hover{background:#FFE4EC} .kanabar .kb.off{opacity:.35} .kanabar .kb.on{background:#e5638c;color:#fff;border-color:#e5638c}
   .rowlinks{font-size:12px;font-weight:700;margin-top:3px;white-space:nowrap}
@@ -389,7 +390,8 @@ function paintDay(){
   h += `<h3 class="sec">📮 ポスティングの封筒</h3>` + PLACES.filter(p => !place || place === p).map(p => {
     const posted = rows.filter(r => r.cd.settled && r.place === p).length;
     return `<div class="envline" style="border-left:6px solid ${PLACE_COLOR[p] || "#ddd"};padding-left:8px;margin:6px 0"><b>${p}</b>　この日の封筒 <b>${posted}通</b>${ENV[p] ? `　／　前回の回収からたまっている封筒 <b>${ENV[p].since.length}通</b>${ENV[p].last ? `（前回 ${when(ENV[p].last.checked_at)} ${esc(ENV[p].last.checked_by)}）` : ""}
-      ${KB.CAN_EDIT ? `　回収した封筒 <input type="number" min="0" id="env-${p}" oninput="envCheck('${p}')" style="width:64px"> 通 <button class="btn btn-primary btn-sm" onclick="save('${p}')">📮 回収した</button><span class="envres" id="envres-${p}"></span>` : ""}` : ""}</div>`; }).join("");
+      ${KB.CAN_EDIT ? `　回収した封筒 <input type="number" min="0" id="env-${p}" oninput="envCheck('${p}')" style="width:64px"> 通 <button class="btn btn-primary btn-sm" onclick="save('${p}')">📮 回収した</button><span class="envres" id="envres-${p}"></span>` : ""}` : ""}
+      ${ENV[p] && ENV[p].hist.length ? `<div class="envhist">📜 回収の履歴（新しい順）：${ENV[p].hist.map(x => `<span class="${x.found === x.expected ? "ok" : "ng"}">${when(x.checked_at)} ${esc(x.checked_by || "")} <b>${x.found}通</b>／あるはず ${x.expected}通 ${x.found === x.expected ? "✅" : "⚠️"}</span>`).join("　")}</div>` : ""}</div>`; }).join("");
   h += `<div class="leg">・回収サイン：<b class="mk day">✔ 当日回収</b>／<b class="mk later">✔ 後日内勤回収</b>／<b class="mk me">✔ 店長回収</b>（もう一度押すと消えます）。内勤がその場で受け取った精算は、自動で当日回収（あとの日なら後日内勤回収）になります<br>
     ・封筒の中：回収サインを押すと、精算で投函した額が自動で入ります。そろっているはずの額（店落ち − カード − 振込）と同じなら <b>💯 完璧回収</b>（自動）。額がちがったら手で入れなおす<br>
     ・交通費・プラスはキャッシュフローから出して、袋には「店落ち − カード」の額をそろえます　・精算ミスは精算画面で未精算・お釣りになっています。項目ごとに、処理したら ✓</div>`;

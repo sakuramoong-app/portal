@@ -1287,7 +1287,7 @@ function partyExtraRows(row){
     const w = party.af[party.casts.indexOf(cid)] || {};
     $("f_cast").value = cid; const c2 = withAf(w, () => calc());
     return Object.assign({}, row, { cast_id: cid, af_wish: w.af, rev_af_wish: w.raf, nomination_fee: c2.nomination, options: c2.opts, option_total: c2.optionTotal, total: c2.total,
-      card_total: c2.pay === "cash" ? 0 : c2.total, course_back: c2.courseBack, option_back: c2.optionBack, extra_back: c2.extra, back_override: null,
+      card_total: c2.pay === "cash" ? 0 : c2.total, course_back: c2.courseBack, option_back: c2.optionBack, extra_back: c2.extra, back_override: null, ...(HAS_226 ? { nomi_back: c2.nomiBack || 0 } : {}),
       cast_notified_at: null, cast_notified_by: "", ...("todos" in row ? { todos: [] } : {}), checks: [] });
   });
   $("f_cast").value = main; calc();
@@ -1312,6 +1312,9 @@ openForm = function(){ const r = __openFormParty.apply(this, arguments); paintPa
 /* ---------- 👗 キューティー：お客さんの女装（kb_reservations.dress：{ h, w, wig:"黒ショート", cloth, book }。SQL 164） ---------- */
 let HAS_DRESS = false;
 Promise.resolve(sb.from("kb_reservations").select("dress").limit(1)).then(res=>{ HAS_DRESS = !!res && !res.error; }).catch(()=>{});
+// SQL 226（本指名バック nomi_back・満了・中抜け）を実行ずみか
+let HAS_226 = false;
+Promise.resolve(sb.from("kb_reservations").select("nomi_back").limit(1)).then(res=>{ HAS_226 = !!res && !res.error; }).catch(()=>{});
 const WIG_COL = [["黒", "#1d1a1a"], ["茶", "#7b4a2a"], ["金", "#c9a06a"]], WIG_LEN = ["ショート", "ミディアム", "ロング"];
 let wigSel = "", underSel = "";
 // 👙 下着：お金はバック無OP（calc でオプションに足す）
@@ -2007,7 +2010,7 @@ function calc(){
   if(pay === "split"){ const base = Math.min(total, Math.max(0, Number($("f_cardpart") ? $("f_cardpart").value : 0) || 0)); splitCard = Math.round(base * cardRate); total = total - base + splitCard; }
   else if(pay && pay !== "cash"){ total = Math.round(total * cardRate); }
   // バック：店舗のグループのランク（特別フリー・イベフリーは「イベ」のランク）＋コース＋（本指／フリー…）
-  let courseBack = 0, rank = "", key = "", backMissing = null;
+  let courseBack = 0, rank = "", key = "", backMissing = null, nomiBack = 0;
   if(cast){
     rank = (free === "special_free" || free === "event_free") ? ranksOn(cast).event : ranksOn(cast)[g];
     const suffix = free ? FREE_SUFFIX[free] : (visit === "honshi" ? "本指" : "");
@@ -2025,8 +2028,12 @@ function calc(){
         if(mv > 0){ courseBack = mv; why.push(`コースのバック：${r2}・${key} → ${yen(mv)}（受付で入れた。保存すると次から自動）`); }
         else { courseBack = 0; why.push(`⚠️ バック表に「${r2}・${key}」がありません → 「💗 キャストの報酬」でこのコースのバックを入れてください`); }
       }
-      else why.push(`コースのバック：${rank}・${key} → ${yen(courseBack)}`);
-      if(courseBack && typeof party !== "undefined" && party.kind === "guest"){ courseBack = courseBack * 2; why.push(`お客2名の3P：コースのバックも×2 → ${yen(courseBack)}`); }
+      else {
+        why.push(`コースのバック：${rank}・${key} → ${yen(courseBack)}`);
+        // 本指名：本指のバック − ふつうのバック ＝ 本指名バック（精算明細で別の行に出す。合計は同じ）2026/11/7
+        if(suffix === "本指"){ const b0 = M.back[r2 + "|" + course] ?? M.back[rank + "|" + course]; if(b0 != null && courseBack > b0){ nomiBack = courseBack - b0; why.push(`（うち本指名バック ${yen(nomiBack)}）`); } }
+      }
+      if(courseBack && typeof party !== "undefined" && party.kind === "guest"){ courseBack = courseBack * 2; nomiBack = nomiBack * 2; why.push(`お客2名の3P：コースのバックも×2 → ${yen(courseBack)}`); }
     }else why.push("⚠️ このお店用のランクが台帳にありません → 報酬を手で入れてください");
   }
   let extra = ext*extSet.back + date*dateSet.back;
@@ -2042,7 +2049,7 @@ function calc(){
     });
   }
   return { store, g, course, price, nomination, admission, extFee: ext*extSet.price, dateFee: date*dateSet.price, opts, optionTotal,
-           optionBack, transport, discount, total, pay, splitCard, courseBack, extra, why, rank, ext, date, free, backMissing };
+           optionBack, transport, discount, total, pay, splitCard, courseBack, nomiBack, extra, why, rank, ext, date, free, backMissing };
 }
 
 let last = null;
@@ -2278,6 +2285,8 @@ async function saveRes(){
   if(!cancelLike && curCustomer && curCustomer.ng && curCustomer.ng_ask){ toast("🤔 このお客さんが出禁・店NGか、先に決めてください（お客さんの欄のボタン）"); $("custInfo").scrollIntoView({ block: "center" }); return; }
   // 止めるのは「新しい予約」で「もともと店NG」のお客さんだけ。終わった予約などを開いて、今回 店NG にする（記録する）のは保存できる
   if(!cancelLike && !editing && $("f_ng").value === "1" && curCustomer && curCustomer.ng){ toast("🚫 出禁・店NGのお客さんです。受けられません（解除なら、お客さんの「店NG」を直してから）"); $("custInfo").scrollIntoView({ block: "center" }); return; }
+  // 🈵 満了のキャストは、その日の新しい予約を受けない（受けるときは、キャストの枠の「🈵 満了」を外してから）2026/11/7
+  if(!cancelLike && !editing && (($("f_day") && $("f_day").value) || day) === day && (castDays[$("f_cast").value] || {}).full_at){ toast("🈵 " + castName($("f_cast").value) + "さんは満了です。受けるときは、キャストの枠の「🈵 満了」を外してから"); return; }
   if(!cancelLike && ck.longNg){ toast("🚫 このキャストでは受けられません（赤い枠の理由を見てください）"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.missAnnounce){ toast("📣 お客様に案内することに、まだチェックがついていません"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.missConfirm && !waiting){ toast("✅ キャストに確認してから受けるものがあります。確認したらチェック、まだなら状態を「キャスト返事待ち」に"); $("castChecks").scrollIntoView({ block: "center" }); return; }
@@ -2338,6 +2347,7 @@ async function saveRes(){
       // 現金＋カードは、支払いは「現金」のまま、カードの分（手数料こみ）を card_total に入れる（精算・回収明細でカードとして引く）
       total: c.total, payment: c.pay === "split" ? "cash" : c.pay === "card" && editing && (editing.card_step === "paid" || editing.payment === "card_paid") ? "card_paid" : c.pay, card_total: c.pay === "cash" ? 0 : c.pay === "split" ? (c.splitCard || 0) : c.total,
       course_back: c.courseBack, option_back: c.optionBack, extra_back: c.extra,
+      ...(HAS_226 ? { nomi_back: c.nomiBack || 0 } : {}),   // コースのバックのうち本指名の分（精算明細で別の行に。合計は変わらない）
       back_override: ovRaw === "" ? null : Number(ovRaw),
       ...(("back_override_note" in (rows[0] || editing || {})) || ovRaw !== "" ? { back_override_note: ovRaw === "" ? "" : backOvNote.trim() } : {}),
       // 📱 スマホで保存しても、そのまま本予約（2026/11/02 社長OK。前の「仮入力」は使わない）
@@ -2625,7 +2635,7 @@ async function markDroppedAbsent(){
 }
 // 🔒 お金の数字（精算済・エクセルから取りこんだ予約では変えない）2026/11/6
 const MONEY_KEYS = ["base_price", "admission", "nomination_fee", "extension_fee", "transport", "option_total", "discount", "total", "payment", "card_total",
-  "course_back", "option_back", "extra_back", "back_override", "options", "extension_count", "date_count", "nh_rate", "free_kind"];
+  "course_back", "option_back", "extra_back", "nomi_back", "back_override", "options", "extension_count", "date_count", "nh_rate", "free_kind"];
 function moneyLocked(r){
   if(!r) return false;
   if(/^xl\d/.test(String(r.src || ""))) return true;   // エクセルから取りこんだ予約
@@ -2807,6 +2817,7 @@ function tlCell(castId, h){
   newBookingFor(castId, String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0"));
 }
 function newBookingFor(castId, time){
+  if(castId && (castDays[castId] || {}).full_at) toast("🈵 " + castName(castId) + "さんは満了です（この日の新しい予約は保存できません）");
   openForm(null);
   if(castId && ![...$("f_cast").options].some(o=>o.value === castId)){ $("f_castAll").checked = true; fillCastSel(); }
   $("f_cast").value = castId; onCast();
@@ -3686,7 +3697,8 @@ boardState = function(x){
   const aw = autoWork(x);
   if(aw && aw.t >= manualT(x)) return "work";
   if(cd.settled && !["待機中", "仕事中"].includes(cd.status)) return "gone";   // 先に精算して待機中・仕事中のままの子は、まだいる（2026/11/6）
-  if(["不在", "お茶", "欠勤"].includes(cd.status)) return "gone";
+  if(["不在", "お茶", "欠勤", "中抜け"].includes(cd.status)) return "gone";
+  if(cd.direct_home && !["待機中", "仕事中"].includes(cd.status)) return "gone";   // 精算で直帰 → 今いない（直帰）2026/11/7
   if(cd.status === "仕事中") return "work";
   if(cd.status === "予約スタート") return "start";   // 待機しないで、最初の予約から仕事を始める
   if(cd.status === "出勤前連絡") return "precall";   // 出勤前に「何時からどこで待機」と連絡があった
@@ -3738,12 +3750,21 @@ renderBoard = function(){
     // その子の今日の予約（何時から・場所・コース・お客さん）を箇条書きで
     const bl = x.bks.filter(b=>!["cancel", "tobi", "flowed"].includes(b.r.status)).sort((a, b)=>a.s - b.s)
       .map(b=>`<li class="${b.r.status === "done" ? "dn" : ""}">${esc(hm(b.r.start_at))} ${esc(b.r.area || "")} ${esc(b.r.course || "")}${/^\d+$/.test(b.r.course || "") ? "分" : ""} ${esc((b.r.kb_customers || {}).name || "")} <span class="st ${b.r.status}" style="font-size:10.5px;padding:0 6px">${esc(STATUS[b.r.status] || "")}</span></li>`).join("");
-    return `<div class="chipc ${cls}" data-cid="${cid}" data-st="${st}">【${esc(castLabel(x))}】${esc(sh)}${st === "gone" && gk ? `<small>（${gk}）</small>` : x.cd && x.cd.status ? `<small class="cdst">（${esc(x.cd.status)}）</small>` : ""}${x.cd && x.cd.settled ? "<small>（精算済）</small>" : ""}${pill}${bl ? `<ul class="bkl">${bl}</ul>` : ""}${movingHtml(x)}${seat}</div>`;
+    const cd1 = x.cd || {};
+    // 中抜け：もどる時間・再開する場所／直帰／🈵 満了／出張・他エリアは行き先（2026/11/7）
+    const brk = cd1.status === "中抜け" ? `<small class="brk">（中抜け${cd1.break_back ? " 〜" + esc(cd1.break_back) + "にもどる" : ""}${cd1.break_place ? "・" + esc(cd1.break_place) + "で再開" : ""}）</small>` : "";
+    const home = st === "gone" && cd1.direct_home && !["待機中", "仕事中"].includes(cd1.status) ? `<small>（直帰）</small>` : "";
+    const full = cd1.full_at ? `<span class="fullbadge">🈵満了</span>` : "";
+    let trip = "";
+    if(col === "出張・他エリア"){ const aw = st === "work" ? autoWork(x) : null; const p = aw && aw.t >= manualT(x) ? aw.r.area : cd1.standby; if(p && p !== "出張・他エリア") trip = `<br><span class="tripat">📍 ${esc(p)}</span>`; }
+    return `<div class="chipc ${cls}${cd1.status === "中抜け" ? " brkc" : ""}" data-cid="${cid}" data-st="${st}">【${esc(castLabel(x))}】${esc(sh)}${full}${brk || (st === "gone" && gk ? `<small>（${gk}）</small>` : x.cd && x.cd.status ? `<small class="cdst">（${esc(x.cd.status)}）</small>` : "")}${home}${x.cd && x.cd.settled ? "<small>（精算済）</small>" : ""}${trip}${pill}${bl ? `<ul class="bkl">${bl}</ul>` : ""}${movingHtml(x)}${seat}</div>`;
   };
   const th = c=>`<th class="${AREA_CLASS[c] || ""}">${esc(c)}${c === "鶯谷" ? ` <button type="button" class="logbtn" onclick="openSeatLog()">📜 ログ</button>` : ""}</th>`;
-  el.innerHTML = `<table class="board"><tr><th class="corner"></th>${cols.map(th).join("")}</tr>`
+  const fulls = tlRows().filter(x => x.c && x.cd && x.cd.full_at);
+  el.innerHTML = (fulls.length ? `<div class="fullbar">🈵 満了：${fulls.map(x => `<b>${esc(castLabel(x))}</b>`).join("、")}　<small>（この日の新しい予約は受けません）</small></div>` : "")
+    + `<table class="board"><tr><th class="corner"></th>${cols.map(th).join("")}</tr>`
     + [["wait", "待機中"], ["work", "仕事中"], ["start", "予約スタート"], ["precall", "出勤前連絡"]].map(([k, l])=>`<tr class="${k}"><th>${l}</th>${cols.map(c=>`<td class="${AREA_CLASS[c] || ""}" data-drop="${k}|${esc(c)}">${(cell[k + "|" + c] || []).map(x=>chip(x, k, c)).join("")}</td>`).join("")}</tr>`).join("")
-    + `<tr class="gone"><th>今いない<br><small style="font-weight:700">押すと色：⬜不在→🟩お茶→🟥欠勤</small></th><td colspan="${cols.length}" data-drop="gone">${gone.map(x=>chip(x, "gone", "")).join("") || `<span class="hist" style="margin:0">なし</span>`}</td></tr>`
+    + `<tr class="gone"><th>今いない<br><small style="font-weight:700">押すと色：⬜不在→🟩お茶→🟥欠勤<br>🟧中抜け・直帰</small></th><td colspan="${cols.length}" data-drop="gone">${gone.map(x=>chip(x, "gone", "")).join("") || `<span class="hist" style="margin:0">なし</span>`}</td></tr>`
     + `</table>`;
 };
 // その日のキャストの状態を保存（待機場所・今いないの色）
@@ -3961,7 +3982,7 @@ renderListTable = function(){
   const head = `<tr><th>時間</th><th>店舗</th><th>コース・エリア</th><th>お客さん・電話</th><th>状態・やること</th><th>キャストに</th><th>📝 備考</th></tr>`;
   // 今いない（不在・お茶・欠勤）は、枠ぜんたいをグレー・緑・赤に（今どこに誰がとつながっている）
   const block = (title, sub, list, cid, cls)=>`<div class="cblock ${cls || ""}" ${cid ? `id="cb-${cid}"` : ""}>
-      <div class="ch"><b>${title}</b>${cid && KB.CAN_EDIT ? whereSel(cid) + dayStatusSel(cid) + kanzenBtn(cid) : ""}<small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="editInfoNote('${cid}')">📌 今日のこと</button><button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button>` : ""}${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
+      <div class="ch"><b>${title}</b>${cid && KB.CAN_EDIT ? whereSel(cid) + dayStatusSel(cid) + kanzenBtn(cid) + fullBtn(cid) : ""}<small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="editInfoNote('${cid}')">📌 今日のこと</button><button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button>` : ""}${cid ? `<button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
       ${cid ? attendHtml(cid) : ""}
       ${list.length ? `<div class="wrapx"><table class="list">${head}${list.map(r=>`<tr class="r ${["cancel", "tobi", "flowed"].includes(r.status) ? "cx" : ""}" onclick="openForm(${r.id})">${resCells(r)}</tr>`).join("")}</table></div>` : `<div class="none">予約なし</div>`}</div>`;
   const noCast = rows.filter(r=>!r.cast_id).sort(byStart);
@@ -3981,11 +4002,11 @@ function dayStatusSel(cid){
   const cd = castDays[cid] || {}, x = tlRows().find(r=>r.c && r.c.id === cid);
   const st = x ? boardState(x) : "gone", col = x ? boardCol(x, st) : "";
   // 状態：待機中・仕事中・出勤前連絡・不在・お茶・欠勤（2026/11/5）。えらんでいなければ「自動」（シフトと予約から）
-  const MAN = ["待機中", "仕事中", "出勤前連絡", "不在", "お茶", "欠勤"];
+  const MAN = ["待機中", "仕事中", "出勤前連絡", "中抜け", "不在", "お茶", "欠勤"];
   const cur = MAN.includes(cd.status) ? cd.status : cd.status === "出勤前" ? "出勤前連絡" : "";
   const autoLbl = { wait: "🟡 待機中", work: "🔴 仕事中", before: "🟪 出勤前", start: "🔵 予約スタート", gone: "⬜ 今いない" }[st] || "";
   if(!KB.CAN_EDIT) return `<span class="st">${esc((cur || autoLbl) + (col ? "（" + col + "）" : ""))}</span>`;
-  const opts = [["", "🤖 自動：" + autoLbl.replace(/^\S+\s/, "") + (col && !cur ? "（" + col + "）" : "")], ["待機中", "🟡 待機中"], ["仕事中", "🔴 仕事中"], ["出勤前連絡", "🟪 出勤前連絡"], ["不在", "⬜ 不在"], ["お茶", "🟩 お茶"], ["欠勤", "🟥 欠勤"]];
+  const opts = [["", "🤖 自動：" + autoLbl.replace(/^\S+\s/, "") + (col && !cur ? "（" + col + "）" : "")], ["待機中", "🟡 待機中"], ["仕事中", "🔴 仕事中"], ["出勤前連絡", "🟪 出勤前連絡"], ["中抜け", "🟧 中抜け"], ["不在", "⬜ 不在"], ["お茶", "🟩 お茶"], ["欠勤", "🟥 欠勤"]];
   return `<select class="daysel ${cur === "お茶" ? "tea" : cur === "欠勤" ? "absent" : cur === "出勤前連絡" ? "pre" : cur === "不在" ? "away" : ""}" onclick="event.stopPropagation()" onchange="setDayStatus('${cid}',this.value)">
     ${opts.map(([v, l])=>`<option value="${v}" ${cur === v ? "selected" : ""}>${l}</option>`).join("")}</select>`;
 }
@@ -4011,10 +4032,35 @@ async function setDayStatus(cid, v){
   if(v === "_here") return;
   // 欠勤は、今いないの札と同じく理由を聞く（記録を残して、サクラシフトもお休みにするため）2026/11/6
   if(v === "欠勤" && (castDays[cid] || {}).status !== "欠勤"){ openAttend(cid, "欠勤"); if($("at_skip")) $("at_skip").style.display = ""; renderList(); return; }
+  const cd0 = castDays[cid] || {};
+  // 🟧 中抜け：もどる時間と、再開する場所を聞く（今どこに誰がの「今いない」に出る）2026/11/7
+  if(v === "中抜け"){
+    if(!HAS_226){ toast("中抜けには SQL 226 の実行が必要です"); renderList(); return; }
+    const t = prompt(castName(cid) + "：中抜け。もどる時間は？（例 21:00。わからなければ空のまま OK）", cd0.break_back || "");
+    if(t === null){ renderList(); return; }
+    const pl = prompt("再開する場所は？（" + STANDBY.join("・") + "。空のままなら今の場所）", cd0.break_place || cd0.standby || "");
+    if(pl === null){ renderList(); return; }
+    const seat = seatsOk ? seatOf(cid) : null; if(seat) await leaveSeat(seat.id, true);
+    await saveDayPart(cid, { status: "中抜け", standby: "", break_back: t.trim().slice(0, 10), break_place: (pl.trim() || cd0.standby || "").slice(0, 20) });
+    return;
+  }
   const keepPlace = ["", "待機中", "仕事中", "出勤前連絡"].includes(v);
   const seat = seatsOk && !keepPlace ? seatOf(cid) : null;
   if(seat) await leaveSeat(seat.id, true);
-  await saveDayPart(cid, keepPlace ? { status: v } : { status: v, standby: "" });
+  const patch = keepPlace ? { status: v } : { status: v, standby: "" };
+  if(cd0.status === "中抜け" && keepPlace && !cd0.standby && cd0.break_place) patch.standby = cd0.break_place;   // 中抜けからもどったら、再開する場所へ
+  await saveDayPart(cid, patch);
+}
+// 🈵 満了：押すと内勤みんなの画面に出て、その日の新しい予約は受けない。もう一度押すと外す（2026/11/7）
+function fullBtn(cid){
+  const cd = castDays[cid] || {}, on = !!cd.full_at;
+  return `<button type="button" class="kzbtn fullbtn ${on ? "on" : ""}" title="${on ? "満了：" + esc(cd.full_by || "") + "（押すと外す）" : "押すと満了（この日の新しい予約を受けない）"}" onclick="event.stopPropagation();setFull('${cid}')">🈵 ${on ? "満了" : "満了にする"}</button>`;
+}
+async function setFull(cid){
+  if(!HAS_226){ toast("満了には SQL 226 の実行が必要です"); return; }
+  const on = !!(castDays[cid] || {}).full_at;
+  if(!confirm(`${castName(cid)}：${on ? "満了を外しますか？（また新しい予約を受けられます）" : "満了にしますか？\n（内勤みんなの画面に出て、この日の新しい予約は受けられなくなります）"}`)) return;
+  if(await saveDayPart(cid, on ? { full_at: null, full_by: "" } : { full_at: new Date().toISOString(), full_by: KB.operatorName() })){ toast(on ? "満了を外しました" : "🈵 満了にしました"); renderBoard(); }
 }
 
 /* ---------- 🔔 確認電話が来ていない予約（画面のいちばん上に赤く）
@@ -4777,7 +4823,7 @@ async function setKanzen(cid){
     if(await saveDayPart(cid, { kanzen: next === fromShift && (castDays[cid] || {}).kanzen != null ? null : next })) toast(`🏁 ${castName(cid)}：${next ? "完にしました" : "完を外しました"}`);
   }catch(e){ toast("保存できませんでした（SQL 212 は実行ずみ？）：" + (e.message || e)); }
 }
-document.head.insertAdjacentHTML("beforeend", `<style>.kzbtn{font-family:inherit;font-size:12px;font-weight:800;border:1.5px solid var(--line);background:#fff;color:#999;border-radius:99px;padding:3px 9px;cursor:pointer;margin-left:4px} .kzbtn.on{background:#2B4C8C;border-color:#2B4C8C;color:#fff}</style>`);
+document.head.insertAdjacentHTML("beforeend", `<style>.kzbtn{font-family:inherit;font-size:12px;font-weight:800;border:1.5px solid var(--line);background:#fff;color:#999;border-radius:99px;padding:3px 9px;cursor:pointer;margin-left:4px} .kzbtn.on{background:#2B4C8C;border-color:#2B4C8C;color:#fff} .kzbtn.fullbtn{color:#c0392b} .kzbtn.fullbtn.on{background:#E0001B;border-color:#E0001B;color:#fff} .fullbar{background:#FFE4E4;border:2px solid #E0001B;color:#B0001B;border-radius:10px;padding:6px 12px;margin:0 0 8px;font-weight:900} .fullbadge{display:inline-block;background:#E0001B;color:#fff;border-radius:6px;padding:0 5px;margin-left:4px;font-size:11px;font-weight:900} .chipc.gone.brkc{background:#FF9F43;border-color:#E67E22;color:#fff} .tripat{display:inline-block;background:#FFF3C4;color:#7A5A00;border-radius:6px;padding:0 6px;font-size:11.5px;font-weight:900;margin-top:2px}</style>`);
 const __openAttend = openAttend;
 openAttend = function(cid, kind){
   __openAttend(cid, kind);
@@ -5744,7 +5790,7 @@ renderListTable = function(){
   const casts = sortRows(tlRows());
   const STATE = { wait: "待機中", work: "仕事中", start: "予約スタート", precall: "出勤前連絡", gone: "今いない" };
   const block = (title, sub, list, cid, cls)=>`<div class="cblock ${cls || ""}" ${cid ? `id="cb-${cid}"` : ""}>
-      <div class="ch"><b>${title}</b>${cid && KB.CAN_EDIT ? whereSel(cid) + dayStatusSel(cid) + kanzenBtn(cid) : ""}<small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="editInfoNote('${cid}')">📌 今日のこと</button><button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button><button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
+      <div class="ch"><b>${title}</b>${cid && KB.CAN_EDIT ? whereSel(cid) + dayStatusSel(cid) + kanzenBtn(cid) + fullBtn(cid) : ""}<small>${sub}</small><span style="flex:1"></span>${cid ? `<button class="btn btn-ghost btn-sm" onclick="editInfoNote('${cid}')">📌 今日のこと</button><button class="btn btn-ghost btn-sm" onclick="openAttend('${cid}')">📝 勤怠</button><button class="btn btn-ghost btn-sm" onclick="openSettle('${cid}')">💴 精算</button>` : ""}${cid && KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="newBookingFor('${cid}','')">＋ 予約</button>` : ""}</div>
       ${cid ? attendHtml(cid) : ""}
       ${list.length ? list.map(resCard).join("") : `<div class="none">予約なし</div>`}</div>`;
   const noCast = rows.filter(r=>!r.cast_id).sort(byStart);
@@ -7468,6 +7514,6 @@ document.head.insertAdjacentHTML("beforeend", `<style>textarea.msg.msgedit{backg
 </script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 <script src="kb_cal.js?v=1"></script>
-<script src="unsettled.js?v=54"></script>
+<script src="unsettled.js?v=55"></script>
 </body>
 </html>
