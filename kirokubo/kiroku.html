@@ -1315,6 +1315,30 @@ Promise.resolve(sb.from("kb_reservations").select("dress").limit(1)).then(res=>{
 // SQL 226（本指名バック nomi_back・満了・中抜け）を実行ずみか
 let HAS_226 = false;
 Promise.resolve(sb.from("kb_reservations").select("nomi_back").limit(1)).then(res=>{ HAS_226 = !!res && !res.error; }).catch(()=>{});
+// 本指名バックがまだ入っていない本指名の予約（SQL 227 で決まらなかったもの）：そのキャストのランクで本指のバックと合えば入れる
+//   入れるのは nomi_back（精算明細で行を分けるだけ）。報酬・店落ちは変わらない。開いたときに1回だけ（2026/11/7）
+(function(){
+  let tries = 0;
+  const run = async () => {
+    if(++tries > 20) return;
+    if(!HAS_226 || !M.casts || !M.casts.length || !M.back || !Object.keys(M.back).length || !KB.CAN_EDIT || day === KB.PRACTICE_DAY){ setTimeout(run, 3000); return; }
+    try{
+      const l = q(await sb.from("kb_reservations").select("id,cast_id,store_key,course,course_back,free_kind,nh_rate").eq("visit_kind", "honshi").is("nomi_back", null).is("back_override", null).gt("course_back", 0).eq("deleted", false).limit(300)) || [];
+      for(const r of l){
+        if(r.free_kind) continue;
+        const cast = M.casts.find(c => c.id === r.cast_id); if(!cast) continue;
+        const g = storeGroup(r.store_key), rank = ranksOn(cast)[g]; if(!rank) continue;
+        const ranks = g === "cutie" && !/NH/.test(rank) ? [rank + "+NH指名", rank] : [rank];
+        const r1 = ranks.find(k => M.back[k + "|" + r.course + "本指"] === r.course_back); if(!r1) continue;
+        const b0 = M.back[r1 + "|" + r.course] ?? M.back[rank + "|" + r.course];
+        if(b0 == null || r.course_back <= b0) continue;
+        await sb.from("kb_reservations").update({ nomi_back: r.course_back - b0 }).eq("id", r.id).is("nomi_back", null);
+        const mine = rows.find(x => x.id === r.id); if(mine) mine.nomi_back = r.course_back - b0;
+      }
+    }catch(e){}
+  };
+  setTimeout(run, 5000);
+})();
 const WIG_COL = [["黒", "#1d1a1a"], ["茶", "#7b4a2a"], ["金", "#c9a06a"]], WIG_LEN = ["ショート", "ミディアム", "ロング"];
 let wigSel = "", underSel = "";
 // 👙 下着：お金はバック無OP（calc でオプションに足す）
@@ -7093,6 +7117,7 @@ async function addSubPhoneK(){
 async function paintSimilarPhones(){
   const now = digits(phoneNorm($("f_phone").value));
   if(!curCustomer && now.length >= 6) await paintPartialPhones(now);
+  if(curCustomer && now.length >= 6) await paintDupCustomers(now);
   if(curCustomer || now.length < 10) return;
   const last8 = now.slice(-8);
   const l = (q(await sb.from("kb_customers").select("id,name,phone").like("phone", "%" + last8).neq("phone", now).limit(3)) || []);
@@ -7104,6 +7129,15 @@ async function paintSimilarPhones(){
     <div class="xlwarn" style="margin-top:6px">📒 同じ人か分からないときは、<b>キャストを行かせる前に、エクセルの台帳も確認してください</b></div></div>`);
 }
 
+// ⚠️ 同じ番号のお客さんが2人以上いる → 顧客台帳で1人にまとめて（履歴・NG が分かれて見えないので）2026/11/7
+async function paintDupCustomers(now){
+  const me = curCustomer; let l = [];
+  try{ l = q(await sb.from("kb_customers").select("id,name,ng").or(`phone.eq.${now},phones.cs.{${now}}`).neq("id", me.id).limit(5)) || []; }catch(e){ return; }
+  if(!l.length || curCustomer !== me) return;
+  $("custInfo").insertAdjacentHTML("afterbegin", `<div class="warn" style="margin-bottom:6px">⚠️ <b>同じ番号のお客さんが、ほかに${l.length}人います</b>（${l.map(c => (c.ng ? "⚠️店NG " : "") + esc(c.name || "名前なし")).join("・")}）<br>
+    これまでの利用・NG が分かれて見えません。<b>顧客台帳で1人にまとめてください</b>（残すほうを開いて「🔗 同じ人をこのお客さんにまとめる」）
+    <div style="margin-top:4px">${[me].concat(l).map(c => `<a href="customers.html?id=${c.id}" target="_blank" rel="noopener" style="font-weight:800;color:var(--pink-deep);margin-right:10px">👥 ${esc(c.name || "名前なし")}を顧客台帳で開く</a>`).join("")}</div></div>`);
+}
 // 🔎 完全一致で見つからない → 一部が合う番号のお客さん（エクセルの Ctrl+F と同じ。主の番号・副番号の中に入れた数字がある）2026/11/7
 //   例：台帳で2つの番号が1つのマスに書いてあった・番号の一部だけ聞いた など。押すと、その番号で調べる
 async function paintPartialPhones(now){

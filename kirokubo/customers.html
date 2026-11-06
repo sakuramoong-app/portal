@@ -73,6 +73,7 @@
           <button class="chip on" data-f="all" onclick="setFilter('all')">ぜんぶ</button>
           <button class="chip" data-f="ng" onclick="setFilter('ng')">⚠️ 店NG</button>
           <button class="chip" data-f="cng" onclick="setFilter('cng')">🙅 キャストNGあり</button>
+          <select id="tagSel" onchange="searchByTag(this.value)" onfocus="fillTagSel()" style="border-radius:99px;padding:4px 10px;font-weight:800"><option value="">🏷 タグで探す</option></select>
           <button class="btn btn-ghost btn-sm edit-only" onclick="newCustomer()">＋ お客さんを足す</button>
         </div>
         <div class="list" id="list"><div class="empty">読み込み中…</div></div>
@@ -143,6 +144,7 @@ const mode = a => { const c = {}; a.forEach(v => c[v] = (c[v] || 0) + 1); return
 function setFilter(f){ filter = f; document.querySelectorAll(".flt .chip").forEach(b=>b.classList.toggle("on", b.dataset.f === f)); paintList(); }
 async function search(){
   const t = $("q").value.trim();
+  if($("tagSel") && t) $("tagSel").value = "";
   try{
     results = q(await sb.rpc("kb_customer_search", { p_q: t, p_limit: t ? 100 : 60 })) || [];
     $("listHint").textContent = t ? `${results.length}人見つかりました${results.length >= 100 ? "（100人まで表示）" : ""}` : "最近のお客さん（新しく来た順）。電話番号か名前で探せます";
@@ -165,7 +167,7 @@ function paintList(){
 }
 function liHtml(r){ return `<div class="li ${cur && cur.id === r.id ? "on" : ""}" onclick="openCustomer(${r.id})">
       <div class="nm">${esc(r.name || "（名前なし）")}${r.ng ? '<span class="badge b-ng">⚠️ 店NG</span>' : ""}${r.cast_ng ? `<span class="badge b-cng">🙅 キャストNG ${r.cast_ng}</span>` : ""}</div>
-      <div class="sub">📞 ${esc(fmtPhone(r.phone))}　${r.visits ? `${r.visits}回・最後 ${md(r.last_date)}・合計 ${yen(r.total)}` : "まだ利用なし"}</div></div>`;
+      <div class="sub">📞 ${esc(fmtPhone(r.phone))}　${r.tagOnly ? "🏷 " + esc((r.tags || []).join("・")) : r.visits ? `${r.visits}回・最後 ${md(r.last_date)}・合計 ${yen(r.total)}` : "まだ利用なし"}</div></div>`;
 }
 
 /* ---------- 1人ずつ ---------- */
@@ -357,6 +359,23 @@ function custTagChips(){
   return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${list.map((t, i) => { const on = have.includes(t);
       return `<button type="button" class="ctag ${on ? "on" : ""} ${tagCls(t)}" ${ed ? `onclick="toggleCustTag(custTagAt(${i}))"` : "disabled"}>${on ? "✓ " : ""}${esc(t)}</button>`; }).join("")}
     ${ed ? `<button type="button" class="ctag add" onclick="addCustTag()">＋ タグを足す</button><button type="button" class="ctag add" onclick="editCustTags()">⚙️ タグの一覧を直す</button>` : ""}</div>${tagEditHtml()}`;
+}
+// 🏷 タグで探す：そのタグがついているお客さん（新しい順・300人まで）2026/11/7
+setTimeout(() => { try{ fillTagSel(); }catch(e){} }, 1500);
+async function fillTagSel(){
+  if(custTagList == null) await loadCustTags();
+  const s = $("tagSel"), v = s.value;
+  s.innerHTML = `<option value="">🏷 タグで探す</option>` + (custTagList || []).map(t => `<option value="${esc(t)}" ${t === v ? "selected" : ""}>🏷 ${esc(t)}</option>`).join("");
+}
+async function searchByTag(t){
+  if(!t){ search(); return; }
+  $("q").value = "";
+  try{
+    const l = q(await sb.from("kb_customers").select("id,name,phone,ng,ng_reason,tags").contains("tags", [t]).order("updated_at", { ascending: false }).limit(300)) || [];
+    results = l.map(x => Object.assign({ tagOnly: true }, x));
+    $("listHint").textContent = `🏷 「${t}」のお客さん ${l.length}人${l.length >= 300 ? "（300人まで）" : ""}`;
+  }catch(e){ results = []; $("listHint").textContent = "探せませんでした：" + (e.message || e); }
+  paintList();
 }
 // 🔗 同じ人を1人にまとめる（SQL 231 kb_cust_merge）：開いているお客さんが残る。まとめた方は消える（記録は移る）2026/11/7
 async function mergeSearch(){
