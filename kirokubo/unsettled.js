@@ -153,7 +153,7 @@ function unsBoxHtml(id, c){
     const rest = open.length ? `<div class="hint2" style="font-size:12px">⚠️ のこりの未精算 ${open.length}件は、つぎの精算で：</div>${open.map(x => `<div class="ur">・<b>${unsMd(x.date)}</b> <span class="${x.amount >= 0 ? "neg" : "pos"}">${esc(x.what)}</span>${x.date !== day ? unsJump(x.date, id) : ""}</div>`).join("")}` : "";
     if(!snapU.length && !today.length) return open.length ? `<div class="unsbox"><b>📒 未精算</b>${rest}</div>` : "";
     return `<div class="unsbox"><b>📒 この日いっしょに精算した未精算</b>
-      ${snapU.map(x => `<div class="ur">✅ ${esc(x.label || (unsMd(x.date) + " " + yen(x.amount)))}</div>`).join("")}
+      ${snapU.map(x => `<div class="ur">✅ ${esc(x.label || (unsMd(x.date) + " " + yen(x.amount)))}${x.date && x.date !== day ? unsJump(x.date, id) : ""}</div>`).join("")}
       <div class="ut">当日の投函額 ${yen(c.drop)} ＋ 未精算 ${yen(snapU.reduce((a, x) => a + (x.amount || 0), 0))} ＝ <b>${yen(((unsCD()[id] || {}).settle_snapshot || {}).due ?? c.drop)}</b></div>${rest}</div>`;
   }
   if(!open.length) return "";
@@ -889,7 +889,7 @@ function shopStatusHtml(id, c, done, home){
       const diff = cd.deposited - due;
       lines.push(diff === 0 ? `💰 投函（回収）した額 ${yen(cd.deposited)}：✅ ぴったり` : diff < 0 ? `💰 投函（回収）した額 ${yen(cd.deposited)}：<b style="color:#c0392b">⚠️ 足りない ${yen(-diff)} → 未精算にした</b>` : `💰 投函（回収）した額 ${yen(cd.deposited)}：<b style="color:#2f7fd0">⚠️ 多い ${yen(diff)} → お釣り（未精算表）にした</b>`);
     }
-    (s.uns || []).forEach(x => lines.push(`📒 前の未精算を、いっしょに精算：${esc(x.label || (unsMd(x.date) + " " + yen(x.amount)))}`));
+    (s.uns || []).forEach(x => lines.push(`📒 前の未精算を、いっしょに精算：${esc(x.label || (unsMd(x.date) + " " + yen(x.amount)))}${x.date && x.date !== day ? unsJump(x.date, id) : ""}`));
   }else if(home){
     const hl = logs.slice().reverse().find(x => /直帰にしました/.test(x.text || ""));
     head = `<div class="ssh home">🏠 直帰（今日は精算しない・次の精算でいっしょに）　${hl ? who(hl.at, hl.by) : ""}</div>`;

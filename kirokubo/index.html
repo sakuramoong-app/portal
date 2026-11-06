@@ -1282,6 +1282,9 @@ async function refreshAnsCount(){
    エイティーン・極門（ダミー）はオプションだけ。媒体はまだ（あとで） ---------- */
 let fin = null;   // { a, d, c, prof, stores, main, ed }
 const FIN_OPT_CHOICES = ["◎", "○", "△", "×"];
+// お店の並び（タブ・完成イメージ）：サクラムーン → ラナ鶯谷 → ラナ錦糸町 → ドレスガーデン → ピーチムーン → 逆AF倶楽部 → キューティー → 18 → 極門
+const FIN_STORE_ORDER = ["サクラムーン", "ラナ鶯谷", "ラナ錦糸町", "ドレスガーデン", "ピーチムーン五反田", "逆AF倶楽部", "キューティー", "18", "極門"];
+const finTabName = sk => sk === "ピーチムーン五反田" ? "ピーチムーン" : STORE_LABEL_OF(sk);
 async function finOpen(){
   const { a, d, c } = ansCur;
   if(!c.prof_id){ toast("このキャストはキャストプロフとつながっていません"); paintAnswer(); return; }
@@ -1290,83 +1293,137 @@ async function finOpen(){
   try{ prof = q(await sb.from("prof_casts").select("id,name,data").eq("id", c.prof_id).single()); }
   catch(e){ toast("キャストプロフが読めませんでした：" + (e.message || e)); paintAnswer(); return; }
   await loadHpDummyNos();
-  const stores = Object.keys(c.stores || {}).map(k => PROF_STORE_OF[k]).filter(Boolean);
-  const main = stores.filter(s => !PROF_DUMMY.includes(s));
+  const stores = Object.keys(c.stores || {}).map(k => PROF_STORE_OF[k]).filter(Boolean).sort((x, y) => FIN_STORE_ORDER.indexOf(x) - FIN_STORE_ORDER.indexOf(y));
+  const main = stores.filter(s => !PROF_DUMMY.includes(s));   // プロフィール（年齢・サイズ…）を入れるお店（18・極門はダミーなので入れない）
   const data = prof.data || {}, saved = ((a.review_state || {}).edits) || null;
   // はじめの値：とちゅうで残した内容 → なければ、答え（紹介文は今のプロフ。本人の「変えたい」文はその文）
   const ed = saved ? JSON.parse(JSON.stringify(saved)) : { profile: {}, intro: {}, options: {} };
+  const self = (d.introChange || {}).self || {};
   if(!saved){
     Object.keys(ANS_PROFILE_LABELS).forEach(k => { const v = String(((d.profile || {})[k]) ?? "").trim(); ed.profile[k] = v || String(profGet(data, main[0] || "サクラムーン", k) || ""); });
-    const self = (d.introChange || {}).self || {};
-    main.forEach(sk => { ed.intro[sk] = { comment: self.want === "change" && self.text ? self.text : String(profGet(data, sk, "comment") || ""), mgrComment: String(profGet(data, sk, "mgrComment") || "") }; });
     Object.keys(d.options || {}).forEach(k => { ed.options[k] = { v: d.options[k] || "", memo: (d.optMemo || {})[k] || "" }; });
   }
-  main.forEach(sk => { if(!ed.intro[sk]) ed.intro[sk] = { comment: String(profGet(data, sk, "comment") || ""), mgrComment: String(profGet(data, sk, "mgrComment") || "") }; });
-  fin = { a, d, c, prof, stores, main, ed };
+  // 紹介文：在籍のお店ぜんぶ（18・極門も）。本人の「変えたい」文は、ダミーではないお店に入れておく
+  stores.forEach(sk => { if(!ed.intro[sk]) ed.intro[sk] = { comment: !PROF_DUMMY.includes(sk) && self.want === "change" && self.text ? self.text : String(profGet(data, sk, "comment") || ""), mgrComment: String(profGet(data, sk, "mgrComment") || "") }; });
+  fin = { a, d, c, prof, stores, main, ed, tab: stores[0] || "" };
   paintFin();
 }
 function paintFin(){
   const { a, d, c, prof, stores, main, ed } = fin, data = prof.data || {};
-  const s0 = main[0] || "サクラムーン";
-  // 📝 プロフィール
-  const profRows = Object.keys(ANS_PROFILE_LABELS).map(k => {
+  const s0 = main[0] || "サクラムーン", rs = a.review_state || {};
+  const qa = (qText, body) => `<div class="qa"><div class="qq">Q. ${esc(qText)}</div><div class="aa">${body}</div></div>`;
+  // 📝 プロフィール（元の答えの画面と同じ Q. と A. の並び。A. の中を直せる）
+  const prof1 = Object.keys(ANS_PROFILE_LABELS).map(k => {
     const ans = String(((d.profile || {})[k]) ?? ""), cur = String(profGet(data, s0, k) || ""), hp = (d.hpProfile || {})[k];
-    return `<tr><td><b>${esc(ANS_PROFILE_LABELS[k])}</b></td><td><textarea class="finIn" rows="1" data-k="${k}" oninput="finSet('profile','${k}',this.value)" style="width:100%;min-height:34px">${esc(ed.profile[k] || "")}</textarea>
-      <div class="hint">答え：${esc(ans || "（空欄）")}${cur !== ed.profile[k] ? `　／　今のプロフ：${esc(cur || "（空欄）")}` : ""}${hp != null && hp !== "" && String(hp) !== String(ed.profile[k] || "") ? `　／　<span style="color:#C2185B">公式HP：${esc(hp)}</span>` : ""}</div></td></tr>`;
+    const notes = [ans !== (ed.profile[k] || "") ? "答え：" + esc(ans || "（空欄）") : "", cur !== (ed.profile[k] || "") ? "今のプロフ：" + esc(cur || "（空欄）") : "",
+      hp != null && hp !== "" && String(hp) !== String(ed.profile[k] || "") ? `<span style="color:#C2185B">公式HP：${esc(hp)}</span>` : ""].filter(Boolean).join("　／　");
+    return qa(ANS_PROFILE_LABELS[k], `<textarea class="finIn" rows="1" oninput="finSet('profile','${k}',this.value);finGrow(this)">${esc(ed.profile[k] || "")}</textarea>${notes ? `<div class="hint">${notes}</div>` : ""}`);
   }).join("");
-  // 💬 紹介文（お店ごと）
+  // 💬 紹介文（お店ごとにタブ）
   const want = ["self", "mgr"].map(k => { const s = (d.introChange || {})[k] || {}; return s.want === "change" ? `<div class="ansText"><b>${k === "self" ? "本人から一言" : "店長から一言"}の希望：</b>${esc(s.text || "")}</div>` : ""; }).join("");
+  const tab = stores.includes(fin.tab) ? fin.tab : stores[0], ti = stores.indexOf(tab), it = ed.intro[tab] || {};
   const intro = (want || `<div class="hint">キャストは紹介文を「このままでOK」と答えています。直すところがあれば直してください。</div>`)
-    + `<div class="hint" style="margin:6px 0">同じ文章が並ぶと公式HPの検索に不利なので、お店ごとに言い回しを少し変えてください。「↓ ほかのお店にコピー」でコピーしてから直すと早いです。</div>`
-    + main.map((sk, i) => `<div class="ansSec"><b>${esc(STORE_LABEL_OF(sk))}</b>${hpLinkOf(c, sk)}
-      <div class="hint" style="margin-top:4px">本人から一言 <a href="javascript:void(0)" onclick="finCopy(${i},'comment')">↓ ほかのお店にコピー</a></div>
-      <textarea id="fin_c${i}" style="width:100%;min-height:80px" oninput="finSetIntro(${i},'comment',this.value)">${esc(ed.intro[sk].comment || "")}</textarea><iframe id="fin_c${i}_pv" sandbox style="display:none;width:100%;height:200px;border:1px solid #eee;border-radius:8px;background:#fff"></iframe>
-      <div class="hint">店長から一言 <a href="javascript:void(0)" onclick="finCopy(${i},'mgrComment')">↓ ほかのお店にコピー</a></div>
-      <textarea id="fin_m${i}" style="width:100%;min-height:100px" oninput="finSetIntro(${i},'mgrComment',this.value)">${esc(ed.intro[sk].mgrComment || "")}</textarea><iframe id="fin_m${i}_pv" sandbox style="display:none;width:100%;height:200px;border:1px solid #eee;border-radius:8px;background:#fff"></iframe></div>`).join("");
-  // ✅ オプション（ピンク＝公式HPとちがう）
-  const po = profOpts(data, s0);
+    + `<div class="fintabs">${stores.map(sk => `<button type="button" class="fintab ${sk === tab ? "on" : ""}" onclick="finTab('${esc(sk)}')">${esc(finTabName(sk))}</button>`).join("")}</div>`
+    + (tab ? `<div class="fintabbody">${hpLinkOf(c, tab)}
+      ${qa("本人から一言", `<textarea id="fin_c" class="finIn" style="min-height:90px" oninput="finSetIntro('comment',this.value)">${esc(it.comment || "")}</textarea><iframe id="fin_c_pv" sandbox class="finpv"></iframe>
+        ${stores.length > 1 ? `<a href="javascript:void(0)" class="hint" onclick="finCopy('comment')">↓ この文をほかのお店にもコピー</a>` : ""}`)}
+      ${qa("店長から一言", `<textarea id="fin_m" class="finIn" style="min-height:110px" oninput="finSetIntro('mgrComment',this.value)">${esc(it.mgrComment || "")}</textarea><iframe id="fin_m_pv" sandbox class="finpv"></iframe>
+        ${stores.length > 1 ? `<a href="javascript:void(0)" class="hint" onclick="finCopy('mgrComment')">↓ この文をほかのお店にもコピー</a>` : ""}`)}
+      <div class="hint">同じ文章が並ぶと公式HPの検索に不利なので、お店ごとに言い回しを少し変えてください。HTML（デザインつき）の紹介文は、下に見た目が出ます。</div></div>` : `<div class="hint">在籍しているお店がありません</div>`);
+  // ✅ オプション（元と同じ表。ピンク＝公式HPとちがう）
   const optRows = Object.keys(ed.options).map((k, i) => {
     const o = ed.options[k], ch = d.optMeaning && d.optMeaning[k] ? Object.keys(d.optMeaning[k]) : FIN_OPT_CHOICES;
     const hpv = (d.hpOptions || {})[k] || ((k.indexOf("3P／お客様") === 0) ? (d.hpOptions || {})["3P（有料）"] : "") || "";
     const mean = v => d.optMeaning && d.optMeaning[k] && d.optMeaning[k][v] ? "（" + d.optMeaning[k][v] + "）" : "";
     return `<tr class="${hpv && hpv !== o.v ? "chg" : ""}"><td>${esc(k)}</td>
-      <td><select onchange="finSetOpt(${i},'v',this.value)"><option value="">（入れない）</option>${ch.map(v => `<option value="${esc(v)}" ${o.v === v ? "selected" : ""}>${esc(v + mean(v))}</option>`).join("")}</select>
+      <td><select class="finSel" onchange="finSetOpt(${i},'v',this.value)"><option value="">（入れない）</option>${ch.map(v => `<option value="${esc(v)}" ${o.v === v ? "selected" : ""}>${esc(v + mean(v))}</option>`).join("")}</select>
         ${(d.options || {})[k] && (d.options || {})[k] !== o.v ? `<div class="hint">答え：${esc(d.options[k])}</div>` : ""}</td>
-      <td><input value="${esc(o.memo || "")}" placeholder="補足" style="width:100%" oninput="finSetOpt(${i},'memo',this.value)"></td>
-      <td style="color:#9C8B8F">${esc(po.options[k] || "")}</td><td>${esc(hpv)}</td></tr>`;
+      <td>${esc(hpv)}</td><td><input class="finIn" value="${esc(o.memo || "")}" placeholder="補足" oninput="finSetOpt(${i},'memo',this.value)"></td></tr>`;
   }).join("");
-  const popts = (d.personalOptions || []).length ? `<div class="hint" style="margin-top:6px">自分だけの個人オプション：${d.personalOptions.map(o => esc(o.name) + (o.price ? " " + esc(o.price) : "")).join("・")}（公式HPには入れません）</div>` : "";
-  const nos = stores.map(sk => { const { no } = hpNoOf(c, sk); return `${esc(STORE_LABEL_OF(sk))}${no ? "" : "<span style='color:#d9534f'>（在籍番号なし→公式HPは入れない）</span>"}`; }).join("・");
-  const rs = a.review_state || {};
+  const popts = (d.personalOptions || []).length ? qa("自分だけの個人オプション（公式HPには入れません）", d.personalOptions.map(o => esc(o.name) + (o.price ? "　" + esc(o.price) : "")).join("<br>")) : "";
+  const nos = stores.map(sk => { const { no } = hpNoOf(c, sk); return `${esc(finTabName(sk))}${no ? "" : "<span style='color:#d9534f'>（在籍番号なし→公式HPは入れない）</span>"}`; }).join("・");
   $("e_answer").innerHTML = `<div class="ansWrap">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <b style="font-size:15px">✏️ ${esc(nameOf(c))}さんの答えを直して完成させる</b><span class="hint">${fmtDT(a.submitted_at)} の答え</span><span style="flex:1"></span>
+      <b style="font-size:15px">📨 ${esc(nameOf(c))}さんの答え</b><span class="hint">${fmtDT(a.submitted_at)}</span><span style="flex:1"></span>
       <a href="javascript:void(0)" class="hint" onclick="paintAnswer()">📄 答えだけ見る</a></div>
-    <div class="hint" style="margin:4px 0 8px">答えが入った状態です。直すところだけ直して、いちばん下の「✅ 完成」を押すと、<b>キャストプロフ（${esc(stores.map(STORE_LABEL_OF).join("・"))}）と公式HP</b>に入ります。<br>
-      とちゅうの内容は自動で残ります（あとで続きから）。公式HPに入れるお店：${nos}。エイティーン・極門はオプションだけ。<span id="finSaved"></span></div>
-    <div class="ansSec"><div class="ansHead"><b>📝 プロフィール</b><span class="hint">（${esc(main.map(STORE_LABEL_OF).join("・"))} に同じものを入れます）</span></div>
-      <table class="ansTbl"><tr><th style="width:120px">項目</th><th>入れる内容</th></tr>${profRows}</table></div>
-    <div class="ansSec"><div class="ansHead"><b>💬 紹介文（お店ごと）</b></div>${intro}</div>
-    <div class="ansSec"><div class="ansHead"><b>✅ オプション</b><span class="hint">（在籍のお店ぜんぶ。ピンクの行＝公式HPとちがう）</span></div>
-      <table class="ansTbl"><tr><th>オプション</th><th>入れる</th><th>補足</th><th>今のプロフ</th><th>公式HP</th></tr>${optRows}</table>${popts}</div>
+    <div class="hint" style="margin:4px 0 8px">答えが入った状態です。直すところだけ直して、いちばん下の「👀 完成イメージを見る」→「✅ この内容で完成」で、<b>キャストプロフと公式HP</b>に入ります。とちゅうの内容は自動で残ります。<span id="finSaved"></span><br>
+      公式HPに入れるお店：${nos}。エイティーン・極門は、紹介文とオプションだけ。</div>
+    <div class="ansSec"><div class="ansHead"><b>📝 プロフィール</b><span class="hint">（${esc(main.map(finTabName).join("・"))} に同じものを入れます）</span></div>${prof1}</div>
+    <div class="ansSec"><div class="ansHead"><b>💬 紹介文</b></div>${intro}</div>
+    <div class="ansSec"><div class="ansHead"><b>✅ オプション</b><span class="hint">（在籍のお店ぜんぶ）</span></div>
+      <table class="ansTbl"><tr><th>オプション</th><th>入れる</th><th>公式HP</th><th>補足</th></tr>${optRows}</table><div class="hint">ピンクの行＝公式HPとちがう</div>${popts}</div>
     <div class="ansSec ${(rs.reception || {}).done ? "done" : ""}"><div class="ansHead"><b>📣 受付へのお願い</b><span style="flex:1"></span>
       <label class="ansDone"><input type="checkbox" ${(rs.reception || {}).done ? "checked" : ""} onchange="ansMark('reception',this.checked).then(()=>paintFin())"> 対応した</label></div>
-      ${(d.mustAnnounce || []).length ? `<div class="aa">${d.mustAnnounce.map(s => "・" + esc(s)).join("<br>")}</div>` : ""}${d.notes ? `<div class="aa">要望：${esc(d.notes)}</div>` : ""}${d.hotel ? `<div class="aa">ホテル：${esc(d.hotel)}</div>` : ""}
+      ${(d.mustAnnounce || []).length ? qa("受付時、お客様に必ず確認・案内してほしいこと", d.mustAnnounce.map(s => "・" + esc(s)).join("<br>")) : ""}${d.notes ? qa("電話受付外でのご要望", esc(d.notes)) : ""}${d.hotel ? qa("ホテルの希望", esc(d.hotel)) : ""}
       <div class="ansTools">${answerToolsHtml(d, a.id)}</div><div class="hint">受付ルール・インターバルなどは、台帳（記録簿）に入れるものです（公式HPには入れません）</div></div>
     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="finComplete()">✅ 完成（照合済み）→ キャストプロフと公式HPに入れる</button>
+      <button class="btn btn-primary" onclick="finPreview()">👀 完成イメージを見る（→ 完成）</button>
       <button class="btn btn-ghost" onclick="$('e_answer').innerHTML=''">閉じる（とちゅうの内容は残ります）</button></div></div>`;
-  main.forEach((sk, i) => { reflPv("fin_c" + i); reflPv("fin_m" + i); });
+  reflPv("fin_c"); reflPv("fin_m");
+  document.querySelectorAll("#e_answer textarea.finIn[rows='1']").forEach(finGrow);
 }
 let finTimer = null;
+function finGrow(el){ el.style.height = "auto"; el.style.height = Math.max(34, el.scrollHeight + 2) + "px"; }
+function finTab(sk){ fin.tab = sk; paintFin(); }
 function finSet(sec, k, v){ fin.ed[sec][k] = v; finAutoSave(); }
-function finSetIntro(i, f, v){ fin.ed.intro[fin.main[i]][f] = v; reflPv((f === "comment" ? "fin_c" : "fin_m") + i); finAutoSave(); }
+function finSetIntro(f, v){ (fin.ed.intro[fin.tab] = fin.ed.intro[fin.tab] || {})[f] = v; reflPv(f === "comment" ? "fin_c" : "fin_m"); finAutoSave(); }
 function finSetOpt(i, f, v){ const k = Object.keys(fin.ed.options)[i]; if(k == null) return; (fin.ed.options[k] = fin.ed.options[k] || { v: "", memo: "" })[f] = v; finAutoSave(); }
-function finCopy(i, f){
-  const v = fin.ed.intro[fin.main[i]][f];
-  fin.main.forEach((sk, j) => { if(j !== i){ fin.ed.intro[sk][f] = v; const el = $((f === "comment" ? "fin_c" : "fin_m") + j); if(el){ el.value = v; reflPv(el.id); } } });
-  finAutoSave(); toast("ほかのお店にコピーしました。お店ごとに言い回しを少し変えてください");
+function finCopy(f){
+  const v = (fin.ed.intro[fin.tab] || {})[f] || "";
+  if(!confirm(`この「${f === "comment" ? "本人から一言" : "店長から一言"}」を、ほかのお店（${fin.stores.filter(s => s !== fin.tab).map(finTabName).join("・")}）にもコピーしますか？\n（ほかのお店の今の文は上書きされます）`)) return;
+  fin.stores.forEach(sk => { if(sk !== fin.tab) (fin.ed.intro[sk] = fin.ed.intro[sk] || {})[f] = v; });
+  finAutoSave(); toast("ほかのお店にコピーしました。タブを切りかえて、お店ごとに言い回しを少し変えてください");
 }
+// 👀 完成イメージ：お店ごとに、キャストプロフ・公式HPに入る内容（タブで切りかえ）→「✅ この内容で完成」
+let finPvTab = "";
+function finPreview(){
+  if(!fin) return;
+  finPvTab = fin.stores.includes(finPvTab) ? finPvTab : fin.stores[0];
+  paintFinPreview();
+}
+function paintFinPreview(){
+  const { c, stores, ed } = fin, sk = finPvTab, dummy = PROF_DUMMY.includes(sk), it = ed.intro[sk] || {};
+  const { no } = hpNoOf(c, sk);
+  let bg = document.getElementById("finPvBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "finPvBg"; bg.style.cssText = "position:fixed;inset:0;z-index:315;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
+  const prof = dummy ? `<div class="hint">エイティーン・極門はダミーの名前なので、プロフィール（年齢・サイズなど）は入れません</div>`
+    : `<div class="fpv-prof">${Object.keys(ANS_PROFILE_LABELS).filter(k => String(ed.profile[k] || "").trim()).map(k => `<div><span>${esc(ANS_PROFILE_LABELS[k])}</span><b>${esc(ed.profile[k])}</b></div>`).join("") || '<div class="hint">（入れるものなし）</div>'}</div>`;
+  const txt = (t, v) => { v = String(v || "").trim(); return `<div class="fpv-h">${t}</div>` + (!v ? `<div class="hint">（空欄）</div>` : /<[a-z][^>]*>/i.test(v) ? `<iframe sandbox class="fpv-html" srcdoc="${esc(`<meta charset="utf-8"><body style="margin:6px;font-family:sans-serif;font-size:14px;color:#444">${v}</body>`)}"></iframe>` : `<div class="fpv-text">${esc(v)}</div>`); };
+  const opts = Object.keys(ed.options).filter(k => ed.options[k].v).map(k => `<span class="fpv-op o${["◎", "○", "△", "×"].indexOf(ed.options[k].v)}">${esc(k)} <b>${esc(ed.options[k].v)}</b>${ed.options[k].memo ? `<small>（${esc(ed.options[k].memo)}）</small>` : ""}</span>`).join("");
+  bg.innerHTML = `<div class="fpv">
+    <div style="display:flex;align-items:center;gap:8px"><b style="font-size:16px">👀 完成イメージ：${esc(nameOf(c))}さん</b><span style="flex:1"></span><button class="btn btn-ghost btn-sm" onclick="document.getElementById('finPvBg').remove()">✖</button></div>
+    <div class="hint" style="margin:4px 0 8px">お店ごとに、キャストプロフと公式HPに入る内容です（まだ何も入れていません）。タブで切りかえて確かめてください。</div>
+    <div class="fintabs">${stores.map(s => `<button type="button" class="fintab ${s === sk ? "on" : ""}" onclick="finPvTab='${esc(s)}';paintFinPreview()">${esc(finTabName(s))}</button>`).join("")}</div>
+    <div class="fpv-card">
+      <div class="fpv-name">${esc(finTabName(sk))}　<span class="hint">${no ? "🌐 公式HP 在籍番号 " + no + " に入れます" : "<span style='color:#d9534f'>在籍番号なし → 公式HPには入れない（キャストプロフだけ）</span>"}</span></div>
+      ${prof}${txt("💬 本人から一言", it.comment)}${txt("💬 店長から一言", it.mgrComment)}
+      <div class="fpv-h">✅ オプション</div><div class="fpv-ops">${opts || '<span class="hint">（入れるものなし）</span>'}</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="document.getElementById('finPvBg').remove();finComplete()">✅ この内容で完成（キャストプロフと公式HPに入れる）</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('finPvBg').remove()">← もどって直す</button></div></div>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .finIn{width:100%;box-sizing:border-box;font-family:inherit;font-size:14px;font-weight:700;color:#5C4B4F;border:1.5px solid #F1D9E0;border-radius:12px;padding:6px 10px;background:#FFFCFD;resize:vertical;line-height:1.6}
+  .finIn:focus{outline:none;border-color:#E5638C;background:#fff;box-shadow:0 0 0 3px rgba(229,99,140,.12)}
+  .finSel{font-family:inherit;font-size:14px;font-weight:800;color:#5C4B4F;border:1.5px solid #F1D9E0;border-radius:99px;padding:4px 12px;background:#fff}
+  .finpv{display:none;width:100%;height:200px;border:1.5px solid #F1E3E7;border-radius:12px;background:#fff;margin-top:4px}
+  .fintabs{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 6px}
+  .fintab{font-family:inherit;font-size:13px;font-weight:800;border:1.5px solid #F1D9E0;background:#fff;color:#9C8B8F;border-radius:99px;padding:5px 12px;cursor:pointer}
+  .fintab.on{background:#E5638C;border-color:#E5638C;color:#fff}
+  .fintabbody{border:1.5px solid #F1E3E7;border-radius:12px;padding:4px 10px 8px;background:#FFFCFD}
+  .fpv{background:#fff;border-radius:18px;padding:16px;max-width:680px;width:100%;max-height:90vh;overflow:auto;font-size:13.5px}
+  .fpv-card{border:2px solid #F7B6CF;border-radius:16px;padding:12px 14px;background:linear-gradient(#FFF5F9,#fff 120px)}
+  .fpv-name{font-weight:900;font-size:16px;color:#C2185B;margin-bottom:6px}
+  .fpv-prof{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:4px 12px}
+  .fpv-prof div{display:flex;gap:8px;border-bottom:1px dashed #F1E3E7;padding:3px 0} .fpv-prof span{color:#9C8B8F;font-size:12.5px;min-width:76px}
+  .fpv-h{font-weight:900;color:#6b3550;margin:10px 0 4px}
+  .fpv-text{white-space:pre-wrap;background:#FFF0F5;border-radius:12px;padding:8px 10px;line-height:1.7}
+  .fpv-html{width:100%;height:260px;border:1.5px solid #F1E3E7;border-radius:12px;background:#fff}
+  .fpv-ops{display:flex;flex-wrap:wrap;gap:5px}
+  .fpv-op{border:1.5px solid #F1D9E0;border-radius:99px;padding:2px 10px;font-size:12.5px;background:#fff} .fpv-op b{color:#E5638C}
+  .fpv-op.o3{opacity:.55} .fpv-op.o3 b{color:#888}
+</style>`);
 // とちゅうの内容：答えの review_state.edits に残す（1.5秒ごと）
 function finAutoSave(){
   clearTimeout(finTimer);
@@ -1380,10 +1437,8 @@ function finAutoSave(){
 // 公式HPに入れる内容（お店ごと）：ダミーのお店はオプションだけ
 function finHpSet(data, sk, onlyChanged){
   const set = {};
-  if(!PROF_DUMMY.includes(sk)){
-    Object.keys(ANS_PROFILE_LABELS).forEach(k => { const v = String(profGet(data, sk, k) || "").trim(); if(v) set[k] = v; });
-    ["comment", "mgrComment"].forEach(k => { const v = String(profGet(data, sk, k) || "").trim(); if(v) set[k] = v; });
-  }
+  if(!PROF_DUMMY.includes(sk)) Object.keys(ANS_PROFILE_LABELS).forEach(k => { const v = String(profGet(data, sk, k) || "").trim(); if(v) set[k] = v; });
+  ["comment", "mgrComment"].forEach(k => { const v = String(profGet(data, sk, k) || "").trim(); if(v) set[k] = v; });   // 紹介文は 18・極門も（お店ごとのタブで書いたもの）
   const o = hpOptsOf(data, sk); if(Object.keys(o).length) set.options = o;
   return set;
 }
@@ -1430,8 +1485,7 @@ const finLine = out => out.map(r => `・<b>${esc(STORE_LABEL_OF(r.sk))}</b>：${
 async function finComplete(){
   if(!fin) return;
   const { a, c, stores, main, ed } = fin;
-  if(!confirm(`${nameOf(c)}さんの答えを完成にします。\n\n・キャストプロフ（${stores.map(STORE_LABEL_OF).join("・")}）に入れます\n・公式HP（在籍番号があるお店）にも入れて更新します\n\nよろしいですか？（あとで「↩ 照合済みを取り消す」で戻せます）`)) return;
-  clearTimeout(finTimer);
+  clearTimeout(finTimer);   // 確認は「👀 完成イメージ」で見てから（2026/11/7）
   finProgress("✅ 完成させています", "キャストプロフに入れています…");
   let prof, data, before;
   try{
@@ -1443,11 +1497,8 @@ async function finComplete(){
     data = JSON.parse(JSON.stringify(d0));
     data.storeProfiles = data.storeProfiles || {};
     const sp = sk => (data.storeProfiles[sk] = data.storeProfiles[sk] || { active: true });
-    main.forEach(sk => {
-      const s = sp(sk);
-      Object.keys(ANS_PROFILE_LABELS).forEach(k => { const v = String(ed.profile[k] || "").trim(); if(v) s[k] = v; });
-      const it = ed.intro[sk] || {}; s.comment = String(it.comment || "").trim(); s.mgrComment = String(it.mgrComment || "").trim();
-    });
+    main.forEach(sk => { const s = sp(sk); Object.keys(ANS_PROFILE_LABELS).forEach(k => { const v = String(ed.profile[k] || "").trim(); if(v) s[k] = v; }); });
+    stores.forEach(sk => { const it = ed.intro[sk]; if(!it) return; const s = sp(sk); s.comment = String(it.comment || "").trim(); s.mgrComment = String(it.mgrComment || "").trim(); });   // 紹介文はお店ごと（18・極門も）
     stores.forEach(sk => {
       const s = sp(sk);
       if(!s.options || !Object.keys(s.options).length){ const o = profOpts(d0, sk); s.options = Object.assign({}, o.options); s.optMemo = Object.assign({}, o.optMemo); }   // サクラムーンの旧データを先に写す
