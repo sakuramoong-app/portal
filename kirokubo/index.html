@@ -1376,19 +1376,32 @@ function finCopy(f){
 }
 // 👀 完成イメージ：お店ごとに、キャストプロフ・公式HPに入る内容（タブで切りかえ）→「✅ この内容で完成」
 let finPvTab = "";
+// どのお店に何を入れるか（完成イメージのチェック）。はじめは：ふつうのお店＝全部、18・極門＝オプションだけ（2026/11/7）
+const FIN_PICK_KEYS = [["profile", "📝 プロフィール"], ["comment", "💬 本人から一言"], ["mgrComment", "💬 店長から一言"], ["options", "✅ オプション"]];
+function finPick(sk){
+  fin.ed.pick = fin.ed.pick || {};
+  if(!fin.ed.pick[sk]){ const dm = PROF_DUMMY.includes(sk); fin.ed.pick[sk] = { profile: !dm, comment: !dm, mgrComment: !dm, options: true }; }
+  if(PROF_DUMMY.includes(sk)) fin.ed.pick[sk].profile = false;   // ダミーのお店に年齢・サイズなどは入れない
+  return fin.ed.pick[sk];
+}
+function finPickSet(sk, k, on){ finPick(sk)[k] = on; finAutoSave(); paintFinPreview(); }
 function finPreview(){
   if(!fin) return;
+  fin.stores.forEach(finPick);
   finPvTab = fin.stores.includes(finPvTab) ? finPvTab : fin.stores[0];
   paintFinPreview();
 }
 function paintFinPreview(){
   const { c, stores, ed } = fin, sk = finPvTab, dummy = PROF_DUMMY.includes(sk), it = ed.intro[sk] || {};
-  const { no } = hpNoOf(c, sk);
+  const { no } = hpNoOf(c, sk), pk = finPick(sk);
+  const off = k => pk[k] ? "" : " fpv-off";
+  const pickBar = `<div class="fpv-pick"><b>このお店に入れるもの：</b>${FIN_PICK_KEYS.filter(([k]) => !(dummy && k === "profile")).map(([k, l]) => `<label><input type="checkbox" ${pk[k] ? "checked" : ""} onchange="finPickSet('${esc(sk)}','${k}',this.checked)"> ${l}</label>`).join("")}</div>`;
+  const sum = stores.map(s => { const p = finPick(s), n = FIN_PICK_KEYS.filter(([k]) => p[k]).map(([, l]) => l.replace(/^\S+\s/, "")); return `<div>・<b>${esc(finTabName(s))}</b>：${n.length ? esc(n.join("・")) : '<span style="color:#d9534f">入れない</span>'}</div>`; }).join("");
   let bg = document.getElementById("finPvBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "finPvBg"; bg.style.cssText = "position:fixed;inset:0;z-index:315;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
   const prof = dummy ? `<div class="hint">エイティーン・極門はダミーの名前なので、プロフィール（年齢・サイズなど）は入れません</div>`
     : `<div class="fpv-prof">${Object.keys(ANS_PROFILE_LABELS).filter(k => String(ed.profile[k] || "").trim()).map(k => `<div><span>${esc(ANS_PROFILE_LABELS[k])}</span><b>${esc(ed.profile[k])}</b></div>`).join("") || '<div class="hint">（入れるものなし）</div>'}</div>`;
-  const txt = (t, v) => { v = String(v || "").trim(); return `<div class="fpv-h">${t}</div>` + (!v ? `<div class="hint">（空欄）</div>` : /<[a-z][^>]*>/i.test(v) ? `<iframe sandbox class="fpv-html" srcdoc="${esc(`<meta charset="utf-8"><body style="margin:6px;font-family:sans-serif;font-size:14px;color:#444">${v}</body>`)}"></iframe>` : `<div class="fpv-text">${esc(v)}</div>`); };
+  const txt = (t, v, k) => { v = String(v || "").trim(); return `<div class="fpv-h${off(k)}">${t}${pk[k] ? "" : "（入れない）"}</div>` + (!v ? `<div class="hint">（空欄）</div>` : /<[a-z][^>]*>/i.test(v) ? `<iframe sandbox class="fpv-html" srcdoc="${esc(`<meta charset="utf-8"><body style="margin:6px;font-family:sans-serif;font-size:14px;color:#444">${v}</body>`)}"></iframe>` : `<div class="fpv-text">${esc(v)}</div>`); };
   const opts = Object.keys(ed.options).filter(k => ed.options[k].v).map(k => `<span class="fpv-op o${["◎", "○", "△", "×"].indexOf(ed.options[k].v)}">${esc(k)} <b>${esc(ed.options[k].v)}</b>${ed.options[k].memo ? `<small>（${esc(ed.options[k].memo)}）</small>` : ""}</span>`).join("");
   bg.innerHTML = `<div class="fpv">
     <div style="display:flex;align-items:center;gap:8px"><b style="font-size:16px">👀 完成イメージ：${esc(nameOf(c))}さん</b><span style="flex:1"></span><button class="btn btn-ghost btn-sm" onclick="document.getElementById('finPvBg').remove()">✖</button></div>
@@ -1396,9 +1409,11 @@ function paintFinPreview(){
     <div class="fintabs">${stores.map(s => `<button type="button" class="fintab ${s === sk ? "on" : ""}" onclick="finPvTab='${esc(s)}';paintFinPreview()">${esc(finTabName(s))}</button>`).join("")}</div>
     <div class="fpv-card">
       <div class="fpv-name">${esc(finTabName(sk))}　<span class="hint">${no ? "🌐 公式HP 在籍番号 " + no + " に入れます" : "<span style='color:#d9534f'>在籍番号なし → 公式HPには入れない（キャストプロフだけ）</span>"}</span></div>
-      ${prof}${txt("💬 本人から一言", it.comment)}${txt("💬 店長から一言", it.mgrComment)}
-      <div class="fpv-h">✅ オプション</div><div class="fpv-ops">${opts || '<span class="hint">（入れるものなし）</span>'}</div>
+      ${pickBar}
+      <div class="${off("profile")}">${prof}</div><div class="${off("comment")}">${txt("💬 本人から一言", it.comment, "comment")}</div><div class="${off("mgrComment")}">${txt("💬 店長から一言", it.mgrComment, "mgrComment")}</div>
+      <div class="fpv-h${off("options")}">✅ オプション${pk.options ? "" : "（入れない）"}</div><div class="fpv-ops${off("options")}">${opts || '<span class="hint">（入れるものなし）</span>'}</div>
     </div>
+    <div class="fpv-sum"><b>📋 入れるもの（ぜんぶのお店）</b>${sum}</div>
     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="document.getElementById('finPvBg').remove();finComplete()">✅ この内容で完成（キャストプロフと公式HPに入れる）</button>
       <button class="btn btn-ghost" onclick="document.getElementById('finPvBg').remove()">← もどって直す</button></div></div>`;
@@ -1423,6 +1438,10 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .fpv-ops{display:flex;flex-wrap:wrap;gap:5px}
   .fpv-op{border:1.5px solid #F1D9E0;border-radius:99px;padding:2px 10px;font-size:12.5px;background:#fff} .fpv-op b{color:#E5638C}
   .fpv-op.o3{opacity:.55} .fpv-op.o3 b{color:#888}
+  .fpv-pick{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;background:#fff;border:1.5px dashed #F7B6CF;border-radius:12px;padding:6px 10px;margin:4px 0 6px;font-size:13px}
+  .fpv-pick label{font-weight:800;cursor:pointer;white-space:nowrap}
+  .fpv-off{opacity:.35;text-decoration:line-through}
+  .fpv-sum{margin-top:10px;background:#F6F2FF;border:1.5px solid #D9CCF3;border-radius:12px;padding:8px 12px;font-size:13px;line-height:1.8}
 </style>`);
 // とちゅうの内容：答えの review_state.edits に残す（1.5秒ごと）
 function finAutoSave(){
@@ -1435,11 +1454,11 @@ function finAutoSave(){
   }, 1500);
 }
 // 公式HPに入れる内容（お店ごと）：ダミーのお店はオプションだけ
-function finHpSet(data, sk, onlyChanged){
-  const set = {};
-  if(!PROF_DUMMY.includes(sk)) Object.keys(ANS_PROFILE_LABELS).forEach(k => { const v = String(profGet(data, sk, k) || "").trim(); if(v) set[k] = v; });
-  ["comment", "mgrComment"].forEach(k => { const v = String(profGet(data, sk, k) || "").trim(); if(v) set[k] = v; });   // 紹介文は 18・極門も（お店ごとのタブで書いたもの）
-  const o = hpOptsOf(data, sk); if(Object.keys(o).length) set.options = o;
+function finHpSet(data, sk, pick){
+  const set = {}, p = pick || { profile: !PROF_DUMMY.includes(sk), comment: true, mgrComment: true, options: true };   // pick：完成イメージでチェックしたもの
+  if(p.profile && !PROF_DUMMY.includes(sk)) Object.keys(ANS_PROFILE_LABELS).forEach(k => { const v = String(profGet(data, sk, k) || "").trim(); if(v) set[k] = v; });
+  ["comment", "mgrComment"].forEach(k => { if(!p[k]) return; const v = String(profGet(data, sk, k) || "").trim(); if(v) set[k] = v; });
+  if(p.options){ const o = hpOptsOf(data, sk); if(Object.keys(o).length) set.options = o; }
   return set;
 }
 // キャストプロフに保存（台帳の「プロフに反映」と同じ形。サクラムーンは旧データにも同じものを入れる）
@@ -1455,10 +1474,10 @@ async function finProfSave(prof, data, legacy){
   if(!r || r.result !== "ok") throw new Error((r && r.message) || "キャストプロフに保存できませんでした");
 }
 // 公式HPに入れる（お店ごとに：確かめる → 変わるところがあれば入れて更新）。結果を返す
-async function finHpPush(c, data, stores, paint){
+async function finHpPush(c, data, stores, paint, picks){
   const out = [];
   for(const sk of stores){
-    const { mk, no } = hpNoOf(c, sk), set = finHpSet(data, sk);
+    const { mk, no } = hpNoOf(c, sk), set = finHpSet(data, sk, picks && picks[sk]);
     const row = { sk, no, state: "", msg: "" }; out.push(row);
     if(!mk || !no){ row.state = "skip"; row.msg = "在籍番号なし（入れない）"; paint(out); continue; }
     if(!Object.keys(set).length){ row.state = "skip"; row.msg = "入れるものなし"; paint(out); continue; }
@@ -1497,9 +1516,12 @@ async function finComplete(){
     data = JSON.parse(JSON.stringify(d0));
     data.storeProfiles = data.storeProfiles || {};
     const sp = sk => (data.storeProfiles[sk] = data.storeProfiles[sk] || { active: true });
-    main.forEach(sk => { const s = sp(sk); Object.keys(ANS_PROFILE_LABELS).forEach(k => { const v = String(ed.profile[k] || "").trim(); if(v) s[k] = v; }); });
-    stores.forEach(sk => { const it = ed.intro[sk]; if(!it) return; const s = sp(sk); s.comment = String(it.comment || "").trim(); s.mgrComment = String(it.mgrComment || "").trim(); });   // 紹介文はお店ごと（18・極門も）
+    // 完成イメージでチェックしたものだけ入れる（お店ごと）
+    const pk = sk => finPick(sk);
+    main.forEach(sk => { if(!pk(sk).profile) return; const s = sp(sk); Object.keys(ANS_PROFILE_LABELS).forEach(k => { const v = String(ed.profile[k] || "").trim(); if(v) s[k] = v; }); });
+    stores.forEach(sk => { const it = ed.intro[sk]; if(!it) return; const s = sp(sk); if(pk(sk).comment) s.comment = String(it.comment || "").trim(); if(pk(sk).mgrComment) s.mgrComment = String(it.mgrComment || "").trim(); });   // 紹介文はお店ごと
     stores.forEach(sk => {
+      if(!pk(sk).options) return;
       const s = sp(sk);
       if(!s.options || !Object.keys(s.options).length){ const o = profOpts(d0, sk); s.options = Object.assign({}, o.options); s.optMemo = Object.assign({}, o.optMemo); }   // サクラムーンの旧データを先に写す
       s.optMemo = s.optMemo || {};
@@ -1508,7 +1530,7 @@ async function finComplete(){
     await finProfSave(prof, data, null);
   }catch(e){ finProgress("⚠️ 完成できませんでした", esc(e.message || e) + "<br>（何も変わっていません。もう一度ためしてください）", true); return; }
   // 公式HP
-  const out = await finHpPush(c, data, stores, o => finProgress("✅ 完成させています", "📝 キャストプロフに入れました<br>🌐 公式HP：<br>" + finLine(o)));
+  const out = await finHpPush(c, data, stores, o => finProgress("✅ 完成させています", "📝 キャストプロフに入れました<br>🌐 公式HP：<br>" + finLine(o)), ed.pick);
   // 照合済みにする（とちゅうの内容・戻すとき用・公式HPの結果も残す）
   const rs = Object.assign({}, a.review_state || {}, { edits: ed, before, hp: out.map(r => ({ sk: r.sk, state: r.state, msg: r.msg })), completed_at: new Date().toISOString(), completed_by: operatorName() });
   ["profile", "intro", "options"].forEach(k => { rs[k] = { done: true, by: operatorName(), at: new Date().toISOString() }; });
@@ -1542,7 +1564,7 @@ async function finUndo(){
       data.options = Object.assign({}, data.options || {}, rs.before.options); data.optMemo = Object.assign({}, data.optMemo || {}, rs.before.optMemo);
       await finProfSave(prof, data, rs.before);
     }catch(e){ finProgress("⚠️ 戻せませんでした", esc(e.message || e) + "<br>（照合済みも、そのままです）", true); return; }
-    const out = await finHpPush(c, data, rs.before.stores || [], o => finProgress("↩ 前の内容に戻しています", "📝 キャストプロフを戻しました<br>🌐 公式HP：<br>" + finLine(o)));
+    const out = await finHpPush(c, data, rs.before.stores || [], o => finProgress("↩ 前の内容に戻しています", "📝 キャストプロフを戻しました<br>🌐 公式HP：<br>" + finLine(o)), (rs.edits || {}).pick);   // 完成のとき入れたものだけ戻す
     finProgress("↩ 前の内容に戻しました", "📝 キャストプロフを戻しました<br>🌐 公式HP：<br>" + finLine(out), true);
   }
   const rs2 = Object.assign({}, rs, { undone_at: new Date().toISOString(), undone_by: operatorName(), restored: !!restore });
