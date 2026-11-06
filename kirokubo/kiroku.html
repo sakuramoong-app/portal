@@ -7664,6 +7664,40 @@ function stepNavPaint(){
   $("snBar").style.width = Math.round(done / total * 100) + "%"; $("snTxt").textContent = miss.length ? `必須のこり ${miss.length}` : "✅ 必須はぜんぶ入っています";
   stepNavCur();
 }
+/* 🫧 記録簿ぜんたい：まるっと・ぷくっと（2026/11/7 店長）。文字ははっきり（太め・濃いめ）、ボタン・札・箱は丸く、下に影で立体感。中身は変えない */
+document.head.insertAdjacentHTML("beforeend", `<style>
+  :root{--ink:#4A3A3F;--sub:#86737A;--line:#F0DCE3}
+  body{font-weight:700;color:var(--ink);background:linear-gradient(180deg,#FFF7FA,#FBF5F8 400px)}
+  header.kbh h1{font-size:22px;font-weight:900}
+  /* 上のタブ・ボタン・選ぶもの：ぷくっと */
+  body .kbnav a, body .btn-ghost, body .chip, body .stsel, body .daysel, body .kzbtn, body .bfc, body .fintab, body .kb{
+    background:linear-gradient(180deg,#fff 0%,#FFF5F8 100%);border:1.5px solid #F2D9E2;
+    box-shadow:0 3px 0 #F1D3DE,0 5px 12px rgba(229,99,140,.10);transition:transform .08s,box-shadow .08s;font-weight:900}
+  body .kbnav a{padding:8px 16px;font-size:13.5px;color:#6b5560}
+  body .kbnav a:hover, body .btn-ghost:hover, body .chip:hover, body .bfc:hover{transform:translateY(-1px);box-shadow:0 4px 0 #EFC9D6,0 7px 14px rgba(229,99,140,.14)}
+  body .kbnav a:active, body .btn-ghost:active, body .chip:active, body .btn-primary:active, body .bfc:active{transform:translateY(2px);box-shadow:0 1px 0 #EFC9D6,0 2px 6px rgba(229,99,140,.12)}
+  body .kbnav a.on, body .chip.on, body .bfc.on, body .fintab.on, body .kb.on{background:linear-gradient(180deg,#FF9EBD 0%,#E5638C 100%);border-color:#DD5583;color:#fff;box-shadow:0 3px 0 #C24A74,0 6px 14px rgba(229,99,140,.32)}
+  body .btn-primary{background:linear-gradient(180deg,#FFA3C0 0%,#E5638C 100%);box-shadow:0 3px 0 #C24A74,0 7px 16px rgba(229,99,140,.32);font-weight:900}
+  body .btn-primary:hover{transform:translateY(-1px)}
+  body .btn{font-weight:900}
+  /* 箱（たたむ箱・カード・キャストの枠）：まるく、ふわっと浮かせる */
+  body details.fold, body .card{border-radius:20px;border:1.5px solid #F2E0E6;box-shadow:0 4px 0 #F3E3E9,0 10px 24px rgba(92,75,79,.07);padding:8px 14px}
+  body details.fold > summary{font-size:15.5px;font-weight:900;color:#5C4B4F}
+  body details.fold > summary small{font-weight:800;color:#8a777c}
+  body .cblock{border-radius:20px;box-shadow:0 4px 0 rgba(0,0,0,.05),0 10px 22px rgba(92,75,79,.08)}
+  body .cblock .ch b{font-size:17px;font-weight:900}
+  /* 今どこに誰が：表の角を丸く、札をぷくっと */
+  body table.board{border-radius:20px;box-shadow:0 4px 0 #F3E3E9,0 10px 24px rgba(92,75,79,.07)}
+  body table.board th{font-weight:900}
+  body table.board tr > th:first-child{width:150px;white-space:nowrap}
+  body #boardGrid .chipc{border-radius:14px;box-shadow:0 3px 0 rgba(0,0,0,.06),0 5px 12px rgba(92,75,79,.09)}
+  body #boardGrid .chipc.gone.tea, body #boardGrid .chipc.gone.absent, body #boardGrid .chipc.gone.brkc, body #boardGrid .chipc.gone.pre{box-shadow:0 3px 0 rgba(0,0,0,.18),0 6px 12px rgba(0,0,0,.12)}
+  body #boardGrid .cc-nm{font-size:14.5px}
+  /* お知らせ・確認電話などの帯も丸く */
+  body .callalert, body .fullbar, body .warn, body .info{border-radius:16px}
+  /* 入れる欄・プルダウン（ページの上の方） */
+  body .wrap select, body .wrap input[type=text], body .wrap input:not([type]), body .wrap input[type=date], body .wrap input[type=time]{border-radius:12px}
+</style>`);
 { const __prbNav = paintReqBar; paintReqBar = function(){ const r = __prbNav.apply(this, arguments); try{ stepNavInit(); stepNavPaint(); }catch(e){} return r; }; }
 document.head.insertAdjacentHTML("beforeend", `<style>
   /* 箱：色の見出し・丸み・影 */
