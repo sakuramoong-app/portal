@@ -57,6 +57,34 @@
   .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
   .pl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 0;border-bottom:1px dashed var(--line);font-size:13px;}
   .empty{color:var(--sub);padding:20px;text-align:center;}
+  /* 🫧 顧客台帳：まるっと・ぷくっと（2026/11/7 店長）。中身は変えない */
+  body .search input{border-radius:16px;border-color:#F0DCE3;box-shadow:0 3px 0 #F3E3E9,0 6px 14px rgba(92,75,79,.06);padding:11px 14px}
+  body .list{border-radius:20px;border-color:#F2E0E6;box-shadow:0 4px 0 #F3E3E9,0 10px 24px rgba(92,75,79,.07);padding:6px;background:#fff}
+  body .li{border:1.5px solid #F4E6EB;border-radius:14px;margin:6px 4px;padding:10px 14px;background:linear-gradient(180deg,#fff,#FFFAFC);box-shadow:0 2px 0 #F3E3E9;transition:transform .08s}
+  body .li:hover{transform:translateY(-1px);background:#FFF5F8}
+  body .li.on{background:linear-gradient(90deg,#FFE3EC,#FFF5F8);border-color:#F7B6CF;box-shadow:inset 6px 0 0 #E5638C,0 3px 0 #F1CFDB}
+  body .li .nm{font-size:16px;font-weight:900}
+  body .li .sub{font-size:13px;font-weight:800;color:#7c6a70;margin-top:3px}
+  body .detail{border-radius:22px;border-color:#F2E0E6;box-shadow:0 4px 0 #F3E3E9,0 12px 28px rgba(92,75,79,.08);padding:18px}
+  body .detail h2{font-size:24px;font-weight:900}
+  body .detail h2 small{font-size:16px !important;font-weight:800}
+  body .ngbox{border-radius:16px;font-size:14.5px;box-shadow:0 3px 0 rgba(0,0,0,.05)}
+  body .stats{gap:10px;grid-template-columns:repeat(auto-fit,minmax(138px,1fr))}
+  body .stats .c{position:relative;background:linear-gradient(180deg,#fff,#FFF7FA);border:1.5px solid #F4E6EB;border-radius:16px;padding:10px 12px 10px 46px;box-shadow:0 3px 0 #F3E3E9,0 6px 14px rgba(92,75,79,.05)}
+  body .stats .c::before{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:22px}
+  body .stats .c:nth-child(1)::before{content:"🗓"} body .stats .c:nth-child(2)::before{content:"💰"} body .stats .c:nth-child(3)::before{content:"🌱"}
+  body .stats .c:nth-child(4)::before{content:"📅"} body .stats .c:nth-child(5)::before{content:"🚫"}
+  body .stats .k{font-size:12.5px} body .stats .v{font-size:19px !important;font-weight:900}
+  body .csec{margin-top:16px}
+  body .csec > h3{font-size:16.5px;font-weight:900;color:#5C4B4F;margin-bottom:8px}
+  body .csec:has(> h3){background:linear-gradient(180deg,#FFFBFD,#fff 60px);border:1.5px solid #F4E6EB;border-radius:18px;padding:12px 14px;box-shadow:0 3px 0 #F3E3E9}
+  body .detail .f2 input, body .detail .f2 select, body .detail textarea, body .detail input{border-radius:12px}
+  body .hc{border-radius:16px;box-shadow:0 2px 0 rgba(0,0,0,.04),0 4px 10px rgba(92,75,79,.05);padding:10px 12px}
+  body .hc .hmemo{border-radius:12px}
+  body .ctag{box-shadow:0 3px 0 #F1D3DE,0 5px 10px rgba(229,99,140,.08);font-weight:900;padding:6px 14px}
+  body .ctag.on{box-shadow:0 3px 0 #C24A74}
+  body .ctag.on.tg-ng{box-shadow:0 3px 0 #8E0014} body .ctag.on.tg-chk{box-shadow:0 3px 0 #B05A10}
+  body #tagSel{box-shadow:0 3px 0 #F1D3DE;border:1.5px solid #F2D9E2;background:linear-gradient(180deg,#fff,#FFF5F8);font-family:inherit;color:#5C4B4F}
 </style>
 </head>
 <body>
