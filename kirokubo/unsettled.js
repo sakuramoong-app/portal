@@ -842,6 +842,7 @@ cardHtml = function(id, c){
     </div>`}
     ${V.shop}
     <div class="sv"><div class="shop"><div class="hd">🏪 お店用${!done && c.partNo > 1 ? `（${PART_MARK[c.partNo - 1] || c.partNo}の精算）` : ""}</div>
+    ${shopStatusHtml(id, c, done, home)}
     ${!done && c.partNo > 1 ? `<div class="prevparts">${(c.prevParts || []).map((p, i) => `<div>✅ ${PART_MARK[i] || i + 1} 精算済：${p.at ? esc(logWhen(p.at)) : ""}${p.place ? "・" + esc(p.place) : ""}${p.by ? "・" + esc(p.by) : ""}・投函 ${yen(p.deposited != null ? p.deposited : p.drop || 0)}</div>`).join("")}
       <small>ここから下は ${PART_MARK[c.partNo - 1] || c.partNo}（のこした予約）の精算です。投函した額も ${PART_MARK[c.partNo - 1] || c.partNo} の分だけ入れてください</small></div>` : ""}
     ${unsBoxHtml(id, c)}
@@ -874,6 +875,43 @@ cardHtml = function(id, c){
 /* ---------- 🏠 直帰・📹 監視カメラの確認（SQL 170） ----------
    ・「精算済にする」か「🏠 直帰」のどちらかを必ず押す（どちらもまだなら右の枠がピカピカ）
    ・直帰＝今日は精算しない。次の精算で、この日の分を未精算としていっしょに精算する */
+/* 🏪 お店用のすぐ下：この子の精算が今どうなっているか（精算済／直帰／まだ）・未精算をどうしたか・処理した日時と内勤（2026/11/7 店長） */
+function shopStatusHtml(id, c, done, home){
+  const cd = c.cd || {}, s = cd.settle_snapshot || {}, logs = Array.isArray(cd.settle_log) ? cd.settle_log : [];
+  const who = (at, by, place) => `<span class="ssw">🕒 ${esc(at ? logWhen(at) : "時刻なし")}${place ? "・📍" + esc(place) : ""}・👤 ${esc(by || "名前なし")}</span>`;
+  const lines = [];
+  let head;
+  if(done){
+    const later = s.paidOn && s.paidOn !== day;
+    head = `<div class="ssh ok">✅ ${later ? (s.only ? "後日に個別で精算済" : "後日に合算で精算済") : "精算済"}　${who(cd.settled_at, cd.settled_by, cd.settle_place === "回収" ? "手渡し（回収）" : cd.settle_place ? cd.settle_place + "に投函" : "")}</div>`;
+    const due = s.due != null ? s.due : c.drop;
+    if(cd.deposited != null){
+      const diff = cd.deposited - due;
+      lines.push(diff === 0 ? `💰 投函（回収）した額 ${yen(cd.deposited)}：✅ ぴったり` : diff < 0 ? `💰 投函（回収）した額 ${yen(cd.deposited)}：<b style="color:#c0392b">⚠️ 足りない ${yen(-diff)} → 未精算にした</b>` : `💰 投函（回収）した額 ${yen(cd.deposited)}：<b style="color:#2f7fd0">⚠️ 多い ${yen(diff)} → お釣り（未精算表）にした</b>`);
+    }
+    (s.uns || []).forEach(x => lines.push(`📒 前の未精算を、いっしょに精算：${esc(x.label || (unsMd(x.date) + " " + yen(x.amount)))}`));
+  }else if(home){
+    const hl = logs.slice().reverse().find(x => /直帰にしました/.test(x.text || ""));
+    head = `<div class="ssh home">🏠 直帰（今日は精算しない・次の精算でいっしょに）　${hl ? who(hl.at, hl.by) : ""}</div>`;
+  }else{
+    head = `<div class="ssh yet">⏳ まだ精算していません</div>`;
+  }
+  // この日の未精算（精算のあとで出た・手で足した）が、今どうなっているか
+  (UNS || []).filter(x => x.cast_id === id && x.biz_date === day).forEach(x => {
+    const amt = Number(x.amount) || 0;
+    lines.push(`${amt >= 0 ? "⚠️ 未精算" : "💴 お釣り"} ${yen(Math.abs(amt))}${x.note ? "（" + esc(x.note) + "）" : ""}：${x.done_on ? `<b style="color:#2e8b57">✅ ${esc(unsMd(x.done_on))}に精算ずみ</b>（${esc(x.done_by || "")}）` : `<b style="color:#c0392b">まだ（つぎの精算で）</b>`}　<small>${esc(x.created_by || "")} ${x.created_at ? esc(logWhen(x.created_at)) : ""}</small>`);
+  });
+  // 最後にしたこと（精算の履歴のいちばん新しいもの）
+  const last = logs[logs.length - 1];
+  if(last) lines.push(`<small style="color:#888">📜 最後の記録：${esc(logWhen(last.at))} ${esc(last.by || "")} ${esc(last.text || SLOG_KINDS[last.kind] || last.kind || "")}</small>`);
+  return `<div class="shopst">${head}${lines.map(l => `<div class="ssl">${l}</div>`).join("")}</div>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .shopst{border:2px solid #E7DDF5;border-radius:12px;padding:8px 10px;margin:6px 0 8px;background:#FCFAFF;font-size:13px;line-height:1.7}
+  .shopst .ssh{font-weight:900;font-size:14.5px;border-radius:8px;padding:4px 10px;margin-bottom:4px}
+  .shopst .ssh.ok{background:#E6F6EC;color:#1d6b3a} .shopst .ssh.home{background:#FFF1DB;color:#8a4b00} .shopst .ssh.yet{background:#FDE7E7;color:#B0213F}
+  .shopst .ssw{font-weight:800;font-size:12.5px;color:#5b3fa6;white-space:nowrap} .shopst .ssl{padding-left:4px}
+</style>`);
 async function setDirectHome(id, on){
   await P170; if(!HAS_170){ toast("先に SQL 170 を実行してください"); return; }
   if(!confirm(castName(id) + (on ? " を「🏠 直帰」にしますか？\n今日は精算しないで、次の精算でこの日の分をいっしょに精算します" : " の「直帰」をもどしますか？"))) return;
