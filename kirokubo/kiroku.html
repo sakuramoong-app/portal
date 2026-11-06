@@ -5100,6 +5100,7 @@ var formDirty = false;
 $("formBg").addEventListener("click", e => { if(e.isTrusted && e.target.closest && e.target.closest("#formBg .drawer button:not(.x), #formBg .drawer .chip, #formBg .drawer .ynp")) formDirty = true; }, true);
 document.head.insertAdjacentHTML("beforeend", `<style>
   #draftBtn{position:fixed;right:14px;bottom:70px;z-index:960;display:flex;gap:4px;align-items:stretch}
+  body:has(#draftBtn) #toTopBtn{bottom:136px}   /* 一時保存の札があるときは、⬆（上に戻る）をその上へ（かぶらないように）2026/11/7 */
   #draftBtn .dr-go{font-family:inherit;font-size:14px;font-weight:800;border:2.5px solid #E5486C;background:#FFE8EC;color:#B0213F;border-radius:14px;padding:8px 14px;cursor:pointer;text-align:left;display:flex;flex-direction:column;animation:blinkwarn 1.1s ease-in-out infinite;box-shadow:0 4px 14px rgba(0,0,0,.18)}
   #draftBtn .dr-go small{font-size:11px;font-weight:700;opacity:.8}
   #draftBtn .dr-x{font-family:inherit;border:1.5px solid #ddd;background:#fff;border-radius:10px;padding:0 10px;cursor:pointer;color:#999}
