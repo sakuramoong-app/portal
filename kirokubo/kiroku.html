@@ -3783,16 +3783,64 @@ renderBoard = function(){
     const full = cd1.full_at ? `<span class="fullbadge">🈵満了</span>` : "";
     let trip = "";
     if(col === "出張・他エリア"){ const aw = st === "work" ? autoWork(x) : null; const p = aw && aw.t >= manualT(x) ? aw.r.area : cd1.standby; if(p && p !== "出張・他エリア") trip = `<br><span class="tripat">📍 ${esc(p)}</span>`; }
-    return `<div class="chipc ${cls}${cd1.status === "中抜け" ? " brkc" : ""}" data-cid="${cid}" data-st="${st}">【${esc(castLabel(x))}】${esc(sh)}${full}${brk || (st === "gone" && gk ? `<small>（${gk}）</small>` : x.cd && x.cd.status ? `<small class="cdst">（${esc(x.cd.status)}）</small>` : "")}${home}${x.cd && x.cd.settled ? "<small>（精算済）</small>" : ""}${trip}${pill}${bl ? `<ul class="bkl">${bl}</ul>` : ""}${movingHtml(x)}${seat}</div>`;
+    // 🃏 札をカードの形にそろえる（2026/11/7 店長）：1行目＝【名前】出勤時間＋状態のバッジ、2行目から＝予約など。右に ›
+    const badge = (t, c) => `<span class="cb ${c || ""}">${t}</span>`;
+    const badges = full + (cd1.status === "中抜け" ? badge("中抜け" + (cd1.break_back ? " 〜" + esc(cd1.break_back) : "") + (cd1.break_place ? " " + esc(cd1.break_place) + "で再開" : ""), "brk")
+      : st === "gone" ? (gk ? badge(gk === "お茶" ? "☕ お茶" : esc(gk), gk === "お茶" ? "tea" : gk === "欠勤" ? "abs" : "") : home ? "" : cd1.settled ? "" : badge(cd1.status === "不在" || !cd1.status ? "不在" : esc(cd1.status)))
+      : cd1.status ? badge(esc(cd1.status)) : "")
+      + (home ? badge("直帰", "home") : "") + (cd1.settled ? badge("精算済", "done") : "");
+    let sub;
+    if(st === "gone"){   // 今いない：いちばん最後の予約を1行で
+      const lastB = x.bks.filter(b => !["cancel", "tobi", "flowed"].includes(b.r.status)).sort((a, b) => b.s - a.s)[0];
+      sub = lastB ? `<div class="cc-sub">${esc(hm(lastB.r.start_at))} ${esc(lastB.r.area || "")} ${esc(lastB.r.course || "")}${/^\d+$/.test(lastB.r.course || "") ? "分" : ""} ${esc((lastB.r.kb_customers || {}).name || "")}　${esc(STATUS[lastB.r.status] || "")}</div>` : `<div class="cc-sub">予約なし</div>`;
+    }else sub = `${trip}${pill}${bl ? `<ul class="bkl">${bl}</ul>` : ""}`;
+    return `<div class="chipc ${cls}${cd1.status === "中抜け" ? " brkc" : ""}" data-cid="${cid}" data-st="${st}"><div class="cc-top"><b class="cc-nm">【${esc(castLabel(x))}】${esc(sh)}</b>${badges}</div>${sub}${movingHtml(x)}${seat}<span class="cc-go">›</span></div>`;
   };
-  const th = c=>`<th class="${AREA_CLASS[c] || ""}">${esc(c)}${c === "鶯谷" ? ` <button type="button" class="logbtn" onclick="openSeatLog()">📜 ログ</button>` : ""}</th>`;
+  const th = c=>`<th class="${AREA_CLASS[c] || ""}">📍 ${esc(c)}${c === "鶯谷" ? ` <button type="button" class="logbtn" onclick="openSeatLog()">📜 ログ</button>` : ""}</th>`;
   const fulls = tlRows().filter(x => x.c && x.cd && x.cd.full_at);
+  const ROWS = [["wait", "⏳ 待機中"], ["work", "💼 仕事中"], ["start", "▶️ 予約スタート"], ["precall", "📞 出勤前連絡"]];
+  const cnt = k => cols.reduce((a, c) => a + (cell[k + "|" + c] || []).length, 0), all = ROWS.reduce((a, [k]) => a + cnt(k), 0) + gone.length;
+  const bf = boardFilter, hide = k => bf && bf !== k ? " bf-hide" : "";
+  const fchip = (k, l, n) => `<button type="button" class="bfc ${k || "all"} ${bf === k ? "on" : ""}" onclick="setBoardFilter('${k}')">${l} <b>${n}</b></button>`;
   el.innerHTML = (fulls.length ? `<div class="fullbar">🈵 満了：${fulls.map(x => `<b>${esc(castLabel(x))}</b>`).join("、")}　<small>（この日の新しい予約は受けません）</small></div>` : "")
+    + `<div class="bfbar">${fchip("", "すべて", all)}${ROWS.map(([k, l]) => fchip(k, l.replace(/^\S+\s/, ""), cnt(k))).join("")}${fchip("gone", "今いない", gone.length)}</div>`
     + `<table class="board"><tr><th class="corner"></th>${cols.map(th).join("")}</tr>`
-    + [["wait", "待機中"], ["work", "仕事中"], ["start", "予約スタート"], ["precall", "出勤前連絡"]].map(([k, l])=>`<tr class="${k}"><th>${l}</th>${cols.map(c=>`<td class="${AREA_CLASS[c] || ""}" data-drop="${k}|${esc(c)}">${(cell[k + "|" + c] || []).map(x=>chip(x, k, c)).join("")}</td>`).join("")}</tr>`).join("")
-    + `<tr class="gone"><th>今いない<br><small style="font-weight:700">押すと色：⬜不在→🟩お茶→🟥欠勤<br>🟧中抜け・直帰</small></th><td colspan="${cols.length}" data-drop="gone">${gone.map(x=>chip(x, "gone", "")).join("") || `<span class="hist" style="margin:0">なし</span>`}</td></tr>`
+    + ROWS.map(([k, l])=>`<tr class="${k}${hide(k)}"><th>${l}</th>${cols.map(c=>`<td class="${AREA_CLASS[c] || ""}" data-drop="${k}|${esc(c)}">${(cell[k + "|" + c] || []).map(x=>chip(x, k, c)).join("")}</td>`).join("")}</tr>`).join("")
+    + `<tr class="gone${hide("gone")}"><th>🙈 今いない<div class="gonen">${gone.length}人</div><div class="golegend"><span class="lg tea"></span>お茶 <span class="lg abs"></span>欠勤<br><span class="lg"></span>不在 <span class="lg brk"></span>中抜け<br><small>押すと色：不在→お茶→欠勤</small></div></th><td colspan="${cols.length}" data-drop="gone">${gone.length ? `<div class="gonegrid">${gone.map(x=>chip(x, "gone", "")).join("")}</div>` : `<span class="hist" style="margin:0">なし</span>`}</td></tr>`
     + `</table>`;
 };
+// 今どこに誰が：上の「すべて・待機中・仕事中…」で、その段だけ出す（もう一度押すと全部）
+let boardFilter = "";
+function setBoardFilter(k){ boardFilter = boardFilter === k ? "" : k; renderBoard(); }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .bfbar{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}
+  .bfc{font-family:inherit;font-size:14px;font-weight:800;border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:5px 14px;cursor:pointer;color:#5C4B4F;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .bfc b{display:inline-block;min-width:22px;margin-left:4px;padding:0 6px;border-radius:99px;background:#F4EEF0;color:#8a7f83;font-size:12.5px}
+  .bfc.wait{color:#9a7000} .bfc.work{color:#c9556a} .bfc.start{color:#1f5d99} .bfc.precall{color:#6c5896} .bfc.gone{color:#666}
+  .bfc.on{background:#E5638C;border-color:#E5638C;color:#fff} .bfc.on b{background:rgba(255,255,255,.3);color:#fff}
+  table.board tr.bf-hide{display:none}
+  table.board th.a-ike, table.board th.a-ugu, table.board th.a-goh, table.board th.a-kin, table.board th.a-home, table.board th.a-other{font-size:15px;padding:10px 8px}
+  table.board tr > th:first-child{font-size:14.5px}
+  #boardGrid .chipc{position:relative;border-radius:12px;padding:7px 26px 7px 10px;box-shadow:0 1px 4px rgba(92,75,79,.08);margin-bottom:6px}
+  #boardGrid .cc-top{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+  #boardGrid .cc-nm{font-weight:900;font-size:14px}
+  #boardGrid .cb{display:inline-block;font-size:11px;font-weight:800;border-radius:99px;padding:1px 8px;background:#EFEAEC;color:#6b5a5f;line-height:1.6}
+  #boardGrid .cb.tea{background:#fff;color:#2E7D32} #boardGrid .cb.abs{background:#fff;color:#C62850} #boardGrid .cb.home{background:#E3EEF9;color:#2f5f8f}
+  #boardGrid .cb.done{background:#E6F6EC;color:#1d6b3a} #boardGrid .cb.brk{background:#fff;color:#C0620B}
+  #boardGrid .cc-sub{font-size:12px;font-weight:700;color:#8a7f83;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #boardGrid .cc-go{position:absolute;right:8px;top:50%;transform:translateY(-50%);color:#C9B8BE;font-size:20px;font-weight:400;line-height:1}
+  #boardGrid .gonegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px}
+  #boardGrid .gonegrid .chipc{display:block;width:auto;margin:0}
+  #boardGrid .chipc.gone{background:#fff;border-color:#E3DADD;color:#4a3d41}
+  #boardGrid .chipc.gone.tea{background:#43A047;border-color:#2E7D32;color:#fff} #boardGrid .chipc.gone.absent{background:#E5486C;border-color:#C62850;color:#fff}
+  #boardGrid .chipc.gone.pre{background:#9B7BE0;border-color:#7E5ED0;color:#fff} #boardGrid .chipc.gone.brkc{background:#FF9F43;border-color:#E67E22;color:#fff}
+  #boardGrid .chipc.gone.tea .cc-sub, #boardGrid .chipc.gone.absent .cc-sub, #boardGrid .chipc.gone.pre .cc-sub, #boardGrid .chipc.gone.brkc .cc-sub, #boardGrid .chipc.gone.tea .cc-go, #boardGrid .chipc.gone.absent .cc-go, #boardGrid .chipc.gone.brkc .cc-go{color:rgba(255,255,255,.85)}
+  table.board tr.gone td{background:#FCFAFB}
+  .gonen{font-size:13px;font-weight:800;color:#666;margin-top:2px}
+  .golegend{font-size:11.5px;font-weight:700;color:#888;margin-top:8px;line-height:2;text-align:left}
+  .golegend .lg{display:inline-block;width:11px;height:11px;border-radius:3px;border:1.5px solid #CFCFCF;background:#fff;vertical-align:-1px;margin-right:2px}
+  .golegend .lg.tea{background:#43A047;border-color:#2E7D32} .golegend .lg.abs{background:#E5486C;border-color:#C62850} .golegend .lg.brk{background:#FF9F43;border-color:#E67E22}
+</style>`);
 // その日のキャストの状態を保存（待機場所・今いないの色）
 async function saveDayPart(cid, patch){
   if(!KB.CAN_EDIT){ toast("作成中のため、動かせるのは店長だけです"); return false; }
