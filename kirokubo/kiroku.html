@@ -7069,6 +7069,7 @@ async function addSubPhoneK(){
 // 🤔 見つからなかったとき：下8けたが同じ番号のお客さん（090↔080 の打ちまちがい・番号の変更など）を出す。同じ人なら「🔗 つなぐ」
 async function paintSimilarPhones(){
   const now = digits(phoneNorm($("f_phone").value));
+  if(!curCustomer && now.length >= 6) await paintPartialPhones(now);
   if(curCustomer || now.length < 10) return;
   const last8 = now.slice(-8);
   const l = (q(await sb.from("kb_customers").select("id,name,phone").like("phone", "%" + last8).neq("phone", now).limit(3)) || []);
@@ -7077,6 +7078,21 @@ async function paintSimilarPhones(){
   $("custInfo").insertAdjacentHTML("beforeend", `<div class="info" style="background:#FFF8E1;border:2px solid #FFB547;margin-top:6px">🤔 <b>下8けたが同じ番号のお客さんがいます</b>（最初の数字だけちがう：打ちまちがい・番号を変えた など）
     ${l.map(c => `<div style="margin-top:4px">・<b>${esc(c.name || "名前なし")}</b>（${esc(mask(c.phone))}）${KB.CAN_EDIT ? ` <button type="button" class="btn btn-ghost btn-sm" onclick="linkOldPhone('${esc(c.phone)}')">🔗 同じ人ならつなぐ</button>` : ""}</div>`).join("")}
     <div style="font-size:12px;color:var(--sub);margin-top:4px">つなぐと、メインの番号が今回の番号になり、前の番号は副番号に入ります。</div>
+    <div class="xlwarn" style="margin-top:6px">📒 同じ人か分からないときは、<b>キャストを行かせる前に、エクセルの台帳も確認してください</b></div></div>`);
+}
+
+// 🔎 完全一致で見つからない → 一部が合う番号のお客さん（エクセルの Ctrl+F と同じ。主の番号・副番号の中に入れた数字がある）2026/11/7
+//   例：台帳で2つの番号が1つのマスに書いてあった・番号の一部だけ聞いた など。押すと、その番号で調べる
+async function paintPartialPhones(now){
+  let l = [];
+  try{ l = q(await sb.rpc("kb_customer_search", { p_q: now, p_limit: 10 })) || []; }catch(e){ return; }
+  if(curCustomer || digits(phoneNorm($("f_phone").value)) !== now) return;
+  l = l.filter(c => digits(c.phone) !== now);
+  if(!l.length) return;
+  l.sort((a, b) => (b.ng ? 1 : 0) - (a.ng ? 1 : 0));
+  const hl = p => { const s = String(p || ""), i = s.indexOf(now); return i < 0 ? esc(s) + "<small>（副番号に一部一致）</small>" : esc(s.slice(0, i)) + "<b style='background:#FFE58A'>" + esc(now) + "</b>" + esc(s.slice(i + now.length)); };
+  $("custInfo").insertAdjacentHTML("beforeend", `<div class="info" style="background:#EEF6FF;border:2px solid #7FB2E5;margin-top:6px">🔎 <b>一部が合う番号のお客さん（${l.length >= 10 ? "10人以上" : l.length + "人"}）</b>　押すと、そのお客さんで調べます
+    <div class="l4list">${l.map(c => `<button type="button" class="l4" onclick="$('f_phone').value='${esc(c.phone)}';lookupCustomer()">${c.ng ? "⚠️店NG " : ""}<b>${esc(c.name || "名前なし")}</b> <small>${hl(c.phone)}${c.visits ? "・" + c.visits + "回" : ""}</small></button>`).join("")}</div>
     <div class="xlwarn" style="margin-top:6px">📒 同じ人か分からないときは、<b>キャストを行かせる前に、エクセルの台帳も確認してください</b></div></div>`);
 }
 

@@ -150,11 +150,22 @@ async function search(){
   paintList();
 }
 function paintList(){
-  const list = results.filter(r=>filter === "all" || (filter === "ng" && r.ng) || (filter === "cng" && r.cast_ng > 0));
-  $("list").innerHTML = list.length ? list.map(r=>`<div class="li ${cur && cur.id === r.id ? "on" : ""}" onclick="openCustomer(${r.id})">
-      <div class="nm">${esc(r.name || "（名前なし）")}${r.ng ? '<span class="badge b-ng">⚠️ 店NG</span>' : ""}${r.cast_ng ? `<span class="badge b-cng">🙅 キャストNG ${r.cast_ng}</span>` : ""}</div>
-      <div class="sub">📞 ${esc(fmtPhone(r.phone))}　${r.visits ? `${r.visits}回・最後 ${md(r.last_date)}・合計 ${yen(r.total)}` : "まだ利用なし"}</div></div>`).join("")
+  let list = results.filter(r=>filter === "all" || (filter === "ng" && r.ng) || (filter === "cng" && r.cast_ng > 0));
+  // 🎯 完全一致（番号・名前がぴったり）を先に、その下に 🔎 一部一致（エクセルの Ctrl+F と同じ）2026/11/7
+  const t = $("q").value.trim(), d = t.replace(/\D/g, ""), nk = s => String(s || "").normalize("NFKC").replace(/\s|　/g, "");
+  const exact = r => !!t && ((d.length >= 6 && String(r.phone || "") === d) || (!!nk(t) && nk(r.name) === nk(t)));
+  if(t){ const ex = list.filter(exact), pa = list.filter(r => !exact(r)); list = ex.concat(pa);
+    const head = (s, n) => `<div class="li" style="cursor:default;background:#FFF5D6;font-weight:900;padding:6px 10px">${s}（${n}人）</div>`;
+    const row = r => liHtml(r);
+    $("list").innerHTML = list.length ? (ex.length ? head("🎯 完全一致", ex.length) + ex.map(row).join("") : `<div class="li" style="cursor:default;background:#FFF5D6;font-weight:900;padding:6px 10px">🎯 完全一致はありません</div>`)
+      + (pa.length ? head("🔎 一部一致の候補", pa.length) + pa.map(row).join("") : "") : `<div class="empty">見つかりません</div>`;
+    return; }
+  $("list").innerHTML = list.length ? list.map(liHtml).join("")
     : `<div class="empty">見つかりません</div>`;
+}
+function liHtml(r){ return `<div class="li ${cur && cur.id === r.id ? "on" : ""}" onclick="openCustomer(${r.id})">
+      <div class="nm">${esc(r.name || "（名前なし）")}${r.ng ? '<span class="badge b-ng">⚠️ 店NG</span>' : ""}${r.cast_ng ? `<span class="badge b-cng">🙅 キャストNG ${r.cast_ng}</span>` : ""}</div>
+      <div class="sub">📞 ${esc(fmtPhone(r.phone))}　${r.visits ? `${r.visits}回・最後 ${md(r.last_date)}・合計 ${yen(r.total)}` : "まだ利用なし"}</div></div>`;
 }
 
 /* ---------- 1人ずつ ---------- */
