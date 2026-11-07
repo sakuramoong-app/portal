@@ -11,6 +11,7 @@
 <script src="kb_common.js?v=23"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx-populate/1.21.0/xlsx-populate.min.js"></script>
 <style>
   body{font-size:14.5px;}
   .wrap.wide{max-width:1280px;}
@@ -88,7 +89,8 @@
       <span class="sp"></span>
       <span class="lab">新しい記録簿の数字</span>
       <select id="liveYm" onchange="changeLive()"></select>
-      <button type="button" class="btn btn-primary btn-sm" onclick="exportMoney()" title="期間の、お金の数字をエクセルで（お客さんの名前・電話は入りません）">📥 お金のデータをエクセルで</button>
+      <button type="button" class="btn btn-primary btn-sm" onclick="exportMoney()" title="期間の、お金の数字をカギつきのエクセルで（お客さんの名前・電話は入りません）">🔒 お金のデータ（エクセル）</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="exportAll()" title="アプリの表を全部、カギつきのエクセルで（個人情報の欄は入りません）。目次つき">🔒 全部のデータ（エクセル）</button>
     </div>
     <div class="tabs" id="tabs">
       <button type="button" data-t="sales" class="on" onclick="tab('sales')">💴 店落ち</button>
@@ -395,8 +397,119 @@ function exportMoney(){
     [""], ["・お客さんの名前・電話番号は入っていません"], ["・キャンセル・トビ・流れた予約は入れていません"], ["・店落ち＝暫定的な残額（総額−キャスト報酬）＋雑費"], ["・源泉徴収＝キャスト報酬÷9（四捨五入。税務用。手取りからは引いていません）"],
     ["・内勤の日払いは「払った」分です"], ["・このファイルを直しても、アプリのデータは変わりません"]], [40, 50]);
   const nm = `サクラG_お金のデータ_${months[0]}〜${months[months.length - 1]}.xlsx`;
-  XLSX.writeFile(wb, nm);
-  toast("📥 " + nm + " をダウンロードしました");
+  downloadLocked(wb, nm, "お金のデータ");
+}
+/* 🔒 カギつきのエクセル（開くときにパスワードを聞かれる）でダウンロード（2026/11/8 店長）
+   SheetJS で作ったエクセル → xlsx-populate でパスワードをかける（エクセルの「パスワードを使用して暗号化」と同じ形）。パスワードはどこにも送らない */
+function askPw(title){
+  return new Promise(res => {
+    const bg = document.createElement("div"); bg.className = "modal-bg show"; bg.style.zIndex = 500;
+    bg.innerHTML = `<div class="modal" style="max-width:440px"><h2>🔒 ${esc(title)}にカギをかけます</h2>
+      <p style="font-size:13px;line-height:1.7;margin:4px 0 10px">エクセルを開くときに、このパスワードを聞かれます。<b>忘れると、だれも開けません。</b>（8文字以上）</p>
+      <div class="f"><label>パスワード</label><input type="password" id="xpw1" autocomplete="new-password"></div>
+      <div class="f" style="margin-top:8px"><label>もう一度（打ちまちがい防止）</label><input type="password" id="xpw2" autocomplete="new-password"></div>
+      <div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary" id="xpwOk" style="flex:1">🔒 カギをかけてダウンロード</button><button class="btn btn-ghost" id="xpwNo">やめる</button></div></div>`;
+    document.body.appendChild(bg);
+    const done = v => { bg.remove(); res(v); };
+    bg.querySelector("#xpwNo").onclick = () => done(null);
+    bg.querySelector("#xpwOk").onclick = () => {
+      const a = bg.querySelector("#xpw1").value, b = bg.querySelector("#xpw2").value;
+      if(a.length < 8){ toast("パスワードを8文字以上で入れてください"); return; }
+      if(a !== b){ toast("2つのパスワードがちがいます"); bg.querySelector("#xpw2").value = ""; return; }
+      done(a);
+    };
+    setTimeout(() => { bg.querySelector("#xpw1").value = ""; bg.querySelector("#xpw2").value = ""; bg.querySelector("#xpw1").focus(); }, 300);   // ブラウザが覚えた別のパスワードを入れないように
+  });
+}
+async function downloadLocked(wb, nm, title){
+  if(typeof XlsxPopulate === "undefined"){ toast("カギをかける部品が読めませんでした。ページを開きなおしてください"); return false; }
+  const pw = await askPw(title); if(!pw) return false;
+  toast("🔒 カギをかけています…（大きいと少しかかります）");
+  try{
+    const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+    const x = await XlsxPopulate.fromDataAsync(buf);
+    const enc = await x.outputAsync({ type: "uint8array", password: pw });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([enc], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })); a.download = nm; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    toast("🔒 " + nm + " をダウンロードしました（開くときにパスワードを聞かれます）");
+    return true;
+  }catch(e){ toast("カギをかけられませんでした：" + (e.message || e)); return false; }
+}
+/* 🔒 全部のデータ（個人情報の欄なし）＋ 目次（種類ごとに、どのシートに何があるか）2026/11/8 店長・社長
+   個人情報（お客さんの名前・電話・メール・メモ・住所、キャストの個人情報、自由に書いたメモ・理由）は入れない。合言葉・URLのカギなどの表も入れない */
+const ALL_TABLES = [
+  ["お金・予約", "kb_reservations", "予約（1件ずつの総額・料金の内訳・キャスト報酬・支払い方法）"],
+  ["お金・予約", "kb_cast_days", "その日のキャスト（精算・雑費・投函した額・待機場所）"],
+  ["お金・予約", "kb_unsettled", "未精算・お釣り"],
+  ["お金・予約", "kb_collections", "回収明細（回収サイン・封筒の中の額）"],
+  ["お金・予約", "kb_handovers", "回収明細の経費・振込・社長に手渡し・袋の中身"],
+  ["お金・予約", "kb_envelope_checks", "待機場の封筒の回収"],
+  ["お金・予約", "kb_staff_work", "内勤の勤怠・日払い"],
+  ["お金・予約", "kb_staff_rates", "内勤の時給"],
+  ["お金・予約", "kb_media_fees", "媒体費"],
+  ["お金・集計（過去）", "kb_hist_daily", "過去の日ごとの数字（売上管理エクセルから）"],
+  ["お金・集計（過去）", "kb_hist_month", "過去の月ごとの数字"],
+  ["お金・集計（過去）", "kb_hist_media", "過去の媒体ごとの数字"],
+  ["お金・集計（過去）", "kb_hist_cast_day", "過去のキャスト×日"],
+  ["お金・集計（過去）", "kb_hist_cast_month", "過去のキャスト×月"],
+  ["お金・集計（過去）", "kb_hist_cast_area", "過去のキャスト×エリア"],
+  ["お金・集計（過去）", "kb_hist_cast_band", "過去のキャスト×時間帯"],
+  ["料金・バックの決まり", "kb_prices", "コースの料金"],
+  ["料金・バックの決まり", "kb_back", "ランクごとのバック"],
+  ["料金・バックの決まり", "kb_options", "オプションの料金・バック"],
+  ["料金・バックの決まり", "kb_course_info", "コースの決まり"],
+  ["料金・バックの決まり", "kb_cast_rules", "キャストごとの特例"],
+  ["料金・バックの決まり", "kb_rank_history", "ランクの履歴"],
+  ["料金・バックの決まり", "kb_area_fees", "エリアの交通費"],
+  ["お客さん（個人情報なし）", "kb_customers", "お客さん（番号・NGかどうか・タグだけ。名前・電話・メモは入れない）"],
+  ["お客さん（個人情報なし）", "kb_cust_history", "台帳エクセルの利用（日付・店・コース・金額など。場所・メモは入れない）"],
+  ["お客さん（個人情報なし）", "kb_cust_cast_ng", "キャストごとのNG（どのキャストか。理由は入れない）"],
+  ["キャスト・お店", "master_casts", "キャスト（源氏名・在籍店舗・ランク。個人情報は入れない）"],
+  ["キャスト・お店", "master_stores", "お店"],
+  ["キャスト・お店", "kb_dummy_names", "ダミー名"],
+  ["キャスト・お店", "kb_media", "媒体"],
+  ["シフト・内勤", "shift_weeks", "キャストのシフト"],
+  ["シフト・内勤", "naikin_shifts", "内勤カレンダー（シフト）"],
+];
+// 入れない欄（名前に、これがふくまれる欄）。キャストの源氏名・ダミー名・お店の名前などは入れる
+const PII_COL = /(^|_)(name|phone|phones|tel|email|mail|address|addr|place|zip|birthday|birth|memo|note|notes|reason|wish|line|token|pass|password|secret|photo|photos|image|url|private|raw|log|check|checks|todos|guest_flags|hotel|room|play)(_|$)/i;
+const KEEP_COL = new Set(["official_name", "temp_name", "shift_name", "dummy_name", "cast_name", "staff_name", "record_name", "store_name", "label", "rank", "status", "settle_place", "discount_note"]);
+const DROP_ALL = { kb_customers: c => !["id", "ng", "tags", "src", "created_at", "updated_at"].includes(c), master_casts: c => !["id", "official_name", "temp_name", "shift_name", "kana", "status", "stores", "ranks", "created_at", "updated_at", "cast_type"].includes(c) };
+async function readAllT(t){
+  const out = [];
+  for(let from = 0; ; from += 1000){
+    const r = await sb.from(t).select("*").range(from, from + 999);
+    if(r.error) throw r.error;
+    out.push(...(r.data || []));
+    if(!r.data || r.data.length < 1000) break;
+  }
+  return out;
+}
+async function exportAll(){
+  if(typeof XLSX === "undefined"){ toast("エクセルを作る部品が読めませんでした。ページを開きなおしてください"); return; }
+  const btn = event && event.target; if(btn) btn.disabled = true;
+  try{
+    const wb = XLSX.utils.book_new(), toc = [["種類", "シート", "中身", "行の数", "入れなかった欄（個人情報など）"]], names = new Set(), sheets = [];
+    for(const [kind, t, label] of ALL_TABLES){
+      toast(`読んでいます：${label}…`);
+      let rows = [], err = "";
+      try{ rows = await readAllT(t); }catch(e){ err = e.message || String(e); }
+      const cols = [...new Set(rows.flatMap(r => Object.keys(r)))];
+      const drop = cols.filter(c => DROP_ALL[t] ? DROP_ALL[t](c) : (PII_COL.test(c) && !KEEP_COL.has(c)));
+      const keep = cols.filter(c => !drop.includes(c));
+      const cell = v => { if(v == null) return ""; if(typeof v === "object") v = JSON.stringify(v); v = String(v); return v.length > 32000 ? v.slice(0, 32000) + "…" : v; };
+      let nm = label.replace(/（.*$/, "").slice(0, 28).replace(/[\\\/\?\*\[\]:]/g, "_"); while(names.has(nm)) nm = nm.slice(0, 26) + "_" + names.size; names.add(nm);
+      sheets.push([nm, rows.length ? [keep].concat(rows.map(r => keep.map(c => cell(r[c])))) : [[err ? "読めませんでした：" + err : "（データなし）"]]]);
+      toc.push([kind, nm, label, err ? "読めませんでした" : rows.length, drop.join("・")]);
+    }
+    const head = [["サクラG 全部のデータ（個人情報なし）"], ["作った日時", new Date().toLocaleString("ja-JP")], ["作った人", KB.operatorName()],
+      ["・お客さんの名前・電話・メール・メモ、キャストの個人情報（住所・電話・誕生日）、自由に書いたメモ・理由は入れていません"], ["・このファイルを直しても、アプリのデータは変わりません"], [""]];
+    const ws = XLSX.utils.aoa_to_sheet(head.concat(toc)); ws["!cols"] = [{ wch: 22 }, { wch: 24 }, { wch: 60 }, { wch: 10 }, { wch: 60 }];
+    XLSX.utils.book_append_sheet(wb, ws, "目次");
+    sheets.forEach(([nm, aoa]) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), nm));
+    const d = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, "");
+    await downloadLocked(wb, `サクラG_全部のデータ_個人情報なし_${d}.xlsx`, "全部のデータ");
+  }finally{ if(btn) btn.disabled = false; }
 }
 function render(){
   if(curTab === "sales") renderSales();
