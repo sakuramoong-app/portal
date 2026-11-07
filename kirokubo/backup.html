@@ -9,7 +9,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_common.js?v=23"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   .wrap{max-width:760px;}
   .bk{background:#fff;border:2px solid #FFC2D1;border-radius:18px;padding:18px 20px;margin-top:12px;}
@@ -21,6 +20,7 @@
   .prog{margin-top:10px;font-size:13px;color:var(--sub);white-space:pre-wrap;line-height:1.6;max-height:240px;overflow:auto;}
   .note{font-size:13px;line-height:1.8;color:#5C4B4F;}
   .note b{color:#c0392b;}
+  .pw{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 12px} .pw label{font-size:13px;font-weight:800;color:#5C4B4F} .pw input{display:block;width:100%;margin-top:4px;font-family:inherit;font-size:15px;padding:9px 12px;border:1.5px solid var(--line);border-radius:12px} @media (max-width:640px){ .pw{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
@@ -31,22 +31,28 @@
     <div class="bk">
       <h2>毎朝のバックアップ</h2>
       <div id="last" class="last">最後のバックアップ：読み込み中…</div>
-      <button type="button" class="bigbtn" id="go" onclick="runBackup()">💾 バックアップをダウンロード（エクセル）</button>
+      <div class="pw">
+        <label>🔑 バックアップのパスワード<input type="password" id="pw1" autocomplete="new-password" placeholder="自動バックアップと同じパスワード"></label>
+        <label>🔑 もう一度（打ちまちがい防止）<input type="password" id="pw2" autocomplete="new-password" placeholder="同じパスワードをもう一度"></label>
+      </div>
+      <button type="button" class="bigbtn" id="go" onclick="runBackup()">🔒 バックアップをダウンロード（カギつき .sgb）</button>
       <div id="prog" class="prog"></div>
     </div>
     <div class="bk note">
-      ・記録簿・顧客台帳・キャスト台帳・シフト・内勤カレンダーなど、アプリのデータを<b>1つのエクセル</b>にまとめてダウンロードします（表ごとにシート）。<br>
+      ・記録簿・顧客台帳・キャスト台帳・シフト・内勤カレンダーなど、アプリのデータを<b>1つのファイル（.sgb）</b>にまとめて、<b>カギ（パスワード）をかけて</b>ダウンロードします。<br>
+      ・中を見るときは「🔓 自動バックアップを開く」（backup_open）で、ファイルとパスワードを入れるとエクセルになります。<b>カギのないエクセルは、このページからは出ません。</b><br>
+      ・パスワードを忘れると、だれも開けません。<b>自動バックアップと同じパスワード</b>にしておくと、まちがえにくいです。パスワードはどこにも送られません（このパソコンの中でカギをかけます）。<br>
       ・<b>お客さん・キャストの個人情報が入っています。</b>ダウンロードしたファイルは、決めた場所（鍵つきのUSBなど）に入れて、ほかの人に送ったり、共有のフォルダに置いたりしないでください。<br>
       ・<b>フォルダに入れておくファイルは2つまでにします。</b>今日から数えて一昨日のファイルは削除して、<b>昨日と今日のファイルだけ</b>がフォルダに入っているようにしてください。<br>
       ・押した日時はアプリに残ります。今日まだ取っていないと、ポータルに「今日のバックアップがまだです」と出ます。<br>
-      ・合言葉・端末の鍵・意見箱、たくさんたまる記録（ログ）は入れていません。
+      ・このページは店長だけが使えます（社長は Dropbox の自動バックアップを backup_open で開いてください）。合言葉・端末の鍵・意見箱、たくさんたまる記録（ログ）は入れていません。
     </div>
   </div>
 </div>
 <script>
 /* ============================================================
-   💾 バックアップ（店長・社長だけ・PCだけ）
-   ・アプリの表を全部読んで、SheetJS で 1つの .xlsx にしてダウンロード（表ごとにシート）
+   💾 バックアップ（店長だけ・PCだけ）
+   ・アプリの表を全部読んで、カギつきの 1つの .sgb にしてダウンロード（backup_open.html で開く）。店長だけ
    ・押した日時を kb_settings の 'last_backup' に残す（ポータルの「今日のバックアップがまだです」に使う）
    ============================================================ */
 const { sb, q, esc, toast } = KB;
@@ -92,41 +98,51 @@ async function paintLast(){
     $("last").textContent = `最後のバックアップ：${jst(new Date(v.at))}（${v.by || ""}・${(v.rows || 0).toLocaleString("ja-JP")}行）` + (ok ? "　✅ 今日は取りました" : "　⚠️ 今日はまだです");
   }catch(e){ $("last").textContent = "最後のバックアップ：読めませんでした"; }
 }
+// 🔒 カギつき（.sgb）で作る：自動バックアップ（kb-backup）と同じ形。backup_open.html でパスワードを入れて開く（2026/11/7 店長：カギのないエクセルは出さない）
+//   ファイル ＝ 先頭 "SAKURABK1" ＋ salt 16 ＋ iv 12 ＋ 暗号（AES-256-GCM。鍵は PBKDF2・SHA-256・10万回）。中身 ＝ gzip した JSON {v,at,tables:[{t,label,rows}],summary}
+const MAGIC = "SAKURABK1", ITER = 100000;
 async function runBackup(){
-  if(!KB.IS_BOSS){ toast("店長・社長だけが取れます"); return; }   // 読むだけなので社長も（CAN_EDIT は社長が false なので IS_BOSS で見る）2026/11/7
-  if(typeof XLSX === "undefined"){ toast("エクセルを作る部品が読めませんでした。ページを開きなおしてください"); return; }
+  if(!KB.IS_BOSS || KB.IS_OWNER){ toast("店長だけが取れます"); return; }
+  const p1 = $("pw1").value, p2 = $("pw2").value;
+  if(p1.length < 8){ toast("パスワードを8文字以上で入れてください"); $("pw1").focus(); return; }
+  if(p1 !== p2){ toast("2つのパスワードがちがいます。もう一度入れてください"); $("pw2").value = ""; $("pw2").focus(); return; }
+  if(typeof CompressionStream === "undefined" || !crypto.subtle){ toast("このブラウザではカギをかけられません。Chrome か Edge の新しいもので開いてください"); return; }
   $("go").disabled = true; const log = []; const say = s => { log.push(s); $("prog").textContent = log.join("\n"); $("prog").scrollTop = 1e9; };
-  const wb = XLSX.utils.book_new(), names = new Set(); let total = 0, ng = 0;
-  const summary = [["表", "中身", "行の数", "メモ"]];
+  const now = new Date(), tables = [], summary = []; let total = 0, ng = 0;
   for(const [t, label] of TABLES){
     say(`読んでいます：${label}…`);
     try{
       const rows = await readAll(t);
-      total += rows.length;
-      const cols = [...new Set(rows.flatMap(r => Object.keys(r)))];
-      const aoa = [cols].concat(rows.map(r => cols.map(c => cell(r[c]))));
-      let name = label.slice(0, 31).replace(/[\\\/\?\*\[\]:]/g, "_"); while(names.has(name)) name = name.slice(0, 29) + "_" + names.size;
-      names.add(name);
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows.length ? aoa : [["（データなし）"]]), name);
-      summary.push([t, label, rows.length, ""]);
+      total += rows.length; tables.push({ t, label, rows }); summary.push({ t, label, rows: rows.length });
       log[log.length - 1] = `✅ ${label}：${rows.length.toLocaleString("ja-JP")}行`;
-    }catch(e){ ng++; summary.push([t, label, "", "読めませんでした：" + (e.message || e)]); log[log.length - 1] = `⚠️ ${label}：読めませんでした（${e.message || e}）`; }
+    }catch(e){ ng++; summary.push({ t, label, rows: 0, error: e.message || String(e) }); log[log.length - 1] = `⚠️ ${label}：読めませんでした（${e.message || e}）`; }
     $("prog").textContent = log.join("\n");
   }
-  const now = new Date();
-  summary.unshift([`バックアップ ${jst(now)}（${KB.operatorName()}）`, "", total, ng ? `読めなかった表 ${ng}` : ""]);
-  const ws = XLSX.utils.aoa_to_sheet(summary);
-  wb.SheetNames.unshift("目次"); wb.Sheets["目次"] = ws;
-  const fname = `サクラG_バックアップ_${jst(now).replace(/[-: ]/g, "").slice(0, 12)}.xlsx`;
-  XLSX.writeFile(wb, fname);
-  say(`\n💾 ダウンロードしました：${fname}（全部で ${total.toLocaleString("ja-JP")}行${ng ? "・読めなかった表 " + ng : ""}）`);
+  try{
+    say("🔒 カギをかけています…");
+    const enc = new TextEncoder();
+    const plainJson = enc.encode(JSON.stringify({ v: 1, at: now.toISOString(), by: KB.operatorName(), manual: true, tables, summary }));
+    const plain = new Uint8Array(await new Response(new Blob([plainJson]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
+    const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+    const base = await crypto.subtle.importKey("raw", enc.encode(p1), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: ITER, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plain));
+    await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);   // 念のため、開けるか確かめる
+    const m = enc.encode(MAGIC), file = new Uint8Array(m.length + 16 + 12 + ct.length);
+    file.set(m, 0); file.set(salt, m.length); file.set(iv, m.length + 16); file.set(ct, m.length + 28);
+    const fname = `サクラG_バックアップ_${jst(now).replace(/[-: ]/g, "").slice(0, 12)}_手動.sgb`;
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([file], { type: "application/octet-stream" })); a.download = fname; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    $("pw1").value = ""; $("pw2").value = "";
+    say(`\n🔒 ダウンロードしました：${fname}（全部で ${total.toLocaleString("ja-JP")}行${ng ? "・読めなかった表 " + ng : ""}）\n開くときは「🔓 自動バックアップを開く」で、このファイルとパスワードを入れてください`);
+  }catch(e){ say("⚠️ カギをかけられませんでした：" + (e.message || e)); $("go").disabled = false; return; }
   try{ q(await sb.from("kb_settings").upsert({ key: "last_backup", value: { at: now.toISOString(), by: KB.operatorName(), rows: total, ng }, note: "💾 最後のバックアップ（backup.html）" })); }catch(e){ say("（押した日時を残せませんでした：" + (e.message || e) + "）"); }
   $("go").disabled = false; paintLast();
 }
 async function init(){
   $("navArea").innerHTML = KB.nav("backup.html");
-  if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（店長・社長だけ）"; return; }
-  if(!KB.IS_BOSS){ $("gate").textContent = "店長・社長だけが使えます"; return; }
+  if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（店長だけ）"; return; }
+  if(!KB.IS_BOSS || KB.IS_OWNER){ $("gate").innerHTML = "このページは店長だけが使えます。<br>バックアップの中を見るときは、Dropbox の自動バックアップ（.sgb）を「🔓 自動バックアップを開く」で開いてください。"; return; }   // 社長は使わない（カギのないファイルを広げないため）2026/11/7
   if(!(await KB.passGate("バックアップ"))) return;   // 🔒 端末の登録の合言葉
   $("gate").style.display = "none"; $("main").style.display = "";
   paintLast();
