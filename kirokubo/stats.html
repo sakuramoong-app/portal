@@ -89,8 +89,7 @@
       <span class="sp"></span>
       <span class="lab">新しい記録簿の数字</span>
       <select id="liveYm" onchange="changeLive()"></select>
-      <button type="button" class="btn btn-primary btn-sm" onclick="exportMoney()" title="期間の、お金の数字をカギつきのエクセルで（お客さんの名前・電話は入りません）">🔒 お金のデータ（エクセル）</button>
-      <button type="button" class="btn btn-ghost btn-sm" onclick="exportAll()" title="アプリの表を全部、カギつきのエクセルで（個人情報の欄は入りません）。目次つき">🔒 全部のデータ（エクセル）</button>
+      <button type="button" class="btn btn-primary btn-sm" onclick="exportAll()" title="お金のまとめ（日ごと・月ごと・源泉）と、アプリの表を全部、カギつきのエクセルで（個人情報の欄は入りません）。目次つき">🔒 全部のデータ（エクセル）</button>
     </div>
     <div class="tabs" id="tabs">
       <button type="button" data-t="sales" class="on" onclick="tab('sales')">💴 店落ち</button>
@@ -365,11 +364,10 @@ function tab(t){
 /* 📥 お金のデータをエクセルで（2026/11/7 店長・社長：売上・税金などのお金の数字を取り出したい。アプリのデータは変わらない）
    上の「期間」の月のうち、新しい記録簿の数字（L）がある分。お客さんの名前・電話は入れない
    シート：日ごと／月ごと／キャストの月ごと（源泉）／予約ごと／説明 */
-function exportMoney(){
-  if(typeof XLSX === "undefined"){ toast("エクセルを作る部品が読めませんでした。ページを開きなおしてください"); return; }
-  const { months } = range(), inM = d => months.includes(ymOf(d)) && isLive(ymOf(d));
+// 2026/11/8：お金のまとめは「🔒 全部のデータ」の中に入れる（目次のすぐ後ろ）。inM＝入れる日（新しい記録簿の数字がある日ぜんぶ）
+function moneySheets(inM){
   const rs = L.res.filter(r => inM(r.d)), days = L.days.filter(x => inM(x.d));
-  if(!rs.length && !days.length){ toast("この期間に、新しい記録簿の数字がありません（「新しい記録簿の数字」の月と、期間を確かめてください）"); return; }
+  if(!rs.length && !days.length) return [];
   const gen = v => Math.round(n0(v) / 9);   // 源泉徴収（報酬 ÷ 9）
   const sum = (l, f) => l.reduce((a, x) => a + n0(f(x)), 0);
   // 日ごと
@@ -388,16 +386,12 @@ function exportMoney(){
   // 予約ごと（お客さんの名前・電話は入れない）
   const VK = { new: "新規", repeat: "店リピ", honshi: "本指名" };
   const R = rs.slice().sort((a, b) => a.d.localeCompare(b.d)).map(r => [r.d, r.store, r.cast, r.course, r.area, r.band, VK[r.visit] || "", (r.media || []).join("・"), r.total, r.card, r.back, r.prov, Math.round(r.drop)]);
-  const wb = XLSX.utils.book_new(), add = (name, aoa, w) => { const ws = XLSX.utils.aoa_to_sheet(aoa); if(w) ws["!cols"] = w.map(x => ({ wch: x })); XLSX.utils.book_append_sheet(wb, ws, name); };
-  add("日ごと", [H1].concat(D, [tot]), [12, 8].concat(Array(11).fill(16)));
-  add("月ごと", [["月"].concat(H1.slice(1))].concat(M2), [10, 8].concat(Array(11).fill(16)));
-  add("キャストの月ごと（源泉）", [["月", "キャスト", "出勤した日（予約あり）", "本数", "報酬（報酬＋OP）", "【税務用】源泉徴収（報酬÷9）", "手取りの目安（報酬−源泉）", "店落ち（暫定＋雑費）"]].concat(C), [10, 14, 10, 8, 16, 18, 18, 16]);
-  add("予約ごと", [["営業日", "店", "キャスト", "コース", "エリア", "時間帯", "種別", "媒体", "総額", "うちカード", "キャスト報酬", "暫定的な残額", "店落ち（雑費を予約で分けた）"]].concat(R), [12, 14, 12, 8, 10, 6, 8, 16, 10, 10, 10, 12, 14]);
-  add("説明", [["お金のデータ（集計ページから）"], ["作った日時", new Date().toLocaleString("ja-JP")], ["作った人", KB.operatorName()], ["期間", months[0] + " 〜 " + months[months.length - 1] + "（新しい記録簿の数字がある月だけ）"],
-    [""], ["・お客さんの名前・電話番号は入っていません"], ["・キャンセル・トビ・流れた予約は入れていません"], ["・店落ち＝暫定的な残額（総額−キャスト報酬）＋雑費"], ["・源泉徴収＝キャスト報酬÷9（四捨五入。税務用。手取りからは引いていません）"],
-    ["・内勤の日払いは「払った」分です"], ["・このファイルを直しても、アプリのデータは変わりません"]], [40, 50]);
-  const nm = `サクラG_お金のデータ_${months[0]}〜${months[months.length - 1]}.xlsx`;
-  downloadLocked(wb, nm, "お金のデータ");
+  const out = [], add = (name, aoa, w, what) => out.push([name, aoa, w, what]);
+  add("日ごと", [H1].concat(D, [tot]), [12, 8].concat(Array(11).fill(16)), "日ごとの総額・カード・キャスト報酬・雑費・店落ち・内勤の日払い・源泉徴収（いちばん下に合計）");
+  add("月ごと", [["月"].concat(H1.slice(1))].concat(M2), [10, 8].concat(Array(11).fill(16)), "月ごとの合計（日ごとと同じ項目）");
+  add("キャストの月ごと（源泉）", [["月", "キャスト", "出勤した日（予約あり）", "本数", "報酬（報酬＋OP）", "【税務用】源泉徴収（報酬÷9）", "手取りの目安（報酬−源泉）", "店落ち（暫定＋雑費）"]].concat(C), [10, 14, 10, 8, 16, 18, 18, 16], "キャストの月ごとの本数・報酬・【税務用】源泉徴収");
+  add("予約ごと", [["営業日", "店", "キャスト", "コース", "エリア", "時間帯", "種別", "媒体", "総額", "うちカード", "キャスト報酬", "暫定的な残額", "店落ち（雑費を予約で分けた）"]].concat(R), [12, 14, 12, 8, 10, 6, 8, 16, 10, 10, 10, 12, 14], "予約1件ずつの総額・カード・報酬・店落ち（お客さんの名前・電話なし）");
+  return out;
 }
 /* 🔒 カギつきのエクセル（開くときにパスワードを聞かれる）でダウンロード（2026/11/8 店長）
    SheetJS で作ったエクセル → xlsx-populate でパスワードをかける（エクセルの「パスワードを使用して暗号化」と同じ形）。パスワードはどこにも送らない */
@@ -502,10 +496,18 @@ async function exportAll(){
       sheets.push([nm, rows.length ? [keep].concat(rows.map(r => keep.map(c => cell(r[c])))) : [[err ? "読めませんでした：" + err : "（データなし）"]]]);
       toc.push([kind, nm, label, err ? "読めませんでした" : rows.length, drop.join("・")]);
     }
+    // 💴 お金のまとめ（計算したもの）：新しい記録簿の数字がある日ぜんぶ。目次のすぐ後ろに入れる（2026/11/8 店長：1つにまとめる）
+    const money = moneySheets(d => isLive(ymOf(d)));
+    money.forEach(([nm]) => names.add("💴" + nm));
+    const mtoc = money.map(([nm, aoa, w, what]) => ["💴 お金のまとめ（計算したもの）", "💴" + nm, what, Math.max(0, aoa.length - 1), ""]);
     const head = [["サクラG 全部のデータ（個人情報なし）"], ["作った日時", new Date().toLocaleString("ja-JP")], ["作った人", KB.operatorName()],
+      ["・売上・税金などは、まず「💴」のシート（お金のまとめ）を見てください。新しい記録簿の数字（" + (liveYm || "なし") + "〜）から計算しています"],
+      ["・店落ち＝暫定的な残額（総額−キャスト報酬）＋雑費。源泉徴収＝キャスト報酬÷9（四捨五入・税務用）。内勤の日払いは「払った」分。キャンセル・トビ・流れた予約は入れていません"],
       ["・お客さんの名前・電話・メール・メモ、キャストの個人情報（住所・電話・誕生日）、自由に書いたメモ・理由は入れていません"], ["・このファイルを直しても、アプリのデータは変わりません"], [""]];
-    const ws = XLSX.utils.aoa_to_sheet(head.concat(toc)); ws["!cols"] = [{ wch: 22 }, { wch: 24 }, { wch: 60 }, { wch: 10 }, { wch: 60 }];
+    toc.splice(1, 0, ...mtoc);
+    const ws = XLSX.utils.aoa_to_sheet(head.concat(toc)); ws["!cols"] = [{ wch: 26 }, { wch: 26 }, { wch: 60 }, { wch: 10 }, { wch: 60 }];
     XLSX.utils.book_append_sheet(wb, ws, "目次");
+    money.forEach(([nm, aoa, w]) => { const s = XLSX.utils.aoa_to_sheet(aoa); if(w) s["!cols"] = w.map(x => ({ wch: x })); XLSX.utils.book_append_sheet(wb, s, ("💴" + nm).slice(0, 31)); });
     sheets.forEach(([nm, aoa]) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), nm));
     const d = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, "");
     await downloadLocked(wb, `サクラG_全部のデータ_個人情報なし_${d}.xlsx`, "全部のデータ");
