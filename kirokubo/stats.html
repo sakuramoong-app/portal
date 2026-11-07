@@ -10,6 +10,7 @@
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_common.js?v=23"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   body{font-size:14.5px;}
   .wrap.wide{max-width:1280px;}
@@ -87,6 +88,7 @@
       <span class="sp"></span>
       <span class="lab">新しい記録簿の数字</span>
       <select id="liveYm" onchange="changeLive()"></select>
+      <button type="button" class="btn btn-primary btn-sm" onclick="exportMoney()" title="期間の、お金の数字をエクセルで（お客さんの名前・電話は入りません）">📥 お金のデータをエクセルで</button>
     </div>
     <div class="tabs" id="tabs">
       <button type="button" data-t="sales" class="on" onclick="tab('sales')">💴 店落ち</button>
@@ -233,7 +235,7 @@ async function loadLive(){
   const start = liveYm + "-01";
   try{
     const [res, cds, shifts, casts, rules, media, stores] = await Promise.all([
-      fetchAll("kb_reservations", "id,biz_date,cast_id,store_key,area,start_at,status,visit_kind,media,total,course_back,option_back,extra_back,back_override", "id", x=>x.gte("biz_date", start).eq("deleted", false)),
+      fetchAll("kb_reservations", "id,biz_date,cast_id,store_key,area,start_at,status,visit_kind,media,total,course_back,option_back,extra_back,back_override,payment,card_total,course", "id", x=>x.gte("biz_date", start).eq("deleted", false)),
       fetchAll("kb_cast_days", "*", "biz_date", x=>x.gte("biz_date", start)),
       fetchAll("shift_weeks", "cast_name,wk,data", "wk", x=>x.gte("wk", weekKeyOfYmd(start))),
       fetchAll("master_casts", "id,official_name,temp_name,shift_name", "id"),
@@ -277,14 +279,15 @@ async function loadLive(){
         plan_shift: p ? hourTxt(p.start) + "-" + hourTxt(p.end) : "", real_shift: real && !absent ? hourTxt(real.start) + "-" + hourTxt(real.end) : "",
         status: absent ? "欠勤" : (!rs.length ? "お茶" : ""),
         late_h: p && real && real.start > p.start ? real.start - p.start : null, early_h: p && real && real.end < p.end ? p.end - real.end : null,
-        drop_yen: drop, reward: reward + option,
+        drop_yen: drop, reward: reward + option, total, zappi,
         n_new: rs.filter(r=>r.visit_kind === "new").length, n_repeat: rs.filter(r=>r.visit_kind === "repeat").length, n_honshi: rs.filter(r=>r.visit_kind === "honshi").length, cnt: rs.length });
       // 1予約ずつ（雑費は、その日の予約で同じだけ分ける）
       rs.forEach(r=>{
         const back = r.back_override != null ? n0(r.back_override) : n0(r.course_back) + n0(r.extra_back) + n0(r.option_back);
         const j = new Date(new Date(r.start_at).getTime() + 9 * 3600 * 1000).getUTCHours();
         L.res.push({ d, ym: ymOf(d), cast, store: storeLabel(r.store_key), area: r.area || "（なし）", band: r.start_at && (j >= 22 || j < 6) ? "深夜" : "昼",
-          visit: r.visit_kind, media: (r.media || []).map(mediaLabel), total: n0(r.total), prov: n0(r.total) - back, drop: n0(r.total) - back + zappi / rs.length });
+          visit: r.visit_kind, media: (r.media || []).map(mediaLabel), total: n0(r.total), prov: n0(r.total) - back, drop: n0(r.total) - back + zappi / rs.length,
+          back, card: (r.payment === "card" || r.payment === "card_paid") ? n0(r.total) : n0(r.card_total), course: r.course || "" });   // back・card・course：📥 お金のデータ用（2026/11/7）
       });
     });
   }catch(e){ toast("新しい記録簿の数字を読めませんでした：" + (e.message || e)); }
@@ -356,6 +359,44 @@ function tab(t){
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.t === t));
   ["sales", "cast", "area", "media"].forEach(k=>{ $("v_" + k).style.display = k === t ? "" : "none"; });
   render();
+}
+/* 📥 お金のデータをエクセルで（2026/11/7 店長・社長：売上・税金などのお金の数字を取り出したい。アプリのデータは変わらない）
+   上の「期間」の月のうち、新しい記録簿の数字（L）がある分。お客さんの名前・電話は入れない
+   シート：日ごと／月ごと／キャストの月ごと（源泉）／予約ごと／説明 */
+function exportMoney(){
+  if(typeof XLSX === "undefined"){ toast("エクセルを作る部品が読めませんでした。ページを開きなおしてください"); return; }
+  const { months } = range(), inM = d => months.includes(ymOf(d)) && isLive(ymOf(d));
+  const rs = L.res.filter(r => inM(r.d)), days = L.days.filter(x => inM(x.d));
+  if(!rs.length && !days.length){ toast("この期間に、新しい記録簿の数字がありません（「新しい記録簿の数字」の月と、期間を確かめてください）"); return; }
+  const gen = v => Math.round(n0(v) / 9);   // 源泉徴収（報酬 ÷ 9）
+  const sum = (l, f) => l.reduce((a, x) => a + n0(f(x)), 0);
+  // 日ごと
+  const dset = [...new Set(rs.map(r => r.d).concat(days.map(x => x.d)).concat(Object.keys(L.pay || {}).filter(inM)))].sort();
+  const dayRow = d => { const r = rs.filter(x => x.d === d), cd = days.filter(x => x.d === d), back = sum(r, x => x.back), zp = sum(cd, x => x.zappi), pay = n0((L.pay || {})[d]);
+    const total = sum(r, x => x.total), prov = total - back, drop = prov + zp;
+    return [d, r.length, total, sum(r, x => x.card), total - sum(r, x => x.card), back, prov, zp, drop, pay, drop - pay, sum(cd, x => gen(x.reward)), drop - pay - sum(cd, x => gen(x.reward))]; };
+  const H1 = ["営業日", "予約件数", "総額", "カード", "現金（総額−カード）", "キャスト報酬（報酬＋OP）", "暫定的な残額（総額−報酬）", "雑費", "店落ち（暫定＋雑費）", "内勤の日払い", "店落ち（日払いを引いたあと）", "【税務用】源泉徴収（報酬÷9）", "実質的な店落ち（日払い・源泉を引いたあと）"];
+  const D = dset.map(dayRow);
+  const tot = H1.map((h, i) => i === 0 ? "合計" : D.reduce((a, r) => a + n0(r[i]), 0));
+  // 月ごと
+  const M2 = [...new Set(dset.map(ymOf))].sort().map(ym => { const l = D.filter(r => ymOf(r[0]) === ym); return [ym].concat(H1.slice(1).map((h, i) => l.reduce((a, r) => a + n0(r[i + 1]), 0))); });
+  // キャストの月ごと（源泉）
+  const ck = {}; days.forEach(x => { const k = ymOf(x.d) + "|" + x.cast; const o = ck[k] = ck[k] || { ym: ymOf(x.d), cast: x.cast, cnt: 0, reward: 0, gen: 0, drop: 0, days: 0 }; o.cnt += n0(x.cnt); o.reward += n0(x.reward); o.gen += gen(x.reward); o.drop += n0(x.drop_yen); if(n0(x.cnt)) o.days++; });
+  const C = Object.values(ck).sort((a, b) => a.ym.localeCompare(b.ym) || a.cast.localeCompare(b.cast, "ja")).map(o => [o.ym, o.cast, o.days, o.cnt, o.reward, o.gen, o.reward - o.gen, o.drop]);
+  // 予約ごと（お客さんの名前・電話は入れない）
+  const VK = { new: "新規", repeat: "店リピ", honshi: "本指名" };
+  const R = rs.slice().sort((a, b) => a.d.localeCompare(b.d)).map(r => [r.d, r.store, r.cast, r.course, r.area, r.band, VK[r.visit] || "", (r.media || []).join("・"), r.total, r.card, r.back, r.prov, Math.round(r.drop)]);
+  const wb = XLSX.utils.book_new(), add = (name, aoa, w) => { const ws = XLSX.utils.aoa_to_sheet(aoa); if(w) ws["!cols"] = w.map(x => ({ wch: x })); XLSX.utils.book_append_sheet(wb, ws, name); };
+  add("日ごと", [H1].concat(D, [tot]), [12, 8].concat(Array(11).fill(16)));
+  add("月ごと", [["月"].concat(H1.slice(1))].concat(M2), [10, 8].concat(Array(11).fill(16)));
+  add("キャストの月ごと（源泉）", [["月", "キャスト", "出勤した日（予約あり）", "本数", "報酬（報酬＋OP）", "【税務用】源泉徴収（報酬÷9）", "手取りの目安（報酬−源泉）", "店落ち（暫定＋雑費）"]].concat(C), [10, 14, 10, 8, 16, 18, 18, 16]);
+  add("予約ごと", [["営業日", "店", "キャスト", "コース", "エリア", "時間帯", "種別", "媒体", "総額", "うちカード", "キャスト報酬", "暫定的な残額", "店落ち（雑費を予約で分けた）"]].concat(R), [12, 14, 12, 8, 10, 6, 8, 16, 10, 10, 10, 12, 14]);
+  add("説明", [["お金のデータ（集計ページから）"], ["作った日時", new Date().toLocaleString("ja-JP")], ["作った人", KB.operatorName()], ["期間", months[0] + " 〜 " + months[months.length - 1] + "（新しい記録簿の数字がある月だけ）"],
+    [""], ["・お客さんの名前・電話番号は入っていません"], ["・キャンセル・トビ・流れた予約は入れていません"], ["・店落ち＝暫定的な残額（総額−キャスト報酬）＋雑費"], ["・源泉徴収＝キャスト報酬÷9（四捨五入。税務用。手取りからは引いていません）"],
+    ["・内勤の日払いは「払った」分です"], ["・このファイルを直しても、アプリのデータは変わりません"]], [40, 50]);
+  const nm = `サクラG_お金のデータ_${months[0]}〜${months[months.length - 1]}.xlsx`;
+  XLSX.writeFile(wb, nm);
+  toast("📥 " + nm + " をダウンロードしました");
 }
 function render(){
   if(curTab === "sales") renderSales();
