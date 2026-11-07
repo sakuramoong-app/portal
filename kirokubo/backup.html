@@ -93,7 +93,7 @@ async function paintLast(){
   }catch(e){ $("last").textContent = "最後のバックアップ：読めませんでした"; }
 }
 async function runBackup(){
-  if(!KB.CAN_EDIT){ toast("店長・社長だけが取れます"); return; }
+  if(!KB.IS_BOSS){ toast("店長・社長だけが取れます"); return; }   // 読むだけなので社長も（CAN_EDIT は社長が false なので IS_BOSS で見る）2026/11/7
   if(typeof XLSX === "undefined"){ toast("エクセルを作る部品が読めませんでした。ページを開きなおしてください"); return; }
   $("go").disabled = true; const log = []; const say = s => { log.push(s); $("prog").textContent = log.join("\n"); $("prog").scrollTop = 1e9; };
   const wb = XLSX.utils.book_new(), names = new Set(); let total = 0, ng = 0;
@@ -126,7 +126,7 @@ async function runBackup(){
 async function init(){
   $("navArea").innerHTML = KB.nav("backup.html");
   if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（店長・社長だけ）"; return; }
-  if(!KB.CAN_EDIT){ $("gate").textContent = "店長・社長だけが使えます"; return; }
+  if(!KB.IS_BOSS){ $("gate").textContent = "店長・社長だけが使えます"; return; }
   if(!(await KB.passGate("バックアップ"))) return;   // 🔒 端末の登録の合言葉
   $("gate").style.display = "none"; $("main").style.display = "";
   paintLast();
