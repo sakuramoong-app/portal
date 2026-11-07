@@ -292,10 +292,11 @@ function totalsFor(day, R, rows){
 }
 
 /* ---------- 1日ごと ---------- */
-async function loadDay(){
+async function loadDay(quiet){   // quiet：保存のあと（「読み込み中」にしない・スクロールの場所をそのまま）2026/11/7
+  const keepY = quiet === true ? window.scrollY : null;
   const day = $("day").value; if(!day) return;
   KB.rememberDay(day);
-  $("dayArea").innerHTML = `<div class="lead">読み込み中…</div>`;
+  if(keepY == null) $("dayArea").innerHTML = `<div class="lead">読み込み中…</div>`;
   try{
     const R = await readRange(day, nextDay(day));
     if(day !== $("day").value || mode !== "day") return;   // とちゅうで日を変えた
@@ -308,6 +309,7 @@ async function loadDay(){
     D = Object.assign(R, { day });
   }catch(e){ $("dayArea").innerHTML = `<div class="warn">読めませんでした：${esc(e.message || e)}</div>`; return; }
   paintDay();
+  if(keepY != null) window.scrollTo(0, keepY);
 }
 function paintDay(){
   if(!D) return;
@@ -534,12 +536,12 @@ async function kikiReturn(bd, sid, on){
   if(on && !confirm(`${md(bd)} の ${staffNames[sid] || sid} の日払いを、この日（${md(D.day)}）の回収金からキキララへ返しましたか？\n（この日の回収金から引きます）`)) return;
   try{ q(await sb.from("kb_staff_work").update(on ? { kiki_returned_on: D.day, kiki_returned_by: KB.operatorName() } : { kiki_returned_on: null, kiki_returned_by: "" }).eq("biz_date", bd).eq("staff_id", sid)); toast(on ? "返金完了にしました" : "取り消しました"); }
   catch(e){ toast("保存できませんでした：" + (e.message || e)); }
-  loadDay();
+  loadDay(true);   // 保存のあと：画面を消さずに、今の場所のまま描きなおす
 }
 async function saveCol(cid, patch, noReload){
   try{ q(await sb.from("kb_collections").upsert(Object.assign({ biz_date: D.day, cast_id: cid, updated_by: KB.operatorName(), updated_at: new Date().toISOString() }, patch), { onConflict: "biz_date,cast_id" })); }
   catch(e){ toast("保存できませんでした：" + (e.message || e)); }
-  if(!noReload) loadDay();
+  if(!noReload) loadDay(true);
 }
 // 📜 精算の履歴（精算画面と同じ kb_cast_days.settle_log）。キャスト名の下に、押すと開く
 const SLOG_KINDS = { post: "📮 当日ポスティング", late: "📮 後日投函（未精算分）", receipt: "🧾 領収書だけ投函", collect: "👛 回収", change: "💴 お釣りを渡した", settle: "✅ 精算済", memo: "📝 メモ" };
@@ -560,7 +562,7 @@ async function setState(cid, st){
       text: st ? "回収明細：" + STATE[st] : "回収明細：回収サインを消しました" }]);
     try{ q(await sb.from("kb_cast_days").update({ settle_log: l }).eq("biz_date", D.day).eq("cast_id", cid)); }catch(e){}
   }
-  loadDay();
+  loadDay(true);   // 保存のあと：画面を消さずに、今の場所のまま描きなおす
 }
 /* ---------- 封筒の中（数えた額）・差額・💯 完璧回収（スプレッドシートと同じ）
    ・封筒には「店落ち − カード − 振込」がそろっているはず（交通費・プラスはキャッシュフローから足してそろえる）
@@ -591,7 +593,7 @@ function setDoneItem(cid, key, on){
 async function saveHo(patch){
   try{ q(await sb.from("kb_handovers").upsert(Object.assign({ biz_date: D.day, updated_by: KB.operatorName(), updated_at: new Date().toISOString() }, patch), { onConflict: "biz_date" })); }
   catch(e){ toast("保存できませんでした：" + (e.message || e)); }
-  loadDay();
+  loadDay(true);   // 保存のあと：画面を消さずに、今の場所のまま描きなおす
 }
 const HO = () => D.ho.find(h => h.biz_date === D.day) || null;
 // 👛 袋の中身（数えた額）を保存。空にすると消す（SQL 232）
@@ -600,7 +602,7 @@ async function setBag(v){
   if(n != null && !isFinite(n)){ toast("数字で入れてください"); return; }
   try{ q(await sb.from("kb_handovers").upsert({ biz_date: D.day, bag_amount: n, bag_by: n == null ? "" : KB.operatorName(), bag_at: n == null ? null : new Date().toISOString(), updated_by: KB.operatorName(), updated_at: new Date().toISOString() }, { onConflict: "biz_date" })); toast(n == null ? "袋の中身を消しました" : "👛 袋の中身を入れました"); }
   catch(e){ toast("保存できませんでした（SQL 232 は実行ずみ？）：" + (e.message || e)); }
-  loadDay();
+  loadDay(true);   // 保存のあと：画面を消さずに、今の場所のまま描きなおす
 }
 const exList = () => ((HO() && Array.isArray(HO().expenses)) ? HO().expenses : []).map(x => Object.assign({}, x));
 function addExp(type){ const l = exList(); l.push(type === "transfer" ? { type, memo: "キャンセル料", amount: 0 } : type === "advance" ? { type, memo: "両替が足りない", amount: 0, from: "", settled: false } : { memo: "キャッシュフロー補充", amount: 0, from: "", taken: false }); saveHo({ expenses: l }); }
