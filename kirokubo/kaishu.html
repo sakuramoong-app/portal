@@ -42,7 +42,8 @@
   .kanabar{display:flex;gap:4px;flex-wrap:wrap;margin:0 0 8px} .kanabar .kb{font-family:inherit;font-size:15px;font-weight:800;min-width:36px;padding:5px 8px;border:1.5px solid #FFC2D1;border-radius:9px;background:#fff;color:#e5638c;cursor:pointer} .kanabar .kb:hover{background:#FFE4EC} .kanabar .kb.off{opacity:.35} .kanabar .kb.on{background:#e5638c;color:#fff;border-color:#e5638c}
   .rowlinks{font-size:12px;font-weight:700;margin-top:3px;white-space:nowrap}
   .envres{margin-top:6px;font-weight:900;font-size:14px} .envres .ok{color:#2e8b57} .envres .ng{color:#c0392b}
-  .hand{background:#FFF8D6;border:3px solid #F2C94C;border-radius:14px;padding:10px 16px;margin-top:10px;}   /* 社長に手渡し＝随時の回収合計（同じ枠の色） */
+  .hand{background:#FFF8D6;border:3px solid #F2C94C;border-radius:14px;padding:10px 16px;margin-top:10px;}
+  .bag{background:#fff;border:3px dashed #F2C94C;border-radius:14px;padding:10px 16px;margin-top:8px} .bag .k{font-weight:900} .bagin{display:flex;align-items:center;gap:6px;justify-content:flex-end;margin:4px 0} .bagin input{width:180px;text-align:right;font-family:inherit;font-size:22px;font-weight:900;color:#1a3a8a;padding:4px 10px;border:1.5px solid var(--line);border-radius:12px} .bagin span{font-weight:900} .bagst{font-size:13px;font-weight:800;color:#9C8B8F;text-align:right} .bagst.ok{color:#2e8b57} .bagst.ng{color:#c0392b}   /* 社長に手渡し＝随時の回収合計（同じ枠の色） */
   .sum .s.handbox{background:#FFF8D6;border:3px solid #F2C94C;}
   .flow .handrow{background:#FFF8D6;border:3px solid #F2C94C;border-radius:10px;padding:6px 10px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;font-weight:900;grid-column:1 / -1;}
   .hand .k{font-weight:800;color:#6b4e00;} .hand .v{text-align:right;font-weight:900;font-size:32px;color:#E0001B;}
@@ -460,6 +461,12 @@ function paintDay(){
         <td class="l">${ed ? `<a class="j" href="javascript:void 0" onclick="delExp(${x.i})">🗑</a>` : ""}</td></tr>`).join("")}
       ${ed ? `<tr><td class="l" colspan="4"><button class="btn btn-ghost btn-sm" onclick="addExp('advance')">＋ 立て替えを足す</button></td></tr>` : ""}</table>
     <div class="hand"><div class="k">🤝 社長に手渡し（随時の回収合計・現金）</div><div class="v">${yen(hand)}</div></div>
+    ${(() => { /* 👛 袋の中身：実際に数えた額を手で入れる。社長に手渡しの額とくらべる（2026/11/7 店長） */
+      const b = ho && ho.bag_amount != null ? Number(ho.bag_amount) : null, df = b == null ? null : b - hand;
+      return `<div class="bag"><div class="k">👛 袋の中身（実際に数えた額）</div>
+        <div class="bagin">${ed ? `<input type="number" id="bagAmt" value="${b == null ? "" : b}" placeholder="数えた額" onchange="setBag(this.value)"><span>円</span>` : `<b>${b == null ? "まだ" : yen(b)}</b>`}</div>
+        <div class="bagst ${df == null ? "" : df === 0 ? "ok" : "ng"}">${df == null ? "袋のお金を数えたら入れてください（社長に手渡しの額とくらべます）" : df === 0 ? "✅ 社長に手渡しの額とぴったり" : df > 0 ? `⚠️ 袋のほうが ${yen(df)} 多い` : `⚠️ 袋のほうが ${yen(-df)} 足りない`}
+          ${b != null && ho.bag_by ? `<small>（${esc(ho.bag_by)} ${ho.bag_at ? when(ho.bag_at) : ""}）</small>` : ""}</div></div>`; })()}
     ${ho && ho.received_at && ho.received_amount != null && ho.received_amount !== hand ? `<div class="warn" style="margin-top:8px">受け取ったときは ${yen(ho.received_amount)} でした。そのあと ${sgn(hand - ho.received_amount)}円 変わっています（あとから回収した分など）。</div>` : ""}
     <div class="chk"><input type="checkbox" ${ho && ho.received_at ? "checked" : ""} ${KB.IS_OWNER && !D.no171 ? "" : "disabled"} onchange="setReceived(this.checked)"> 社長が受け取った
       <small>${ho && ho.received_at ? `${esc(ho.received_by)} ${when(ho.received_at)}（${yen(ho.received_amount ?? hand)}）` : "（社長のログインでだけ押せる・日時が残る）"}</small></div>
@@ -587,6 +594,14 @@ async function saveHo(patch){
   loadDay();
 }
 const HO = () => D.ho.find(h => h.biz_date === D.day) || null;
+// 👛 袋の中身（数えた額）を保存。空にすると消す（SQL 232）
+async function setBag(v){
+  const n = String(v).trim() === "" ? null : Math.round(Number(v));
+  if(n != null && !isFinite(n)){ toast("数字で入れてください"); return; }
+  try{ q(await sb.from("kb_handovers").upsert({ biz_date: D.day, bag_amount: n, bag_by: n == null ? "" : KB.operatorName(), bag_at: n == null ? null : new Date().toISOString(), updated_by: KB.operatorName(), updated_at: new Date().toISOString() }, { onConflict: "biz_date" })); toast(n == null ? "袋の中身を消しました" : "👛 袋の中身を入れました"); }
+  catch(e){ toast("保存できませんでした（SQL 232 は実行ずみ？）：" + (e.message || e)); }
+  loadDay();
+}
 const exList = () => ((HO() && Array.isArray(HO().expenses)) ? HO().expenses : []).map(x => Object.assign({}, x));
 function addExp(type){ const l = exList(); l.push(type === "transfer" ? { type, memo: "キャンセル料", amount: 0 } : type === "advance" ? { type, memo: "両替が足りない", amount: 0, from: "", settled: false } : { memo: "キャッシュフロー補充", amount: 0, from: "", taken: false }); saveHo({ expenses: l }); }
 function delExp(i){ const l = exList(); if(!confirm("この行を消しますか？")) return; l.splice(i, 1); saveHo({ expenses: l }); }
