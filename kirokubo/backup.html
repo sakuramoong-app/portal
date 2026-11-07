@@ -45,14 +45,14 @@
       ・<b>お客さん・キャストの個人情報が入っています。</b>ダウンロードしたファイルは、決めた場所（鍵つきのUSBなど）に入れて、ほかの人に送ったり、共有のフォルダに置いたりしないでください。<br>
       ・<b>フォルダに入れておくファイルは2つまでにします。</b>今日から数えて一昨日のファイルは削除して、<b>昨日と今日のファイルだけ</b>がフォルダに入っているようにしてください。<br>
       ・押した日時はアプリに残ります。今日まだ取っていないと、ポータルに「今日のバックアップがまだです」と出ます。<br>
-      ・このページは店長だけが使えます（社長は Dropbox の自動バックアップを backup_open で開いてください）。合言葉・端末の鍵・意見箱、たくさんたまる記録（ログ）は入れていません。
+      ・このページは店長・社長が使えます。合言葉・端末の鍵・意見箱、たくさんたまる記録（ログ）は入れていません。
     </div>
   </div>
 </div>
 <script>
 /* ============================================================
-   💾 バックアップ（店長だけ・PCだけ）
-   ・アプリの表を全部読んで、カギつきの 1つの .sgb にしてダウンロード（backup_open.html で開く）。店長だけ
+   💾 バックアップ（店長・社長・PCだけ）
+   ・アプリの表を全部読んで、カギつきの 1つの .sgb にしてダウンロード（backup_open.html で開く）。店長・社長
    ・押した日時を kb_settings の 'last_backup' に残す（ポータルの「今日のバックアップがまだです」に使う）
    ============================================================ */
 const { sb, q, esc, toast } = KB;
@@ -102,7 +102,7 @@ async function paintLast(){
 //   ファイル ＝ 先頭 "SAKURABK1" ＋ salt 16 ＋ iv 12 ＋ 暗号（AES-256-GCM。鍵は PBKDF2・SHA-256・10万回）。中身 ＝ gzip した JSON {v,at,tables:[{t,label,rows}],summary}
 const MAGIC = "SAKURABK1", ITER = 100000;
 async function runBackup(){
-  if(!KB.IS_BOSS || KB.IS_OWNER){ toast("店長だけが取れます"); return; }
+  if(!KB.IS_BOSS){ toast("店長・社長だけが取れます"); return; }   // カギつき（.sgb）だけなので社長も（2026/11/7 店長OK）
   const p1 = $("pw1").value, p2 = $("pw2").value;
   if(p1.length < 8){ toast("パスワードを8文字以上で入れてください"); $("pw1").focus(); return; }
   if(p1 !== p2){ toast("2つのパスワードがちがいます。もう一度入れてください"); $("pw2").value = ""; $("pw2").focus(); return; }
@@ -142,7 +142,7 @@ async function runBackup(){
 async function init(){
   $("navArea").innerHTML = KB.nav("backup.html");
   if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（店長だけ）"; return; }
-  if(!KB.IS_BOSS || KB.IS_OWNER){ $("gate").innerHTML = "このページは店長だけが使えます。<br>バックアップの中を見るときは、Dropbox の自動バックアップ（.sgb）を「🔓 自動バックアップを開く」で開いてください。"; return; }   // 社長は使わない（カギのないファイルを広げないため）2026/11/7
+  if(!KB.IS_BOSS){ $("gate").textContent = "店長・社長だけが使えます"; return; }   // カギつき（.sgb）だけなので、店長・社長（2026/11/7）
   if(!(await KB.passGate("バックアップ"))) return;   // 🔒 端末の登録の合言葉
   $("gate").style.display = "none"; $("main").style.display = "";
   paintLast();
