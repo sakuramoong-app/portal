@@ -623,12 +623,16 @@
       <div id="dummyWrap" style="display:none;background:#F6F2FE;border-radius:12px;padding:8px 10px;margin-bottom:8px">
         <!-- 18・極門：ダミー指名か、名前のある子（台帳で18・極門の名前を持っている子）の指名か -->
         <div id="dmModeChips" style="margin-bottom:6px">
-          <div class="dmgrp"><div class="dmgl">🎭 指名：ダミー or 本物 の一覧から選ぶ</div><div class="chips">
+          <div class="dmgrp"><div class="dmgl">🎭 指名：ダミー or 本物 の一覧から選ぶ</div>
+            <div style="display:flex;gap:6px;align-items:center"><select id="f_pick" style="flex:1" onchange="pickChoose(this.value)"></select>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="toggleDummyEdit()" title="ダミー名を足す・直す">⚙️ ダミー</button></div>
+            <div style="font-size:11.5px;color:var(--sub);margin-top:3px">🎭 ダミーを選ぶと、行ける子とマッチ率が下に出ます。⭐ 本物を選ぶと、その子に決まります</div>
+            <div class="chips" style="display:none">
             <button type="button" class="chip" data-m="dummy" onclick="setDmMode('dummy')">🎭 ダミー</button>
             <button type="button" class="chip" data-m="named" onclick="setDmMode('named')">⭐ 本物（みさ・美咲など）</button></div></div>
           <div class="dmgrp"><div class="dmgl">⏱ 時間指定：誰が行ける？</div><div class="chips">
-            <button type="button" class="chip" data-m="time" onclick="setDmMode('time')">⏱ 行けるダミー</button>
-            <button type="button" class="chip" data-m="cast" onclick="setDmMode('cast')">⏱ 行けるキャスト（本物もふくむ）</button></div></div>
+            <button type="button" class="chip" data-m="time" onclick="setDmMode('time')">⏱ 行けるダミーと本物</button>
+            <button type="button" class="chip" data-m="cast" onclick="setDmMode('cast')">👤 行けるサクラの子から（ダミー名をつける）</button></div></div>
           <div style="font-size:11.5px;color:var(--sub)">※<b>本物</b>＝このお店の専用の名前を持っている子（例：美沙＝みさ・葵つばさ＝つばさ）。フリーでも指名でもその名前で行きます。<b>ダミー</b>＝だれが行くか決まっていない名前</div></div>
         <div id="timeBox" style="display:none">
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px"><b>何時から？</b>
@@ -2331,7 +2335,7 @@ async function saveRes(){
   if(!$("f_cast").value){ toast(isDummyStore($("f_store").value) ? "実際に行くキャストを選んでください" : "キャストを選んでください"); return; }
   // 専用在籍指名で子を選んでいるのに、名前の欄が空のとき（念のため）：選んだ子の専用の名前を入れなおす
   if(isDummyStore($("f_store").value) && !$("f_dummy").value && typeof dmMode !== "undefined" && dmMode === "named" && $("f_named") && $("f_named").value){ try{ onNamedPick(true); }catch(e){} }
-  if(isDummyStore($("f_store").value) && !$("f_dummy").value){ toast(typeof dmMode !== "undefined" && dmMode === "named" ? "「⭐ 本物の一覧」から指名された子を選んでください" : "「🎭 ダミーの一覧」からダミーを選んでください（一覧になければ ⚙️ から足せます）"); return; }
+  if(isDummyStore($("f_store").value) && !$("f_dummy").value){ toast(typeof dmMode !== "undefined" && dmMode === "named" ? "「ダミー or 本物の一覧」から指名された子（⭐ 本物）を選んでください" : "「ダミー or 本物の一覧」から選んでください（ダミー名がなければ ⚙️ から足せます）"); return; }
   // 受付ルール：📣は全部チェック／✅はチェックするまで「〜待ち」でしか保存できない／⌛受けない長さは保存できない（キャンセル・トビは除く）
   if(!$("f_status").value){ toast("⚠️ 状態を選んでください"); $("f_status").scrollIntoView({ block: "center" }); return; }
   const cancelLike = ["cancel", "tobi", "flowed"].includes($("f_status").value);
@@ -7038,6 +7042,13 @@ async function tmPaint(){
     });
     const ok = list.filter(x => x.cands.length), ng = list.filter(x => !x.cands.length);
     const pick = list.find(x => x.d.name === tmPick && x.cands.length);
+    // ⭐ 本物（このお店の名前を持つ子）：その時間に行けるか。押すと、その子に決まり（マッチ率なし）2026/11/7
+    const reals = namedCasts(store).filter(c => c.status !== "left"), realOk = reals.filter(free), realNg = reals.filter(c => !free(c));
+    const skName = c => (c.stores.sakuramoon && c.stores.sakuramoon.name) || c.official_name || c.temp_name || "";
+    const realHtml = `<div style="font-size:12.5px;font-weight:800;margin:10px 0 4px">⭐ ${fmtHour(s)}〜${fmtHour(e)} に行ける本物（${realOk.length}人）</div>
+      <div class="tm-dms">${realOk.map(c => { const sh = shifts[c.shift_name] || shifts[c.official_name];
+        return `<button type="button" class="tm-dm real" onclick="pickChoose('n:${esc(c.id)}')">⭐ ${esc(c.stores[store].name)}<small>サクラムーン：${esc(skName(c))}${sh ? "・" + fmtHour(sh.start) + "〜" + fmtHour(sh.end) : ""}</small></button>`; }).join("") || `<div class="hint2" style="font-size:12px;color:var(--sub)">この時間に行ける本物はいません</div>`}</div>
+      ${realNg.length ? `<details style="margin-top:4px;font-size:12px;color:var(--sub)"><summary>この時間に行けない本物（${realNg.length}）</summary>${realNg.map(c => `<div>⭐${esc(c.stores[store].name)}（${esc(skName(c))}）：出勤していない・予約が重なる</div>`).join("")}</details>` : ""}`;
     out.innerHTML = `<div style="font-size:12.5px;font-weight:800;margin:2px 0 4px">🎭 ${fmtHour(s)}〜${fmtHour(e)} に出せるダミー名（${ok.length}人）${noLook}</div>
       <div class="tm-dms">${ok.map(x => `<button type="button" class="tm-dm ${x.d.name === tmPick ? "on" : ""} ${x.owners.length || x.sc(x.cands[0]) >= 80 ? "hi" : ""}" onclick="tmPick='${esc(x.d.name).replace(/'/g, "")}';tmPaint()">${dmPhoto(x.d, 54)}${esc(x.d.name)}${x.d.nomination_fee != null ? `<small>${yen(x.d.nomination_fee)}</small>` : ""}${x.owners.length ? `<small>専用</small>` : x.sameIds.length ? `<small>前回の子</small>` : `<small>${x.cands.length}人</small>`}</button>`).join("") || `<div class="warn">この時間に出せるダミー名がありません</div>`}</div>
       ${ng.length ? `<details style="margin-top:4px;font-size:12px;color:var(--sub)"><summary>出せないダミー名（${ng.length}）</summary>${ng.map(x => `<div>🎭${esc(x.d.name)}：${x.owners.length ? `${x.owners.map(o => castName(o.id)).map(esc).join("・")} 専用の名前（この時間に行けない／このお客さんに出せない）` : x.sameIds.length ? `前回（${md(x.same[0])}）の ${x.sameIds.map(castName).map(esc).join("・")} がこの時間に行けない` : "この時間に行ける子がいない"}</div>`).join("")}</details>` : ""}
@@ -7045,7 +7056,7 @@ async function tmPaint(){
         ${pick.cands.map(c => { const hh = hist[c.id], sh = shifts[c.shift_name] || shifts[c.official_name];
           return `<div class="tm-c">${pctBadge(pick.sc(c))}<div style="flex:1"><b>${esc(castName(c.id))}</b> <small>${fmtHour(sh.start)}〜${fmtHour(sh.end)}</small>
             ${hh && hh.other.length ? `<br><small style="color:#7a4a00;font-weight:700">👀 ほかのお店で会ったことあり：${hh.other.slice(0, 3).map(p => md(p) + " " + esc(storeLabel(p.store_key))).join("、")}</small>` : ""}</div>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="tmChoose('${esc(pick.d.name).replace(/'/g, "")}','${c.id}')">この子で行く</button></div>`; }).join("")}` : ok.length ? `<div class="hint2" style="font-size:12px;color:var(--sub);margin-top:4px">ダミー名を押すと、その名前で行ける子が出ます</div>` : ""}`;
+            <button type="button" class="btn btn-ghost btn-sm" onclick="tmChoose('${esc(pick.d.name).replace(/'/g, "")}','${c.id}')">この子で行く</button></div>`; }).join("")}` : ok.length ? `<div class="hint2" style="font-size:12px;color:var(--sub);margin-top:4px">ダミー名を押すと、その名前で行ける子とマッチ率が出ます</div>` : ""}` + realHtml;
   }catch(err){ out.innerHTML = `<div class="warn">探せませんでした：${esc(err.message || err)}</div>`; }
 }
 function tmCast(cid){
@@ -7100,6 +7111,7 @@ function tmChoose(name, cid){
 document.head.insertAdjacentHTML("beforeend", `<style>
   .tm-dms{display:flex;flex-wrap:wrap;gap:6px} .tm-dm{border:1.5px solid #D9CCF2;background:#fff;border-radius:12px;padding:5px 10px;font-family:inherit;font-size:14px;font-weight:800;color:#5c3d7a;cursor:pointer;display:flex;flex-direction:column;align-items:center;line-height:1.2}
   .tm-dm small{font-size:10.5px;font-weight:700;color:#9C8B8F} .tm-dm.on{background:#8a6fd1;border-color:#8a6fd1;color:#fff} .tm-dm.on small{color:#f0eaff}
+  .tm-dm.real{border-color:#F2C94C;background:#FFFBEA;color:#7a5a00}
   .tm-c{display:flex;gap:6px;align-items:center;background:#fff;border-radius:10px;padding:6px 8px;margin-bottom:4px;font-size:12.5px}
 </style>`);
 // お客さんを調べたら、行ける子を出しなおす。店を変えたら、ダミー指名から
@@ -7122,6 +7134,39 @@ function dmUiDummy(){
   if($("timeBox")) $("timeBox").style.display = "none";
   if($("dummyRow")) $("dummyRow").style.display = "";
 }
+/* 🎭⭐ 18・極門の指名：ダミーと本物を1つの一覧で選ぶ（2026/11/7 店長）
+   中の仕組み（f_dummy・f_named・dmMode）はそのまま。この一覧で選ぶと、ダミーなら dmMode=dummy＋f_dummy、本物なら dmMode=named＋f_named にする
+   ダミーを選ぶと、行ける子とマッチ率（dummyMatch）。本物は、その子に決まり（マッチ率なし） */
+function pickSync(){
+  const sel = $("f_pick"), store = $("f_store").value; if(!sel || !isDummyStore(store)) return;
+  const dOpts = [...$("f_dummy").options].filter(o => o.value);
+  const named = namedCasts(store);
+  const sk = c => (c.stores.sakuramoon && c.stores.sakuramoon.name) || c.official_name || c.temp_name || "";
+  sel.innerHTML = `<option value="">（ダミー or 本物を選ぶ）</option>`
+    + `<optgroup label="🎭 ダミー（マッチ率が出ます）">${dOpts.map(o => `<option value="d:${esc(o.value)}" ${o.disabled ? "disabled" : ""}>🎭 ${esc(o.textContent)}</option>`).join("") || `<option disabled>（ダミー名がありません ⚙️ から足せます）</option>`}</optgroup>`
+    + `<optgroup label="⭐ 本物（18・極門の名前／サクラムーンの名前）">${named.map(c => `<option value="n:${esc(c.id)}">⭐ ${esc(c.stores[store].name)}　／　サクラムーン：${esc(sk(c))}</option>`).join("") || `<option disabled>（このお店の名前を持っている子がいません）</option>`}</optgroup>`;
+  const cur = dmMode === "named" ? ($("f_named").value ? "n:" + $("f_named").value : "") : ($("f_dummy").value && !ownersOf(store, $("f_dummy").value).length ? "d:" + $("f_dummy").value : "");
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : "";
+}
+function pickChoose(v){
+  if(!v){ return; }
+  if(v.startsWith("d:")){
+    const name = v.slice(2);
+    if(dmMode !== "dummy") setDmMode("dummy");
+    if(![...$("f_dummy").options].some(o => o.value === name)) $("f_dummy").insertAdjacentHTML("beforeend", `<option>${esc(name)}</option>`);
+    $("f_dummy").value = name; recalc(); renderDummyMatch();
+  } else if(v.startsWith("n:")){
+    const id = v.slice(2);
+    setDmMode("named");
+    $("f_named").value = id; onNamedPick();
+  }
+  pickSync();
+}
+{ const __rdmPick = renderDummyMatch; renderDummyMatch = async function(){ const r = await __rdmPick.apply(this, arguments); try{ pickSync(); }catch(e){} return r; }; }
+{ const __sdmPick = setDmMode; setDmMode = function(){ const r = __sdmPick.apply(this, arguments); try{ pickSync(); }catch(e){} return r; }; }
+{ const __onpPick = onNamedPick; onNamedPick = function(){ const r = __onpPick.apply(this, arguments); try{ pickSync(); }catch(e){} return r; }; }
+document.head.insertAdjacentHTML("beforeend", `<style>#dummyRow{display:none !important} #namedBox > .f{display:none}
+  #f_pick{font-size:15.5px;font-weight:800}</style>`);
 const __openFormDm = openForm;
 openForm = function(id){ dmMode = "dummy"; tmPick = ""; $("f_namedEx").checked = false; $("f_cast").disabled = false; const r = __openFormDm.apply(this, arguments);
   // 前の予約を開くとき：ダミー名がない・または専用の名前（美沙など）なら「専用在籍指名」で開く
