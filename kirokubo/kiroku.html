@@ -950,6 +950,17 @@ async function quickStatus(id, st){
     toast("状態を「" + STATUS[st] + "」にしました"); renderList();
   }catch(e){ toast("変えられませんでした：" + (e.message || e)); loadDay(); }
 }
+// 📞 前日確電・1H前確電がきた（予約の状態を「前日確認電話／メール」「1H前確認電話／メール」から次に進めた）→ その種類のテンプレを、そのキャストをえらんだ状態で開く（2026/11/7 店長）
+//   テンプレがまだなければ、登録のしかたを知らせるだけ
+{ const __qsTpl = quickStatus; quickStatus = async function(id, st){
+    const r0 = rows.find(x => x.id === id), was = r0 && r0.status;
+    const res = await __qsTpl.apply(this, arguments);
+    const sc = ["pre_call", "pre_mail"].includes(was) ? "前日確電" : ["hour_call", "hour_mail"].includes(was) ? "1H前確電" : "";
+    if(sc && st !== was && !["cancel", "tobi", "flowed", "pre_call", "pre_mail", "hour_call", "hour_mail"].includes(st)){
+      if(tplList().some(t => (t.scene || "") === sc)) openTplBox(null, r0.cast_id || "", sc);
+      else toast(`📝「${sc}」のテンプレを登録しておくと、ここで開いてコピーできます（📝 テンプレ → 種類「${sc}」）`);
+    }
+    return res; }; }
 async function saveNotice(){
   if(!KB.CAN_EDIT) return;
   try{ q(await sb.from("kb_day_notes").upsert({ biz_date: day, notice: $("notice").value, updated_by: KB.operatorName() })); toast("お知らせを保存しました"); if(day === KB.bizDateOf()) noticeSeenSet(day, $("notice").value); }
@@ -1796,6 +1807,21 @@ async function custByPhone(phone, cols){
   const b = await sb.from("kb_customers").select(sel).contains("phones", [phone]).order("id").limit(20);
   return b.error ? null : pick(b.data);
 }
+// 📒 台帳の名前のヒント（受付の「お客さんの名前」の下）。新しい予約では名前を自動で入れないので、聞いてから押す（2026/11/7）
+// 名前を打ったら「台帳と同じ」かを出しなおす・受付を開いたら消す
+document.addEventListener("input", e => { if(e.target && e.target.id === "f_name") try{ nameHintPaint(curCustomer); }catch(_){} }, true);
+{ const __ofNh = openForm; openForm = function(){ const r = __ofNh.apply(this, arguments); try{ nameHintPaint(editing ? null : curCustomer); }catch(e){} return r; }; }
+function nameHintPaint(c){
+  const inp = $("f_name"); if(!inp) return;
+  let el = $("nameHint");
+  if(!el){ inp.insertAdjacentHTML("afterend", `<div id="nameHint"></div>`); el = $("nameHint"); }
+  if(!c || !c.name || editing){ el.innerHTML = ""; return; }
+  const same = inp.value.trim() === String(c.name).trim();
+  el.innerHTML = same ? `<div class="nh ok">✅ 台帳の名前と同じです（${esc(c.name)}）</div>`
+    : `<div class="nh">🗣 <b>お客さんに名前を聞いてください</b>　📒 台帳の名前：<b>${esc(c.name)}</b>　<button type="button" class="btn btn-ghost btn-sm" onclick="$('f_name').value=curCustomer?curCustomer.name:'';nameHintPaint(curCustomer);recalc()">聞いて同じなら押して入れる</button></div>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>#nameHint .nh{margin-top:6px;background:#FFF5D6;border:2px solid #F2C94C;border-radius:12px;padding:6px 10px;font-size:13.5px;font-weight:800;color:#6b5300}
+  #nameHint .nh.ok{background:#E6F6EC;border-color:#9AD3A8;color:#1d6b3a}</style>`);
 async function lookupCustomer(keepName){
   const phone = phoneNorm($("f_phone").value);
   $("f_phone").value = phone;
@@ -1818,7 +1844,9 @@ async function lookupCustomer(keepName){
     curCustomer = c || null;
     if(!c){ custPast = []; custSeen = []; $("custInfo").innerHTML = `<div class="info">🆕 はじめての電話番号です（保存すると新しいお客さんとして登録します）</div>
       <div class="xlwarn">📒 似た名前のお客さんがいる・番号を変えたと言っている・様子があやしいときは、<b>キャストを行かせる前に、エクセルの台帳も確認してください</b>（店NGかもしれません）</div>`; if(!editing) setVisit("new"); return; }
-    if(!keepName || !$("f_name").value) $("f_name").value = c.name || "";
+    // 名前：新しい予約では自動で入れない（入ると、お客さんに名前を聞き忘れるので。2026/11/7 店長）→ 台帳の名前を横に出して、聞いて同じなら押して入れる
+    if(editing){ if(!keepName || !$("f_name").value) $("f_name").value = c.name || ""; }
+    nameHintPaint(c);
     if(!keepName || !$("f_email").value) $("f_email").value = c.email || "";   // メールは、受付で入れたものを消さない
     $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = c.ng_reason || c.note || "";
     // ダミーで行った子の確認（renderCastChecks）のため、多めに読む。履歴に出すのは新しい10件
@@ -2240,8 +2268,8 @@ function netReply(){
   // 文は「✏️ 返信の文を直す」で、内勤みんなで直せる（kb_settings 'net_reply_tpl'。2026/11/5）
   const V = { 名前: $("f_name").value || "お客", 店名: storeLabel(store), 日時: `${cd2.getUTCMonth() + 1}/${cd2.getUTCDate()}(${DOW[cd2.getUTCDay()]}) ${st2 || "--:--"}〜${en || "--:--"}`,
     キャスト: who, コース: `${c.course}${/^\d+$/.test(c.course) ? "分" : ""}${c.ext ? "（延長" + c.ext * 30 + "分）" : ""}`, 場所: place || "（未定）",
-    オプション行: ops ? "\n■オプション：" + ops : "", 料金: c.total.toLocaleString("ja-JP") + "円", 支払: c.pay === "cash" ? "現金" : c.pay === "split" ? "現金＋カード" : "カード", 電話: STORE_TEL[store] || "" };
-  $("netReply").value = netTpl().replace(/\{(名前|店名|日時|キャスト|コース|場所|オプション行|料金|支払|電話)\}/g, (m, k) => V[k]);
+    オプション行: ops ? "\n■オプション：" + ops : "", 希望プレイ行: $("f_play") && $("f_play").value.trim() ? "\n■希望プレイ（無料の範囲）：" + $("f_play").value.trim() : "", 料金: c.total.toLocaleString("ja-JP") + "円", 支払: c.pay === "cash" ? "現金" : c.pay === "split" ? "現金＋カード" : "カード", 電話: STORE_TEL[store] || "" };
+  $("netReply").value = netTpl().replace(/\{(名前|店名|日時|キャスト|コース|場所|オプション行|希望プレイ行|料金|支払|電話)\}/g, (m, k) => V[k]);
 }
 const NET_TPL_DEF = `{名前}様
 
@@ -2251,7 +2279,7 @@ const NET_TPL_DEF = `{名前}様
 ■ご予約日時：{日時}
 ■キャスト：{キャスト}
 ■コース：{コース}
-■ご利用場所：{場所}{オプション行}
+■ご利用場所：{場所}{オプション行}{希望プレイ行}
 ■料金総額：{料金}（{支払}）
 
 ご不明な点やご変更がございましたら、お気軽にお電話ください。
@@ -2259,14 +2287,17 @@ const NET_TPL_DEF = `{名前}様
 
 {店名}
 TEL：{電話}`;
-function netTpl(){ const v = M.set && M.set.net_reply_tpl; return typeof v === "string" && v.trim() ? v : NET_TPL_DEF; }
+function netTpl(){ const v = M.set && M.set.net_reply_tpl; let t = typeof v === "string" && v.trim() ? v : NET_TPL_DEF;
+  // 前に保存した文に {希望プレイ行} がなければ、{オプション行} のあとに入れる（2026/11/7 店長：今のテンプレにも入るように）
+  if(!t.includes("{希望プレイ行}")) t = t.includes("{オプション行}") ? t.replace("{オプション行}", "{オプション行}{希望プレイ行}") : t.replace(/(\n■料金総額)/, "{希望プレイ行}$1");
+  return t; }
 function openNetTpl(){
   let bg = $("ntBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "ntBg"; bg.className = "modal-bg"; document.body.appendChild(bg); KB.closeOnBackdrop(bg, () => bg.classList.remove("show")); }
   bg.innerHTML = `<div class="modal" style="max-width:640px"><button class="x" onclick="$('ntBg').classList.remove('show')">×</button>
     <h2>✏️ 📩 お客さまへの返信の文</h2>
     <p style="font-size:12.5px;color:var(--sub);line-height:1.7;margin:0 0 8px">いつもの注意事項なども、ここに書けば毎回入ります（内勤みんな同じ文）。<br>
-      {名前} {店名} {日時} {キャスト} {コース} {場所} {オプション行} {料金} {支払} {電話} は、その予約の内容になります。</p>
+      {名前} {店名} {日時} {キャスト} {コース} {場所} {オプション行} {希望プレイ行} {料金} {支払} {電話} は、その予約の内容になります。</p>
     <textarea id="nt_text" rows="18" style="width:100%;font-family:inherit;font-size:13.5px">${esc(netTpl())}</textarea>
     ${KB.CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:8px"><button type="button" class="btn btn-primary" style="flex:1" onclick="saveNetTpl()">保存</button>
       <button type="button" class="btn btn-ghost" onclick="if(confirm('はじめの文にもどしますか？'))$('nt_text').value=NET_TPL_DEF">はじめの文にもどす</button></div>` : ""}</div>`;
@@ -3477,7 +3508,14 @@ function renderToday(){
   el.innerHTML = t("今日の店落ち", yen(part[0] + part[1] - staffPaid) + `<div style="font-size:11.5px;font-weight:700;color:var(--sub);margin-top:2px">暫定＋雑費 ${yen(part[0] + part[1])} − 内勤の日払い ${yen(staffPaid)}</div>`) + t("☀️ 22時までの店落ち", yen(part[0])) + t("🌙 22時からの店落ち", yen(part[1])) + t("カード合計", yen(card)) + t("予約件数", live.length + "件")
     + t("予約のあるキャスト", ids.length + "名") + t("お茶", st.filter(s=>s === "お茶").length + "名") + t("欠勤", st.filter(s=>s === "欠勤").length + "名")
     + t("キャンセル・トビ", rows.filter(r=>r.status === "cancel").length + "件・" + rows.filter(r=>r.status === "tobi").length + "件");
+  // 📋 売上の報告（社長に送る文）：その日の予約の総額（キャンセル・トビ・流れたは入れない）2026/11/7
+  const sales = live.reduce((a, r) => a + (Number(r.total) || 0), 0), dd = new Date(day + "T12:00:00Z");
+  salesReport = `お疲れ様です。\n${dd.getUTCMonth() + 1}月${dd.getUTCDate()}日\n売上   ${sales.toLocaleString("ja-JP")}円\nお願いします<(_ _)>`;
+  el.insertAdjacentHTML("beforeend", `<div class="t salesrep"><div class="k">📋 売上の報告（コピーして送る）</div><pre>${esc(salesReport)}</pre>
+    <button type="button" class="btn btn-primary btn-sm" onclick="navigator.clipboard.writeText(salesReport).then(()=>toast('📋 売上の報告をコピーしました'),()=>prompt('コピーしてください',salesReport))">📋 コピー</button></div>`);
 }
+let salesReport = "";
+document.head.insertAdjacentHTML("beforeend", `<style>.todaygrid .salesrep pre{font-family:inherit;font-size:14px;font-weight:800;white-space:pre-wrap;margin:4px 0 6px;color:var(--ink)}</style>`);
 const __renderListT = renderList;
 renderList = function(){ __renderListT(); renderToday(); renderOwner(); };
 
@@ -4586,7 +4624,7 @@ async function loadNaikinWeek(){
   if($("tplBg") && $("tplBg").classList.contains("show")) openTplBox();
 }
 let tplScene = "";   // えらんでいる種類（"" = ぜんぶ）
-const TPL_BASE_SCENES = ["出勤", "退勤"];
+const TPL_BASE_SCENES = ["出勤", "退勤", "前日確電", "1H前確電"];   // 前日確電・1H前確電：予約の状態をその確認電話から次に進めたとき、その種類のテンプレが開く（2026/11/7）
 function openTplBox(editId, castId, scene){
   let bg = $("tplBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "tplBg"; bg.className = "modal-bg"; document.body.appendChild(bg); KB.closeOnBackdrop(bg, () => bg.classList.remove("show")); }
@@ -5269,13 +5307,32 @@ function rcAllOpen(){ try{ return localStorage.getItem("kbRcAllOpen") === "1"; }
 // 「全部開く／全部閉じる」ボタン（その日の予約ぜんぶ。ひとつずつ開け閉めもそのまま）2026/11/5
 function rcAllOpenToggle(on){ try{ localStorage.removeItem("kbRcAllOpen"); }catch(e){} if(on) rows.forEach(r => rcOpen.add(r.id)); else rcOpen.clear(); renderList(); }
 // 📞 フィルターの電話番号：この日の予約のお客さんの番号に、入れた数字が入っていれば出す（一部でもOK）。押すとその予約へ
+// 2026/11/7 店長：今日（営業日）から1週間（7日後まで）の予約も探す。見ている日の予約もいっしょに
+let telSeq = 0, telTimer = null;
 function telFind(){
   const el = $("telResult"); if(!el) return;
   const d = digits($("s_tel").value);
   if(d.length < 3){ el.innerHTML = d ? `<div class="hint2">3けた以上入れてください</div>` : ""; return; }
-  const hit = rows.filter(r => r.kb_customers && digits(r.kb_customers.phone || "").includes(d)).sort((a, b) => String(a.start_at).localeCompare(String(b.start_at)));
-  el.innerHTML = hit.length ? `<div class="l4list">${hit.map(r => `<button type="button" class="l4" onclick="jumpToRes(${r.id},'${r.biz_date}')">${r.kb_customers.ng ? "⚠️" : ""}<b>${esc(r.kb_customers.name || "名前なし")}</b> <small>${esc(r.kb_customers.phone || "")}　${r.start_at ? hm(r.start_at) : "時間未定"} ${esc(castName(r.cast_id))}${["cancel", "tobi", "flowed"].includes(r.status) ? "（" + esc(STATUS[r.status]) + "）" : ""}</small></button>`).join("")}</div>`
-    : `<div class="hint2">この日の予約に、${esc(d)} が入った電話番号のお客さんはいません</div>`;
+  const local = rows.filter(r => r.kb_customers && digits(r.kb_customers.phone || "").includes(d));
+  paintTel(d, local, true);
+  clearTimeout(telTimer);
+  const seq = ++telSeq;
+  telTimer = setTimeout(async () => {
+    const from = KB.realBizDateOf(), to = addDays(from, 7);
+    let more = [];
+    try{ more = q(await sb.from("kb_reservations").select("id,biz_date,start_at,cast_id,status,kb_customers!inner(name,phone,ng)").gte("biz_date", from).lte("biz_date", to).eq("deleted", false).like("kb_customers.phone", "%" + d + "%").order("biz_date").order("start_at").limit(50)) || []; }catch(e){ more = []; }
+    if(seq !== telSeq) return;
+    const seen = new Set(local.map(r => r.id));
+    paintTel(d, local.concat(more.filter(r => !seen.has(r.id))), false);
+  }, 350);
+}
+function paintTel(d, hit, loading){
+  const el = $("telResult"); if(!el) return;
+  hit = hit.slice().sort((a, b) => String(a.biz_date).localeCompare(String(b.biz_date)) || String(a.start_at).localeCompare(String(b.start_at)));
+  const dl = bd => { const x = new Date(bd + "T12:00:00Z"); return `${x.getUTCMonth() + 1}/${x.getUTCDate()}(${DOW[x.getUTCDay()]})`; };
+  el.innerHTML = (hit.length ? `<div class="l4list">${hit.map(r => `<button type="button" class="l4" onclick="jumpToRes(${r.id},'${r.biz_date}')">${r.kb_customers.ng ? "⚠️" : ""}<b>${esc(r.kb_customers.name || "名前なし")}</b> <small>${esc(r.kb_customers.phone || "")}　<b>${esc(dl(r.biz_date))}</b> ${r.start_at ? hm(r.start_at) : "時間未定"} ${esc(castName(r.cast_id))}${["cancel", "tobi", "flowed"].includes(r.status) ? "（" + esc(STATUS[r.status]) + "）" : ""}</small></button>`).join("")}</div>`
+    : loading ? "" : `<div class="hint2">今日から1週間の予約（と、見ている日の予約）に、${esc(d)} が入った電話番号のお客さんはいません</div>`)
+    + (loading ? `<div class="hint2">🔎 今日から1週間の予約も探しています…</div>` : `<div class="hint2">今日から1週間（${esc(dl(KB.realBizDateOf()))}〜${esc(dl(addDays(KB.realBizDateOf(), 7)))}）の予約から探しました</div>`);
 }
 { const __ldTel = loadDay; loadDay = async function(){ const r = await __ldTel.apply(this, arguments); telFind(); return r; }; }   // 日を変えたら探しなおす
 function rcMoneyRows(r){
@@ -7161,7 +7218,7 @@ async function addSubPhoneK(){
     c.phones = list; paintSubPhones(); toast("📞 副番号を足しました");
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
-{ const __lcSub = lookupCustomer; lookupCustomer = async function(){ const r = await __lcSub.apply(this, arguments); try{ paintSubPhones(); }catch(e){} try{ await paintSimilarPhones(); }catch(e){} return r; }; }
+{ const __lcSub = lookupCustomer; lookupCustomer = async function(){ const r = await __lcSub.apply(this, arguments); try{ nameHintPaint(curCustomer); }catch(e){} try{ paintSubPhones(); }catch(e){} try{ await paintSimilarPhones(); }catch(e){} return r; }; }
 // 🤔 見つからなかったとき：下8けたが同じ番号のお客さん（090↔080 の打ちまちがい・番号の変更など）を出す。同じ人なら「🔗 つなぐ」
 async function paintSimilarPhones(){
   const now = digits(phoneNorm($("f_phone").value));
