@@ -17,6 +17,8 @@
   .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 12px;}
   .bar input[type=date]{font-family:inherit;font-weight:800;font-size:14px;border:1.5px solid var(--line);border-radius:99px;padding:6px 12px;color:var(--ink);}
   .sum{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+  .kanabar .ssort{font-family:inherit;font-size:14px;font-weight:800;border:1.5px solid #FFC2D1;border-radius:9px;background:#fff;color:#B0124F;padding:4px 8px;margin-right:6px}
+  .colnote{margin-top:4px;background:#FFF8D6;border:1.5px solid #F2D27A;border-radius:10px;padding:3px 8px;font-size:12.5px;font-weight:800;color:#6b5300;cursor:pointer;white-space:pre-wrap;max-width:260px}
   /* 日付の行は、下にスクロールしても上にいつも出す（2026/11/7）。場所のボタン（ぜんぶ・池袋…）は使わないので出さない */
   #main > .bar{position:sticky;top:0;z-index:40;background:rgba(255,247,250,.96);backdrop-filter:blur(4px);padding:8px 6px;margin-left:-6px;margin-right:-6px;border-radius:0 0 16px 16px;box-shadow:0 6px 14px -8px rgba(92,75,79,.25)}
   .sum .s{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:8px 14px;font-size:12px;color:var(--sub);font-weight:800;}
@@ -83,6 +85,7 @@
   .mk{font-weight:900;font-size:16px;} .mk.day{color:#222;} .mk.later{color:#1f6fd1;} .mk.me,.mk.none{color:#E0001B;}
   .paperfoot{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:6px 14px;margin:10px 0;padding:10px 12px;border:2px solid #E9C9D3;border-radius:12px;background:#FFF8FA}
   .paperfoot>div{display:flex;justify-content:space-between;gap:8px;font-size:13.5px}.paperfoot>div.ng b{color:#E0001B}.paperfoot .pf-staff{grid-column:1/-1;justify-content:flex-start}
+  .paperfoot .pf-net{grid-column:1/-1;background:#E6F6EC;border:2px solid #9AD3A8;border-radius:10px;padding:6px 10px;font-weight:800;color:#1d6b3a} .paperfoot .pf-net b{font-size:17px}
   .who3{font-size:11.5px;color:var(--sub);font-weight:700;margin-top:4px;line-height:1.5}
   .xi{display:block;font-size:12px;font-weight:700;line-height:1.6;}
   .hl{margin-top:4px;font-size:11.5px;} .hl summary{cursor:pointer;color:#8a6d00;font-weight:800;} .hli{background:#FFFCEB;border:1px solid #F2D27A;border-radius:8px;padding:4px 7px;margin-top:4px;white-space:normal;min-width:220px;line-height:1.5;} .hli .ht{white-space:pre-wrap;color:var(--ink);} .hli .hb{color:var(--sub);text-align:right;}
@@ -152,7 +155,7 @@ async function init(){
   if(!(await KB.passGate("回収明細"))) return;   // 🔒 端末の登録の合言葉
   $("wip").innerHTML = KB.wipBanner();
   $("gate").style.display = "none"; $("main").style.display = "";
-  try{ (q(await sb.from("master_casts").select("*")) || []).forEach(c => { names[c.id] = c.official_name || c.temp_name || c.id; kanas[c.id] = c.kana || names[c.id]; }); }catch(e){}
+  try{ (q(await sb.from("master_casts").select("*")) || []).forEach(c => { names[c.id] = c.official_name || c.temp_name || c.id; kanas[c.id] = c.kana || names[c.id]; shiftNames[c.id] = c.shift_name || c.official_name || ""; }); }catch(e){}
   try{ ZRULES = q(await sb.from("kb_cast_rules").select("*").eq("active", true).eq("kind", "zappi_exempt")) || []; }catch(e){}
   try{ (q(await sb.from("kb_staff_rates").select("staff_id,record_name")) || []).forEach(r => { if(r.record_name) staffNames[r.staff_id] = r.record_name; }); }catch(e){}
   $("day").value = KB.startDay();   // 記録簿・精算で見ていた日
@@ -208,6 +211,37 @@ function kikiAmt(x){
 }
 const nextDay = d => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); };
 
+/* ---------- 並び順：精算と同じ（あいうえお順／出勤が早い順／退勤が早い順）。localStorage 'settleSort' を精算といっしょに使う（2026/11/7 店長）
+   出勤・退勤はシフト（勤怠で直した時刻があればそちら。シフトがなければ予約の時刻） ---------- */
+const SETTLE_SORTS = [["kana", "あいうえお順"], ["start", "出勤が早い順"], ["endEarly", "退勤が早い順"]];
+let settleSort = "kana"; try{ settleSort = localStorage.getItem("settleSort") || "kana"; }catch(e){}
+const shiftNames = {}, kShifts = {};
+function setSettleSort(v){ settleSort = v; try{ localStorage.setItem("settleSort", v); }catch(e){} if(mode === "day") paintDay(); }
+async function loadKShifts(ymd){
+  if(kShifts[ymd]) return;
+  kShifts[ymd] = {};
+  try{
+    const [y, m, d] = ymd.split("-").map(Number), dt = new Date(Date.UTC(y, m - 1, d)), dow = dt.getUTCDay();
+    dt.setUTCDate(dt.getUTCDate() + (dow === 0 ? -6 : 1 - dow));
+    const rs = q(await sb.from("shift_weeks").select("cast_name,data").eq("wk", dt.toISOString().slice(0, 10))) || [];
+    rs.forEach(r => { const sh = r.data && r.data.shifts && r.data.shifts[ymd]; if(sh && sh.start != null && sh.end != null) kShifts[ymd][r.cast_name] = { start: Number(sh.start), end: Number(sh.end) }; });
+  }catch(e){}
+  if(settleSort !== "kana" && mode === "day" && D && D.day === ymd) paintDay();
+}
+function kaishuSortFn(day, R){
+  const kana = id => String(kanas[id] || names[id] || id);
+  const byKana = (a, b) => kana(a.id).localeCompare(kana(b.id), "ja");
+  if(settleSort === "kana") return byKana;
+  loadKShifts(day);
+  const h = iso => { if(!iso) return null; const t = new Date(new Date(iso).getTime() + 9 * 3600 * 1000); let x = t.getUTCHours() + t.getUTCMinutes() / 60; if(x < 6) x += 24; return x; };
+  const sh = r => {
+    const s = (kShifts[day] || {})[shiftNames[r.id]] || (kShifts[day] || {})[names[r.id]] || null, cd = r.cd || {};
+    const mine = (R.resv || []).filter(x => x.biz_date === day && x.cast_id === r.id && x.start_at);
+    return { start: cd.shift_start_ov != null ? Number(cd.shift_start_ov) : s ? s.start : mine.length ? Math.min(...mine.map(x => h(x.start_at))) : 99,
+             end: cd.shift_end_ov != null ? Number(cd.shift_end_ov) : s ? s.end : mine.length ? Math.max(...mine.map(x => h(x.end_at || x.start_at))) : 99 };
+  };
+  return settleSort === "start" ? (a, b) => sh(a).start - sh(b).start || byKana(a, b) : (a, b) => sh(a).end - sh(b).end || byKana(a, b);
+}
 // その日のキャストごとの行
 function rowsFor(day, R){
   const cds = R.cds.filter(c => c.biz_date === day), resv = R.resv.filter(r => r.biz_date === day && !["cancel", "tobi", "flowed"].includes(r.status));
@@ -234,7 +268,7 @@ function rowsFor(day, R){
   })
   // 売上0の子（予約なし・店落ちもカードも振込も投函も0：お茶・休みなど）は回収明細に出さない（合計は0円なので変わらない）2026/11/7
   .filter(r => r.nRes || r.shop || r.card || r.tr || Number(r.cd.deposited || 0))
-  .sort((a, b) => (ALL_PLACES.indexOf(a.place) + 1 || 9) - (ALL_PLACES.indexOf(b.place) + 1 || 9) || String(kanas[a.id] || names[a.id] || "").localeCompare(String(kanas[b.id] || names[b.id] || ""), "ja"));
+  .sort(kaishuSortFn(day, R));   // 並び順は精算と同じ（あいうえお順／出勤が早い順／退勤が早い順・精算とどちらで選んでも同じ）2026/11/7
 }
 // 交通費・経費・精算ミス（その子のぶん）
 // 項目ごとに { key（処理✓のキー。空＝チェックなし）, html }
@@ -383,7 +417,8 @@ function paintDay(){
     }
     return pre + rowHtml(r, ed);
   }).join("");
-  h += `<div class="kanabar sortbar"><span style="font-weight:800;align-self:center;margin-right:4px">並び：</span>` + [["", "いつもの順"], ["staff", "🙋 担当内勤ごと"], ["place", "📍 エリアごと"]].map(([k, t]) => `<button type="button" class="kb ${(sortMode || "") === k ? "on" : ""}" onclick="setSort('${k}')">${t}</button>`).join("") + `</div>`;
+  h += `<div class="kanabar sortbar"><span style="font-weight:800;align-self:center;margin-right:4px">並び：</span><select class="ssort" onchange="setSettleSort(this.value)" title="並び順（精算と同じ）">${SETTLE_SORTS.map(([v, l]) => `<option value="${v}" ${v === settleSort ? "selected" : ""}>${l}</option>`).join("")}</select>`
+    + `<span style="font-weight:800;align-self:center;margin:0 4px 0 10px">まとめる：</span>` + [["", "まとめない"], ["staff", "🙋 担当内勤ごと"], ["place", "📍 エリアごと"]].map(([k, t]) => `<button type="button" class="kb ${(sortMode || "") === k ? "on" : ""}" onclick="setSort('${k}')">${t}</button>`).join("") + `</div>`;
   h += rows.length ? `<div class="tbl"><table class="coltbl">
     <tr><th class="l">キャスト名</th><th>店落ち（Z列＋雑費）／カード</th><th class="l">回収サイン・だれが いつ どこで</th><th>封筒の中（数えた額）</th><th class="l">交通費・経費・精算ミス（処理したら ✓）</th></tr>
     ${bodyRows}</table></div>` : `<div class="lead">この日の回収はありません。</div>`;
@@ -396,7 +431,11 @@ function paintDay(){
     <div><span>✔ 後日内勤回収（${byS("later").length}人）</span><b>${yen(sAmt(byS("later")))}</b></div>
     <div><span>✔ 店長回収（${byS("me").length}人）</span><b>${yen(sAmt(byS("me")))}</b></div>
     <div class="${rows.filter(r => !r.state || r.state === "none").length ? "ng" : ""}"><span>■ まだ回収していない（${rows.filter(r => !r.state || r.state === "none").length}人）</span><b>${yen(sAmt(rows.filter(r => !r.state || r.state === "none")))}</b></div>
-    <div class="pf-staff"><span>内勤日払い</span><b>${staff.length ? staff.map(x => `${esc(staffNames[x.staff_id] || x.staff_id)} ${num(x.day_paid)}${!x.paid ? "（まだ）" : x.pay_source === "kikirara" ? "（キキララ）" : x.pay_source === "split" ? `（回収金 ${num(Number(x.day_paid) - kikiAmt(x))}＋キキララ ${num(kikiAmt(x))}）` : ""}`).join("　") : "なし"}</b></div></div>`;
+    <div class="pf-staff"><span>内勤日払い</span><b>${staff.length ? staff.map(x => `${esc(staffNames[x.staff_id] || x.staff_id)} ${num(x.day_paid)}${!x.paid ? "（まだ）" : x.pay_source === "kikirara" ? "（キキララ）" : x.pay_source === "split" ? `（回収金 ${num(Number(x.day_paid) - kikiAmt(x))}＋キキララ ${num(kikiAmt(x))}）` : ""}`).join("　") : "なし"}</b></div>
+    ${(() => { /* ✔ 回収した額から、経費と回収金から払った日払いを引いた額（2026/11/7 店長）。キキララから払った分・まだ払っていない分は回収金から出ていないので引かない */
+      const col = sAmt(byS("day")) + sAmt(byS("later")) + sAmt(byS("me"));
+      const paidCash = staff.filter(x => x.paid).reduce((a, x) => a + Number(x.day_paid || 0) - kikiAmt(x), 0);
+      return `<div class="pf-net"><span>✔ 回収した額 ${yen(col)} − 経費 ${yen(ex)} − 回収金から払った日払い ${yen(paidCash)} ＝</span><b>${yen(col - ex - paidCash)}</b></div>`; })()}</div>`;
   // 📮 封筒（ポスティングの金庫）：この日の封筒の数・前回からたまっている封筒・回収した封筒の数
   h += `<h3 class="sec">📮 ポスティングの封筒</h3>` + PLACES.filter(p => !place || place === p).map(p => {
     const posted = rows.filter(r => r.cd.settled && r.place === p).length;
@@ -482,7 +521,8 @@ function rowHtml(r, ed){
   const who = [r.cd.settled && r.cd.settled_at ? `🧾 精算：${esc(r.cd.settled_by || "")} ${when(r.cd.settled_at)}${plTxt ? "・" + esc(plTxt) : ""}` : r.cd.direct_home ? "🏠 直帰（まだ精算していない）" : "⏳ まだ精算していない",
     r.cl.state && r.cl.updated_by ? `✔ サイン：${esc(r.cl.updated_by)} ${when(r.cl.updated_at)}` : r.auto ? `✔ 自動（${r.state === "later" ? "後日" : "当日"}にその場で受け取った精算）` : ""].filter(Boolean).join("<br>");
   return `<tr class="${countPerfect(r) ? "perfect" : ""}"><td class="l"><b>${esc(names[r.id] || r.id)}</b>${r.place ? ` <span class="st" style="background:${PLACE_COLOR[r.place] || "#eee"};color:#333">${esc(r.place)}</span>` : ""}${histHtml(r)}
-          <div class="rowlinks"><a class="j" href="settle.html?d=${r.day}&c=${encodeURIComponent(r.id)}" target="_blank" rel="noopener" title="この日のこの子の精算へ">↗ 精算</a>　<a class="j" href="javascript:void 0" onclick="phView('${r.day}','${esc(r.id)}')">🖼 写真を見る</a></div></td>
+          <div class="rowlinks"><a class="j" href="settle.html?d=${r.day}&c=${encodeURIComponent(r.id)}" target="_blank" rel="noopener" title="この日のこの子の精算へ">↗ 精算</a>　<a class="j" href="javascript:void 0" onclick="phView('${r.day}','${esc(r.id)}')">🖼 写真を見る</a>　<a class="j" href="javascript:void 0" onclick="editColNote('${esc(r.id)}')">📝 メモ</a></div>
+          ${r.cl.note ? `<div class="colnote" onclick="editColNote('${esc(r.id)}')">📝 ${esc(r.cl.note)}</div>` : ""}</td>
         <td class="amt"><b>${num(r.shop)}</b> <small>／ ${r.card ? num(r.card) : "0"}</small>${r.card ? `<br><small style="font-weight:900;color:${r.amt < 0 ? "#2f7fd0" : "#c0392b"}">${r.amt < 0 ? "返金 " + num(-r.amt) + "円（お店から渡す）" : "回収 " + num(r.amt) + "円"}</small>` : ""}</td>
         <td class="l"><span class="cs" style="flex-wrap:wrap">${["day", "later", "me"].map(k => `<button class="${k} ${r.state === k ? "on" : ""}" ${ed ? "" : "disabled"} onclick="setState('${r.id}','${r.state === k && !r.auto ? "" : k}')">${STATE[k]}</button>`).join("")}</span>${!r.state || r.state === "none" ? `<div class="who2" style="color:#E0001B">■ まだ回収していない</div>` : ""}<div class="who3">${who}</div></td>
         ${countCell(r, ed)}
@@ -536,6 +576,14 @@ async function kikiReturn(bd, sid, on){
   try{ q(await sb.from("kb_staff_work").update(on ? { kiki_returned_on: D.day, kiki_returned_by: KB.operatorName() } : { kiki_returned_on: null, kiki_returned_by: "" }).eq("biz_date", bd).eq("staff_id", sid)); toast(on ? "返金完了にしました" : "取り消しました"); }
   catch(e){ toast("保存できませんでした：" + (e.message || e)); }
   loadDay(true);   // 保存のあと：画面を消さずに、今の場所のまま描きなおす
+}
+// 📝 キャストごとのメモ（回収明細の行。kb_collections.note・300文字まで）2026/11/7 店長
+function editColNote(cid){
+  if(!KB.CAN_EDIT){ toast("見るだけです"); return; }
+  const r = rowsFor(D.day, D).find(x => x.id === cid), cur = (r && r.cl.note) || "";
+  const v = prompt(`📝 ${names[cid] || cid} のメモ（${md(D.day)}・300文字まで。空にすると消す）`, cur);
+  if(v === null || v.trim() === cur.trim()) return;
+  saveCol(cid, { note: v.trim().slice(0, 300) });
 }
 async function saveCol(cid, patch, noReload){
   try{ q(await sb.from("kb_collections").upsert(Object.assign({ biz_date: D.day, cast_id: cid, updated_by: KB.operatorName(), updated_at: new Date().toISOString() }, patch), { onConflict: "biz_date,cast_id" })); }
