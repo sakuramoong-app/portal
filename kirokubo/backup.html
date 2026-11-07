@@ -32,8 +32,8 @@
       <h2>毎朝のバックアップ</h2>
       <div id="last" class="last">最後のバックアップ：読み込み中…</div>
       <div class="pw">
-        <label>🔑 バックアップのパスワード<input type="password" id="pw1" autocomplete="new-password" placeholder="自動バックアップと同じパスワード"></label>
-        <label>🔑 もう一度（打ちまちがい防止）<input type="password" id="pw2" autocomplete="new-password" placeholder="同じパスワードをもう一度"></label>
+        <label>🔑 バックアップのパスワード<input type="password" id="pw1" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly')" placeholder="自動バックアップと同じパスワード"></label>
+        <label>🔑 もう一度（打ちまちがい防止）<input type="password" id="pw2" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly')" placeholder="同じパスワードをもう一度"></label>
       </div>
       <button type="button" class="bigbtn" id="go" onclick="runBackup()">🔒 バックアップをダウンロード（カギつき .sgb）</button>
       <div id="prog" class="prog"></div>
@@ -146,6 +146,8 @@ async function init(){
   if(!(await KB.passGate("バックアップ"))) return;   // 🔒 端末の登録の合言葉
   $("gate").style.display = "none"; $("main").style.display = "";
   paintLast();
+  // ブラウザが覚えている別のパスワード（端末の合言葉など）が自動で入らないように、開いたら空にする（2026/11/7）
+  setTimeout(() => { ["pw1", "pw2"].forEach(id => { const el = $(id); if(el && document.activeElement !== el) el.value = ""; }); }, 600);
 }
 init();
 </script>
