@@ -623,13 +623,13 @@
       <div id="dummyWrap" style="display:none;background:#F6F2FE;border-radius:12px;padding:8px 10px;margin-bottom:8px">
         <!-- 18・極門：ダミー指名か、名前のある子（台帳で18・極門の名前を持っている子）の指名か -->
         <div id="dmModeChips" style="margin-bottom:6px">
-          <div class="dmgrp"><div class="dmgl">🎭 18・極門在籍キャスト指名</div><div class="chips">
-            <button type="button" class="chip" data-m="dummy" onclick="setDmMode('dummy')">ダミー在籍指名</button>
-            <button type="button" class="chip" data-m="named" onclick="setDmMode('named')">個人または複数人専用在籍指名</button></div></div>
-          <div class="dmgrp"><div class="dmgl">🙋 誰行ける？（時間指定）</div><div class="chips">
-            <button type="button" class="chip" data-m="time" onclick="setDmMode('time')">⏱ 行けるダミー名から</button>
-            <button type="button" class="chip" data-m="cast" onclick="setDmMode('cast')">⏱ 行けるサクラ在籍の子から</button></div></div>
-          <div style="font-size:11.5px;color:var(--sub)">※専用の名前を持っている子（例：葵つばさ→つばさ）は、フリーでも指名でもその名前で行きます</div></div>
+          <div class="dmgrp"><div class="dmgl">🎭 指名：ダミー or 本物 の一覧から選ぶ</div><div class="chips">
+            <button type="button" class="chip" data-m="dummy" onclick="setDmMode('dummy')">🎭 ダミー</button>
+            <button type="button" class="chip" data-m="named" onclick="setDmMode('named')">⭐ 本物（みさ・美咲など）</button></div></div>
+          <div class="dmgrp"><div class="dmgl">⏱ 時間指定：誰が行ける？</div><div class="chips">
+            <button type="button" class="chip" data-m="time" onclick="setDmMode('time')">⏱ 行けるダミー</button>
+            <button type="button" class="chip" data-m="cast" onclick="setDmMode('cast')">⏱ 行けるキャスト（本物もふくむ）</button></div></div>
+          <div style="font-size:11.5px;color:var(--sub)">※<b>本物</b>＝このお店の専用の名前を持っている子（例：美沙＝みさ・葵つばさ＝つばさ）。フリーでも指名でもその名前で行きます。<b>ダミー</b>＝だれが行くか決まっていない名前</div></div>
         <div id="timeBox" style="display:none">
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px"><b>何時から？</b>
             <input type="time" id="f_tStart" step="300" style="width:auto" oninput="$('f_start').value=this.value;recalc();tmPaint()">
@@ -637,10 +637,10 @@
           <div id="tmOut" style="margin-top:6px"></div>
         </div>
         <div id="namedBox" style="display:none">
-          <div class="f"><label>👤 指名された子（このお店の名前）</label><select id="f_named" onchange="onNamedPick()"></select></div>
+          <div class="f"><label>⭐ 本物の一覧（このお店の名前／サクラムーンの名前）</label><select id="f_named" onchange="onNamedPick()"></select></div>
           <label style="display:flex;gap:6px;align-items:center;font-size:13px;margin-top:6px;cursor:pointer"><input type="checkbox" id="f_namedEx" style="width:auto" onchange="onNamedPick()"> 特例で、ほかの子を行かせる（下の「キャスト」で選ぶ）</label>
         </div>
-        <div class="f" id="dummyRow"><label>🎭 ダミー名（お客さんに伝える名前）</label>
+        <div class="f" id="dummyRow"><label>🎭 ダミーの一覧（お客さんに伝える名前）</label>
           <div style="display:flex;gap:6px"><select id="f_dummy" style="flex:1" onchange="recalc();renderDummyMatch()"></select>
             <button type="button" class="btn btn-ghost btn-sm" onclick="toggleDummyEdit()">⚙️ 一覧</button></div></div>
         <div id="dummyEdit" style="display:none;margin-top:6px"></div>
@@ -2331,7 +2331,7 @@ async function saveRes(){
   if(!$("f_cast").value){ toast(isDummyStore($("f_store").value) ? "実際に行くキャストを選んでください" : "キャストを選んでください"); return; }
   // 専用在籍指名で子を選んでいるのに、名前の欄が空のとき（念のため）：選んだ子の専用の名前を入れなおす
   if(isDummyStore($("f_store").value) && !$("f_dummy").value && typeof dmMode !== "undefined" && dmMode === "named" && $("f_named") && $("f_named").value){ try{ onNamedPick(true); }catch(e){} }
-  if(isDummyStore($("f_store").value) && !$("f_dummy").value){ toast(typeof dmMode !== "undefined" && dmMode === "named" ? "「指名された子（このお店の名前）」を選んでください" : "ダミー名を選んでください（一覧になければ ⚙️ から足せます）"); return; }
+  if(isDummyStore($("f_store").value) && !$("f_dummy").value){ toast(typeof dmMode !== "undefined" && dmMode === "named" ? "「⭐ 本物の一覧」から指名された子を選んでください" : "「🎭 ダミーの一覧」からダミーを選んでください（一覧になければ ⚙️ から足せます）"); return; }
   // 受付ルール：📣は全部チェック／✅はチェックするまで「〜待ち」でしか保存できない／⌛受けない長さは保存できない（キャンセル・トビは除く）
   if(!$("f_status").value){ toast("⚠️ 状態を選んでください"); $("f_status").scrollIntoView({ block: "center" }); return; }
   const cancelLike = ["cancel", "tobi", "flowed"].includes($("f_status").value);
@@ -6854,7 +6854,7 @@ function setDmMode(m){
   if(m === "time" || m === "cast"){ $("f_tStart").value = $("f_start").value; $("f_cast").disabled = false; recalc(); tmPaint(); if(m === "time") return; }
   if(m === "named"){
     const store = $("f_store").value, list = namedCasts(store), cur = $("f_cast").value;
-    $("f_named").innerHTML = `<option value="">（指名された子を選ぶ）</option>` + list.map(c => `<option value="${c.id}">${esc(c.stores[store].name)}（${esc(c.official_name || c.temp_name)}）</option>`).join("");
+    $("f_named").innerHTML = `<option value="">（本物を選ぶ）</option>` + list.map(c => `<option value="${c.id}">⭐ ${esc(c.stores[store].name)}　／　サクラムーン：${esc((c.stores.sakuramoon && c.stores.sakuramoon.name) || c.official_name || c.temp_name)}</option>`).join("");
     if(list.some(c => c.id === cur)) $("f_named").value = cur;
     else if(cur && editing && editing.cast_id === cur) $("f_namedEx").checked = true;   // 前に特例でほかの子にした予約
     if($("f_dummy").value){ $("f_dummy").value = ""; }
