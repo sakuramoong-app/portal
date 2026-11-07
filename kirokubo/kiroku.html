@@ -1728,7 +1728,9 @@ function renderCastChecks(c){
   }
   // 🎭 ダミー：このお客さんが前にこのダミー名で会った子（実際に行ったキャスト）以外では行けない（「あの時の子じゃない」になるので）
   const dmNow = isDummyStore($("f_store").value) && $("f_dummy") ? $("f_dummy").value : "";
-  if(dmNow && Array.isArray(custPast)){
+  // ⭐ 本物（この子の専用の名前。美沙＝みさ など）は、いつも同じ名前で行くので、ダミーのチェックはしない（2026/11/7：本物の美沙で「ダミー「美沙」では行けません」と出て保存できなかった）
+  const isReal = dmNow && typeof ownName === "function" && ownName(c, $("f_store").value) === dmNow;
+  if(dmNow && !isReal && Array.isArray(custPast)){
     // 記録簿の予約＋台帳エクセル（「雪（A」なども読む）の両方で見る
     const seenX = typeof seenNorm === "function" ? seenNorm() : custPast;
     const been = seenX.filter(p => p.store_key === $("f_store").value && p.dummy_name === dmNow && !["cancel", "tobi", "flowed"].includes(p.status) && (!editing || p.id !== editing.id))
