@@ -1807,21 +1807,22 @@ async function custByPhone(phone, cols){
   const b = await sb.from("kb_customers").select(sel).contains("phones", [phone]).order("id").limit(20);
   return b.error ? null : pick(b.data);
 }
-// 📒 台帳の名前のヒント（受付の「お客さんの名前」の下）。新しい予約では名前を自動で入れないので、聞いてから押す（2026/11/7）
-// 名前を打ったら「台帳と同じ」かを出しなおす・受付を開いたら消す
+// 🗣 名前を聞いた ✅（2026/11/7 店長）：台帳の名前は今までどおり自動で入れる。新しい予約で台帳のお客さんのときは「名前を聞いた」にチェックしないと保存できない（聞き忘れ防止）
+let nameAsked = false;
 document.addEventListener("input", e => { if(e.target && e.target.id === "f_name") try{ nameHintPaint(curCustomer); }catch(_){} }, true);
-{ const __ofNh = openForm; openForm = function(){ const r = __ofNh.apply(this, arguments); try{ nameHintPaint(editing ? null : curCustomer); }catch(e){} return r; }; }
+{ const __ofNh = openForm; openForm = function(){ nameAsked = false; const r = __ofNh.apply(this, arguments); try{ nameHintPaint(editing ? null : curCustomer); }catch(e){} return r; }; }
+function nameAskNeeded(){ return !editing && !!curCustomer && !!curCustomer.name; }
 function nameHintPaint(c){
   const inp = $("f_name"); if(!inp) return;
   let el = $("nameHint");
   if(!el){ inp.insertAdjacentHTML("afterend", `<div id="nameHint"></div>`); el = $("nameHint"); }
   if(!c || !c.name || editing){ el.innerHTML = ""; return; }
   const same = inp.value.trim() === String(c.name).trim();
-  el.innerHTML = same ? `<div class="nh ok">✅ 台帳の名前と同じです（${esc(c.name)}）</div>`
-    : `<div class="nh">🗣 <b>お客さんに名前を聞いてください</b>　📒 台帳の名前：<b>${esc(c.name)}</b>　<button type="button" class="btn btn-ghost btn-sm" onclick="$('f_name').value=curCustomer?curCustomer.name:'';nameHintPaint(curCustomer);recalc()">聞いて同じなら押して入れる</button></div>`;
+  el.innerHTML = `<label class="nh ${nameAsked ? "ok" : ""}" id="nameAskChk"><input type="checkbox" ${nameAsked ? "checked" : ""} onchange="nameAsked=this.checked;nameHintPaint(curCustomer);if(typeof paintReqBar==='function')paintReqBar()">
+    🗣 <b>お客さんに名前を聞いた</b>（台帳の名前：${esc(c.name)}${same ? "" : `　→ 今の欄：${esc(inp.value.trim() || "空")}`}）</label>`;
 }
-document.head.insertAdjacentHTML("beforeend", `<style>#nameHint .nh{margin-top:6px;background:#FFF5D6;border:2px solid #F2C94C;border-radius:12px;padding:6px 10px;font-size:13.5px;font-weight:800;color:#6b5300}
-  #nameHint .nh.ok{background:#E6F6EC;border-color:#9AD3A8;color:#1d6b3a}</style>`);
+document.head.insertAdjacentHTML("beforeend", `<style>#nameHint .nh{display:block;margin-top:6px;background:#FFF5D6;border:2px solid #F2C94C;border-radius:12px;padding:6px 10px;font-size:13.5px;font-weight:800;color:#6b5300;cursor:pointer}
+  #nameHint .nh input{width:auto;margin-right:4px;vertical-align:-2px;transform:scale(1.2)} #nameHint .nh.ok{background:#E6F6EC;border-color:#9AD3A8;color:#1d6b3a}</style>`);
 async function lookupCustomer(keepName){
   const phone = phoneNorm($("f_phone").value);
   $("f_phone").value = phone;
@@ -1844,8 +1845,8 @@ async function lookupCustomer(keepName){
     curCustomer = c || null;
     if(!c){ custPast = []; custSeen = []; $("custInfo").innerHTML = `<div class="info">🆕 はじめての電話番号です（保存すると新しいお客さんとして登録します）</div>
       <div class="xlwarn">📒 似た名前のお客さんがいる・番号を変えたと言っている・様子があやしいときは、<b>キャストを行かせる前に、エクセルの台帳も確認してください</b>（店NGかもしれません）</div>`; if(!editing) setVisit("new"); return; }
-    // 名前：新しい予約では自動で入れない（入ると、お客さんに名前を聞き忘れるので。2026/11/7 店長）→ 台帳の名前を横に出して、聞いて同じなら押して入れる
-    if(editing){ if(!keepName || !$("f_name").value) $("f_name").value = c.name || ""; }
+    nameAsked = false;   // お客さんが変わったら「名前を聞いた」を外す
+    if(!keepName || !$("f_name").value) $("f_name").value = c.name || "";
     nameHintPaint(c);
     if(!keepName || !$("f_email").value) $("f_email").value = c.email || "";   // メールは、受付で入れたものを消さない
     $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = c.ng_reason || c.note || "";
@@ -1913,6 +1914,7 @@ function missingRequired(quiet){   // quiet：ピカピカ用（たたんであ�
   return [
     [!digits($("f_phone").value), "電話番号", "f_phone"],
     [!$("f_name").value.trim(), "お客さんの名前", "f_name"],
+    [typeof nameAskNeeded === "function" && nameAskNeeded() && !nameAsked, "名前を聞いた ✅", "nameAskChk"],   // 台帳のお客さんの新しい予約（2026/11/7）
     [!visit, "種別（新規・店リピ・本指名）", "f_visit"],
     [!nomiChosen, "指名する？", "f_nomiChips"],
     [!$("f_store").value, "売上店舗", "f_store"],
@@ -2327,7 +2329,9 @@ function startAt(){
 async function saveRes(){
   if(!KB.CAN_EDIT){ toast("作成中のため、直せるのは店長だけです"); return; }
   if(!$("f_cast").value){ toast(isDummyStore($("f_store").value) ? "実際に行くキャストを選んでください" : "キャストを選んでください"); return; }
-  if(isDummyStore($("f_store").value) && !$("f_dummy").value){ toast("ダミー名を選んでください（一覧になければ ⚙️ から足せます）"); return; }
+  // 専用在籍指名で子を選んでいるのに、名前の欄が空のとき（念のため）：選んだ子の専用の名前を入れなおす
+  if(isDummyStore($("f_store").value) && !$("f_dummy").value && typeof dmMode !== "undefined" && dmMode === "named" && $("f_named") && $("f_named").value){ try{ onNamedPick(true); }catch(e){} }
+  if(isDummyStore($("f_store").value) && !$("f_dummy").value){ toast(typeof dmMode !== "undefined" && dmMode === "named" ? "「指名された子（このお店の名前）」を選んでください" : "ダミー名を選んでください（一覧になければ ⚙️ から足せます）"); return; }
   // 受付ルール：📣は全部チェック／✅はチェックするまで「〜待ち」でしか保存できない／⌛受けない長さは保存できない（キャンセル・トビは除く）
   if(!$("f_status").value){ toast("⚠️ 状態を選んでください"); $("f_status").scrollIntoView({ block: "center" }); return; }
   const cancelLike = ["cancel", "tobi", "flowed"].includes($("f_status").value);
@@ -3508,12 +3512,16 @@ function renderToday(){
   el.innerHTML = t("今日の店落ち", yen(part[0] + part[1] - staffPaid) + `<div style="font-size:11.5px;font-weight:700;color:var(--sub);margin-top:2px">暫定＋雑費 ${yen(part[0] + part[1])} − 内勤の日払い ${yen(staffPaid)}</div>`) + t("☀️ 22時までの店落ち", yen(part[0])) + t("🌙 22時からの店落ち", yen(part[1])) + t("カード合計", yen(card)) + t("予約件数", live.length + "件")
     + t("予約のあるキャスト", ids.length + "名") + t("お茶", st.filter(s=>s === "お茶").length + "名") + t("欠勤", st.filter(s=>s === "欠勤").length + "名")
     + t("キャンセル・トビ", rows.filter(r=>r.status === "cancel").length + "件・" + rows.filter(r=>r.status === "tobi").length + "件");
-  // 📋 売上の報告（社長に送る文）：その日の予約の総額（キャンセル・トビ・流れたは入れない）2026/11/7
-  const sales = live.reduce((a, r) => a + (Number(r.total) || 0), 0), dd = new Date(day + "T12:00:00Z");
-  salesReport = `お疲れ様です。\n${dd.getUTCMonth() + 1}月${dd.getUTCDate()}日\n売上   ${sales.toLocaleString("ja-JP")}円\nお願いします<(_ _)>`;
-  el.insertAdjacentHTML("beforeend", `<div class="t salesrep"><div class="k">📋 売上の報告（コピーして送る）</div><pre>${esc(salesReport)}</pre>
-    <button type="button" class="btn btn-primary btn-sm" onclick="navigator.clipboard.writeText(salesReport).then(()=>toast('📋 売上の報告をコピーしました'),()=>prompt('コピーしてください',salesReport))">📋 コピー</button></div>`);
+  // 📋 売上の報告（社長に送る文）：見ている日の「今日の店落ち」（暫定＋雑費 − 内勤の日払い）。2026/11/7 店長：前の日の店落ちを、次の日に送る
+  //   今日（営業日）を見ているときは、前の日を見て送れるように「◀ 前の日の報告へ」
+  const drop = part[0] + part[1] - staffPaid, dd = new Date(day + "T12:00:00Z"), isToday = day === KB.bizDateOf(), prev = addDays(day, -1), pd = new Date(prev + "T12:00:00Z");
+  salesReport = `お疲れ様です。\n${dd.getUTCMonth() + 1}月${dd.getUTCDate()}日\n売上   ${drop.toLocaleString("ja-JP")}円\nお願いします<(_ _)>`;
+  el.insertAdjacentHTML("beforeend", `<div class="t salesrep"><div class="k">📋 売上の報告（${dd.getUTCMonth() + 1}/${dd.getUTCDate()}の店落ち・コピーして送る）</div>
+    ${isToday ? `<div class="hint2" style="margin:4px 0">ふつうは前の日の分を送ります → <button type="button" class="btn btn-primary btn-sm" onclick="salesPrevDay()">◀ ${pd.getUTCMonth() + 1}/${pd.getUTCDate()}の報告へ</button></div>` : ""}
+    <pre>${esc(salesReport)}</pre>
+    <button type="button" class="btn ${isToday ? "btn-ghost" : "btn-primary"} btn-sm" onclick="navigator.clipboard.writeText(salesReport).then(()=>toast('📋 売上の報告をコピーしました'),()=>prompt('コピーしてください',salesReport))">📋 コピー</button></div>`);
 }
+async function salesPrevDay(){ $("day").value = addDays(day, -1); await loadDay(); const b = $("todayBox"); if(b){ b.open = true; b.scrollIntoView({ block: "start", behavior: "smooth" }); } }
 let salesReport = "";
 document.head.insertAdjacentHTML("beforeend", `<style>.todaygrid .salesrep pre{font-family:inherit;font-size:14px;font-weight:800;white-space:pre-wrap;margin:4px 0 6px;color:var(--ink)}</style>`);
 const __renderListT = renderList;
@@ -7102,12 +7110,23 @@ renderDummy = function(keep){
   const r = __renderDummyM.apply(this, arguments);
   if(!isDummyStore($("f_store").value)){ $("f_cast").disabled = false; return r; }
   if(dmMode === "named") setDmMode("named");   // お店を変えたときは、そのお店の名前で選びなおす
+  else if(dmMode === "dummy") dmUiDummy();
   else document.querySelectorAll("#dmModeChips .chip").forEach(b => b.classList.toggle("on", b.dataset.m === "dummy"));
   return r;
 };
+// ダミー在籍指名の見た目にそろえる（ボタン・中の欄）。2026/11/7 バグ：受付を開きなおすと、ボタンは「ダミー在籍指名」なのに中は「専用在籍指名」の欄のまま
+//   → 美沙（専用の名前）を選んでも、ダミー在籍指名として専用の名前が消され「ダミー名を選んでください」で保存できなかった
+function dmUiDummy(){
+  document.querySelectorAll("#dmModeChips .chip").forEach(b => b.classList.toggle("on", b.dataset.m === "dummy"));
+  if($("namedBox")) $("namedBox").style.display = "none";
+  if($("timeBox")) $("timeBox").style.display = "none";
+  if($("dummyRow")) $("dummyRow").style.display = "";
+}
 const __openFormDm = openForm;
 openForm = function(id){ dmMode = "dummy"; tmPick = ""; $("f_namedEx").checked = false; $("f_cast").disabled = false; const r = __openFormDm.apply(this, arguments);
-  if(editing && isDummyStore(editing.store_key || "") && !editing.dummy_name) setDmMode("named"); else document.querySelectorAll("#dmModeChips .chip").forEach(b => b.classList.toggle("on", b.dataset.m === "dummy")); dmLock(); return r; };
+  // 前の予約を開くとき：ダミー名がない・または専用の名前（美沙など）なら「専用在籍指名」で開く
+  const ownNamed = editing && editing.dummy_name && ownersOf(editing.store_key || "", editing.dummy_name).length;
+  if(editing && isDummyStore(editing.store_key || "") && (!editing.dummy_name || ownNamed)) setDmMode("named"); else dmUiDummy(); dmLock(); return r; };
 
 /* 🎭 18・極門：電話番号で調べたら、前にこのお店で会った名前（記録簿・台帳エクセル）を自動で選ぶ → 本指名
    専用の名前（みさ→美咲 など）なら「個人または複数人専用在籍指名」、ダミー名（茜 など）なら「ダミー在籍指名」＋前に行った実際の子 */
