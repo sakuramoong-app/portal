@@ -17,6 +17,8 @@
   .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 12px;}
   .bar input[type=date]{font-family:inherit;font-weight:800;font-size:14px;border:1.5px solid var(--line);border-radius:99px;padding:6px 12px;color:var(--ink);}
   .sum{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+  /* 日付の行は、下にスクロールしても上にいつも出す（2026/11/7）。場所のボタン（ぜんぶ・池袋…）は使わないので出さない */
+  #main > .bar{position:sticky;top:0;z-index:40;background:rgba(255,247,250,.96);backdrop-filter:blur(4px);padding:8px 6px;margin-left:-6px;margin-right:-6px;border-radius:0 0 16px 16px;box-shadow:0 6px 14px -8px rgba(92,75,79,.25)}
   .sum .s{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:8px 14px;font-size:12px;color:var(--sub);font-weight:800;}
   .sum .s b{display:block;font-size:18px;color:var(--ink);} .sum .s.ng b{color:#c0392b;} .sum .s.ok b{color:#2e8b57;}
   .card{margin-bottom:12px;} .card h2{font-size:16px;margin:0 0 8px;}
@@ -102,7 +104,7 @@
       <span class="seg"><button id="mDay" class="on" onclick="setMode('day')">1日ごと</button><button id="mMonth" onclick="setMode('month')">1か月ごと</button></span>
       <button class="btn btn-ghost btn-sm" onclick="shift(-1)">◀</button><label class="datebox" id="dayBox" onclick="event.preventDefault();openCuteCal()" title="押すとカレンダー"><span id="dayLabel"></span><span class="calico">📅</span><input type="date" id="day" onchange="reload()"></label><span id="ymLabel" class="ym" style="display:none"></span><button class="btn btn-ghost btn-sm" onclick="shift(1)">▶</button>
       <button class="btn btn-ghost btn-sm" onclick="$('day').value=KB.bizDateOf();reload()" id="todayBtn">今日</button>
-      <span style="width:12px"></span><span id="plBar"></span>
+      <span id="plBar" style="display:none"></span>
     </div>
     <div id="dayArea"></div>
 
