@@ -224,8 +224,11 @@ function rowsFor(day, R){
     // 精算場所が「回収」（内勤がその場でお金を受け取った）なら、チェックしなくても ✔ 当日回収（精算した内勤・時刻を出す）
     //   あとの日に精算して受け取った（kind＝later）なら ✔ 後日内勤回収（2026/11/6）
     const auto = !cl.state && (kind === "done" || kind === "later") && cd.settle_place === "回収";
-    return { id, cd, s, cl, day, shop, card, tr, amt: shop - card - tr, exact, kind, place: cd.settle_place || "", state: cl.state || (auto ? (kind === "later" ? "later" : "day") : ""), auto, done: !!cl.done };
-  }).sort((a, b) => (ALL_PLACES.indexOf(a.place) + 1 || 9) - (ALL_PLACES.indexOf(b.place) + 1 || 9) || String(kanas[a.id] || names[a.id] || "").localeCompare(String(kanas[b.id] || names[b.id] || ""), "ja"));
+    return { id, cd, s, cl, day, shop, card, tr, amt: shop - card - tr, exact, kind, place: cd.settle_place || "", state: cl.state || (auto ? (kind === "later" ? "later" : "day") : ""), auto, done: !!cl.done, nRes: mine.length };
+  })
+  // 売上0の子（予約なし・店落ちもカードも振込も投函も0：お茶・休みなど）は回収明細に出さない（合計は0円なので変わらない）2026/11/7
+  .filter(r => r.nRes || r.shop || r.card || r.tr || Number(r.cd.deposited || 0))
+  .sort((a, b) => (ALL_PLACES.indexOf(a.place) + 1 || 9) - (ALL_PLACES.indexOf(b.place) + 1 || 9) || String(kanas[a.id] || names[a.id] || "").localeCompare(String(kanas[b.id] || names[b.id] || ""), "ja"));
 }
 // 交通費・経費・精算ミス（その子のぶん）
 // 項目ごとに { key（処理✓のキー。空＝チェックなし）, html }
