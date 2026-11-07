@@ -45,6 +45,9 @@
   .hand{background:#FFF8D6;border:3px solid #F2C94C;border-radius:14px;padding:10px 16px;margin-top:10px;}
   .bag{background:#fff;border:3px dashed #F2C94C;border-radius:14px;padding:10px 16px;margin-top:8px} .bag .k{font-weight:900} .bagin{display:flex;align-items:center;gap:6px;justify-content:flex-end;margin:4px 0} .bagin input{width:180px;text-align:right;font-family:inherit;font-size:22px;font-weight:900;color:#1a3a8a;padding:4px 10px;border:1.5px solid var(--line);border-radius:12px} .bagin span{font-weight:900} .bagst{font-size:13px;font-weight:800;color:#9C8B8F;text-align:right} .bagst.ok{color:#2e8b57} .bagst.ng{color:#c0392b}   /* 社長に手渡し＝随時の回収合計（同じ枠の色） */
   .sum .s.handbox{background:#FFF8D6;border:3px solid #F2C94C;}
+  .sum .handcol{display:flex;flex-direction:column;gap:6px} .sum .s.bagbox{background:#fff;border:3px dashed #F2C94C} .sum .s.bagbox.ok{border-style:solid;border-color:#7CC795;background:#F2FBF5} .sum .s.bagbox.ng{border-color:#E5486C;background:#FFF4F6}
+  .sum .bagin{display:flex;align-items:center;gap:4px;margin-top:4px} .sum .bagin input{width:100%;min-width:0;text-align:right;font-family:inherit;font-size:18px;font-weight:900;color:#1a3a8a;padding:3px 8px;border:1.5px solid var(--line);border-radius:10px} .sum .bagin span{font-weight:900;color:var(--ink)}
+  .sum .bagst{font-size:12px;margin-top:3px} .sum .bagbox.ok .bagst{color:#2e8b57} .sum .bagbox.ng .bagst{color:#c0392b}
   .flow .handrow{background:#FFF8D6;border:3px solid #F2C94C;border-radius:10px;padding:6px 10px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;font-weight:900;grid-column:1 / -1;}
   .hand .k{font-weight:800;color:#6b4e00;} .hand .v{text-align:right;font-weight:900;font-size:32px;color:#E0001B;}
   .chk{border:2.5px solid #2e8b57;background:#F0FBF4;border-radius:12px;padding:10px 14px;margin-top:10px;font-weight:900;display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
@@ -320,7 +323,7 @@ function paintDay(){
   let h = D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "";
   h += `<div class="sum">
     <div class="s">想定店落ち 1日の粗利（F）<b>${yen(F)}</b></div>
-    <div class="s handbox">🤝 随時の回収合計（＝社長に手渡し）<b style="color:#E0001B">${yen(hand)}</b></div>
+    <div class="handcol"><div class="s handbox">🤝 随時の回収合計（＝社長に手渡し）<b style="color:#E0001B">${yen(hand)}</b></div>${bagHtml(ho, hand, ed)}</div>
     <div class="s">カード（D）<b>${yen(A.card)}</b></div>
     <div class="s">回収サイン<b><span class="mk day">✔${T.dayN}</span>　<span class="mk later">✔${T.laterN}</span>　<span class="mk me">✔${T.meN}</span>　<span class="mk none">■${T.noneN}</span></b></div>
     <div class="s ${T.yetN ? "ng" : ""}">まだチェックしていない<b>${T.yetN}人</b></div>
@@ -463,12 +466,6 @@ function paintDay(){
         <td class="l">${ed ? `<a class="j" href="javascript:void 0" onclick="delExp(${x.i})">🗑</a>` : ""}</td></tr>`).join("")}
       ${ed ? `<tr><td class="l" colspan="4"><button class="btn btn-ghost btn-sm" onclick="addExp('advance')">＋ 立て替えを足す</button></td></tr>` : ""}</table>
     <div class="hand"><div class="k">🤝 社長に手渡し（随時の回収合計・現金）</div><div class="v">${yen(hand)}</div></div>
-    ${(() => { /* 👛 袋の中身：実際に数えた額を手で入れる。社長に手渡しの額とくらべる（2026/11/7 店長） */
-      const b = ho && ho.bag_amount != null ? Number(ho.bag_amount) : null, df = b == null ? null : b - hand;
-      return `<div class="bag"><div class="k">👛 袋の中身（実際に数えた額）</div>
-        <div class="bagin">${ed ? `<input type="number" id="bagAmt" value="${b == null ? "" : b}" placeholder="数えた額" onchange="setBag(this.value)"><span>円</span>` : `<b>${b == null ? "まだ" : yen(b)}</b>`}</div>
-        <div class="bagst ${df == null ? "" : df === 0 ? "ok" : "ng"}">${df == null ? "袋のお金を数えたら入れてください（社長に手渡しの額とくらべます）" : df === 0 ? "✅ 社長に手渡しの額とぴったり" : df > 0 ? `⚠️ 袋のほうが ${yen(df)} 多い` : `⚠️ 袋のほうが ${yen(-df)} 足りない`}
-          ${b != null && ho.bag_by ? `<small>（${esc(ho.bag_by)} ${ho.bag_at ? when(ho.bag_at) : ""}）</small>` : ""}</div></div>`; })()}
     ${ho && ho.received_at && ho.received_amount != null && ho.received_amount !== hand ? `<div class="warn" style="margin-top:8px">受け取ったときは ${yen(ho.received_amount)} でした。そのあと ${sgn(hand - ho.received_amount)}円 変わっています（あとから回収した分など）。</div>` : ""}
     <div class="chk"><input type="checkbox" ${ho && ho.received_at ? "checked" : ""} ${KB.IS_OWNER && !D.no171 ? "" : "disabled"} onchange="setReceived(this.checked)"> 社長が受け取った
       <small>${ho && ho.received_at ? `${esc(ho.received_by)} ${when(ho.received_at)}（${yen(ho.received_amount ?? hand)}）` : "（社長のログインでだけ押せる・日時が残る）"}</small></div>
@@ -596,6 +593,13 @@ async function saveHo(patch){
   loadDay(true);   // 保存のあと：画面を消さずに、今の場所のまま描きなおす
 }
 const HO = () => D.ho.find(h => h.biz_date === D.day) || null;
+// 👛 袋の中身：実際に数えた額を手で入れる。上の「随時の回収合計（＝社長に手渡し）」のすぐ下に同じ幅で出す。社長に手渡しの額とくらべる（2026/11/7 店長）
+function bagHtml(ho, hand, ed){
+  const b = ho && ho.bag_amount != null ? Number(ho.bag_amount) : null, df = b == null ? null : b - hand;
+  return `<div class="s bagbox ${df == null ? "" : df === 0 ? "ok" : "ng"}">👛 袋の中身（実際に数えた額）
+    <div class="bagin">${ed ? `<input type="number" id="bagAmt" value="${b == null ? "" : b}" placeholder="数えた額" onchange="setBag(this.value)"><span>円</span>` : `<b>${b == null ? "まだ" : yen(b)}</b>`}</div>
+    <div class="bagst">${df == null ? "数えたら入れる" : df === 0 ? "✅ 手渡しの額とぴったり" : df > 0 ? `⚠️ ${yen(df)} 多い` : `⚠️ ${yen(-df)} 足りない`}${b != null && ho.bag_by ? ` <small>（${esc(ho.bag_by)} ${ho.bag_at ? when(ho.bag_at) : ""}）</small>` : ""}</div></div>`;
+}
 // 👛 袋の中身（数えた額）を保存。空にすると消す（SQL 232）
 async function setBag(v){
   const n = String(v).trim() === "" ? null : Math.round(Number(v));
