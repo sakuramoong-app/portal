@@ -608,6 +608,17 @@
     <!-- ② 指名・時間・コース・どこで（ここで行けるかどうかが決まる） -->
     <div class="step">
       <h3><span class="n">2</span>指名・時間・コース・どこで（ここで行けるか決まる）</h3>
+      <!-- 🔎 受付の中で探す（時間・キャスト・希望プレイ → 対応できるキャストの一覧。押すとキャストと時刻が入る。受付は閉じない）2026/11/9 -->
+      <details class="fsbox" id="fsBox" ontoggle="if(this.open) fsPaint()"><summary>🔎 探す（時間・キャスト・希望プレイ）<small>→ 対応できるキャストが一覧で出ます。押すと、そのキャストと時刻が入ります</small></summary>
+        <div class="fsctl"><label>何時から <input type="time" id="fs_time" step="300" oninput="fsPaint()"></label>
+          <label>何分 <select id="fs_min" onchange="fsPaint()"><option value="60">60分</option><option value="90" selected>90分</option><option value="120">120分</option><option value="150">150分</option><option value="180">180分</option><option value="240">240分</option></select></label>
+          <label><input type="checkbox" id="fs_ok" checked onchange="fsPaint()" style="width:auto"> 行ける子だけ</label>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="fsClear()">クリア</button></div>
+        <details class="fssub"><summary>👥 キャストで絞る（複数OK）<span id="fs_castN"></span></summary><div class="chips" id="fs_castChips"></div></details>
+        <details class="fssub"><summary>🎯 希望プレイで絞る（複数OK・◎○の子だけ）<span id="fs_playN"></span></summary><div class="chips" id="fs_playChips"></div>
+          <label style="display:block;margin-top:6px;font-size:13px;font-weight:800;color:var(--sub)"><input type="checkbox" id="fs_tri" onchange="fsPaint()" style="width:auto"> △（条件つきOK）の子も入れる</label></details>
+        <div id="fsOut"></div>
+      </details>
       <div class="f"><label>指名する？<span class="req">必須</span></label><div class="chips" id="f_nomiChips"></div>
         <select id="f_free" style="display:none" onchange="recalc()">
           <option value="">なし（指名あり）</option><option value="free">フリー</option>
@@ -7755,6 +7766,113 @@ function msgManualReset(){ ["msg", "netReply"].forEach(id => { msgManual[id] = n
     ["msg", "netReply"].forEach(id => { if(msgManual[id] != null && $(id)) $(id).value = msgManual[id]; });   // 書きかえている文は、そのまま
     return r; }; }
 { const __ofMan = openForm; openForm = function(){ msgManualReset(); const r = __ofMan.apply(this, arguments); setTimeout(paintReqBar, 400); return r; }; }
+/* ---------- 🔎 受付の中で探す（2026/11/9 店長：受付を開いたまま、時間・キャスト・希望プレイで探して、そのまま登録まで）
+   受付の「日付」の日のシフトと予約から、対応できるキャストを一覧に。「この子にする」でキャストと開始時刻を受付に入れる（受付は閉じない）
+   外の 🔎 フィルター（一覧を絞る）は今までどおり。中の項目・計算・保存は変えない ---------- */
+const fsCasts = new Set(), fsPlay = new Set();
+let fsSeq = 0;
+function fsClear(){ $("fs_time").value = ""; fsCasts.clear(); fsPlay.clear(); fsPaint(); }
+function fsToggleCast(id){ if(fsCasts.has(id)) fsCasts.delete(id); else fsCasts.add(id); fsPaint(); }
+function fsTogglePlay(k){ if(fsPlay.has(k)) fsPlay.delete(k); else fsPlay.add(k); fsPaint(); }
+async function fsPaint(){
+  const box = $("fsBox"), out = $("fsOut"); if(!box || !out || !box.open) return;
+  const seq = ++fsSeq, bd = ($("f_day") && $("f_day").value) || day;
+  if(!$("fs_time").value && $("f_start").value) $("fs_time").value = $("f_start").value;   // 受付の開始時刻があれば、それで探す
+  if($("f_course").value && !box.dataset.minTouched){ const m = minutesOf($("f_course").value); if([60, 90, 120, 150, 180, 240].includes(m)) $("fs_min").value = String(m); }
+  out.innerHTML = `<div class="hint2" style="font-size:12.5px;color:var(--sub);margin-top:6px">探しています…</div>`;
+  let shifts, rs;
+  try{
+    [shifts] = await Promise.all([loadShifts(bd), fsPlay.size ? loadProfs() : Promise.resolve(null)]);
+    rs = bd === day ? rows : (q(await sb.from("kb_reservations").select("id,cast_id,start_at,end_at,status,biz_date").eq("biz_date", bd).eq("deleted", false)) || []);
+  }catch(e){ out.innerHTML = `<div class="warn">探せませんでした：${esc(e.message || e)}</div>`; return; }
+  if(seq !== fsSeq) return;
+  // その日に出勤するキャスト（受付ずみのシフト）
+  const list = Object.keys(shifts || {}).map(nm => { const c = M.casts.find(x => x.shift_name === nm || x.official_name === nm); return c ? { c, sh: shifts[nm] } : null; })
+    .filter(x => x && x.c.status !== "left");
+  $("fs_castChips").innerHTML = list.slice().sort((a, b) => a.sh.start - b.sh.start).map(x => `<button type="button" class="chip ${fsCasts.has(x.c.id) ? "on" : ""}" onclick="fsToggleCast('${x.c.id}')">${esc(castName(x.c.id))}</button>`).join("") || `<span class="hint2">この日のシフトがありません</span>`;
+  $("fs_castN").textContent = fsCasts.size ? `（${fsCasts.size}人）` : "";
+  $("fs_playChips").innerHTML = PLAYS.map(([k, l]) => `<button type="button" class="chip ${fsPlay.has(k) ? "on" : ""}" onclick="fsTogglePlay('${k}')">${esc(l)}</button>`).join("");
+  $("fs_playN").textContent = fsPlay.size ? `（${[...fsPlay].map(k => (PLAYS.find(p => p[0] === k) || [k, k])[1]).join("・")}）` : "";
+  // 時間：何時から・何分
+  const st = $("fs_time").value, len = (Number($("fs_min").value) || 90) / 60;
+  let s = null; if(st){ const [h, mi] = st.split(":").map(Number); s = h + mi / 60; if(s < 8) s += 24; }
+  const busyOf = c => rs.filter(r => r.cast_id === c.id && (!editing || r.id !== editing.id) && !["cancel", "tobi", "flowed"].includes(r.status) && r.start_at && r.end_at)
+    .map(r => { const a = hourOf(r.start_at); let b = hourOf(r.end_at); if(b < a) b += 24; return [a, b]; }).sort((a, b) => a[0] - b[0]);
+  const freeOf = (c, sh) => { const g = (c.interval_min || 0) / 60, o2 = []; let t = sh.start;
+    busyOf(c).forEach(([a, b]) => { if(a - g > t + 0.01) o2.push([t, Math.min(a - g, sh.end)]); t = Math.max(t, b + g); });
+    if(t < sh.end - 0.01) o2.push([t, sh.end]); return o2.filter(([a, b]) => b - a >= 0.5); };
+  const okMarks = $("fs_tri").checked ? ["◎", "○", "△"] : ["◎", "○"];
+  const cds = bd === day ? castDays : {};
+  const L = list.filter(x => !fsCasts.size || fsCasts.has(x.c.id)).map(x => {
+    const cd = cds[x.c.id] || {}, fr = freeOf(x.c, x.sh);
+    let ok = true, why = "";
+    if(cd.status === "欠勤"){ ok = false; why = "欠勤"; }
+    else if(cd.full_at){ ok = false; why = "🈵 満了"; }
+    else if(s != null){
+      if(s < x.sh.start || s + len > x.sh.end){ ok = false; why = "出勤の時間外"; }
+      else if(!fr.some(([a, b]) => a <= s + 0.001 && s + len <= b + 0.001)){ ok = false; const nx = fr.find(([a, b]) => a >= s && b - a >= len); why = "この時間は予約あり" + (nx ? `（${fmtHour(nx[0])}から空き）` : ""); }
+    } else if(!fr.length){ ok = false; why = "空きなし"; }
+    let marks = "";
+    if(fsPlay.size){
+      const o = profOpts(x.c);
+      if(!o){ ok = false; why = why || "プロフとつながっていない"; marks = "プロフなし"; }
+      else { marks = [...fsPlay].map(k => (PLAYS.find(p => p[0] === k) || [k, k])[1] + (o[k] || "？")).join(" ");
+        if(![...fsPlay].every(k => okMarks.includes(o[k]))){ ok = false; why = why || "希望プレイが×・△・空欄"; } }
+    }
+    return { x, ok, why, fr, marks };
+  });
+  const onlyOk = $("fs_ok").checked, okL = L.filter(r => r.ok), ngL = L.filter(r => !r.ok);
+  okL.sort((a, b) => a.x.sh.start - b.x.sh.start);
+  const cur = $("f_cast").value;
+  const row = r => `<div class="fsrow ${r.ok ? "ok" : "ng"} ${r.x.c.id === cur ? "cur" : ""}"><b>${r.ok ? "✅" : "✖"} ${esc(castName(r.x.c.id))}</b>
+      <small>${fmtHour(r.x.sh.start)}〜${fmtHour(r.x.sh.end)}　${r.ok ? (s != null ? `${fmtHour(s)}から行ける` : `空き：${r.fr.map(([a, b]) => fmtHour(a) + "〜" + fmtHour(b)).join("・")}`) : esc(r.why)}${r.marks ? "　" + esc(r.marks) : ""}</small>
+      ${r.ok ? (r.x.c.id === cur ? `<span class="fscur">✔ この子にしています</span>` : `<button type="button" class="btn btn-primary btn-sm" onclick="fsPick('${r.x.c.id}')">この子にする</button>`) : ""}</div>`;
+  out.innerHTML = `<div class="fshead">${bd !== day ? `📅 ${esc(bd.slice(5).replace("-", "/"))} の` : ""}${s != null ? `${fmtHour(s)}〜${fmtHour(s + len)} に` : ""}対応できるキャスト <b>${okL.length}人</b></div>`
+    + (okL.map(row).join("") || `<div class="warn" style="margin-top:4px">条件に合うキャストがいません</div>`)
+    + (ngL.length ? (onlyOk ? `<details style="margin-top:6px;font-size:12.5px;color:var(--sub)"><summary>対応できないキャスト（${ngL.length}）</summary>${ngL.map(row).join("")}</details>` : ngL.map(row).join("")) : "")
+    + (fsCasts.size && !okL.length ? `<div style="margin-top:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="fsOtherDays()">🗓 選んだ子の、ほかの出勤日を見る</button><div id="fsDays"></div></div>` : "");
+}
+function fsPick(cid){
+  const t = $("fs_time").value;
+  if(![...$("f_cast").options].some(o => o.value === cid) && $("f_castAll")){ $("f_castAll").checked = true; fillCastSel(); }
+  $("f_cast").value = cid; onCast();
+  if(t){ $("f_start").value = t; }
+  recalc(); fsPaint();
+  toast(`✅ ${castName(cid)}${t ? "・" + t + "から" : ""} にしました`);
+}
+// 🗓 選んだ子の、この先2週間の出勤日（押すと受付の日付をその日に）
+async function fsOtherDays(){
+  const el = $("fsDays"); if(!el) return;
+  el.innerHTML = `<div class="hint2" style="font-size:12.5px;color:var(--sub)">探しています…</div>`;
+  const from = ($("f_day") && $("f_day").value) || day, out = [];
+  for(let i = 1; i <= 14; i++){
+    const d = addDays(from, i); let sh = {};
+    try{ sh = await loadShifts(d); }catch(e){}
+    [...fsCasts].forEach(cid => { const c = M.casts.find(x => x.id === cid); const s2 = c && (sh[c.shift_name] || sh[c.official_name]); if(s2) out.push({ d, cid, s: s2 }); });
+  }
+  const dl = d => { const x = new Date(d + "T12:00:00Z"); return `${x.getUTCMonth() + 1}/${x.getUTCDate()}(${DOW[x.getUTCDay()]})`; };
+  el.innerHTML = out.length ? `<div class="tm-dms" style="margin-top:6px">${out.map(o => `<button type="button" class="tm-dm" onclick="fsGoDay('${o.d}')">${esc(dl(o.d))}<small>${esc(castName(o.cid))} ${fmtHour(o.s.start)}〜${fmtHour(o.s.end)}</small></button>`).join("")}</div>`
+    : `<div class="hint2" style="font-size:12.5px;color:var(--sub)">この先2週間、選んだ子の出勤（受付ずみのシフト）はありません</div>`;
+}
+function fsGoDay(d){
+  if(!$("f_day")){ toast("受付の日付の欄が見つかりません"); return; }
+  $("f_day").value = d; try{ $("f_day").dispatchEvent(new Event("change", { bubbles: true })); }catch(e){}
+  recalc(); fsPaint(); toast("📅 受付の日付を " + d.slice(5).replace("-", "/") + " にしました");
+}
+// 受付を開いたら、探すの中身を空に（前の受付の絞りを残さない）
+{ const __ofFs = openForm; openForm = function(){ const r = __ofFs.apply(this, arguments); try{ fsCasts.clear(); fsPlay.clear(); if($("fs_time")) $("fs_time").value = ""; const b = $("fsBox"); if(b){ b.open = false; delete b.dataset.minTouched; } }catch(e){} return r; }; }
+document.addEventListener("change", e => { if(e.target && e.target.id === "fs_min"){ const b = $("fsBox"); if(b) b.dataset.minTouched = "1"; } }, true);
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .fsbox{border:2px solid #CFE0F6;border-radius:16px;background:#F5F9FF;padding:8px 12px;margin:0 0 12px}
+  .fsbox > summary{cursor:pointer;font-weight:900;font-size:15px;color:#2E6BB0} .fsbox > summary small{font-weight:700;color:#6b8db5;margin-left:6px;font-size:12px}
+  .fsctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0;font-size:13.5px;font-weight:800}
+  .fsctl input[type=time]{width:auto !important} .fsctl select{width:auto !important}
+  .fssub{margin:4px 0} .fssub > summary{cursor:pointer;font-weight:800;font-size:13.5px;color:#5C4B4F}
+  .fshead{font-weight:900;margin:8px 0 4px;color:#2E6BB0}
+  .fsrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;border:1.5px solid #DCE8F6;border-radius:12px;padding:6px 10px;margin:4px 0}
+  .fsrow small{flex:1;color:#6b5a5f;font-weight:700} .fsrow.ng{opacity:.6} .fsrow.cur{border-color:#3FA96A;background:#F2FBF5}
+  .fscur{font-size:12.5px;font-weight:900;color:#2e8b57}
+</style>`);
 /* ---------- 🎨 受付の見た目（2026/11/7 店長：見やすく）
    中身（項目・id・自動の計算・検索・保存）は1つも変えない。見た目（色・丸み・余白）と、パソコンの左の目次・入力の進捗を足すだけ
    ①〜⑥ の箱ごとに色の見出し。必須（赤い「必須」・赤い枠）は今のまま ---------- */
