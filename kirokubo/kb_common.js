@@ -274,3 +274,39 @@ document.addEventListener("focusin", e => { const t = e.target; if(t && t.matche
   css.textContent = `.is-phone .kanabar, .is-phone #kanaBar, .is-phone #todayBox, .is-phone #staffPayBox{display:none !important}`;
   (document.head || document.documentElement).appendChild(css);
 })();
+
+/* ---------- 📖 説明：出す／かくす（2026/11/9 店長：説明の文が多いと見づらい人・あったほうがわかりやすい人がいるので、ログインした人ごとに選べる）
+   かくすと、小さい説明の文（.hint2・.hint・.leg・欄の名前の横の小さい字・たたむ箱の見出しの横の小さい字）だけが「？」になる。押すとその説明だけ出る
+   項目・ボタン・箱の場所や並びは変えない（「そこの？を押して」で伝わるように）。赤い注意（NG・必須・お金のずれ）はいつも出す ---------- */
+(function(){
+  const KEY = "kbHintsOff";   // { ログインした人の名前: true }
+  const who = () => { try{ return (window.KB && KB.operatorName && KB.operatorName()) || localStorage.getItem("currentOperator") || "_"; }catch(e){ return "_"; } };
+  const get = () => { try{ return !!(JSON.parse(localStorage.getItem(KEY) || "{}")[who()]); }catch(e){ return false; } };
+  const set = v => { try{ const m = JSON.parse(localStorage.getItem(KEY) || "{}"); m[who()] = !!v; localStorage.setItem(KEY, JSON.stringify(m)); }catch(e){} };
+  const SEL = ".hint2, .hint, .leg, label > small, .f > label > small, details > summary > small, .kbh-sub";
+  const css = document.createElement("style");
+  css.textContent = `
+    html.hints-off :is(${SEL}):not(.hshow){font-size:0 !important;line-height:0 !important;padding:0 !important;margin:2px 0 !important;border:0 !important;background:none !important;display:inline-block !important;width:auto !important;min-height:0 !important}
+    html.hints-off :is(${SEL}):not(.hshow) *{display:none !important}
+    html.hints-off :is(${SEL}):not(.hshow)::before{content:"？";display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:99px;background:#EEE6F7;color:#7a5fa8;font-size:12px;font-weight:900;line-height:1;cursor:pointer;vertical-align:middle}
+    #hintToggle{font-family:inherit;font-size:12.5px;font-weight:900;border:1.5px solid #E3D6F2;background:linear-gradient(180deg,#fff,#F8F3FD);color:#6b4f9a;border-radius:99px;padding:5px 12px;cursor:pointer;box-shadow:0 2px 0 #E8DCF5;white-space:nowrap}
+    #hintToggle.off{background:#6b4f9a;color:#fff;border-color:#6b4f9a}`;
+  (document.head || document.documentElement).appendChild(css);
+  const apply = () => { document.documentElement.classList.toggle("hints-off", get()); const b = document.getElementById("hintToggle"); if(b){ b.classList.toggle("off", get()); b.textContent = get() ? "📖 説明：かくす中（押すと出す）" : "📖 説明：出す（押すとかくす）"; } };
+  // かくしている説明を押したら、その説明だけ出す（もう一度ページを描きなおすと、また「？」にもどる）
+  document.addEventListener("click", e => {
+    if(!document.documentElement.classList.contains("hints-off")) return;
+    const t = e.target && e.target.closest && e.target.closest(SEL);
+    if(t && !t.classList.contains("hshow")){ t.classList.add("hshow"); e.preventDefault(); e.stopPropagation(); }
+  }, true);
+  function setup(){
+    apply();
+    if(document.getElementById("hintToggle")) return;
+    const b = document.createElement("button"); b.id = "hintToggle"; b.type = "button"; b.title = "小さい説明の文を出す／かくす（ログインした人ごとに覚えます）";
+    b.onclick = () => { set(!get()); apply(); };
+    const h = document.querySelector("header.kbh");
+    if(h) h.appendChild(b); else { b.style.cssText = "position:fixed;right:12px;top:8px;z-index:900"; document.body.appendChild(b); }
+    apply();
+  }
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", setup); else setup();
+})();
