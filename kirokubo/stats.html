@@ -497,11 +497,20 @@ async function exportAll(){
       toc.push([kind, nm, label, err ? "読めませんでした" : rows.length, drop.join("・")]);
     }
     // 💴 お金のまとめ（計算したもの）：新しい記録簿の数字がある日ぜんぶ。目次のすぐ後ろに入れる（2026/11/8 店長：1つにまとめる）
-    const money = moneySheets(d => isLive(ymOf(d)));
+    // アプリに入っている予約のいちばん古い月から（記録簿エクセルで前の月を取りこんだら、その月も自動で入る）2026/11/9
+    //   画面の「新しい記録簿の数字」の設定は変えない（読みおわったら、もとの月で読みなおす）
+    let fromYm = liveYm;
+    try{ const r = await sb.from("kb_reservations").select("biz_date").eq("deleted", false).order("biz_date").limit(1); const mn = r.data && r.data[0] && r.data[0].biz_date; if(mn && (!fromYm || ymOf(mn) < fromYm)) fromYm = ymOf(mn); }catch(e){}
+    let money = [];
+    if(fromYm && fromYm !== liveYm){
+      const keepYm = liveYm; toast(`💴 ${fromYm} からのお金の数字を読んでいます…`);
+      try{ liveYm = fromYm; await loadLive(); money = moneySheets(d => ymOf(d) >= fromYm); }
+      finally{ liveYm = keepYm; await loadLive(); }
+    } else money = moneySheets(d => isLive(ymOf(d)));
     money.forEach(([nm]) => names.add("💴" + nm));
     const mtoc = money.map(([nm, aoa, w, what]) => ["💴 お金のまとめ（計算したもの）", "💴" + nm, what, Math.max(0, aoa.length - 1), ""]);
     const head = [["サクラG 全部のデータ（個人情報なし）"], ["作った日時", new Date().toLocaleString("ja-JP")], ["作った人", KB.operatorName()],
-      ["・売上・税金などは、まず「💴」のシート（お金のまとめ）を見てください。新しい記録簿の数字（" + (liveYm || "なし") + "〜）から計算しています"],
+      ["・売上・税金などは、まず「💴」のシート（お金のまとめ）を見てください。アプリに入っている記録簿の数字（" + (fromYm || "なし") + "〜）から計算しています"],
       ["・店落ち＝暫定的な残額（総額−キャスト報酬）＋雑費。源泉徴収＝キャスト報酬÷9（四捨五入・税務用）。内勤の日払いは「払った」分。キャンセル・トビ・流れた予約は入れていません"],
       ["・お客さんの名前・電話・メール・メモ、キャストの個人情報（住所・電話・誕生日）、自由に書いたメモ・理由は入れていません"], ["・このファイルを直しても、アプリのデータは変わりません"], [""]];
     toc.splice(1, 0, ...mtoc);

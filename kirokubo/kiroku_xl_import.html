@@ -23,7 +23,7 @@
 </head>
 <body>
 <!-- 記録簿エクセル（1か月）を、このPCで変換した JSON（kiroku_YYYYMM.json）から新しい記録簿に入れる（SQL 203）。
-     お客さんの情報はこのページには入っていない（選んだファイルから読むだけ）。店長・社長だけ・登録した端末から。 -->
+     お客さんの情報はこのページには入っていない（選んだファイルから読むだけ）。店長だけ・登録した端末から。 -->
 <div class="wrap">
   <header class="kbh"><h1>📥 記録簿エクセルの取りこみ</h1></header>
   <div id="gate" class="gate">読み込み中…</div>
@@ -58,7 +58,9 @@ let J = null;
 const STAFF = [["", "（入れない）"], ["kya", "きゃ"], ["suya", "すや"], ["ran", "らん"], ["kami", "かみ"], ["waka", "わか"]];
 const GUESS = { "蘭子": "ran", "上川": "kami", "若林": "waka" };
 async function init(){
-  if(!(await KB.staffSession()) || !KB.CAN_EDIT){   /* このページは STAFF_PAGES にないので、CAN_EDIT ＝ 店長・社長 */ $("gate").textContent = "ポータルから開いてください（店長・社長だけ・登録した端末から開けます）"; return; }
+  if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（店長だけ・登録した端末から開けます）"; return; }
+  // CAN_EDIT ＝ 店長だけ（社長は見るだけなので取りこみはしない。お金のデータは 集計 の「🔒 全部のデータ」で）2026/11/9
+  if(!KB.CAN_EDIT){ $("gate").innerHTML = "このページは店長だけが使えます（アプリにデータを書きこむページです）。<br>お金のデータを見るときは、集計のページの「🔒 全部のデータ（エクセル）」を使ってください。"; return; }
   $("gate").style.display = "none"; $("main").style.display = "";
 }
 $("file").addEventListener("change", async e => {
