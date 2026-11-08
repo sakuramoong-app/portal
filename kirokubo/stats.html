@@ -375,21 +375,21 @@ function moneySheets(inM){
   const dayRow = d => { const r = rs.filter(x => x.d === d), cd = days.filter(x => x.d === d), back = sum(r, x => x.back), zp = sum(cd, x => x.zappi), pay = n0((L.pay || {})[d]);
     const total = sum(r, x => x.total), prov = total - back, drop = prov + zp;
     return [d, r.length, total, sum(r, x => x.card), total - sum(r, x => x.card), back, prov, zp, drop, pay, drop - pay, sum(cd, x => gen(x.reward)), drop - pay - sum(cd, x => gen(x.reward))]; };
-  const H1 = ["営業日", "予約件数", "総額", "カード", "現金（総額−カード）", "キャスト報酬（報酬＋OP）", "暫定的な残額（総額−報酬）", "雑費", "店落ち（暫定＋雑費）", "内勤の日払い", "店落ち（日払いを引いたあと）", "【税務用】源泉徴収（報酬÷9）", "実質的な店落ち（日払い・源泉を引いたあと）"];
+  const H1 = ["営業日", "予約件数", "総額", "カード", "現金（総額−カード）", "キャスト報酬（報酬＋OP）", "暫定的な残額（総額−報酬）", "雑費", "店落ち（暫定＋雑費）", "内勤の日払い", "店落ち（日払いを引いたあと）", "源泉徴収相当（報酬÷9・簡易計算）", "実質的な店落ち（日払い・源泉徴収相当を引いたあと）"];
   const D = dset.map(dayRow);
   const tot = H1.map((h, i) => i === 0 ? "合計" : D.reduce((a, r) => a + n0(r[i]), 0));
   // 月ごと
   const M2 = [...new Set(dset.map(ymOf))].sort().map(ym => { const l = D.filter(r => ymOf(r[0]) === ym); return [ym].concat(H1.slice(1).map((h, i) => l.reduce((a, r) => a + n0(r[i + 1]), 0))); });
   // キャストの月ごと（源泉）
   const ck = {}; days.forEach(x => { const k = ymOf(x.d) + "|" + x.cast; const o = ck[k] = ck[k] || { ym: ymOf(x.d), cast: x.cast, cnt: 0, reward: 0, gen: 0, drop: 0, days: 0 }; o.cnt += n0(x.cnt); o.reward += n0(x.reward); o.gen += gen(x.reward); o.drop += n0(x.drop_yen); if(n0(x.cnt)) o.days++; });
-  const C = Object.values(ck).sort((a, b) => a.ym.localeCompare(b.ym) || a.cast.localeCompare(b.cast, "ja")).map(o => [o.ym, o.cast, o.days, o.cnt, o.reward, o.gen, o.reward - o.gen, o.drop]);
+  const C = Object.values(ck).sort((a, b) => a.ym.localeCompare(b.ym) || a.cast.localeCompare(b.cast, "ja")).map(o => [o.ym, o.cast, o.days, o.cnt, o.reward, o.gen, o.reward + o.gen, o.drop]);   // 2026/11/9：報酬（E）がキャストに渡した額（手取り）。総報酬＝報酬＋源泉徴収相当
   // 予約ごと（お客さんの名前・電話は入れない）
   const VK = { new: "新規", repeat: "店リピ", honshi: "本指名" };
   const R = rs.slice().sort((a, b) => a.d.localeCompare(b.d)).map(r => [r.d, r.store, r.cast, r.course, r.area, r.band, VK[r.visit] || "", (r.media || []).join("・"), r.total, r.card, r.back, r.prov, Math.round(r.drop)]);
   const out = [], add = (name, aoa, w, what) => out.push([name, aoa, w, what]);
   add("日ごと", [H1].concat(D, [tot]), [12, 8].concat(Array(11).fill(16)), "日ごとの総額・カード・キャスト報酬・雑費・店落ち・内勤の日払い・源泉徴収（いちばん下に合計）");
   add("月ごと", [["月"].concat(H1.slice(1))].concat(M2), [10, 8].concat(Array(11).fill(16)), "月ごとの合計（日ごとと同じ項目）");
-  add("キャストの月ごと（源泉）", [["月", "キャスト", "出勤した日（予約あり）", "本数", "報酬（報酬＋OP）", "【税務用】源泉徴収（報酬÷9）", "手取りの目安（報酬−源泉）", "店落ち（暫定＋雑費）"]].concat(C), [10, 14, 10, 8, 16, 18, 18, 16], "キャストの月ごとの本数・報酬・【税務用】源泉徴収");
+  add("キャストの月ごと（源泉）", [["月", "キャスト", "出勤した日（予約あり）", "本数", "報酬（報酬＋OP）＝キャストに渡した額（手取り）", "源泉徴収相当（報酬÷9・簡易計算）", "総報酬額（報酬＋源泉徴収相当）", "店落ち（暫定＋雑費）"]].concat(C), [10, 14, 10, 8, 16, 18, 18, 16], "キャストの月ごとの本数・報酬（手取り）・源泉徴収相当・総報酬額");
   add("予約ごと", [["営業日", "店", "キャスト", "コース", "エリア", "時間帯", "種別", "媒体", "総額", "うちカード", "キャスト報酬", "暫定的な残額", "店落ち（雑費を予約で分けた）"]].concat(R), [12, 14, 12, 8, 10, 6, 8, 16, 10, 10, 10, 12, 14], "予約1件ずつの総額・カード・報酬・店落ち（お客さんの名前・電話なし）");
   return out;
 }
@@ -511,7 +511,7 @@ async function exportAll(){
     const mtoc = money.map(([nm, aoa, w, what]) => ["💴 お金のまとめ（計算したもの）", "💴" + nm, what, Math.max(0, aoa.length - 1), ""]);
     const head = [["サクラG 全部のデータ（個人情報なし）"], ["作った日時", new Date().toLocaleString("ja-JP")], ["作った人", KB.operatorName()],
       ["・売上・税金などは、まず「💴」のシート（お金のまとめ）を見てください。アプリに入っている記録簿の数字（" + (fromYm || "なし") + "〜）から計算しています"],
-      ["・店落ち＝暫定的な残額（総額−キャスト報酬）＋雑費。源泉徴収＝キャスト報酬÷9（四捨五入・税務用）。内勤の日払いは「払った」分。キャンセル・トビ・流れた予約は入れていません"],
+      ["・店落ち＝暫定的な残額（総額−キャスト報酬）＋雑費。キャスト報酬＝キャストに渡した額（手取り）。源泉徴収相当＝キャスト報酬÷9（四捨五入）で、エクセルと同じ簡易計算です（正確な源泉徴収額ではありません）。総報酬額＝報酬＋源泉徴収相当。内勤の日払いは「払った」分。キャンセル・トビ・流れた予約は入れていません"],
       ["・お客さんの名前・電話・メール・メモ、キャストの個人情報（住所・電話・誕生日）、自由に書いたメモ・理由は入れていません"], ["・このファイルを直しても、アプリのデータは変わりません"], [""]];
     toc.splice(1, 0, ...mtoc);
     const ws = XLSX.utils.aoa_to_sheet(head.concat(toc)); ws["!cols"] = [{ wch: 26 }, { wch: 26 }, { wch: 60 }, { wch: 10 }, { wch: 60 }];
