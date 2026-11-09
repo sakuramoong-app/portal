@@ -2503,7 +2503,7 @@ renderList = function(){
   const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed");
   const total = live.reduce((a, r)=>a + (r.total || 0), 0), back = live.reduce((a, r)=>a + backOf(r), 0);
   const casts = new Set(live.map(r=>r.cast_id).filter(Boolean)).size;
-  const tax = live.reduce((a, r)=>a + KBM.gensen(backOf(r)), 0);
+  const tax = KBM.gensen(back);   // 源泉はエクセルと同じく「報酬の合計÷9」を四捨五入（1予約ずつだと数円ずれる）2026/11/10
   const card = live.filter(r=>r.payment !== "cash").reduce((a, r)=>a + (r.total || 0), 0);
   $("stats").className = "stats" + (showMoney ? "" : " hide");
   $("tax").className = "tax" + (showMoney ? "" : " hide");
