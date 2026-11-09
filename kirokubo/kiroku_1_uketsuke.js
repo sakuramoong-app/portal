@@ -983,6 +983,16 @@ function renderCastChecks(c){
   el.innerHTML = h;
   el.dataset.longng = longNg ? "1" : "";
 }
+// 🧰 準備がいるもの：オプション・個人オプションの名前に、この言葉が入っていたら（女レのコースも）。言葉は kb_settings の prep_words で足せる 2026/11/10
+const PREP_WORDS_DEF = ["コスプレ", "衣装", "制服", "ナース", "セーラー", "パンスト", "ストッキング", "網タイツ", "ランジェリー", "下着", "ボンデージ", "SM", "ＳＭ", "道具", "ロープ", "縄", "拘束", "おもちゃ", "バイブ", "ディルド", "ペニバン", "女装"];
+function prepTodoTexts(c){
+  const words = (M.set && Array.isArray(M.set.prep_words) && M.set.prep_words.length ? M.set.prep_words : PREP_WORDS_DEF).map(w => String(w).toLowerCase());
+  const hit = s => { const t = String(s || "").normalize("NFKC").toLowerCase(); return words.some(w => t.includes(w.normalize("NFKC"))); };
+  const out = [];
+  if(c && /^女レ/.test(String(c.course || ""))) out.push("🧰 準備（前日まで）：女レ道具セット");
+  ((c && c.opts) || []).filter(o => hit(o.label)).forEach(o => out.push("🧰 準備（前日まで）：" + String(o.label).replace(/^🎁/, "") + (o.qty > 1 ? "×" + o.qty : "") + (o.memo ? "（" + o.memo + "）" : "")));
+  return out;
+}
 // 保存用：{ list（チェックしたもの）, missAnnounce, missConfirm, longNg, todos }
 function checksForSave(){
   const boxes = [...document.querySelectorAll("#castChecks .cchk")];
@@ -995,6 +1005,8 @@ function checksForSave(){
   const todos = afterTexts.map(t=>prevTodos.find(p=>p.text === t) || { text: t, done_at: null, done_by: "" });
   // 🏨 新規の在室確認（部屋番号を入れたとき「する」を選んだら、予約のあとにやることに）
   if(typeof roomCheck !== "undefined" && roomCheck){ const tx = "🏨 新規の在室確認（" + ($("f_address").value.trim() || "ホテル") + "）"; const old = prevTodos.find(p => /在室確認/.test(p.text)); todos.push(old || { text: tx, done_at: null, done_by: "" }); }
+  // 🧰 前日までに準備がいるもの（女レ・コスプレ・パンスト・ランジェリー・SM道具など）→ 予約のカードに ✅（準備した）2026/11/10
+  try{ prepTodoTexts(calc()).forEach(tx => { if(!todos.some(t => t.text === tx)) todos.push(prevTodos.find(p => p.text === tx) || { text: tx, done_at: null, done_by: "" }); }); }catch(e){}
   return {
     list, todos,
     missAnnounce: boxes.some(b=>b.dataset.kind === "announce" && !b.checked),
