@@ -861,7 +861,7 @@ var custSeen = null;   // custPast＋台帳エクセルの過去の利用（新�
 let custPast = null;   // 電話番号で見つけたお客さんの、これまでの予約（キャストを変えたら本指名・店リピを決めなおす）
 let showMoney = false;
 
-$("navArea").innerHTML = KB.nav("reception.html");
+$("navArea").innerHTML = KB.nav("kiroku.html");
 if($("wipArea")) $("wipArea").innerHTML = KB.wipBanner();   // 新しい記録簿では出さない
 if(!KB.CAN_EDIT) document.body.classList.add("readonly");
 // 受付の外（暗いところ）を押したら、一時保存してから閉じる（先に閉じると一時保存が動かなかった。2026/11/3）
