@@ -253,13 +253,12 @@ function paintSales(){
   const old = el.querySelector(".salesrep"); if(old) old.remove();
   const isToday = salesToday.d === KB.bizDateOf(), dayWord = isToday ? "今日" : "この日";
   // どの日を開いても：前の日の報告（読みこみ中なら待つ）。「この日の分」に切りかえもできる（2026/11/10 店長：昨日より前を開いても前の日の分に）
-  const usePrev = !salesShowToday;
+  const usePrev = true;   // いつも前の日の分（2026/11/10 店長：切りかえ・説明はいらない）
   const cur = usePrev ? salesPrev : salesToday;
   const ready = cur && cur.d === (usePrev ? addDays(salesToday.d, -1) : salesToday.d) && !cur.err && cur.drop != null;
   salesReport = ready ? salesText(cur.d, cur.drop) : "";
   const tgt = usePrev ? addDays(salesToday.d, -1) : salesToday.d;
-  el.insertAdjacentHTML("beforeend", `<div class="t salesrep"><div class="k">📋 売上の報告（${mdOf(tgt)}の店落ち・コピーして送る）</div>
-    ${`<div class="hint2" style="margin:4px 0">${usePrev ? `ふつうは前の日の分を送ります（開いている日はそのまま）。<a href="javascript:void(0)" onclick="salesShowToday=true;paintSales()">${dayWord}（${mdOf(salesToday.d)}）の分を見る</a>` : `${dayWord}（${mdOf(salesToday.d)}）の分です${isToday ? "（まだ途中）" : ""}。<a href="javascript:void(0)" onclick="salesShowToday=false;paintSales()">◀ 前の日（${mdOf(addDays(salesToday.d, -1))}）の分にもどす</a>`}</div>`}
+  el.insertAdjacentHTML("beforeend", `<div class="t salesrep"><div class="k">📋 前日の売上報告（${mdOf(tgt)}）</div>
     ${ready ? `<pre>${esc(salesReport)}</pre><button type="button" class="btn btn-primary btn-sm" onclick="navigator.clipboard.writeText(salesReport).then(()=>toast('📋 売上の報告をコピーしました'),()=>prompt('コピーしてください',salesReport))">📋 コピー</button>`
       : cur && cur.err ? `<div class="hint2" style="color:#C0392B">前の日の数字が読めませんでした：${esc(cur.err)}</div>` : `<div class="hint2">前の日の数字を計算しています…</div>`}</div>`);
 }
