@@ -171,26 +171,26 @@ async function moveCast(cid, target){
   const [kind, area] = target.split("|");
   const seat = seatsOk ? seatOf(cid) : null;
   if(kind === "precall"){   // 出勤前に「何時からどこで待機」と連絡があった
-    if(seat) await leaveSeat(seat.id, true);
+    if(seat) await leaveSeat(seat.id, true, "札を「出勤前連絡」へ");
     if(await saveDayPart(cid, { standby: area, status: "出勤前連絡" })) toast(castLabel(x) + " → " + area + "で出勤前連絡");
     return;
   }
   if(kind === "start"){   // 待機しないで、最初の予約から（予約スタート）
-    if(seat) await leaveSeat(seat.id, true);
+    if(seat) await leaveSeat(seat.id, true, "札を「予約スタート」へ");
     if(await saveDayPart(cid, { standby: area, status: "予約スタート" })) toast(castLabel(x) + " → " + area + "で予約スタート");
     return;
   }
   if(kind === "work"){   // つまんで仕事中へ（新しい情報で上書き）
-    if(seat) await leaveSeat(seat.id, true);
+    if(seat) await leaveSeat(seat.id, true, "札を「仕事中」へ");
     if(await saveDayPart(cid, { standby: area, status: "仕事中" })) toast(castLabel(x) + " → " + area + "で仕事中");
     return;
   }
   if(kind === "gone"){
-    if(seat) await leaveSeat(seat.id, true);
+    if(seat) await leaveSeat(seat.id, true, "札を「今いない」へ");
     if(await saveDayPart(cid, { standby: "", status: "" })) toast(castLabel(x) + " → 今いない");
     return;
   }
-  if(seat && area !== "鶯谷") await leaveSeat(seat.id, true);
+  if(seat && area !== "鶯谷") await leaveSeat(seat.id, true, "札を「" + area + "」へ");
   if(await saveDayPart(cid, { standby: area, status: (x.cd && x.cd.settled) ? "待機中" : "" })) toast(castLabel(x) + " → " + area + "で待機");   // 精算済の子も、待機の段に動かしたら待機中（2026/11/6）
 }
 async function cycleGone(cid){
@@ -249,7 +249,8 @@ async function cycleGone(cid){
 leaveSeat = async function(logId, quiet, why){
   try{
     // why：自動で外したときの理由（「自動：接客中」など）。席の記録の「退席した人」に残す（また外れたとき原因がわかるように）2026/11/10
-    q(await sb.from("kb_seat_logs").update({ end_at: new Date().toISOString(), end_by: KB.operatorName() + (why ? "（" + why + "）" : "") }).eq("id", logId));
+    const w = why || (quiet ? "" : "退席ボタン");
+    q(await sb.from("kb_seat_logs").update({ end_at: new Date().toISOString(), end_by: KB.operatorName() + (w ? "（" + w + "）" : "") }).eq("id", logId));
     await loadSeats(); renderSeats(); renderBoard();
     if(!quiet) toast("退席しました");
   }catch(e){ toast("記録できませんでした：" + (e.message || e)); }
@@ -414,7 +415,7 @@ function whereSel(cid){
 async function setWhere(cid, v){
   const cd = castDays[cid] || {};
   const seat = seatsOk && v !== "鶯谷" ? seatOf(cid) : null;   // 鶯谷から動いたら、席は立つ
-  if(seat) await leaveSeat(seat.id, true);
+  if(seat) await leaveSeat(seat.id, true, "今どこを「" + (v || "なし") + "」に");
   // 場所を選んだら、出勤前・不在・予約スタートなどは「来ている」として待機中に（お茶・欠勤・精算済はそのまま）
   const keep = ["お茶", "欠勤", "待機中", "仕事中"].includes(cd.status) || cd.settled;
   await saveDayPart(cid, keep || !v ? { standby: v } : { standby: v, status: "" });
@@ -432,13 +433,13 @@ async function setDayStatus(cid, v){
     if(t === null){ renderList(); return; }
     const pl = prompt("再開する場所は？（" + STANDBY.join("・") + "。空のままなら今の場所）", cd0.break_place || cd0.standby || "");
     if(pl === null){ renderList(); return; }
-    const seat = seatsOk ? seatOf(cid) : null; if(seat) await leaveSeat(seat.id, true);
+    const seat = seatsOk ? seatOf(cid) : null; if(seat) await leaveSeat(seat.id, true, "状態を「中抜け」に");
     await saveDayPart(cid, { status: "中抜け", standby: "", break_back: t.trim().slice(0, 10), break_place: (pl.trim() || cd0.standby || "").slice(0, 20) });
     return;
   }
   const keepPlace = ["", "待機中", "仕事中", "出勤前連絡"].includes(v);
   const seat = seatsOk && !keepPlace ? seatOf(cid) : null;
-  if(seat) await leaveSeat(seat.id, true);
+  if(seat) await leaveSeat(seat.id, true, "状態を「" + v + "」に");
   const patch = keepPlace ? { status: v } : { status: v, standby: "" };
   if(cd0.status === "中抜け" && keepPlace && !cd0.standby && cd0.break_place) patch.standby = cd0.break_place;   // 中抜けからもどったら、再開する場所へ
   await saveDayPart(cid, patch);

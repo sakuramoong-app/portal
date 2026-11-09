@@ -293,10 +293,12 @@ async function sitDown(n, castId){
   if(!KB.CAN_EDIT) return;
   const id = castId || ($("seatSel" + n) && $("seatSel" + n).value);
   if(!id){ toast("だれが座るか選んでください"); return; }
-  if(seatLogs.some(l=>l.seat === n && !l.end_at)){ toast(n + "番はもう使われています"); return; }
+  await loadSeats();   // ほかのPCで座らせたばかりかもしれないので、いまの席を読みなおしてから（同じ子が2つの席に座らないように）2026/11/10
+  if(seatLogs.some(l=>l.seat === n && !l.end_at && l.cast_id !== id)){ renderSeats(); renderBoard(); toast(n + "番はもう使われています（ほかのPCで座らせたかもしれません）"); return; }
   const old = seatOf(id);
   try{
-    if(old) q(await sb.from("kb_seat_logs").update({ end_at: new Date().toISOString(), end_by: KB.operatorName() }).eq("id", old.id));   // 席の移動：前の席は退席
+    if(old && old.seat === n){ renderSeats(); renderBoard(); toast(castName(id) + " はもう " + n + "番に座っています"); return; }
+    if(old) q(await sb.from("kb_seat_logs").update({ end_at: new Date().toISOString(), end_by: KB.operatorName() + "（" + n + "番に移動）" }).eq("id", old.id));   // 席の移動：前の席は退席
     q(await sb.from("kb_seat_logs").insert({ biz_date: day, seat: n, cast_id: id, start_by: KB.operatorName() }));
     await loadSeats(); renderSeats(); renderBoard();
     toast(castName(id) + " → 🪑" + n + "番");
