@@ -6723,13 +6723,26 @@ async function loadBackRef(bm){
     + (past.length ? `前に入ったとき：<br>${past.map(r => `・${esc(String(r.biz_date).slice(5).replace("-", "/"))} ${esc(nm(r.cast_id))}（${esc(rankAt(r.cast_id, bm.g, r.biz_date) || "ランク不明")}）基本額 ${yen(r.base_price)} → バック <b>${yen(r.course_back)}</b>`).join("<br>")}` : "前に入った記録はありません");
   backRefCache[ck] = html; paint(html);
 }
+// 🕘 バック表を変えた記録（キャスト台帳の 💴 バック表 と同じ kb_settings.back_edit_log。新しい順・300件まで）2026/11/10
+async function backLogAdd(list){
+  try{
+    const lg = q(await sb.from("kb_settings").select("value").eq("key", "back_edit_log").maybeSingle());
+    const old = lg && Array.isArray(lg.value) ? lg.value : [];
+    const by = (KB.operatorName && KB.operatorName()) || "", at = new Date().toISOString();
+    const v = list.map(x => Object.assign({ at, by }, x)).concat(old).slice(0, 300);
+    q(await sb.from("kb_settings").upsert({ key: "back_edit_log", value: v, note: "バック表を変えた記録（キャスト台帳の 💴 バック表）" }));
+    return v;
+  }catch(e){ return null; }   // 記録が残せなくても、バックは入っている
+}
 const __saveResBL = saveRes;
 saveRes = async function(){
   const bm = last && last.backMissing && Number(cbackOv) > 0 ? { rank: last.backMissing.rank, course: last.backMissing.key, amount: Math.round(Number(cbackOv)) } : null;
   const r = await __saveResBL.apply(this, arguments);
   if(bm && !$("formBg").classList.contains("show")){   // 保存できた（小窓が閉じた）ときだけ、バック表に入れる
     try{
+      const wasNew = M.back[bm.rank + "|" + bm.course] == null;
       q(await sb.from("kb_back").upsert(bm, { onConflict: "rank,course", ignoreDuplicates: true }));
+      if(wasNew) await backLogAdd([{ rank: bm.rank, course: bm.course, before: null, after: bm.amount, from: "受付" }]);   // 🕘 変えた記録に（2026/11/10）
       if(M.back[bm.rank + "|" + bm.course] == null) M.back[bm.rank + "|" + bm.course] = bm.amount;
       delete backRefCache[last.backMissing.g + "|" + bm.course];
       alert(`バック表に「${bm.rank}・${bm.course}」${yen(bm.amount)} を入れました（次から自動）。\n\n⚠️ 店長に報告してください。\nキャストには「過去にないコース内容だったので、バックを手で入れました。万が一直しが必要な場合は、店長から連絡が来ます」とお伝えください。`);

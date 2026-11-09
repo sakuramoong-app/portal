@@ -724,7 +724,7 @@ function btPaint(){
     : `<div class="hint">このランクのコースがありません</div>`;
   btSumPaint();
   const lg = $("bt_log");
-  if(lg) lg.innerHTML = btLog.length ? btLog.slice(0, 40).map(x => `<div style="font-size:12.5px;border-bottom:1px dashed #eee;padding:3px 0">${esc(String(x.at || "").slice(0, 16).replace("T", " "))} ${esc(x.by || "")}：<b>${esc(x.rank)}・${esc(x.course)}</b> ${x.before == null ? "なし" : Number(x.before).toLocaleString()} → ${x.after == null ? "なし（消した）" : Number(x.after).toLocaleString()}</div>`).join("") : `<div class="hint">まだありません</div>`;
+  if(lg) lg.innerHTML = btLog.length ? btLog.slice(0, 40).map(x => `<div style="font-size:12.5px;border-bottom:1px dashed #eee;padding:3px 0">${esc(String(x.at || "").slice(0, 16).replace("T", " "))} ${esc(x.by || "")}${x.from ? `（${esc(x.from)}で）` : ""}：<b>${esc(x.rank)}・${esc(x.course)}</b> ${x.before == null ? "なし" : Number(x.before).toLocaleString()} → ${x.after == null ? "なし（消した）" : Number(x.after).toLocaleString()}</div>`).join("") : `<div class="hint">まだありません</div>`;
 }
 function btChanges(){
   return Object.entries(btEdit).map(([course, v]) => ({ course, before: btCur(course), after: String(v).trim() === "" ? null : Math.round(Number(v)) }))
