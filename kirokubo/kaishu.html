@@ -9,6 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_common.js?v=24"></script>
+<script src="kb_money.js?v=1"></script><!-- 💴 お金の計算はここ1か所 -->
 <style>
   body{font-size:14.5px;}
   .wrap{max-width:1180px;}
@@ -135,14 +136,13 @@ const md = s => { const p = String(s).split("-"); return `${Number(p[1])}/${Numb
 const num = n => (Number(n) || 0).toLocaleString("ja-JP");
 const sgn = n => (n > 0 ? "＋" : n < 0 ? "−" : "") + num(Math.abs(n));
 const jump = (d, cid) => `<a class="j" href="settle.html?d=${d}${cid ? "&c=" + encodeURIComponent(cid) : ""}" target="_blank" rel="noopener" title="その日のそのキャストの精算へ">${md(d)} ↗</a>`;
-const backOf = r => r.back_override != null ? Number(r.back_override) : (Number(r.course_back) || 0) + (Number(r.option_back) || 0) + (Number(r.extra_back) || 0);
+const backOf = KBM.backOf;   // 💴 計算は kb_money.js の1か所に
 // 雑費（精算と同じ）：手で直していればその額。なければ 報酬＋OP 10,500円ごとに500円（3,000円まで）。雑費なしの曜日（キャストのルール）は0
 let ZRULES = [];
 function zappiOf(id, day, cd, mine){
   if(cd && cd.zappi_override != null) return Number(cd.zappi_override) || 0;
-  const dow = new Date(day + "T12:00:00Z").getUTCDay();
-  if(ZRULES.some(x => x.cast_id === id && (x.valid_from || "2000-01-01") <= day && (!x.valid_to || x.valid_to > day) && ((x.params || {}).days || []).includes(dow))) return 0;
-  return Math.min(3000, Math.floor(mine.reduce((a, r) => a + backOf(r), 0) / 10500) * 500);
+  if(KBM.zappiExempt(KBM.rulesOn(ZRULES, id, day), day)) return 0;   // 💴 計算は kb_money.js の1か所に
+  return KBM.zappiAuto(mine.reduce((a, r) => a + backOf(r), 0));
 }
 const RESV_COLS = "*";   // 振込（SQL 173）の欄もあるので全部
 let sortMode = (() => { try{ return localStorage.getItem("kaishuSort") || ""; }catch(e){ return ""; } })();

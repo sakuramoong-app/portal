@@ -10,6 +10,7 @@
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_live.js?v=4"></script><!-- いっしょに使う（保存の合図・入力中）。kb_common より前 -->
 <script src="kb_common.js?v=24"></script>
+<script src="kb_money.js?v=1"></script><!-- 💴 お金の計算はここ1か所 -->
 <style>
   .daybar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
   .daybar input[type=date]{font-family:inherit;font-size:14px;padding:8px 12px;border:1.5px solid var(--line);border-radius:99px;background:#fff;color:var(--ink);}
@@ -125,7 +126,7 @@ function moveDay(n){ const d = new Date($("day").value + "T12:00:00Z"); d.setUTC
 function castName(id){ const c = M.casts.find(x=>x.id === id); return c ? (c.official_name || c.temp_name) : (id || "—"); }
 function storeLabel(k){ const s = M.stores.find(x=>x.key === k); return s ? s.label : (k || ""); }
 function hm(iso){ if(!iso) return "--:--"; const d = new Date(new Date(iso).getTime() + 9*3600*1000); let h = d.getUTCHours(); if(h < 6) h += 24; return String(h).padStart(2,"0") + ":" + String(d.getUTCMinutes()).padStart(2,"0"); }   // 深夜は 27:00 のように（記録簿と同じ。2026/11/4）
-function backOf(r){ return r.back_override != null ? r.back_override : (r.course_back + r.option_back + r.extra_back); }
+function backOf(r){ return KBM.backOf(r); }   // 💴 kb_money.js
 function rulesOn(castId){ return M.rules.filter(r=>r.cast_id === castId && (r.valid_from || "2000-01-01") <= day && (!r.valid_to || r.valid_to > day)); }
 
 async function loadDay(){
@@ -144,63 +145,8 @@ async function loadDay(){
 }
 
 // キャスト1人分の計算
-function calcCast(castId){
-  const all = rows.filter(r=>r.cast_id === castId);
-  const allLive = all.filter(r=>r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed");
-  const cd = days[castId] || {};
-  // ② 先精算のあとの追加分：前の精算（①…）に入った予約は数えない（unsettled.js の kbSnapParts・kbPartIds）2026/11/4
-  //   精算済のあとでふえた予約があるときも、ふえた予約だけで計算する（チェックを外した予約＝今日は精算しない も入れない）
-  const prevParts = typeof kbSnapParts === "function" && (!cd.settled || kbPendingAfterSettle(cd, all).length) ? kbSnapParts(cd) : [];
-  const doneIds = prevParts.length ? kbPartIds(cd, all, prevParts) : new Set();
-  const skip = typeof settleSkip !== "undefined" ? settleSkip[day + "|" + castId] : null;
-  const live = allLive.filter(r=>!doneIds.has(r.id) && !(skip && skip.has(r.id)));
-  const prevSum = k=>prevParts.reduce((a, p)=>a + (Number(p[k]) || 0), 0);
-  // 報酬：手で直した報酬があればそれ（OP込みの金額として扱う）
-  let reward = 0, option = 0;
-  live.forEach(r=>{
-    if(r.back_override != null) reward += r.back_override;
-    else { reward += (r.course_back || 0) + (r.extra_back || 0); option += (r.option_back || 0); }
-  });
-  // 交通費バック（台帳の条件）
-  let transportBack = 0; const why = [];
-  rulesOn(castId).filter(x=>x.kind === "transport_back").forEach(x=>{
-    live.forEach(r=>{
-      const t = r.transport || 0; if(!t) return;
-      if(x.params && x.params.min_transport && t < Number(x.params.min_transport)) return;   // 交通費が○円以上のときだけ
-      const v = x.params && x.params.amount != null ? Math.min(Number(x.params.amount) || 0, t) : Math.round(t * (Number(x.params && x.params.rate) || 0));
-      if(v){ transportBack += v; }
-    });
-    if(transportBack) why.push("交通費バック：" + x.note);
-  });
-  // 雑費（自動・免除の曜日・手で直したとき）
-  const dow = new Date(day + "T12:00:00Z").getUTCDay();
-  const exempt = rulesOn(castId).some(x=>x.kind === "zappi_exempt" && (x.params.days || []).includes(dow));
-  const zFull = rr=>{ let a = 0; rr.forEach(r=>{ a += r.back_override != null ? r.back_override : (r.course_back || 0) + (r.extra_back || 0) + (r.option_back || 0); }); return Math.min(3000, Math.floor(a / 10500) * 500); };
-  // 雑費は1日まとめて計算して、前の精算で払った分を引く（②だけで計算すると多くなったり少なくなったりするので）
-  const zappiAuto = exempt ? 0 : (prevParts.length ? Math.max(0, zFull(allLive) - prevSum("zappi")) : Math.min(3000, Math.floor((reward + option) / 10500) * 500));
-  const zappi = cd.zappi_override != null ? Math.max(0, cd.zappi_override - prevSum("zappi")) : zappiAuto;
-  const plusItems = Array.isArray(cd.plus_items) ? cd.plus_items : [];
-  const minusItems = Array.isArray(cd.minus_items) ? cd.minus_items : [];
-  const plus = Math.max(0, plusItems.reduce((a, b)=>a + (Number(b.amount) || 0), 0) - prevSum("plus"));     // ②：前の精算で払ったプラス・マイナスは引く
-  const minus = Math.max(0, minusItems.reduce((a, b)=>a + (Number(b.amount) || 0), 0) - prevSum("minus"));
-  const takeHome = reward + option + transportBack + plus - zappi - minus;
-  const total = live.reduce((a, r)=>a + (r.total || 0), 0);
-  // カードは予約の1時間前までに決済URLで先に払ってもらう（現金はキャストに入らない）。「カード」「カード精算済」どちらも引く
-  // 現金＋カード（分けて払う）の予約は、カードの分（card_total）だけ引く 2026/11/4
-  const cardPaid = live.reduce((a, r)=>a + ((r.payment === "card" || r.payment === "card_paid") ? (r.total || 0) : (Number(r.card_total) || 0)), 0);
-  const cardUnconfirmed = live.filter(r=>r.payment === "card").length;
-  // 🏦 振込（SQL 173）：あとで振り込んでもらう分は、カードと同じでキャストの手元にない
-  const trList = live.filter(r=>r.transfer_status && Number(r.transfer_amount)), transferPaid = trList.reduce((a, r)=>a + (Number(r.transfer_amount) || 0), 0), trIds = trList.map(r=>r.id);
-  const drop = total - takeHome - cardPaid - transferPaid;
-  const withholding = Math.round((reward + option) / 9);   // 源泉：エクセルと同じく四捨五入
-  const provisional = total - reward - option;          // 暫定残額（総額 − 報酬）
-  const shopDrop = total - reward - option + zappi;   // 店落ち＝総額−報酬＋雑費（交通費・プラスマイナスは経費なので入れない）                    // 店落ち（暫定残額 ＋ 雑費 など）
-  const realDrop = provisional - withholding;           // 実質的な店落ち（暫定残額 − 源泉）
-  // 投函した額：精算済にすると空にもどす（②の精算で前の額が残らないように）。精算済の枠では、精算したときの額を出す（2026/11/5）
-  const snapDep = cd.settled && !prevParts.length && cd.settle_snapshot ? cd.settle_snapshot.deposited : null;
-  const deposited = cd.deposited != null ? cd.deposited : snapDep != null ? Number(snapDep) : null;
-  const diff = deposited != null ? deposited - drop : null;   // マイナス＝未精算／プラス＝お釣り
-  return { partNo: prevParts.length + 1, prevParts, allLive, transferPaid, trIds, all, live, cd, reward, option, transportBack, why, exempt, zappiAuto, zappi, plusItems, minusItems, plus, minus, takeHome, total, cardPaid, cardUnconfirmed, drop, withholding, provisional, shopDrop, realDrop, deposited, diff };
+function calcCast(castId){   // 💴 計算は kb_money.js（KBM.calcCast）の1か所に（2026/11/10）
+  return KBM.calcCast({ all: rows.filter(r=>r.cast_id === castId), cd: days[castId] || {}, rules: rulesOn(castId), day, skip: typeof settleSkip !== "undefined" ? settleSkip[day + "|" + castId] : null });
 }
 
 function render(){
