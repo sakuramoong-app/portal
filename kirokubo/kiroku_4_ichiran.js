@@ -264,7 +264,11 @@ function paintSales(){
       : cur && cur.err ? `<div class="hint2" style="color:#C0392B">前の日の数字が読めませんでした：${esc(cur.err)}</div>` : `<div class="hint2">前の日の数字を計算しています…</div>`}</div>`);
 }
 let salesReport = "";
-document.head.insertAdjacentHTML("beforeend", `<style>.todaygrid .salesrep pre{font-family:inherit;font-size:14px;font-weight:800;white-space:pre-wrap;margin:4px 0 6px;color:var(--ink)}</style>`);
+document.head.insertAdjacentHTML("beforeend", `<style>.todaygrid .salesrep pre{font-family:inherit;font-size:14px;font-weight:800;white-space:pre-wrap;margin:4px 0 6px;color:var(--ink)}
+  .todaygrid .salesrep{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;border:2px solid #F8BBD0;background:#FFF7FA}
+  .todaygrid .salesrep .k{flex-basis:100%;font-size:13px !important;color:#AD1457 !important}
+  .todaygrid .salesrep pre{margin:0 !important;padding:6px 12px;background:#fff;border-radius:10px;border:1px dashed #F2A7C3}
+  .todaygrid .salesrep .hint2{flex-basis:100%;font-size:12px !important;font-weight:600;color:var(--sub);margin:0 !important}</style>`);
 const __renderListT = renderList;
 renderList = function(){ __renderListT(); renderToday(); renderOwner(); };
 
