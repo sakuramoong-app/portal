@@ -1731,7 +1731,7 @@ async function saveReflect(){
 // ---------- 🌐 公式HPにも入れる（お店ごとに「確かめる」→ チェックしたお店に「入れる」） ----------
 let hpPush = null;
 const HP_CMS_LABEL = { gnew:"メインアイコン", gnew2:"サブアイコン①", gnew3:"サブアイコン②", gnew4:"サブアイコン③", gnew5:"サブアイコン④", gnew6:"サブアイコン⑤", gname:"名前", gye:"年齢", g3s:"サイズ", Dttcomm1:"Pサイズ", Dttcomm2:"性格", Dttcomm3:"趣味", Dttcomm4:"性感帯", Dttcomm5:"チャームポイント", Dttcomm6:"状態（竿/玉）", Dttcomm7:"髪の毛",
-  comm1:"本人から一言", comm1a:"本人から一言（HTML）", comm2:"店長から一言", comm2a:"店長から一言（HTML）" };
+  comm1:"本人から一言", comm1a:"本人から一言（HTML）", HpGalDeTown:"デリヘルタウン欄", comm2:"店長から一言", comm2a:"店長から一言（HTML）" };
 function hpOptsOf(data, sk){   // このお店のオプション（◎○△× が入っているものだけ）→ 公式HPに入れる形
   const o = profOpts(data, sk).options || {}, out = {};
   Object.entries(o).forEach(([k, v]) => { if(["◎", "○", "△", "×"].includes(v)) out[k] = v; });
@@ -1759,7 +1759,7 @@ function openHpPush(sets, cast){
 function paintHpPush(){
   let bg = document.getElementById("hpBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "hpBg"; bg.style.cssText = "position:fixed;inset:0;z-index:310;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
-  const L = Object.assign({ name: "名前", comment: "本人から一言", mgrComment: "店長から一言", options: "オプション" }, ANS_PROFILE_LABELS);
+  const L = Object.assign({ name: "名前", comment: "本人から一言", mgrComment: "店長から一言", options: "オプション", deTown: "デリヘルタウン欄（動画・画像・ボタン）" }, ANS_PROFILE_LABELS);
   const short = s => { s = String(s || ""); return s.length > 120 ? s.slice(0, 120) + "…" : s; };
   const busyNow = hpPush.some(x => x.state === "checking" || x.state === "saving");
   const rowsHtml = hpPush.map((x, i) => {
@@ -2447,6 +2447,7 @@ function paintProf(){
         <select class="ed" id="pf_b_castType" ${ro}>${["", ...CAST_TYPES].map(t => `<option value="${t}" ${t === v ? "selected" : ""}>${t || "（なし）"}</option>`).join("")}</select></div>`; })()}
       <div class="hint" style="grid-column:1/-1;font-size:12px">🌐 公式HPのアイコンは自動：メイン＝キャストの種類／サブ＝状態（ありあり・ありなし・なしなし）→ Pサイズ（13cm〜20cm）→ 雰囲気（公式HPにあるアイコンの言葉だけ）の順に入ります</div></div></div></details>
     <details ${pfAcc("intro")}><summary class="pfHead">💬 紹介文</summary><div class="pfBody">
+      ${CAN_EDIT && hpNoOf(pf.c, sk).mk === "sakuramoon" ? `<div style="margin-bottom:8px"><button type="button" class="btn btn-primary btn-sm" onclick="tplOpen()">🎨 テンプレで作る（デリヘルタウン欄・本人から一言）</button>${tplPending[sk] ? ` <span class="hint" style="color:#B7791F">デリヘルタウン欄は、保存すると公式HPに入ります</span>` : ""}</div>` : ""}
       <div class="hint" style="display:flex;align-items:center;gap:6px">本人から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_c')">📋 コピー</button></div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
       <div class="hint" style="margin-top:8px;display:flex;align-items:center;gap:6px">店長から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_m')">📋 コピー</button></div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></details>
     <details ${pfAcc("opts")}><summary class="pfHead">✅ オプション可否◎○△×${CAN_EDIT ? `<button type="button" class="pfEditBtn" onclick="event.preventDefault();pfToggleEdit('opts')">${pfEdit.opts ? "✓ 見る形にもどす" : "✏️ 編集する"}</button>` : ""}</summary>
@@ -2919,13 +2920,13 @@ function hpPushLater(){
   if(pf.dirty.size){ toast("先に「💾 保存」してください（保存した中身を公式HPに入れます）"); return; }
   const sks = pf.stores.filter(sk => hpNoOf(pf.c, sk).no);
   if(!sks.length){ toast("在籍番号のあるお店がありません"); return; }
-  const sets = hpSetsOf(pf.prof.data || pf.data, sks);
+  const sets = tplMerge(hpSetsOf(pf.prof.data || pf.data, sks));
   if(Object.keys(sets).length) openHpPush(sets, pf.c); else toast("入れるものがありません");
 }
 async function saveProf(later){
   if(!pf) return;
   pfCollect();
-  if(!pf.dirty.size && !pf.hotelDirty){ toast("変えたところがありません"); return; }
+  if(!pf.dirty.size && !pf.hotelDirty && !Object.keys(tplPending).length){ toast("変えたところがありません"); return; }
   const { prof, data } = pf;
   const p = profPayload(prof, data);
   if(pf.hotelDirty) p.hotelPrefs = pfHotelPrefs();
@@ -2935,7 +2936,7 @@ async function saveProf(later){
   }catch(e){ toast("プロフを保存できませんでした：" + (e.message || e)); return; }
   pf.hotelDirty = false;
   // 公式HPにも：直したお店の基本情報・紹介文（エイティーン・極門はまだ入れない）
-  const sets = hpSetsOf(data, [...pf.dirty]);
+  const sets = tplMerge(hpSetsOf(data, [...pf.dirty]));
   prof.data = JSON.parse(JSON.stringify(data)); pf.dirty.clear(); paintProf();
   if(later){ toast("保存しました。公式HPは「🌐 公式HPにまとめて入れる」であとから入れられます"); return; }
   toast("プロフを保存しました");
@@ -3046,7 +3047,7 @@ async function fuUpload(){
   try{
     const r = await hpFn({ action: "free_jpg_upload", store, file: { b64: await fuB64(fuFile), type: fuFile.type, name: fuFile.name || "" } });
     if(r && r.no && r.tags && (r.ok || /確かめられません/.test(r.error || ""))){
-      fuDone.unshift({ store: label, no: r.no, tags: r.tags, warn: r.ok ? "" : r.error });
+      fuDone.unshift({ sk: store, store: label, no: r.no, tags: r.tags, warn: r.ok ? "" : r.error, v: Date.now() });
       $("fu_msg").innerHTML = r.ok ? `<b style="color:#1E8E5A">✅ ${r.no}番にアップしました</b>` : `<span style="color:#B7791F">⚠ ${esc(r.error)}</span>`;
       fuFile = null; $("fu_prev").innerHTML = "📁 ほかの画像もアップするときは、ここを押して選ぶ"; fuPaintDone();
     } else { $("fu_msg").innerHTML = `<span style="color:#C0392B">⚠ ${esc((r && r.error) || "うまくいきませんでした")}</span>`; $("fu_go").disabled = false; }
@@ -3054,15 +3055,264 @@ async function fuUpload(){
   fuBusy = false;
 }
 function fuCopy(t){ navigator.clipboard.writeText(t).then(() => toast("📋 コピーしました：" + t)); }
+// ↩ 取り消す（消す）／🔁 上書き：この画面でいまアップしたものだけ（前からある画像はアプリから消さない）
+async function fuUndo(i){
+  const d = fuDone[i]; if(!d || d.deleted || fuBusy) return;
+  if(!confirm(`${d.store} の ${d.no}番の画像を消します（いまアップしたもの）。紹介文にこの番号のコードを貼っていたら、そこは表示されなくなります。いいですか？`)) return;
+  fuBusy = true; $("fu_msg").innerHTML = `⏳ ${d.no}番を消しています…`;
+  const r = await hpFn({ action: "free_jpg_upload", store: d.sk, no: d.no, mode: "delete" });
+  fuBusy = false;
+  if(r && r.ok){ d.deleted = true; $("fu_msg").innerHTML = `<b style="color:#1E8E5A">↩ ${d.no}番を消しました</b>`; }
+  else $("fu_msg").innerHTML = `<span style="color:#C0392B">⚠ ${esc((r && r.error) || "消せませんでした")}</span>`;
+  fuPaintDone();
+}
+function fuReplacePick(i){
+  const d = fuDone[i]; if(!d || d.deleted || fuBusy) return;
+  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/jpeg,image/png,image/gif";
+  inp.onchange = () => inp.files[0] && fuReplace(i, inp.files[0]); inp.click();
+}
+async function fuReplace(i, f){
+  const d = fuDone[i]; if(!d || d.deleted || fuBusy) return;
+  let file; try{ file = await fuPrepare(f); }catch(e){ $("fu_msg").innerHTML = `<span style="color:#C0392B">${esc(e.message)}</span>`; return; }
+  if(!confirm(`${d.store} の ${d.no}番を、選んだ画像で上書きします。コードはそのまま使えます。いいですか？`)) return;
+  fuBusy = true; $("fu_msg").innerHTML = `⏳ ${d.no}番を上書きしています…`;
+  const r = await hpFn({ action: "free_jpg_upload", store: d.sk, no: d.no, mode: "replace", file: { b64: await fuB64(file), type: file.type, name: file.name || "" } });
+  fuBusy = false;
+  if(r && r.ok){ d.v = Date.now(); $("fu_msg").innerHTML = `<b style="color:#1E8E5A">🔁 ${d.no}番を上書きしました（公式HPの表示が変わるまで少しかかることがあります）</b>`; }
+  else $("fu_msg").innerHTML = `<span style="color:#C0392B">⚠ ${esc((r && r.error) || "上書きできませんでした")}</span>`;
+  fuPaintDone();
+}
 function fuPaintDone(){
   const el = $("fu_done"); if(!el) return;
-  el.innerHTML = fuDone.length ? `<div style="margin-top:12px;font-weight:800">📋 紹介文に貼るコード</div>` + fuDone.map(d => `<div style="border:1.5px solid var(--line);border-radius:12px;padding:10px;margin-top:6px">
-      <div style="display:flex;gap:10px;align-items:center">${d.tags.url ? `<img src="${esc(d.tags.url)}?v=${Date.now()}" style="width:64px;height:64px;object-fit:cover;border-radius:8px">` : ""}
-      <div><b>${esc(d.store)}　${d.no}番</b>${d.warn ? `<div class="hint" style="color:#B7791F">${esc(d.warn)}</div>` : ""}</div></div>
+  el.innerHTML = fuDone.length ? `<div style="margin-top:12px;font-weight:800">📋 紹介文に貼るコード</div>` + fuDone.map((d, i) => d.deleted ? `<div style="border:1.5px dashed var(--line);border-radius:12px;padding:8px 10px;margin-top:6px;color:#9C8B8F">${esc(d.store)}　${d.no}番 … ↩ 消しました</div>` : `<div style="border:1.5px solid var(--line);border-radius:12px;padding:10px;margin-top:6px">
+      <div style="display:flex;gap:10px;align-items:center">${d.tags.url ? `<img src="${esc(d.tags.url)}?v=${d.v || ""}" style="width:64px;height:64px;object-fit:cover;border-radius:8px">` : ""}
+      <div style="flex:1"><b>${esc(d.store)}　${d.no}番</b>${d.warn ? `<div class="hint" style="color:#B7791F">${esc(d.warn)}</div>` : ""}</div>
+      <button class="btn btn-sm btn-ghost" onclick="fuReplacePick(${i})" title="この番号に、べつの画像を入れなおす（コードはそのまま）">🔁 上書き</button>
+      <button class="btn btn-sm btn-ghost" style="color:#C0392B" onclick="fuUndo(${i})" title="まちがえてアップしたとき。この番号の画像を消す">↩ 取り消す</button></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
         <button class="btn btn-sm btn-primary" onclick="fuCopy('${d.tags.spW}')">${d.tags.spW}<br><span style="font-size:10.5px;font-weight:600">スマホ・横いっぱい（ふだんはこれ）</span></button>
         <button class="btn btn-sm btn-ghost" onclick="fuCopy('${d.tags.sp}')">${d.tags.sp}<br><span style="font-size:10.5px">スマホ・元の大きさ</span></button>
         <button class="btn btn-sm btn-ghost" onclick="fuCopy('${d.tags.pc}')">${d.tags.pc}<br><span style="font-size:10.5px">パソコン</span></button></div></div>`).join("") : "";
+}
+/* ---------- 🎨 紹介文をテンプレで作る（サクラムーン・2026/11/9）----------
+   材料（タイトル・本文・動画/画像の番号・DMM・X・YouTube・ヘブンの番号）から、公式HPの2つの欄を作る
+   ・デリヘルタウン欄（HpGalDeTown）：動画 → 画像 → DMMのリンク → X・口コミ・YouTube のボタン
+   ・本人から一言の自由欄（comm1a）：花びらのカード（タイトル・本文）→ ヘブンの写メ日記ウィジェット → ヘブンへのボタン
+   本文は、行の頭に「＊」をつけるとピンクの行になる。空の行は段落のあき
+   「✍️ 入れる」で、本人から一言の欄（このお店のタブ）に入れる。デリヘルタウン欄は「💾 プロフを保存」のとき公式HPにいっしょに入れる
+   お店ごとのテンプレは TPL_STORES に足す（いまはサクラムーンだけ） */
+const TPL_STORES = {
+  sakuramoon: { label: "サクラムーン", site: "https://www.sakura-moon.com", heavenShopId: "1210007164", heavenPath: "tokyo/A1305/A130506/sakura_moon",
+    btn: { x: 203, review: 205, youtube: 204 }, heavenBtnGif: 27 }
+};
+const tplPending = {};   // { お店のタブ: デリヘルタウン欄のHTML }（保存のときに公式HPへ）
+function tplMerge(sets){
+  Object.entries(tplPending).forEach(([sk, html]) => { sets[sk] = sets[sk] || {}; sets[sk].deTown = html; delete tplPending[sk]; });
+  return sets;
+}
+const tplEsc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const tplNums = s => String(s || "").normalize("NFKC").split(/[^\d]+/).map(Number).filter(n => n > 0 && n <= 800);
+const tplUrl = s => { s = String(s || "").trim(); return /^https?:\/\/[^\s"'<>]+$/.test(s) ? s : ""; };
+function tplDeTown(m, st){
+  const out = [];
+  tplNums(m.video).forEach(n => out.push(`%MP4FREE${n}-W%<br />`, `<br />`));
+  tplNums(m.images).forEach(n => out.push(`%MJPGFREE${n}-W%<br />`));
+  const dmm = tplUrl(m.dmmUrl);
+  if(dmm) out.push(`<a href="${dmm}" target="_blank">　‹　${tplEsc(m.dmmText || "出演作品はこちら")}</a><br />`);
+  const x = tplUrl(m.x), yt = tplUrl(m.youtube), gid = String(m.girlId || "").replace(/\D/g, "");
+  if(x || yt || gid){
+    out.push(`<!-- 共通ボタンスタイル -->
+<style>
+.button {
+  display: inline-block;
+  background-color: #ffffff;
+  color: black;
+  padding: 6px 12px;
+  text-decoration: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  margin: 10px;
+  transition: transform 0.2s;
+}
+.button:hover {
+  transform: scale(1.05);
+}
+</style>
+`);
+    if(x) out.push(`<!-- Xボタン -->\n<a href="${x}" target="_blank" class="button">%MDISPFREE${st.btn.x}%</a>`);
+    if(gid) out.push(`<!-- 口コミボタン -->\n<a href="https://www.cityheaven.net/${st.heavenPath}/reviews/?girlid=${gid}" target="_blank" class="button">%MDISPFREE${st.btn.review}%</a>`);
+    if(yt) out.push(`<!-- YouTubeボタン -->\n<a href="${yt}" target="_blank" class="button">%MDISPFREE${st.btn.youtube}%</a>`);
+  }
+  return out.join("\n");
+}
+function tplBody(text){
+  const lines = String(text || "").replace(/\r/g, "").split("\n");
+  while(lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  return lines.map((l, i) => {
+    const last = i === lines.length - 1;
+    if(!l.trim()) return "";
+    const pink = /^[＊*]/.test(l.trim()), t = tplEsc(l.trim().replace(/^[＊*]\s*/, ""));
+    const br = last ? "" : (lines[i + 1] !== undefined && !lines[i + 1].trim() ? "<br /><br />" : "<br />");
+    return "        " + (pink ? `<font color="#ffb6c1">${t}</font>` : t) + br;
+  }).filter(Boolean).join("\n");
+}
+function tplComment(m, st){
+  const gid = String(m.girlId || "").replace(/\D/g, "");
+  let h = `<br clear="all"><div style="clear:both;"></div>
+
+<!-- プロフ自由欄：花びら背景＋ズレ防止＋スマホ余白ゼロ（v3.3） -->
+<div style="max-width:100%; background:linear-gradient(30deg,#fad4d8,#ffffff,#fad4d8);
+            text-align:center; font-size:16px; position:relative; overflow:hidden;
+            padding:40px 0; box-sizing:border-box; min-height:340px;">
+
+  <!-- 花びらレイヤー（上下／背面固定） -->
+  <div style="position:absolute; inset:0; z-index:0; opacity:0.45; pointer-events:none;">
+    <!-- 上 -->
+    <div style="position:absolute; top:12px; left:25px; width:56px; height:56px; background:pink; border-radius:50% 0 50% 0; transform:skew(0,-18deg);"></div>
+    <div style="position:absolute; top:0px; left:130px; width:32px; height:32px; background:pink; border-radius:0 50% 0 50%; transform:rotate(70deg) skew(0,24deg);"></div>
+    <div style="position:absolute; top:14px; right:36px; width:40px; height:40px; background:pink; border-radius:0 50% 0 50%; transform:skew(0,22deg);"></div>
+    <!-- 下 -->
+    <div style="position:absolute; bottom:22px; left:34px; width:44px; height:44px; background:pink; border-radius:0 50% 0 50%; transform:skew(0,24deg);"></div>
+    <div style="position:absolute; bottom:46px; right:96px; width:30px; height:30px; background:pink; border-radius:50% 0 50% 0; transform:rotate(12deg) skew(0,-12deg);"></div>
+    <div style="position:absolute; bottom:18px; right:10px; width:38px; height:38px; background:pink; border-radius:0 50% 0 50%; transform:skew(0,20deg);"></div>
+  </div>
+
+  <!-- 本文カード -->
+  <div style="width:85%; max-width:980px; background-color:rgba(255,255,255,0.9);
+              padding:20px; box-sizing:border-box; margin:auto;
+              box-shadow:2px 2px 12px 2px rgba(254,148,184,0.3); border-radius:20px;
+              position:relative; z-index:1;">
+
+    <div style="font-family:Meiryo,メイリオ,'Hiragino Kaku Gothic ProN',ヒラギノ角ゴ ProN W3,Helvetica,sans-serif; color:#666;">
+
+      <!-- タイトル -->
+      <div style="margin:0; color:#ff9999; padding:10px 5px; text-align:center; border-bottom:5px solid #ff9999;">
+        <span style="font-size:20px; font-weight:bold;">${tplEsc(m.title)}</span>
+      </div>
+
+      <!-- 本文 -->
+      <div style="margin:18px auto 0; max-width:38em; text-align:center; line-height:1.8; font-size:16px;">
+${tplBody(m.body)}
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<br clear="all"><div style="clear:both;"></div>`;
+  if(gid) h += `
+
+<iframe id="preview" width="100%" style="border:none;" src="https://blogparts.cityheaven.net/widget/?shopId=${st.heavenShopId}&mode=3&type=21&girlId=${gid}&limitedKind=0&num=8&color=2&width=1130 " scrolling="no"></iframe>
+<script>
+window.addEventListener('message', function(e){
+if(e.origin=="https://blogparts.cityheaven.net"){
+document.getElementById('preview').height = e.data;
+}
+}, false);<\/script><br />
+<br />
+<a href="https://www.cityheaven.net/${st.heavenPath}/girlid-${gid}/" target="_blank" class="button">%MGIFFREE${st.heavenBtnGif}-W%</a>`;
+  return h;
+}
+// 今の「本人から一言」（テンプレで作ったもの）から材料を読みもどす
+function tplReadBack(html){
+  const m = {};
+  const g = String(html || "").match(/girlId=(\d+)/i) || String(html || "").match(/girlid[-=](\d+)/i); if(g) m.girlId = g[1];
+  try{
+    const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+    const t = doc.querySelector('span[style*="font-size:20px"]'); if(t) m.title = t.textContent.trim();
+    const b = [...doc.querySelectorAll("div")].find(d => /line-height:\s*1\.8/.test(d.getAttribute("style") || ""));
+    if(b){
+      let s = b.innerHTML.replace(/<font[^>]*>([\s\S]*?)<\/font>/gi, (_x, y) => "＊" + y).replace(/\n\s*/g, "").replace(/<br\s*\/?>/gi, "\n");
+      const tx = document.createElement("textarea"); tx.innerHTML = s.replace(/<[^>]+>/g, ""); m.body = tx.value.trim();
+    }
+  }catch(e){}
+  return m;
+}
+const TPL_KEYS = ["title", "body", "girlId", "video", "images", "dmmUrl", "dmmText", "x", "youtube"];
+let tplCur = null;   // { sk, mk, m }
+function tplOpen(){
+  if(!pf || !CAN_EDIT) return;
+  pfCollect();
+  const { c, data, sk } = pf, mk = hpNoOf(c, sk).mk, st = TPL_STORES[mk];
+  if(!st){ toast("このお店のテンプレはまだありません"); return; }
+  let saved = {}; try{ saved = JSON.parse(localStorage.getItem("tplMat_" + c.id + "_" + mk) || "{}") || {}; }catch(e){}
+  const m = Object.assign({}, tplReadBack(profGet(data, sk, "comment")), saved);
+  tplCur = { sk, mk, m };
+  let bg = document.getElementById("tplBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "tplBg"; bg.style.cssText = "position:fixed;inset:0;z-index:320;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg);
+    bg.addEventListener("click", e => { if(e.target === bg && confirm("テンプレの画面を閉じますか？（書いた材料は、この端末に残ります）")) bg.remove(); }); }
+  const inp = (k, l, ph, wide) => `<label style="display:block;${wide ? "grid-column:1/-1" : ""}"><span class="hint">${l}</span><input id="tp_${k}" value="${esc(m[k] || "")}" placeholder="${esc(ph)}" oninput="tplPaint()" style="width:100%"></label>`;
+  bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:1100px;width:100%;max-height:92vh;overflow:auto;font-size:14px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">🎨 紹介文をテンプレで作る（${esc(st.label)}）</b><span class="hint">${esc(nameOf(c))}</span>
+      <span style="margin-left:auto"></span><button class="btn btn-ghost btn-sm" onclick="openFreeUp()">🖼 フリー画像をアップ</button></div>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-top:10px" class="tplGrid">
+      <div>
+        <div style="font-weight:800;margin-bottom:4px">💗 本人から一言（花びらのカード）</div>
+        ${inp("title", "タイトル", "例：『恋人みたいに甘く、楽しく♡』", true)}
+        <label style="display:block;margin-top:6px"><span class="hint">本文（ふつうに改行して書く。<b>行の頭に「＊」</b>をつけるとピンクの行。空の行で段落があく）</span>
+          <textarea id="tp_body" oninput="tplPaint()" style="width:100%;min-height:200px">${esc(m.body || "")}</textarea></label>
+        <div style="font-weight:800;margin:10px 0 4px">🎬 デリヘルタウン欄（いちばん上）</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          ${inp("video", "動画の番号（Free動画 MP4）", "例：2")}
+          ${inp("images", "画像の番号（FreeJPG・いくつでも）", "例：116, 117")}
+          ${inp("dmmUrl", "DMM（出演作品）のURL", "https://www.dmm.co.jp/…", true)}
+          ${inp("dmmText", "DMMのリンクの文字", "例：2025/05/13　最新作発売！", true)}
+          ${inp("x", "X（旧Twitter）のURL", "https://x.com/…")}
+          ${inp("youtube", "YouTubeのURL", "https://www.youtube.com/@…")}
+          ${inp("girlId", "ヘブンの女の子番号（girlid）", "例：47694060")}
+        </div>
+        <div class="hint" style="margin-top:4px">ヘブンの番号を入れると、口コミのボタン・写メ日記のウィジェット・ヘブンへのボタンが自動で入ります（ヘブンのその子のページのアドレスの「girlid-」のあとの数字）。空の欄は入りません。</div>
+      </div>
+      <div>
+        <div style="font-weight:800;margin-bottom:4px">👀 見え方（だいたい）</div>
+        <iframe id="tp_pv" sandbox="allow-same-origin" style="width:100%;height:520px;border:1.5px solid var(--line);border-radius:12px;background:#fff"></iframe>
+        <div class="hint">動画・ウィジェットは公式HPでだけ動きます。ここでは場所だけ出します。</div>
+      </div>
+    </div>
+    <details style="margin-top:8px"><summary class="hint" style="cursor:pointer">できたHTMLを見る・コピーする</summary>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px" class="tplGrid">
+        <div><div class="hint">デリヘルタウン欄 <button type="button" class="pfCopy" onclick="navigator.clipboard.writeText($('tp_o1').value).then(()=>toast('📋 コピーしました'))">📋 コピー</button></div><textarea id="tp_o1" readonly style="width:100%;min-height:140px;font-family:monospace;font-size:11.5px"></textarea></div>
+        <div><div class="hint">本人から一言（自由欄） <button type="button" class="pfCopy" onclick="navigator.clipboard.writeText($('tp_o2').value).then(()=>toast('📋 コピーしました'))">📋 コピー</button></div><textarea id="tp_o2" readonly style="width:100%;min-height:140px;font-family:monospace;font-size:11.5px"></textarea></div>
+      </div></details>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-ghost" onclick="document.getElementById('tplBg').remove()">閉じる</button>
+      <button class="btn btn-primary" onclick="tplApply()">✍️ プロフに入れる（このあと「💾 プロフを保存」で公式HPにも）</button></div></div>
+    <style>@media (max-width:760px){ .tplGrid{ grid-template-columns:1fr !important } }</style>`;
+  tplPaint();
+}
+function tplRead(){ const m = {}; TPL_KEYS.forEach(k => { const e = $("tp_" + k); if(e) m[k] = e.value; }); return m; }
+function tplPreviewHtml(html, st){
+  return String(html)
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<iframe\b[^>]*blogparts\.cityheaven[^>]*><\/iframe>/gi, `<div style="border:2px dashed #f2a7c3;border-radius:10px;padding:30px;text-align:center;color:#c06">📷 ヘブンの写メ日記（ウィジェット）</div>`)
+    .replace(/%MP4FREE(\d+)(-W)?%/g, (_x, n) => `<div style="background:#222;color:#fff;border-radius:8px;padding:40px;text-align:center">▶ 動画（Free動画 ${n}番）</div>`)
+    .replace(/%[MN]?JPGFREE(\d+)(-W)?%/g, (_x, n) => `<img src="${st.site}/FreePIC/Free${n}.jpg" style="max-width:100%">`)
+    .replace(/%[MN]?GIFFREE(\d+)(-W)?%/g, (_x, n) => `<img src="${st.site}/FreePIC/Free${n}.gif" style="max-width:100%">`)
+    .replace(/%[MN]?DISPFREE(\d+)(-W)?%/g, (_x, n) => `<img src="${st.site}/FreePIC/Free${n}" style="height:40px;vertical-align:middle">`);
+}
+function tplPaint(){
+  if(!tplCur || !$("tp_o1")) return;
+  const st = TPL_STORES[tplCur.mk], m = tplCur.m = tplRead();
+  const a = tplDeTown(m, st), b = tplComment(m, st);
+  $("tp_o1").value = a; $("tp_o2").value = b;
+  const pv = $("tp_pv"); if(pv) pv.srcdoc = `<meta charset="utf-8"><body style="margin:0;font-family:sans-serif">${tplPreviewHtml(a, st)}<hr style="border:none;border-top:1px dashed #ccc;margin:12px 0">${tplPreviewHtml(b, st)}</body>`;
+  try{ localStorage.setItem("tplMat_" + pf.c.id + "_" + tplCur.mk, JSON.stringify(m)); }catch(e){}
+}
+function tplApply(){
+  if(!tplCur || !pf) return;
+  tplPaint();
+  const st = TPL_STORES[tplCur.mk], m = tplCur.m;
+  if(!String(m.title || "").trim() || !String(m.body || "").trim()){ toast("タイトルと本文を書いてください"); return; }
+  if(pf.sk !== tplCur.sk){ toast("お店のタブが変わりました。もう一度開いてください"); return; }
+  const a = tplDeTown(m, st), b = tplComment(m, st);
+  $("pf_c").value = b; reflPv("pf_c");
+  if(a.trim()) tplPending[tplCur.sk] = a; else delete tplPending[tplCur.sk];
+  pfCollect();
+  document.getElementById("tplBg").remove();
+  paintProf();
+  toast("プロフに入れました。下の「💾 プロフを保存」を押すと、公式HPにも入れる画面が出ます");
 }
 // ✅ 照合済みにするだけ（キャストプロフ・公式HPを自分で直し終わったとき。アプリからは何も入れない）2026/11/9 内勤さん
 async function reviewOnly(){
