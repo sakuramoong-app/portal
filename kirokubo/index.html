@@ -128,6 +128,9 @@
   }
   /* 📝 プロフ（キャストプロフと同じ見た目） */
   .pfTabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  /* 上のピンクの帯の「＋ キャストを追加」：白い地にピンクの文字（帯と同じ色で見えなかった）2026/11/9 */
+  header .addcast{background:#fff !important;color:#D94A7A !important;border:2px solid #fff !important;font-weight:900;font-size:14px;padding:9px 18px;box-shadow:0 3px 0 rgba(160,40,80,.25),0 6px 14px rgba(160,40,80,.2) !important}
+  header .addcast:hover{background:#FFF0F5 !important}
   .h3prow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:2px}
   .h3p{display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:900;color:#2f5f8f;cursor:pointer;white-space:nowrap;border:1.5px solid #CFE0F6;border-radius:99px;padding:3px 12px;background:#fff}
   .h3p input{width:auto !important;margin:0}
@@ -222,7 +225,7 @@
     <h1>📒 キャスト台帳</h1>
     <span class="sub">全アプリ共通のキャスト名簿（記録簿）</span>
     <span class="spacer"></span>
-    <button class="btn btn-primary edit-only" onclick="openEdit(null)">＋ キャストを追加</button>
+    <button class="btn edit-only addcast" onclick="openEdit(null)">＋ キャストを追加</button>
   </header>
 
   <div class="wip" style="display:none"><span id="wipSub"></span></div><!-- 🚧 作成中の帯は 11/5 にやめた -->
