@@ -231,6 +231,7 @@ function onStore(r){
       <input type="number" id="oq_${o.code}" min="1" value="${qty}" title="${o.unit==="per_item"?"枚数":o.unit==="per_cast"?"キャストの人数":"回数"}" oninput="recalc()" ${o.unit==="once"?'style="visibility:hidden"':""}>
       <input type="number" id="op_${o.code}" value="${s?s.price:o.price}" title="料金（1回あたり）" oninput="recalc()" ${o.manual?"":"readonly"}>
       <input type="number" id="ob_${o.code}" value="${s?s.back:o.back}" title="バック（1回あたり）" oninput="recalc()" ${o.manual?"":"readonly"}>
+      <input class="opmemo" id="om_${o.code}" value="${esc((s && s.memo) || "")}" placeholder="📝 メモ（キャストに送る文に出ます。例：ナース・白）" oninput="recalc()">
     </div>`;
   }).join("") + `<div style="font-size:11px;color:var(--sub);margin-top:4px">右の2つは「料金」「バック」（1回あたり）。内容で変わるOPだけ直せます。</div>`;
   const xs = sel.filter(s=>/^custom\d*$/.test(s.code || "")).sort((a, b)=>(Number(a.code.slice(6)) || 1) - (Number(b.code.slice(6)) || 1)), x = xs[0];   // ほかのOP：1つめは上の欄、2つめからは足した欄
@@ -810,6 +811,7 @@ function renderPops(sel){
       <input type="number" id="ppq_${p.id}" min="1" value="${s ? s.qty || 1 : 1}" title="着数・枚数" oninput="recalc()" ${p.unit === "per_item" ? "" : 'style="visibility:hidden"'}>
       <input type="number" id="ppp_${p.id}" value="${s ? s.price : p.price}" title="料金（1回あたり）" oninput="recalc()">
       <input type="number" id="ppb_${p.id}" value="${s ? s.back : p.back}" title="バック（1回あたり）" oninput="recalc()">
+      <input class="opmemo" id="ppm_${p.id}" value="${esc((s && s.memo) || "")}" placeholder="📝 メモ（キャストに送る文に出ます。例：セーラー服）" oninput="recalc()">
     </div>`;
   }).join("") : "";
 }
@@ -1257,7 +1259,8 @@ function calc(){
     // サクラナの「AF・逆AF」1つのOPは、希望したほうだけの名前に（どちらかだけなら、どちらかだけ出す）
     let label = o.label;
     if(o.code === "af" && !$("o_gyakuaf")){ const a = radioVal("f_afw") === "yes", ra = radioVal("f_rafw") === "yes"; label = a && !ra ? "AF" : ra && !a ? "逆AF" : o.label; }
-    opts.push({ group:g, code:o.code, label, qty, price:p, back:b, manual:o.manual });
+    const memo = $("om_" + o.code) ? $("om_" + o.code).value.trim().slice(0, 60) : "";   // 📝 オプションのメモ（キャストに送る）2026/11/10
+    opts.push({ group:g, code:o.code, label, qty, price:p, back:b, manual:o.manual, ...(memo ? { memo } : {}) });
   });
   // 👥 3P・4P：1人につき 3,000円（バック 2,000円）。キャスト複数はキャストごとの予約に1つずつ／お客2名は1つ
   if(typeof party !== "undefined" && party.kind){
@@ -1275,7 +1278,8 @@ function calc(){
   (M.pops || []).filter(p => cast && p.cast_id === cast.id).forEach(p => {
     const cb = $("pp_" + p.id); if(!cb || !cb.checked) return;
     const qty = p.unit === "per_item" ? Math.max(1, +$("ppq_" + p.id).value || 1) : 1;
-    opts.push({ group:g, code:"pop_" + p.id, label:"🎁" + p.label, qty, price: Math.max(0, +$("ppp_" + p.id).value || 0), back: Math.max(0, +$("ppb_" + p.id).value || 0), manual:true });
+    const memo = $("ppm_" + p.id) ? $("ppm_" + p.id).value.trim().slice(0, 60) : "";
+    opts.push({ group:g, code:"pop_" + p.id, label:"🎁" + p.label, qty, price: Math.max(0, +$("ppp_" + p.id).value || 0), back: Math.max(0, +$("ppb_" + p.id).value || 0), manual:true, ...(memo ? { memo } : {}) });
   });
   const optionTotal = opts.reduce((a,o)=>a + o.price*o.qty, 0);
   const optionBack = opts.reduce((a,o)=>a + o.back*o.qty, 0);
@@ -1391,8 +1395,9 @@ function buildMsg(c){
     const mins = minutesOf(c.course) + c.ext*30 + c.date*30, t = s0 + mins; st = lateHM(s0); en = lateHM(t);
     const real = x => { const hh = Math.floor(x / 60) % 24; return (x >= 1440 ? "深夜" : "") + hh + ":" + String(x % 60).padStart(2, "0"); };
     if(t > 1440) lateNote = `\n※${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]})営業日の${s0 >= 1440 ? real(s0) + "〜" + real(t).replace("深夜", "") : real(s0) + "〜" + real(t)}です`; }
-  const backOps = c.opts.filter(o=>o.back>0).map(o=>o.label + (o.qty>1?"×"+o.qty:"")).join("・") || "なし";
-  const noBackOps = c.opts.filter(o=>!(o.back>0)).map(o=>o.label + (o.qty>1?"×"+o.qty:"")).join("・") || "なし";
+  const opTxt = o => o.label + (o.qty>1?"×"+o.qty:"") + (o.memo ? "（" + o.memo + "）" : "");   // 📝 オプションのメモも（2026/11/10）
+  const backOps = c.opts.filter(o=>o.back>0).map(opTxt).join("・") || "なし";
+  const noBackOps = c.opts.filter(o=>!(o.back>0)).map(opTxt).join("・") || "なし";
   // 店名はエリアを伏せる（「五反田逆アナル倶楽部」を見て、行く場所をまちがえる子がいるので。2026/11/3）
   const storeNoArea = k => storeLabel(k).replace(/[（(]?(池袋|五反田|鶯谷|錦糸町|渋谷|新宿|上野|秋葉原|大塚|巣鴨)[）)]?/g, "").trim() || storeLabel(k);
   // 本指名のときだけ、そのキャストを前回指名した日（受付の「本指名」の横と同じ lastNomiOf）。新規・店リピは日付なし

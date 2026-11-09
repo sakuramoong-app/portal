@@ -92,6 +92,9 @@
   .opt{display:grid;grid-template-columns:auto 1fr 56px 80px 80px;gap:6px;align-items:center;padding:4px 0;border-bottom:1px dashed var(--line);}
   .opt .lbl{font-size:13px;} .opt .lbl small{color:var(--sub);font-size:11px;}
   .opt input[type=number]{padding:6px 8px !important;font-size:13px !important;}
+  /* 📝 オプションのメモ（キャストに送る文に出る）：チェックしたオプションだけ出す 2026/11/10 */
+  .opt .opmemo{display:none;grid-column:2/-1;padding:5px 8px !important;font-size:12.5px !important;border:1.5px dashed #F2A7C3 !important;border-radius:8px}
+  .opt:has(input[type=checkbox]:checked) .opmemo{display:block}
   .hist{font-size:12.5px;color:var(--sub);margin-top:6px;line-height:1.6;}
   .msg{width:100%;min-height:210px;font-family:inherit;font-size:13.5px;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);white-space:pre;}
   /* 自動計算プレビュー */
@@ -839,11 +842,11 @@
   </div></div>
 </div>
 
-<script src="kiroku_1_uketsuke.js?v=1"></script>
+<script src="kiroku_1_uketsuke.js?v=2"></script>
 <script src="kiroku_2_gamen.js?v=1"></script>
 <script src="kiroku_3_seisan.js?v=1"></script>
 <script src="kiroku_4_ichiran.js?v=1"></script>
-<script src="kiroku_5_1019.js?v=1"></script>
+<script src="kiroku_5_1019.js?v=2"></script>
 <script src="kiroku_6_1020.js?v=1"></script>
 <script src="kiroku_7_1025.js?v=1"></script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>

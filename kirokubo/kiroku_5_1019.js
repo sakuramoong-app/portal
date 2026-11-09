@@ -65,8 +65,12 @@ renderBoard = function(){
     // 自動で退席するのは、はっきりしたときだけ：予約を「接客中」にした・お茶・欠勤・不在・精算済（2026/11/5）
     //   前は「鶯谷で待機中でなくなったら」で、次の予約の時刻になっただけ・別のPCの古い画面が描きなおしただけでも席が外れていた（1時間くらいで外れる）
     const s = x.c && seatsOk ? seatOf(x.c.id) : null, cd0 = x.cd || {};
-    const clearlyOut = x.bks.some(b => b.r.status === "working") || (cd0.settled && !["待機中", "仕事中"].includes(cd0.status)) || ["お茶", "欠勤", "不在"].includes(cd0.status);
-    if(s && KB.CAN_EDIT && clearlyOut && !autoLeft.has(s.id)){ autoLeft.add(s.id); leaveSeat(s.id, true); }
+    //   2026/11/10 また外れた → 「その日の予約のどれかが接客中のまま」（終了にし忘れた前の予約）・「精算済」だけでも外れていたので、
+    //   ・接客中は「いま、その予約の時間の中」のときだけ（席に座ったあとに始まった予約）　・精算済だけでは外さない（先に精算して待機をつづける子がいる）
+    const nh = nowHour(), seatT = s ? new Date(s.start_at).getTime() : 0;
+    const workingNow = x.bks.find(b => b.r.status === "working" && b.s <= nh && nh <= b.e && (!seatT || new Date(b.r.status_at || b.r.start_at || 0).getTime() >= seatT - 60000));
+    const why = workingNow ? "接客中" : ["お茶", "欠勤", "不在"].find(v => cd0.status === v) || "";
+    if(s && KB.CAN_EDIT && why && !autoLeft.has(s.id)){ autoLeft.add(s.id); leaveSeat(s.id, true, "自動：" + why); }
   });
   const used = seatLogs.filter(l=>!l.end_at);
   const chip = (x, st, col)=>{
@@ -242,9 +246,10 @@ async function cycleGone(cid){
   document.addEventListener("pointercancel", end);
 })();
 // 🪑 席：今どこに誰がの札から。ログは「📜 ログ」で
-leaveSeat = async function(logId, quiet){
+leaveSeat = async function(logId, quiet, why){
   try{
-    q(await sb.from("kb_seat_logs").update({ end_at: new Date().toISOString(), end_by: KB.operatorName() }).eq("id", logId));
+    // why：自動で外したときの理由（「自動：接客中」など）。席の記録の「退席した人」に残す（また外れたとき原因がわかるように）2026/11/10
+    q(await sb.from("kb_seat_logs").update({ end_at: new Date().toISOString(), end_by: KB.operatorName() + (why ? "（" + why + "）" : "") }).eq("id", logId));
     await loadSeats(); renderSeats(); renderBoard();
     if(!quiet) toast("退席しました");
   }catch(e){ toast("記録できませんでした：" + (e.message || e)); }
@@ -1127,7 +1132,7 @@ ruleApplies = function(x){
 };
 
 /* ---------- 有料オプションの一覧：足すのは内勤みんな・直す/消すのは店長だけ ---------- */
-function curOptSel(){ try{ return calc().opts.map(o=>({ code: o.code, group: o.group, qty: o.qty, price: o.price, back: o.back, label: o.label })); }catch(e){ return []; } }
+function curOptSel(){ try{ return calc().opts.map(o=>({ code: o.code, group: o.group, qty: o.qty, price: o.price, back: o.back, label: o.label, ...(o.memo ? { memo: o.memo } : {}) })); }catch(e){ return []; } }
 function rerenderOpts(){ const keep = curOptSel(); onStore({ options: keep, dummy_name: $("f_dummy") ? $("f_dummy").value : "" }); recalc(); }
 const UNIT = [["once", "1回"], ["per_item", "枚数で"], ["per_cast", "キャストの人数で"]];
 function openOptAdd(){
