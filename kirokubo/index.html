@@ -2959,6 +2959,27 @@ function answerToolsHtml(d, aid){
     ${items.join("") || ""}${sets.length ? `<div style="margin-top:4px">${sets.join("")}</div>` : ""}
     <div class="hint">ルールは押すと上の「📋 受付ルール」に入力欄が開きます（直して💾保存）。設定は入れたあと、いちばん下の「💾 保存する」。</div></div>`;
 }
+// 🔍 公式HPの管理画面を調べる（見るだけ・保存や送信は押さない）2026/11/9：フリー画像のアップロード・紹介文の欄を作るための下しらべ
+//   キャスト台帳のアドレスの最後に #cmspeek をつけて開く。結果は「📋 コピー」して店長が Claude に貼る（中身の値・パスワードは出ない）
+async function openCmsPeek(){
+  let bg = document.getElementById("cmsPeekBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "cmsPeekBg"; bg.style.cssText = "position:fixed;inset:0;z-index:330;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
+  bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:760px;width:100%;max-height:90vh;overflow:auto;font-size:13.5px">
+    <b style="font-size:16px">🔍 公式HPの管理画面を調べる（見るだけ）</b>
+    <div class="hint" style="margin:4px 0 8px">管理画面のボタンを、書いた順に押して、その画面の欄の名前だけを読みます。保存・更新・送信などのボタンは押しません。</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">お店 <select id="cp_store">${Object.entries(PROF_STORE_OF).filter(([k]) => HP_SITE_OF[k]).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select>
+      押すボタン（「、」で区切る）<input id="cp_path" style="flex:1;min-width:220px" placeholder="例：Free画像　／　キャスト管理、編集(5)">
+      <button class="btn btn-primary btn-sm" onclick="runCmsPeek()">🔍 調べる</button><button class="btn btn-ghost btn-sm" onclick="document.getElementById('cmsPeekBg').remove()">閉じる</button></div>
+    <textarea id="cp_out" readonly style="width:100%;min-height:340px;margin-top:8px;font-family:monospace;font-size:12px"></textarea>
+    <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText($('cp_out').value).then(()=>toast('📋 コピーしました。Claude に貼ってください'))">📋 結果をコピー</button></div>`;
+}
+async function runCmsPeek(){
+  const path = $("cp_path").value.split(/[、,，]/).map(s => s.trim()).filter(Boolean);
+  $("cp_out").value = "調べています…（1分くらいかかることがあります）";
+  const r = await hpFn({ action: "cms_peek", store: $("cp_store").value, path });
+  $("cp_out").value = JSON.stringify(r, null, 1);
+}
+if(location.hash === "#cmspeek") setTimeout(() => { if(CAN_EDIT) openCmsPeek(); }, 1500);
 // ✅ 照合済みにするだけ（キャストプロフ・公式HPを自分で直し終わったとき。アプリからは何も入れない）2026/11/9 内勤さん
 async function reviewOnly(){
   const a = (typeof fin !== "undefined" && fin && fin.a) || (ansCur && ansCur.a); if(!a) return;
