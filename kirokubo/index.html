@@ -3303,7 +3303,9 @@ function tplBody(text, indent, color){
     return pad + (pink ? `<font color="${hl}">${t}</font>` : t) + br;
   }).filter(Boolean).join("\n");
 }
-function tplCard(b){
+// サクラムーンの飾りテンプレ（🎀 で直したもの）があればそれで、なければ組みこみの花びらカード
+function tplCard(b){ const t = introTpls && introTpls.sakuramoon; return t && t.html ? introTplRender(t, b.title, b.body) : tplCardBuiltin(b); }
+function tplCardBuiltin(b){
   return `<br clear="all"><div style="clear:both;"></div>
 
 <!-- プロフ自由欄：花びら背景＋ズレ防止＋スマホ余白ゼロ（v3.3） -->
@@ -3508,6 +3510,7 @@ async function tplOpen(){
   if(!pf || !CAN_EDIT) return;
   pfCollect();
   const { c, data, sk } = pf, { mk, no } = hpNoOf(c, sk), st = TPL_STORES[mk];
+  await introTplLoad(true);   // サクラムーンの飾り（花びらカード）を直していれば、それを使う
   if(!st){ toast("このお店のテンプレはまだありません"); return; }
   let bg = document.getElementById("tplBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "tplBg"; bg.style.cssText = "position:fixed;inset:0;z-index:320;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg);
@@ -3519,7 +3522,7 @@ async function tplOpen(){
   else note = "公式HPの在籍番号がないので、プロフの中身から出しています";
   if(!document.getElementById("tplBg")) return;
   const selfHtml = hp ? hp.comm1a || hp.comm1 : profGet(data, sk, "comment");
-  const packed = tplUnpack(selfHtml) || tplUnpack(profGet(data, sk, "comment"));
+  const packed = hp ? tplUnpack(selfHtml) : tplUnpack(profGet(data, sk, "comment"));   // 公式HPが読めたら、公式HPのいまを正に
   let m;
   if(packed){
     m = tplUpgrade(packed);
@@ -3535,7 +3538,7 @@ async function tplOpen(){
   tplCur = { sk, mk, m, orig, pos: tplPosOf(m.blocks), removed: [], open: new Set(m.blocks.filter(b => !orig.has(b.id)).map(b => b.id)), adding: null, note, hp: !!hp };
   bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:860px;width:100%;max-height:94vh;overflow:auto;font-size:14px" id="tp_box">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">🎨 紹介文をテンプレで作る（${esc(st.label)}）</b><span class="hint">${esc(nameOf(c))}</span>
-      <span style="margin-left:auto"></span><button class="btn btn-ghost btn-sm" onclick="openFreeUp(null,'${mk}')">🖼 フリー画像をアップ</button></div>
+      <span style="margin-left:auto"></span><button class="btn btn-ghost btn-sm" onclick="openIntroTplEditor('${mk}')" title="花びらカードのデザイン（HTML）を変える">🎀 カードのデザインを変える</button><button class="btn btn-ghost btn-sm" onclick="openFreeUp(null,'${mk}')">🖼 フリー画像をアップ</button></div>
     <div class="tpLegend"><span class="tpS same">✅ いま入っている</span><span class="tpS new">🆕 これから足す</span><span class="tpS edit">✏️ 直した</span><span class="tpS moved">↕ 動かした</span><span class="tpS del">🗑 消す</span>
       <span class="hint">… 公式HPと同じ並びで、上から出しています。ブロックはつかんで上下にドラッグ（または ↑↓）で動かせます。</span></div>
     ${note ? `<div class="hint" style="color:#B7791F;margin-top:4px">⚠ ${esc(note)}</div>` : `<div class="hint" style="margin-top:4px">✅ 公式HPのいまの中身を読みました（${esc(st.label)} ${no}番）</div>`}
@@ -3605,6 +3608,7 @@ function tplBlockCard(b){
   const bl = tplCur.m.blocks, sib = bl.filter(x => x.place === b.place), k = sib.indexOf(b), pi = TPL_PLACES.findIndex(x => x[0] === b.place);
   return `<div class="tpB ${s}" draggable="true" data-id="${b.id}" id="tpB_${b.id}">
     <div class="tpBH"><span class="grip" title="つかんで上下にドラッグ">⠿</span><b>${TPL_TYPES[b.type].label}</b><span class="tpS ${s}" id="tpS_${b.id}">${TPL_ST_LABEL[s]}</span><span style="margin-left:auto"></span>
+      ${(b.type === "html" || b.type === "text") && TPL_STORES[tplCur.mk] ? `<button type="button" class="btn btn-ghost btn-sm" onclick="tplToCard(${b.id})" title="この文を花びらカードの本文に移す">💗 カードにする</button>` : ""}
       <button type="button" class="btn btn-ghost btn-sm" onclick="tplToggle(${b.id})">${opened ? "✓ とじる" : "✏️ 直す"}</button>
       <button type="button" class="btn btn-ghost btn-sm" ${k === 0 && pi === 0 ? "disabled" : ""} onclick="tplMove(${b.id},-1)" title="上へ（欄のいちばん上なら、上の欄へ）">↑</button>
       <button type="button" class="btn btn-ghost btn-sm" ${k === sib.length - 1 && pi === TPL_PLACES.length - 1 ? "disabled" : ""} onclick="tplMove(${b.id},1)" title="下へ（欄のいちばん下なら、下の欄へ）">↓</button>
@@ -3646,6 +3650,25 @@ function tplPaintBlockPv(b){
   const s = tplStatus(b), badge = $("tpS_" + b.id), card = $("tpB_" + b.id);
   if(badge){ badge.className = "tpS " + s; badge.textContent = TPL_ST_LABEL[s]; }
   if(card) card.className = "tpB " + s;
+}
+// 💗 カードにする：「HTMLを自由に」「説明文」の文を、花びらカードの本文に移す（タイトルはあとで書く）。もとのブロックは消す（前からあったものは「🗑 消す」に出るので、もどせる）
+function tplToCard(id){
+  const b = tplFind(id); if(!b) return;
+  const src = b.type === "html" ? String(b.html || "") : String(b.text || "");
+  const d = document.createElement("div"); d.innerHTML = src.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, "").replace(/<br\s*\/?>\s*\n?/gi, "\n").replace(/<\/(p|div)>/gi, "\n");
+  d.querySelectorAll("font").forEach(f => { f.textContent = "＊" + f.textContent; });
+  const text = d.textContent.split("\n").map(l => l.trim()).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  if(!text){ toast("移す文がありません"); return; }
+  const bl = tplCur.m.blocks;
+  let card = bl.find(x => x.type === "card");
+  if(card && String(card.body || "").trim() && !confirm("花びらカードには、もう本文があります。うしろに足しますか？")) return;
+  if(!card){ card = { id: ++tplUid, type: "card", place: b.place === "town" ? "self" : b.place, title: "", body: "" }; bl.splice(bl.indexOf(b), 0, card); }
+  card.body = String(card.body || "").trim() ? card.body.trim() + "\n\n" + text : text;
+  tplCur.open.add(card.id);
+  tplDel(id);
+  tplScrollTo(card.id);
+  setTimeout(() => { const e = $(`tpB_${card.id}`) && $(`tpB_${card.id}`).querySelector("input"); if(e && !e.value) e.focus(); }, 80);
+  toast("💗 花びらカードに移しました。タイトルを書いてね");
 }
 function tplToggle(id){ tplCur.open.has(id) ? tplCur.open.delete(id) : tplCur.open.add(id); tplPaint(); }
 function tplSet(id, k, v){ const b = tplFind(id); if(!b) return; b[k] = v; clearTimeout(tplPvTimer); tplPvTimer = setTimeout(() => { tplPaintBlockPv(b); tplPaintOut(); }, 200); }
@@ -3788,15 +3811,16 @@ function introSrcOf(data, sk){
 async function openIntroTplEditor(mk){
   if(!CAN_EDIT) return;
   await introTplLoad(true);
-  const keys = Object.keys(PROF_STORE_OF).filter(k => k !== "sakuramoon");
+  const keys = Object.keys(PROF_STORE_OF);   // サクラムーンも（花びらカードのデザインを変えるとき）
   mk = keys.includes(mk) ? mk : keys[0];
   let bg = document.getElementById("itBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "itBg"; bg.style.cssText = "position:fixed;inset:0;z-index:335;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg);
     bg.addEventListener("click", e => { if(e.target === bg && confirm("飾りテンプレの画面を閉じますか？（保存していない分は消えます）")) bg.remove(); }); }
-  const t = introTpls[mk] || {};
+  // サクラムーンでまだ直していなければ、いまの花びらカードを {{タイトル}} {{本文}} 入りで出す
+  const t = introTpls[mk] || (mk === "sakuramoon" ? { name: "花びらカード（はじめの形）", html: tplCardBuiltin({ title: "{{タイトル}}", body: "{{本文}}" }), color: "#ffb6c1", builtin: true } : {});
   bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:980px;width:100%;max-height:92vh;overflow:auto;font-size:14px">
     <b style="font-size:17px">🎀 お店ごとの飾りテンプレ（本人から一言）</b>
-    <div class="hint" style="margin:4px 0 8px">お店の紹介文の飾り（HTML）を登録しておくと、サクラムーンから写すときに、タイトル・本文をこの飾りに入れられます。<b>{{タイトル}}</b> と <b>{{本文}}</b> のところに入ります。サクラムーンは花びらカード（🎨 テンプレ）を使います。</div>
+    <div class="hint" style="margin:4px 0 8px">お店の紹介文の飾り（HTML）を登録しておくと、サクラムーンから写すときに、タイトル・本文をこの飾りに入れられます。<b>{{タイトル}}</b> と <b>{{本文}}</b> のところに入ります。サクラムーンは「🎨 テンプレ」の花びらカードのデザインになります（直すと、これから作る紹介文が新しいデザインになります）。</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">お店 <select id="it_store" onchange="openIntroTplEditor(this.value)">${keys.map(k => `<option value="${k}" ${k === mk ? "selected" : ""}>${esc(PROF_STORE_OF[k])}${introTpls[k] && introTpls[k].html ? " ✅" : ""}</option>`).join("")}</select>
       名前 <input id="it_name" value="${esc(t.name || "")}" placeholder="例：ラナの紫リボン" style="width:180px">
       「＊」の行の色 <input id="it_color" type="color" value="${esc(t.color || "#ff6699")}" oninput="introTplPv()" style="width:48px;padding:0">
@@ -3810,7 +3834,7 @@ async function openIntroTplEditor(mk){
       <div><div class="hint">見え方（見本の文で）</div><div id="it_pv" style="border:1.5px solid var(--line);border-radius:12px;min-height:340px;max-height:60vh;overflow:auto;padding:6px;background:#fff"></div></div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
-      ${t.html ? `<button class="btn btn-ghost" style="color:#C0392B;margin-right:auto" onclick="introTplDel('${mk}')">🗑 このお店のテンプレを消す</button>` : ""}
+      ${t.html && !t.builtin ? `<button class="btn btn-ghost" style="color:#C0392B;margin-right:auto" onclick="introTplDel('${mk}')">${mk === "sakuramoon" ? "↩ 花びらカード（はじめの形）にもどす" : "🗑 このお店のテンプレを消す"}</button>` : ""}
       <button class="btn btn-ghost" onclick="document.getElementById('itBg').remove()">閉じる</button>
       <button class="btn btn-primary" onclick="introTplSave('${mk}')">💾 保存</button></div></div>`;
   introTplPv();
@@ -3828,7 +3852,7 @@ async function introTplSave(mk){
   const all = Object.assign({}, introTpls);
   if(html) all[mk] = { name: $("it_name").value.trim(), html, color: $("it_color").value, by: (typeof operatorName === "function" ? operatorName() : ""), at: new Date().toISOString() };
   else delete all[mk];
-  try{ q(await sb.from("prof_settings").upsert({ key: "introTemplates", value: all })); introTpls = all; toast("💾 保存しました"); openIntroTplEditor(mk); }
+  try{ q(await sb.from("prof_settings").upsert({ key: "introTemplates", value: all })); introTpls = all; toast("💾 保存しました"); openIntroTplEditor(mk); if(tplCur && $("tp_list")) tplPaint(); }
   catch(e){ toast("保存できませんでした（SQL 235 はもう実行しましたか？）：" + (e.message || e)); }
 }
 async function introTplDel(mk){
