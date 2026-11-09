@@ -3005,9 +3005,11 @@ function openFreeUp(onDone, store){
     </label>
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       <button class="btn btn-primary" id="fu_go" onclick="fuUpload()" disabled>⬆ 空いている番号にアップ</button>
+      <button class="btn btn-ghost" onclick="fuLib()" title="公式HPに入っているフリー画像（JPG）を全部出して、コードをコピーできる">📚 アップずみの画像を見る</button>
       <button class="btn btn-ghost" onclick="if(!fuBusy) document.getElementById('freeUpBg').remove()">閉じる</button></div>
     <div id="fu_msg" style="margin-top:8px"></div>
-    <div id="fu_done"></div></div>`;
+    <div id="fu_done"></div>
+    <div id="fu_lib"></div></div>`;
   const drop = $("fu_drop");
   drop.addEventListener("dragover", e => { e.preventDefault(); drop.style.background = "#FFE3EE"; });
   drop.addEventListener("dragleave", () => { drop.style.background = "#FFF7FA"; });
@@ -3059,6 +3061,22 @@ async function fuUpload(){
   fuBusy = false;
 }
 function fuCopy(t){ navigator.clipboard.writeText(t).then(() => toast("📋 コピーしました：" + t)); }
+// 📚 アップずみの画像：公式HPの「FreeJPG画像一覧」を読んで、全部の番号を画像つきで出す（いつでもコードをコピーしに来られる）
+async function fuLib(){
+  const el = $("fu_lib"); if(!el) return;
+  const store = $("fu_store").value;
+  el.innerHTML = `<div class="hint" style="margin-top:10px">⏳ ${esc(PROF_STORE_OF[store] || store)} のフリー画像を読んでいます…</div>`;
+  const r = await hpFn({ action: "free_jpg_upload", store, dry: true });
+  if(!r || !r.ok || !Array.isArray(r.used)){ el.innerHTML = `<div style="color:#C0392B;margin-top:10px">⚠ ${esc((r && r.error) || "読めませんでした")}</div>`; return; }
+  const base = r.base || "";
+  el.innerHTML = `<div style="margin-top:12px;font-weight:800">📚 ${esc(r.store || "")} のフリー画像（${r.used.length}枚・新しい番号から）</div>
+    <div class="hint">画像を押すと <b>%MJPGFREE番号-W%</b> をコピーします${fuOnDone ? "（🎨 テンプレから開いたときは「これを使う」で画像ブロックに入ります）" : ""}。</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:6px">${r.used.map(n => `<div style="border:1.5px solid var(--line);border-radius:10px;padding:4px;text-align:center;background:#fff">
+      <img loading="lazy" src="${esc(base)}/FreePIC/Free${n}.jpg" style="width:100%;height:110px;object-fit:cover;border-radius:6px;cursor:pointer;background:#f6f6f6" onclick="fuCopy('%MJPGFREE${n}-W%')" title="押すとコードをコピー">
+      <div style="font-size:12px;font-weight:800">${n}番</div>
+      ${fuOnDone ? `<button class="btn btn-sm btn-primary" style="width:100%" onclick="fuUse(${n})">これを使う</button>` : `<button class="btn btn-sm btn-ghost" style="width:100%" onclick="fuCopy('%MJPGFREE${n}-W%')">📋 コピー</button>`}</div>`).join("")}</div>`;
+}
+function fuUse(n){ if(fuOnDone){ try{ fuOnDone(n); }catch(e){} } const bg = document.getElementById("freeUpBg"); if(bg) bg.remove(); toast(`🎨 画像ブロックに ${n}番 を入れました`); }
 // ↩ 取り消す（消す）／🔁 上書き：この画面でいまアップしたものだけ（前からある画像はアプリから消さない）
 async function fuUndo(i){
   const d = fuDone[i]; if(!d || d.deleted || fuBusy) return;
