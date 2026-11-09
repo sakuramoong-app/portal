@@ -3033,7 +3033,7 @@ function openFreeUp(onDone, store){
   fuPaintDone();
 }
 document.addEventListener("paste", e => {
-  if(!document.getElementById("freeUpBg")) return;
+  if(!document.getElementById("freeUpBg") || document.getElementById("vidUpBg")) return;   // 動画の窓が開いているときは、動画のほうで
   const it = [...(e.clipboardData || {}).items || []].find(x => /^image\//.test(x.type));
   if(it){ e.preventDefault(); fuPick(it.getAsFile()); }
 });
@@ -3107,17 +3107,29 @@ function openVideoUp(onDone, store){
     <b style="font-size:17px">🎥 Free動画をアップ</b>
     <div class="hint" style="margin:4px 0 10px">MP4の動画（<b>40MBまで・約2分</b>）を、公式HPの「MP4ムービー」の <b>空いている番号</b> に入れて、紹介文に貼るコード（%MP4FREE番号-W%）を出します。表紙は動画の1秒目から自動で作ります。</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">お店 <select id="vu_store">${stores.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select></div>
-    <label style="display:block;border:2.5px dashed #9FC5E8;border-radius:14px;padding:16px;text-align:center;cursor:pointer;background:#F5FAFF">
+    <label id="vu_drop" style="display:block;border:2.5px dashed #9FC5E8;border-radius:14px;padding:16px;text-align:center;cursor:pointer;background:#F5FAFF">
       <input type="file" id="vu_input" accept="video/mp4" style="display:none" onchange="vuPick(this.files[0])">
-      <div id="vu_prev">🎥 ここを押して動画（MP4）を選ぶ</div></label>
+      <div id="vu_prev">🎥 ここを押して動画（MP4）を選ぶ<br><span class="hint">（ここにドラッグ、またはファイルをコピーして Ctrl+V で貼りつけもできます）</span></div></label>
     <div id="vu_cover" style="margin-top:8px"></div>
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       <button class="btn btn-primary" id="vu_go" onclick="vuUpload()" disabled>⬆ 空いている番号にアップ</button>
+      <button class="btn btn-ghost" onclick="vuLib()" title="公式HPのMP4ムービーに入っている動画を全部出して、コードをコピーできる">📚 アップずみの動画を見る</button>
       <button class="btn btn-ghost" onclick="if(!vuBusy) document.getElementById('vidUpBg').remove()">閉じる</button></div>
-    <div id="vu_msg" style="margin-top:8px"></div><div id="vu_done"></div></div>`;
+    <div id="vu_msg" style="margin-top:8px"></div><div id="vu_done"></div><div id="vu_lib"></div></div>`;
   if(store && $("vu_store")) $("vu_store").value = store;
+  // ドラッグ＆ドロップ（ファイルの一覧から動画をここに落とす）
+  const drop = $("vu_drop");
+  drop.addEventListener("dragover", e => { e.preventDefault(); drop.style.background = "#DDEEFF"; });
+  drop.addEventListener("dragleave", () => { drop.style.background = "#F5FAFF"; });
+  drop.addEventListener("drop", e => { e.preventDefault(); drop.style.background = "#F5FAFF"; const f = [...e.dataTransfer.files].find(x => /^video\//.test(x.type)) || e.dataTransfer.files[0]; if(f && !vuBusy) vuPick(f); });
   vuPaintDone();
 }
+// 📋 貼りつけ（エクスプローラーで動画ファイルをコピー → Ctrl+V）
+document.addEventListener("paste", e => {
+  if(!document.getElementById("vidUpBg") || vuBusy) return;
+  const f = [...((e.clipboardData || {}).files || [])].find(x => /^video\//.test(x.type));
+  if(f){ e.preventDefault(); vuPick(f); }
+});
 // 動画の1秒目（短い動画は真ん中）を JPEG の表紙に
 function vuGrabCover(file){
   return new Promise(ok => {
@@ -3182,6 +3194,23 @@ async function vuUndo(i){
   else $("vu_msg").innerHTML = `<span style="color:#C0392B">⚠ ${esc((r && r.error) || "消せませんでした")}</span>`;
   vuPaintDone();
 }
+// 📚 アップずみの動画：公式HPの「MP4ムービー」で動画が入っている番号を、表紙つきで出す（いつでもコードをコピーしに来られる）
+async function vuLib(){
+  const el = $("vu_lib"); if(!el) return;
+  const store = $("vu_store").value, site = HP_SITE_OF[store] ? `https://www.${HP_SITE_OF[store]}.com` : "";
+  el.innerHTML = `<div class="hint" style="margin-top:10px">⏳ ${esc(PROF_STORE_OF[store] || store)} の動画を読んでいます…</div>`;
+  const r = await hpFn({ action: "free_mp4_upload", store, dry: true });
+  if(!r || !r.ok || !Array.isArray(r.slots)){ el.innerHTML = `<div style="color:#C0392B;margin-top:10px">⚠ ${esc((r && r.error) || "読めませんでした")}</div>`; return; }
+  const used = r.slots.filter(s => s.used).sort((a, b) => b.no - a.no);
+  el.innerHTML = `<div style="margin-top:12px;font-weight:800">📚 ${esc(r.store || "")} の動画（${used.length}本・新しい番号から／空き ${r.slots.length - used.length}）</div>
+    <div class="hint">表紙を押すと <b>%MP4FREE番号-W%</b> をコピーします${vuOnDone ? "（🎨 テンプレから開いたときは「これを使う」で動画ブロックに入ります）" : ""}。</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:6px">${used.map(s => `<div style="border:1.5px solid var(--line);border-radius:10px;padding:4px;text-align:center;background:#fff">
+      <div style="position:relative;cursor:pointer" onclick="fuCopy('%MP4FREE${s.no}-W%')" title="押すとコードをコピー"><img loading="lazy" src="${esc(site)}/galpic/FLVminiPIC${s.no}.jpg" onerror="this.style.visibility='hidden'" style="width:100%;height:96px;object-fit:cover;border-radius:6px;background:#222">
+        <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px;text-shadow:0 0 6px #000">▶</span></div>
+      <div style="font-size:12px;font-weight:800">動画 ${s.no}番</div>
+      ${vuOnDone ? `<button class="btn btn-sm btn-primary" style="width:100%" onclick="vuUse(${s.no})">これを使う</button>` : `<button class="btn btn-sm btn-ghost" style="width:100%" onclick="fuCopy('%MP4FREE${s.no}-W%')">📋 コピー</button>`}</div>`).join("")}</div>`;
+}
+function vuUse(n){ if(vuOnDone){ try{ vuOnDone(n); }catch(e){} } const bg = document.getElementById("vidUpBg"); if(bg) bg.remove(); toast(`🎨 動画ブロックに ${n}番 を入れました`); }
 function vuPaintDone(){
   const el = $("vu_done"); if(!el) return;
   el.innerHTML = vuDone.length ? `<div style="margin-top:12px;font-weight:800">📋 紹介文に貼るコード</div>` + vuDone.map((d, i) => d.deleted ? `<div style="border:1.5px dashed var(--line);border-radius:12px;padding:8px 10px;margin-top:6px;color:#9C8B8F">${esc(d.store)}　${d.no}番 … ↩ 消しました</div>` : `<div style="border:1.5px solid var(--line);border-radius:12px;padding:10px;margin-top:6px">
