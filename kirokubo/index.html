@@ -2448,8 +2448,8 @@ function paintProf(){
       <div class="hint" style="grid-column:1/-1;font-size:12px">🌐 公式HPのアイコンは自動：メイン＝キャストの種類／サブ＝状態（ありあり・ありなし・なしなし）→ Pサイズ（13cm〜20cm）→ 雰囲気（公式HPにあるアイコンの言葉だけ）の順に入ります</div></div></div></details>
     <details ${pfAcc("intro")}><summary class="pfHead">💬 紹介文</summary><div class="pfBody">
       ${CAN_EDIT && hpNoOf(pf.c, sk).mk === "sakuramoon" ? `<div style="margin-bottom:8px"><button type="button" class="btn btn-primary btn-sm" onclick="tplOpen()">🎨 テンプレで作る（デリヘルタウン欄・本人から一言）</button>${tplPending[sk] ? ` <span class="hint" style="color:#B7791F">デリヘルタウン欄は、保存すると公式HPに入ります</span>` : ""}</div>` : ""}
-      <div class="hint" style="display:flex;align-items:center;gap:6px">本人から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_c')">📋 コピー</button></div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
-      <div class="hint" style="margin-top:8px;display:flex;align-items:center;gap:6px">店長から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_m')">📋 コピー</button></div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></details>
+      <div class="hint" style="display:flex;align-items:center;gap:6px">本人から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_c')">📋 コピー</button>${CAN_EDIT ? tplSnipSelect('pf_c') : ""}</div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
+      <div class="hint" style="margin-top:8px;display:flex;align-items:center;gap:6px">店長から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_m')">📋 コピー</button>${CAN_EDIT ? tplSnipSelect('pf_m') : ""}</div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></details>
     <details ${pfAcc("opts")}><summary class="pfHead">✅ オプション可否◎○△×${CAN_EDIT ? `<button type="button" class="pfEditBtn" onclick="event.preventDefault();pfToggleEdit('opts')">${pfEdit.opts ? "✓ 見る形にもどす" : "✏️ 編集する"}</button>` : ""}</summary>
       <div class="pfBody ${pfEdit.opts ? "" : "pfView"}">
       <div class="vw pfOptView">${optKeys.map(k => { const m = o.options[k] || "", memo = (o.optMemo || {})[k] || ""; return `<div class="pfOptV"><span class="nm">${esc(PF_OPT_LABEL[k] || k)}${memo ? `<small>${esc(memo)}</small>` : ""}</span><b class="mk mk${{ "◎": 1, "○": 2, "△": 3, "×": 4 }[m] || 0}">${m || "—"}</b></div>`; }).join("")}</div>
@@ -3094,17 +3094,35 @@ function fuPaintDone(){
         <button class="btn btn-sm btn-ghost" onclick="fuCopy('${d.tags.sp}')">${d.tags.sp}<br><span style="font-size:10.5px">スマホ・元の大きさ</span></button>
         <button class="btn btn-sm btn-ghost" onclick="fuCopy('${d.tags.pc}')">${d.tags.pc}<br><span style="font-size:10.5px">パソコン</span></button></div></div>`).join("") : "";
 }
-/* ---------- 🎨 紹介文をテンプレで作る（サクラムーン・2026/11/9）----------
-   材料（タイトル・本文・動画/画像の番号・DMM・X・YouTube・ヘブンの番号）から、公式HPの2つの欄を作る
-   ・デリヘルタウン欄（HpGalDeTown）：動画 → 画像 → DMMのリンク → X・口コミ・YouTube のボタン
-   ・本人から一言の自由欄（comm1a）：花びらのカード（タイトル・本文）→ ヘブンの写メ日記ウィジェット → ヘブンへのボタン
-   本文は、行の頭に「＊」をつけるとピンクの行になる。空の行は段落のあき
-   「✍️ 入れる」で、本人から一言の欄（このお店のタブ）に入れる。デリヘルタウン欄は「💾 プロフを保存」のとき公式HPにいっしょに入れる
+/* ---------- 🎨 紹介文をテンプレで作る（サクラムーン・2026/11/9 ブロック式）----------
+   ブロック（動画・画像・リンク文字・説明文・SNSボタン・花びらカード・ヘブン写メ日記）を、3つの場所に好きな順で並べる
+   ・town ＝ デリヘルタウン欄（HpGalDeTown）→ 保存のとき deTown で公式HPへ
+   ・self ＝ 本人から一言（自由欄 comm1a）→ プロフの「本人から一言」をまるごと作る
+   ・mgr  ＝ 店長から一言の下 → プロフの「店長から一言」の最後に足す（<!--tpl:mgr-->〜<!--/tpl:mgr--> の間を入れかえる）
+   材料は「本人から一言」の中に <!--tplmat:…--> で入れておく（公式HPにも残るので、どのパソコンからでも読みもどせる）
    お店ごとのテンプレは TPL_STORES に足す（いまはサクラムーンだけ） */
 const TPL_STORES = {
   sakuramoon: { label: "サクラムーン", site: "https://www.sakura-moon.com", heavenShopId: "1210007164", heavenPath: "tokyo/A1305/A130506/sakura_moon",
     btn: { x: 203, review: 205, youtube: 204 }, heavenBtnGif: 27 }
 };
+const TPL_PLACES = [["town", "🎬 デリヘルタウン欄（いちばん上）"], ["self", "💗 本人から一言"], ["mgr", "✍️ 店長から一言の下"]];
+const TPL_TYPES = {
+  card:   { label: "💗 花びらカード（タイトル・本文）", place: "self" },
+  video:  { label: "🎥 動画（Free動画の番号）", place: "town" },
+  image:  { label: "🖼 画像（FreeJPGの番号・リンクもつけられる）", place: "town" },
+  link:   { label: "🔗 リンク文字", place: "town" },
+  text:   { label: "📝 説明文", place: "town" },
+  sns:    { label: "📱 X・口コミ・YouTube のボタン", place: "town" },
+  heaven: { label: "📷 ヘブンの写メ日記（ウィジェット＋ボタン）", place: "self" },
+};
+// よく使う組み合わせ（押すと、ブロックがまとめて入る）
+const TPL_PRESETS = [
+  ["👗 個人コスプレの画像", () => [{ type: "image", place: "town", no: "" }]],
+  ["🎬 AV出演（リンク＋画像＋説明文）", () => [{ type: "link", place: "town", text: "　‹　最新作発売！", url: "" }, { type: "image", place: "town", no: "", url: "" }, { type: "text", place: "town", text: "" }]],
+  ["🎥 キャスト動画を店長から一言の下に", () => [{ type: "video", place: "mgr", no: "" }]],
+  ["📱 SNSボタン", () => [{ type: "sns", place: "town", x: "", youtube: "" }]],
+  ["📷 ヘブンの写メ日記", () => [{ type: "heaven", place: "self" }]],
+];
 const tplPending = {};   // { お店のタブ: デリヘルタウン欄のHTML }（保存のときに公式HPへ）
 function tplMerge(sets){
   Object.entries(tplPending).forEach(([sk, html]) => { sets[sk] = sets[sk] || {}; sets[sk].deTown = html; delete tplPending[sk]; });
@@ -3113,15 +3131,8 @@ function tplMerge(sets){
 const tplEsc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const tplNums = s => String(s || "").normalize("NFKC").split(/[^\d]+/).map(Number).filter(n => n > 0 && n <= 800);
 const tplUrl = s => { s = String(s || "").trim(); return /^https?:\/\/[^\s"'<>]+$/.test(s) ? s : ""; };
-function tplDeTown(m, st){
-  const out = [];
-  tplNums(m.video).forEach(n => out.push(`%MP4FREE${n}-W%<br />`, `<br />`));
-  tplNums(m.images).forEach(n => out.push(`%MJPGFREE${n}-W%<br />`));
-  const dmm = tplUrl(m.dmmUrl);
-  if(dmm) out.push(`<a href="${dmm}" target="_blank">　‹　${tplEsc(m.dmmText || "出演作品はこちら")}</a><br />`);
-  const x = tplUrl(m.x), yt = tplUrl(m.youtube), gid = String(m.girlId || "").replace(/\D/g, "");
-  if(x || yt || gid){
-    out.push(`<!-- 共通ボタンスタイル -->
+const tplGid = m => String(m.girlId || "").replace(/\D/g, "");
+const TPL_BTN_STYLE = `<!-- 共通ボタンスタイル -->
 <style>
 .button {
   display: inline-block;
@@ -3140,14 +3151,9 @@ function tplDeTown(m, st){
   transform: scale(1.05);
 }
 </style>
-`);
-    if(x) out.push(`<!-- Xボタン -->\n<a href="${x}" target="_blank" class="button">%MDISPFREE${st.btn.x}%</a>`);
-    if(gid) out.push(`<!-- 口コミボタン -->\n<a href="https://www.cityheaven.net/${st.heavenPath}/reviews/?girlid=${gid}" target="_blank" class="button">%MDISPFREE${st.btn.review}%</a>`);
-    if(yt) out.push(`<!-- YouTubeボタン -->\n<a href="${yt}" target="_blank" class="button">%MDISPFREE${st.btn.youtube}%</a>`);
-  }
-  return out.join("\n");
-}
-function tplBody(text){
+`;
+function tplBody(text, indent){
+  const pad = indent == null ? "        " : indent;
   const lines = String(text || "").replace(/\r/g, "").split("\n");
   while(lines.length && !lines[lines.length - 1].trim()) lines.pop();
   return lines.map((l, i) => {
@@ -3155,12 +3161,11 @@ function tplBody(text){
     if(!l.trim()) return "";
     const pink = /^[＊*]/.test(l.trim()), t = tplEsc(l.trim().replace(/^[＊*]\s*/, ""));
     const br = last ? "" : (lines[i + 1] !== undefined && !lines[i + 1].trim() ? "<br /><br />" : "<br />");
-    return "        " + (pink ? `<font color="#ffb6c1">${t}</font>` : t) + br;
+    return pad + (pink ? `<font color="#ffb6c1">${t}</font>` : t) + br;
   }).filter(Boolean).join("\n");
 }
-function tplComment(m, st){
-  const gid = String(m.girlId || "").replace(/\D/g, "");
-  let h = `<br clear="all"><div style="clear:both;"></div>
+function tplCard(b){
+  return `<br clear="all"><div style="clear:both;"></div>
 
 <!-- プロフ自由欄：花びら背景＋ズレ防止＋スマホ余白ゼロ（v3.3） -->
 <div style="max-width:100%; background:linear-gradient(30deg,#fad4d8,#ffffff,#fad4d8);
@@ -3189,12 +3194,12 @@ function tplComment(m, st){
 
       <!-- タイトル -->
       <div style="margin:0; color:#ff9999; padding:10px 5px; text-align:center; border-bottom:5px solid #ff9999;">
-        <span style="font-size:20px; font-weight:bold;">${tplEsc(m.title)}</span>
+        <span style="font-size:20px; font-weight:bold;">${tplEsc(b.title)}</span>
       </div>
 
       <!-- 本文 -->
       <div style="margin:18px auto 0; max-width:38em; text-align:center; line-height:1.8; font-size:16px;">
-${tplBody(m.body)}
+${tplBody(b.body)}
       </div>
 
     </div>
@@ -3202,9 +3207,28 @@ ${tplBody(m.body)}
 </div>
 
 <br clear="all"><div style="clear:both;"></div>`;
-  if(gid) h += `
-
-<iframe id="preview" width="100%" style="border:none;" src="https://blogparts.cityheaven.net/widget/?shopId=${st.heavenShopId}&mode=3&type=21&girlId=${gid}&limitedKind=0&num=8&color=2&width=1130 " scrolling="no"></iframe>
+}
+// 1つのブロック → HTML（中身が空なら ""）
+function tplBlockHtml(b, m, st){
+  const gid = tplGid(m);
+  if(b.type === "card") return String(b.title || "").trim() || String(b.body || "").trim() ? tplCard(b) : "";
+  if(b.type === "video") return tplNums(b.no).map(n => `%MP4FREE${n}-W%<br />\n<br />`).join("\n");
+  if(b.type === "image"){
+    const u = tplUrl(b.url);
+    return tplNums(b.no).map(n => u ? `<a href="${u}" target="_blank">%MJPGFREE${n}-W%</a><br />` : `%MJPGFREE${n}-W%<br />`).join("\n");
+  }
+  if(b.type === "link"){ const u = tplUrl(b.url); return u ? `<a href="${u}" target="_blank">${tplEsc(b.text || u)}</a><br />` : ""; }
+  if(b.type === "text") return String(b.text || "").trim() ? tplBody(b.text, "") + "<br />" : "";
+  if(b.type === "sns"){
+    const x = tplUrl(b.x), yt = tplUrl(b.youtube), out = [];
+    if(x) out.push(`<!-- Xボタン -->\n<a href="${x}" target="_blank" class="button">%MDISPFREE${st.btn.x}%</a>`);
+    if(gid) out.push(`<!-- 口コミボタン -->\n<a href="https://www.cityheaven.net/${st.heavenPath}/reviews/?girlid=${gid}" target="_blank" class="button">%MDISPFREE${st.btn.review}%</a>`);
+    if(yt) out.push(`<!-- YouTubeボタン -->\n<a href="${yt}" target="_blank" class="button">%MDISPFREE${st.btn.youtube}%</a>`);
+    return out.join("\n");
+  }
+  if(b.type === "heaven"){
+    if(!gid) return "";
+    return `<iframe id="preview" width="100%" style="border:none;" src="https://blogparts.cityheaven.net/widget/?shopId=${st.heavenShopId}&mode=3&type=21&girlId=${gid}&limitedKind=0&num=8&color=2&width=1130 " scrolling="no"></iframe>
 <script>
 window.addEventListener('message', function(e){
 if(e.origin=="https://blogparts.cityheaven.net"){
@@ -3213,9 +3237,40 @@ document.getElementById('preview').height = e.data;
 }, false);<\/script><br />
 <br />
 <a href="https://www.cityheaven.net/${st.heavenPath}/girlid-${gid}/" target="_blank" class="button">%MGIFFREE${st.heavenBtnGif}-W%</a>`;
+  }
+  return "";
+}
+// 場所ごとのHTML。ボタン（class="button"）を使う場所には、ボタンの形（style）を1回だけ入れる
+function tplPlaceHtml(m, st, place){
+  const parts = (m.blocks || []).filter(b => b.place === place).map(b => tplBlockHtml(b, m, st)).filter(s => s.trim());
+  let h = parts.join("\n");
+  if(/class="button"/.test(h)){
+    const i = h.indexOf("<!-- Xボタン -->") >= 0 || h.indexOf("<!-- 口コミボタン -->") >= 0 || h.indexOf("<!-- YouTubeボタン -->") >= 0
+      ? Math.min(...["<!-- Xボタン -->", "<!-- 口コミボタン -->", "<!-- YouTubeボタン -->"].map(k => h.indexOf(k)).filter(n => n >= 0)) : -1;
+    h = i >= 0 ? h.slice(0, i) + TPL_BTN_STYLE + "\n" + h.slice(i) : h + "\n" + TPL_BTN_STYLE;
+  }
   return h;
 }
-// 今の「本人から一言」（テンプレで作ったもの）から材料を読みもどす
+// 材料をHTMLのコメントに（UTF-8 → base64。公式HPにも残る）
+const tplPack = m => "<!--tplmat:" + btoa(unescape(encodeURIComponent(JSON.stringify({ v: 2, girlId: m.girlId || "", blocks: m.blocks || [] })))) + "-->";
+function tplUnpack(html){
+  const g = String(html || "").match(/<!--tplmat:([A-Za-z0-9+/=]+)-->/);
+  if(!g) return null;
+  try{ const o = JSON.parse(decodeURIComponent(escape(atob(g[1])))); return o && Array.isArray(o.blocks) ? o : null; }catch(e){ return null; }
+}
+// 本人から一言（まるごと）：self のブロック＋材料
+function tplSelfHtml(m, st){ return tplPlaceHtml(m, st, "self") + "\n" + tplPack(m); }
+// 店長から一言：今の文（前にテンプレで足した分はとる）＋ mgr のブロック
+const TPL_MGR_RE = /\n?<!--tpl:mgr-->[\s\S]*?<!--\/tpl:mgr-->/;
+function tplMgrHtml(cur, m, st){
+  let base = String(cur || "").replace(TPL_MGR_RE, "").replace(/\s+$/, "");
+  const add = tplPlaceHtml(m, st, "mgr");
+  if(!add.trim()) return base;
+  // 文だけだった欄にHTMLを足すと、公式HPの自由欄にまとめて入る → 改行が消えないように <br> に
+  if(base && !/<(br|div|p|font|span|a|img)\b/i.test(base)) base = base.replace(/\r?\n/g, "<br>\n");
+  return (base ? base + "\n" : "") + "<!--tpl:mgr-->\n" + add + "\n<!--/tpl:mgr-->";
+}
+// 前の形（カードだけのテンプレ・11/9 はじめの版の材料）から読みもどす
 function tplReadBack(html){
   const m = {};
   const g = String(html || "").match(/girlId=(\d+)/i) || String(html || "").match(/girlid[-=](\d+)/i); if(g) m.girlId = g[1];
@@ -3224,65 +3279,110 @@ function tplReadBack(html){
     const t = doc.querySelector('span[style*="font-size:20px"]'); if(t) m.title = t.textContent.trim();
     const b = [...doc.querySelectorAll("div")].find(d => /line-height:\s*1\.8/.test(d.getAttribute("style") || ""));
     if(b){
-      let s = b.innerHTML.replace(/<font[^>]*>([\s\S]*?)<\/font>/gi, (_x, y) => "＊" + y).replace(/\n\s*/g, "").replace(/<br\s*\/?>/gi, "\n");
+      const s = b.innerHTML.replace(/<font[^>]*>([\s\S]*?)<\/font>/gi, (_x, y) => "＊" + y).replace(/\n\s*/g, "").replace(/<br\s*\/?>/gi, "\n");
       const tx = document.createElement("textarea"); tx.innerHTML = s.replace(/<[^>]+>/g, ""); m.body = tx.value.trim();
     }
   }catch(e){}
   return m;
 }
-const TPL_KEYS = ["title", "body", "girlId", "video", "images", "dmmUrl", "dmmText", "x", "youtube"];
-let tplCur = null;   // { sk, mk, m }
+function tplFromOld(o){   // { title, body, girlId, video, images, dmmUrl, dmmText, x, youtube } → ブロック
+  const bl = [];
+  if(o.video) bl.push({ type: "video", place: "town", no: o.video });
+  if(o.images) bl.push({ type: "image", place: "town", no: o.images, url: "" });
+  if(o.dmmUrl) bl.push({ type: "link", place: "town", text: "　‹　" + (o.dmmText || "出演作品はこちら"), url: o.dmmUrl });
+  bl.push({ type: "sns", place: "town", x: o.x || "", youtube: o.youtube || "" });
+  bl.push({ type: "card", place: "self", title: o.title || "", body: o.body || "" });
+  bl.push({ type: "heaven", place: "self" });
+  return { girlId: o.girlId || "", blocks: bl };
+}
+let tplCur = null;   // { sk, mk, m:{ girlId, blocks } }
+let tplUid = 0;
 function tplOpen(){
   if(!pf || !CAN_EDIT) return;
   pfCollect();
   const { c, data, sk } = pf, mk = hpNoOf(c, sk).mk, st = TPL_STORES[mk];
   if(!st){ toast("このお店のテンプレはまだありません"); return; }
-  let saved = {}; try{ saved = JSON.parse(localStorage.getItem("tplMat_" + c.id + "_" + mk) || "{}") || {}; }catch(e){}
-  const m = Object.assign({}, tplReadBack(profGet(data, sk, "comment")), saved);
+  const cur = profGet(data, sk, "comment");
+  let m = tplUnpack(cur);
+  if(!m){
+    let old = {}; try{ old = JSON.parse(localStorage.getItem("tplMat_" + c.id + "_" + mk) || "{}") || {}; }catch(e){}
+    m = tplFromOld(Object.assign({}, tplReadBack(cur), old));
+  }
+  m.blocks.forEach(b => b.id = ++tplUid);
   tplCur = { sk, mk, m };
   let bg = document.getElementById("tplBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "tplBg"; bg.style.cssText = "position:fixed;inset:0;z-index:320;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg);
-    bg.addEventListener("click", e => { if(e.target === bg && confirm("テンプレの画面を閉じますか？（書いた材料は、この端末に残ります）")) bg.remove(); }); }
-  const inp = (k, l, ph, wide) => `<label style="display:block;${wide ? "grid-column:1/-1" : ""}"><span class="hint">${l}</span><input id="tp_${k}" value="${esc(m[k] || "")}" placeholder="${esc(ph)}" oninput="tplPaint()" style="width:100%"></label>`;
-  bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:1100px;width:100%;max-height:92vh;overflow:auto;font-size:14px">
+    bg.addEventListener("click", e => { if(e.target === bg && confirm("テンプレの画面を閉じますか？（「✍️ プロフに入れる」を押していない分は消えます）")) bg.remove(); }); }
+  bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:1180px;width:100%;max-height:92vh;overflow:auto;font-size:14px">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">🎨 紹介文をテンプレで作る（${esc(st.label)}）</b><span class="hint">${esc(nameOf(c))}</span>
       <span style="margin-left:auto"></span><button class="btn btn-ghost btn-sm" onclick="openFreeUp()">🖼 フリー画像をアップ</button></div>
-    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-top:10px" class="tplGrid">
+    <div class="hint" style="margin-top:4px">ブロックを足して、<b>↑↓</b> で順番を、<b>場所</b> で表示する欄を変えられます。入れないものは ✕ で消すだけ。右の見え方もすぐ変わります。</div>
+    <div style="display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:14px;margin-top:10px" class="tplGrid">
       <div>
-        <div style="font-weight:800;margin-bottom:4px">💗 本人から一言（花びらのカード）</div>
-        ${inp("title", "タイトル", "例：『恋人みたいに甘く、楽しく♡』", true)}
-        <label style="display:block;margin-top:6px"><span class="hint">本文（ふつうに改行して書く。<b>行の頭に「＊」</b>をつけるとピンクの行。空の行で段落があく）</span>
-          <textarea id="tp_body" oninput="tplPaint()" style="width:100%;min-height:200px">${esc(m.body || "")}</textarea></label>
-        <div style="font-weight:800;margin:10px 0 4px">🎬 デリヘルタウン欄（いちばん上）</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-          ${inp("video", "動画の番号（Free動画 MP4）", "例：2")}
-          ${inp("images", "画像の番号（FreeJPG・いくつでも）", "例：116, 117")}
-          ${inp("dmmUrl", "DMM（出演作品）のURL", "https://www.dmm.co.jp/…", true)}
-          ${inp("dmmText", "DMMのリンクの文字", "例：2025/05/13　最新作発売！", true)}
-          ${inp("x", "X（旧Twitter）のURL", "https://x.com/…")}
-          ${inp("youtube", "YouTubeのURL", "https://www.youtube.com/@…")}
-          ${inp("girlId", "ヘブンの女の子番号（girlid）", "例：47694060")}
+        <label style="display:block;margin-bottom:8px"><span class="hint">ヘブンの女の子番号（girlid）… 口コミのボタン・写メ日記に使う（ヘブンのその子のページのアドレスの「girlid-」のあとの数字）</span>
+          <input id="tp_girlId" value="${esc(m.girlId || "")}" placeholder="例：47694060" oninput="tplCur.m.girlId=this.value;tplPaint(true)" style="width:100%"></label>
+        <div id="tp_blocks"></div>
+        <div style="border:2px dashed #F2A7C3;border-radius:12px;padding:8px;margin-top:8px;background:#FFF7FA">
+          <div style="font-weight:800;font-size:13px;margin-bottom:4px">＋ ブロックを足す</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap">${Object.entries(TPL_TYPES).map(([k, t]) => `<button type="button" class="btn btn-ghost btn-sm" onclick="tplAdd('${k}')">${t.label}</button>`).join("")}</div>
+          <div style="font-weight:800;font-size:13px;margin:8px 0 4px">⭐ よく使う組み合わせ</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap">${TPL_PRESETS.map(([l], i) => `<button type="button" class="btn btn-ghost btn-sm" onclick="tplPreset(${i})">${l}</button>`).join("")}</div>
         </div>
-        <div class="hint" style="margin-top:4px">ヘブンの番号を入れると、口コミのボタン・写メ日記のウィジェット・ヘブンへのボタンが自動で入ります（ヘブンのその子のページのアドレスの「girlid-」のあとの数字）。空の欄は入りません。</div>
       </div>
       <div>
         <div style="font-weight:800;margin-bottom:4px">👀 見え方（だいたい）</div>
-        <iframe id="tp_pv" sandbox="allow-same-origin" style="width:100%;height:520px;border:1.5px solid var(--line);border-radius:12px;background:#fff"></iframe>
+        <iframe id="tp_pv" sandbox="allow-same-origin" style="width:100%;height:640px;border:1.5px solid var(--line);border-radius:12px;background:#fff"></iframe>
         <div class="hint">動画・ウィジェットは公式HPでだけ動きます。ここでは場所だけ出します。</div>
       </div>
     </div>
     <details style="margin-top:8px"><summary class="hint" style="cursor:pointer">できたHTMLを見る・コピーする</summary>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px" class="tplGrid">
-        <div><div class="hint">デリヘルタウン欄 <button type="button" class="pfCopy" onclick="navigator.clipboard.writeText($('tp_o1').value).then(()=>toast('📋 コピーしました'))">📋 コピー</button></div><textarea id="tp_o1" readonly style="width:100%;min-height:140px;font-family:monospace;font-size:11.5px"></textarea></div>
-        <div><div class="hint">本人から一言（自由欄） <button type="button" class="pfCopy" onclick="navigator.clipboard.writeText($('tp_o2').value).then(()=>toast('📋 コピーしました'))">📋 コピー</button></div><textarea id="tp_o2" readonly style="width:100%;min-height:140px;font-family:monospace;font-size:11.5px"></textarea></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px" class="tplGrid">
+        ${[["tp_o1", "デリヘルタウン欄"], ["tp_o2", "本人から一言"], ["tp_o3", "店長から一言"]].map(([id, l]) => `<div><div class="hint">${l} <button type="button" class="pfCopy" onclick="navigator.clipboard.writeText($('${id}').value).then(()=>toast('📋 コピーしました'))">📋 コピー</button></div><textarea id="${id}" readonly style="width:100%;min-height:140px;font-family:monospace;font-size:11.5px"></textarea></div>`).join("")}
       </div></details>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
       <button class="btn btn-ghost" onclick="document.getElementById('tplBg').remove()">閉じる</button>
       <button class="btn btn-primary" onclick="tplApply()">✍️ プロフに入れる（このあと「💾 プロフを保存」で公式HPにも）</button></div></div>
-    <style>@media (max-width:760px){ .tplGrid{ grid-template-columns:1fr !important } }</style>`;
+    <style>@media (max-width:760px){ .tplGrid{ grid-template-columns:1fr !important } } .tplBlk{border:1.5px solid var(--line);border-radius:12px;padding:8px;margin-top:6px;background:#fff} .tplBlk input,.tplBlk textarea{width:100%} .tplBlk .hd{display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-bottom:4px}</style>`;
   tplPaint();
 }
-function tplRead(){ const m = {}; TPL_KEYS.forEach(k => { const e = $("tp_" + k); if(e) m[k] = e.value; }); return m; }
+function tplBlockForm(b){
+  const f = (k, l, ph) => `<label style="display:block;margin-top:3px"><span class="hint">${l}</span><input value="${esc(b[k] || "")}" placeholder="${esc(ph)}" oninput="tplSet(${b.id},'${k}',this.value)"></label>`;
+  const t = (k, l, ph, h) => `<label style="display:block;margin-top:3px"><span class="hint">${l}</span><textarea style="min-height:${h || 80}px" placeholder="${esc(ph)}" oninput="tplSet(${b.id},'${k}',this.value)">${esc(b[k] || "")}</textarea></label>`;
+  if(b.type === "card") return f("title", "タイトル", "例：『恋人みたいに甘く、楽しく♡』") + t("body", "本文（行の頭に「＊」でピンクの行・空の行で段落があく）", "", 180);
+  if(b.type === "video") return f("no", "Free動画（MP4）の番号", "例：2");
+  if(b.type === "image") return f("no", "FreeJPGの番号（いくつでも。例：116, 117）", "例：116") + f("url", "押したときに開くURL（なくてもいい）", "https://…");
+  if(b.type === "link") return f("text", "見える文字", "例：　‹　2025/05/13　最新作発売！") + f("url", "URL", "https://…");
+  if(b.type === "text") return t("text", "説明文（行の頭に「＊」でピンクの行）", "", 70);
+  if(b.type === "sns") return f("x", "X（旧Twitter）のURL", "https://x.com/…") + f("youtube", "YouTubeのURL", "https://www.youtube.com/@…") + `<div class="hint">口コミのボタンは、上の「ヘブンの女の子番号」から自動。</div>`;
+  if(b.type === "heaven") return `<div class="hint">上の「ヘブンの女の子番号」から、写メ日記のウィジェットとヘブンへのボタンを自動で作ります。</div>`;
+  return "";
+}
+function tplPaintBlocks(){
+  const el = $("tp_blocks"); if(!el || !tplCur) return;
+  const bl = tplCur.m.blocks;
+  el.innerHTML = TPL_PLACES.map(([p, pl]) => {
+    const list = bl.filter(b => b.place === p);
+    return `<div style="margin-top:10px"><div style="font-weight:800;font-size:13.5px;color:#C2185B">${pl}</div>
+      ${list.length ? list.map(b => { const i = bl.indexOf(b), sib = bl.filter(x => x.place === p), k = sib.indexOf(b);
+        return `<div class="tplBlk"><div class="hd"><b style="font-size:13px">${TPL_TYPES[b.type].label}</b><span style="margin-left:auto"></span>
+          <button type="button" class="btn btn-ghost btn-sm" ${k === 0 ? "disabled" : ""} onclick="tplMove(${b.id},-1)" title="上へ">↑</button>
+          <button type="button" class="btn btn-ghost btn-sm" ${k === sib.length - 1 ? "disabled" : ""} onclick="tplMove(${b.id},1)" title="下へ">↓</button>
+          <select onchange="tplPlace(${b.id},this.value)" title="表示する場所">${TPL_PLACES.map(([q, ql]) => `<option value="${q}" ${q === p ? "selected" : ""}>${ql.replace(/^\S+\s/, "")}</option>`).join("")}</select>
+          <button type="button" class="btn btn-ghost btn-sm" style="color:#C0392B" onclick="tplDel(${b.id})" title="このブロックを消す">✕</button></div>${tplBlockForm(b)}</div>`; }).join("")
+      : `<div class="hint" style="padding:6px 2px">（なし）</div>`}</div>`;
+  }).join("");
+}
+const tplFind = id => tplCur.m.blocks.find(b => b.id === id);
+function tplSet(id, k, v){ const b = tplFind(id); if(b){ b[k] = v; tplPaint(true); } }
+function tplAdd(type){ tplCur.m.blocks.push({ id: ++tplUid, type, place: TPL_TYPES[type].place }); tplPaint(); }
+function tplPreset(i){ TPL_PRESETS[i][1]().forEach(b => tplCur.m.blocks.push(Object.assign({ id: ++tplUid }, b))); tplPaint(); }
+function tplDel(id){ const b = tplFind(id); if(!b) return; if((b.type === "card" && (b.title || b.body)) && !confirm("花びらカードを消しますか？（書いた文も消えます）")) return; tplCur.m.blocks = tplCur.m.blocks.filter(x => x.id !== id); tplPaint(); }
+function tplPlace(id, p){ const b = tplFind(id); if(!b) return; const bl = tplCur.m.blocks; bl.splice(bl.indexOf(b), 1); b.place = p; bl.push(b); tplPaint(); }
+function tplMove(id, d){
+  const bl = tplCur.m.blocks, b = tplFind(id); if(!b) return;
+  const sib = bl.filter(x => x.place === b.place), k = sib.indexOf(b), o = sib[k + d]; if(!o) return;
+  const i = bl.indexOf(b), j = bl.indexOf(o); bl[i] = o; bl[j] = b; tplPaint();
+}
 function tplPreviewHtml(html, st){
   return String(html)
     .replace(/<script\b[\s\S]*?<\/script>/gi, "")
@@ -3292,27 +3392,64 @@ function tplPreviewHtml(html, st){
     .replace(/%[MN]?GIFFREE(\d+)(-W)?%/g, (_x, n) => `<img src="${st.site}/FreePIC/Free${n}.gif" style="max-width:100%">`)
     .replace(/%[MN]?DISPFREE(\d+)(-W)?%/g, (_x, n) => `<img src="${st.site}/FreePIC/Free${n}" style="height:40px;vertical-align:middle">`);
 }
-function tplPaint(){
+let tplPvTimer = 0;
+function tplPaint(onlyPreview){
   if(!tplCur || !$("tp_o1")) return;
-  const st = TPL_STORES[tplCur.mk], m = tplCur.m = tplRead();
-  const a = tplDeTown(m, st), b = tplComment(m, st);
-  $("tp_o1").value = a; $("tp_o2").value = b;
-  const pv = $("tp_pv"); if(pv) pv.srcdoc = `<meta charset="utf-8"><body style="margin:0;font-family:sans-serif">${tplPreviewHtml(a, st)}<hr style="border:none;border-top:1px dashed #ccc;margin:12px 0">${tplPreviewHtml(b, st)}</body>`;
-  try{ localStorage.setItem("tplMat_" + pf.c.id + "_" + tplCur.mk, JSON.stringify(m)); }catch(e){}
+  if(!onlyPreview) tplPaintBlocks();
+  const st = TPL_STORES[tplCur.mk], m = tplCur.m;
+  const a = tplPlaceHtml(m, st, "town"), b = tplSelfHtml(m, st), c = tplMgrHtml($("pf_m") ? $("pf_m").value : "", m, st);
+  $("tp_o1").value = a; $("tp_o2").value = b; $("tp_o3").value = c;
+  clearTimeout(tplPvTimer);
+  tplPvTimer = setTimeout(() => {
+    const pv = $("tp_pv"); if(!pv) return;
+    const sec = (t, h) => `<div style="background:#FCE4EC;color:#AD1457;font-weight:bold;font-size:12px;padding:4px 8px;margin:10px 0 6px;border-radius:6px">${t}</div>${h.trim() ? tplPreviewHtml(h, st) : `<div style="color:#aaa;font-size:12px;padding:4px 8px">（なし）</div>`}`;
+    const mgrShow = c.replace(/^([\s\S]*?)(<!--tpl:mgr-->|$)/, (_x, txt, mk) => (/<(br|div|p|font|span|a|img)\b/i.test(txt) ? txt : txt.replace(/\n/g, "<br>")) + mk);
+    pv.srcdoc = `<meta charset="utf-8"><body style="margin:0 6px;font-family:sans-serif;font-size:14px;color:#444">${sec("🎬 デリヘルタウン欄", a)}${sec("💗 本人から一言", b)}${sec("✍️ 店長から一言", mgrShow)}</body>`;
+  }, onlyPreview ? 250 : 0);
 }
 function tplApply(){
   if(!tplCur || !pf) return;
-  tplPaint();
+  tplPaint(true);
   const st = TPL_STORES[tplCur.mk], m = tplCur.m;
-  if(!String(m.title || "").trim() || !String(m.body || "").trim()){ toast("タイトルと本文を書いてください"); return; }
   if(pf.sk !== tplCur.sk){ toast("お店のタブが変わりました。もう一度開いてください"); return; }
-  const a = tplDeTown(m, st), b = tplComment(m, st);
-  $("pf_c").value = b; reflPv("pf_c");
-  if(a.trim()) tplPending[tplCur.sk] = a; else delete tplPending[tplCur.sk];
+  const card = m.blocks.find(b => b.type === "card");
+  if(card && (!String(card.title || "").trim() || !String(card.body || "").trim())){ toast("花びらカードのタイトルと本文を書いてください（使わないなら ✕ で消す）"); return; }
+  if(m.blocks.some(b => b.type === "heaven" || (b.type === "sns" && !b.x && !b.youtube)) && !tplGid(m) && !confirm("ヘブンの女の子番号が空なので、写メ日記・口コミのボタンは入りません。このまま入れますか？")) return;
+  const a = tplPlaceHtml(m, st, "town");
+  $("pf_c").value = tplSelfHtml(m, st); reflPv("pf_c");
+  $("pf_m").value = tplMgrHtml($("pf_m").value, m, st); reflPv("pf_m");
+  tplPending[tplCur.sk] = a;   // 空でも入れる（デリヘルタウン欄のブロックを全部消したとき）
   pfCollect();
   document.getElementById("tplBg").remove();
   paintProf();
   toast("プロフに入れました。下の「💾 プロフを保存」を押すと、公式HPにも入れる画面が出ます");
+}
+/* ---------- 🧩 よく使うHTML（紹介文を書くときに、カーソルのところに入れる）2026/11/9 ---------- */
+const TPL_SNIPS = [
+  ["🔗 リンク文字", [["url", "URL"], ["text", "見える文字"]], v => `<a href="${v.url}" target="_blank">${tplEsc(v.text)}</a>`],
+  ["💗 リンク集（≫💗🔗リンク集🔗💗≪）", [["url", "リンク集のURL（lit.link など）"]], v => `<a href="${v.url}" target="_blank">≫💗🔗リンク集🔗💗≪</a>`],
+  ["🖼 画像（FreeJPG）", [["no", "FreeJPGの番号"]], v => `%MJPGFREE${tplNums(v.no)[0] || ""}-W%`],
+  ["🖼🔗 リンクつき画像", [["no", "FreeJPGの番号"], ["url", "押したときに開くURL"]], v => `<a href="${v.url}" target="_blank">%MJPGFREE${tplNums(v.no)[0] || ""}-W%</a>`],
+  ["🎥 動画（Free動画）", [["no", "Free動画の番号"]], v => `%MP4FREE${tplNums(v.no)[0] || ""}-W%`],
+  ["🌸 ピンクの文字", [["text", "ピンクにする文字"]], v => `<font color="#ffb6c1">${tplEsc(v.text)}</font>`],
+  ["➖ 区切り線", [], () => `----------------------------`],
+];
+function tplSnipSelect(id){
+  return `<select class="pfSnip" onchange="tplSnip('${id}',this.value);this.value=''" title="よく使うHTMLを、カーソルのところに入れる"><option value="">🧩 よく使うHTMLを入れる</option>${TPL_SNIPS.map(([l], i) => `<option value="${i}">${l}</option>`).join("")}</select>`;
+}
+function tplSnip(id, i){
+  const s = TPL_SNIPS[Number(i)], ta = $(id); if(!s || !ta || i === "") return;
+  const v = {};
+  for(const [k, l] of s[1]){
+    const a = prompt(l); if(a == null) return;
+    if(k === "url" && !tplUrl(a)){ toast("URLは https:// から入れてください"); return; }
+    if(k === "no" && !tplNums(a).length){ toast("番号を入れてください"); return; }
+    v[k] = a.trim();
+  }
+  const html = s[2](v), p = ta.selectionStart != null ? ta.selectionStart : ta.value.length, e = ta.selectionEnd != null ? ta.selectionEnd : p;
+  ta.value = ta.value.slice(0, p) + html + ta.value.slice(e);
+  ta.focus(); ta.selectionStart = ta.selectionEnd = p + html.length;
+  reflPv(id); toast("入れました。下の「💾 プロフを保存」を忘れずに");
 }
 // ✅ 照合済みにするだけ（キャストプロフ・公式HPを自分で直し終わったとき。アプリからは何も入れない）2026/11/9 内勤さん
 async function reviewOnly(){
