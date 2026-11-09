@@ -1298,6 +1298,7 @@ function setParty(k){
   party.kind = k === "guest" ? "guest" : k ? "cast" : ""; party.n = k === "cast3" ? 3 : 2;
   party.casts = party.casts.slice(0, party.n - 1); party.af = (party.af || []).slice(0, party.n - 1);
   paintParty(); recalc();
+  try{ renderCastChecks(M.casts.find(c => c.id === $("f_cast").value)); }catch(e){}   // 3Pの案内（📣）を出す・消す
 }
 // 保存するとき：一緒に行くキャストの予約（その子で計算しなおす）
 function partyExtraRows(row){
@@ -1717,6 +1718,8 @@ function renderCastChecks(c){
   const custNg = typeof custCastNg !== "undefined" && custCastNg && custCastNg.cid === c.id ? custCastNg : null;
   // ⌛ 長いコース
   const mins = formMinutes(), warn = ngWarnings(c);
+  // 👥 3P・4P のとき：3Pができるホテルを案内する（2026/11/9 内勤さん）
+  if(typeof party !== "undefined" && party.kind) ann.unshift({ text: "✅ 3P可能なホテルを案内する（" + (party.kind === "guest" ? "お客様2名" : "キャスト" + party.n + "名") + "）" });
   // 🌙 お泊り：池袋・鶯谷・五反田以外（遠方）は本指名のみ（新規・店リピのときに出す）
   try{
     const area = $("f_area").value.trim();
@@ -1869,13 +1872,13 @@ async function lookupCustomer(keepName){
     $("f_ng").value = c.ng ? "1" : "0"; $("f_custnote").value = c.ng_reason || c.note || "";
     // ダミーで行った子の確認（renderCastChecks）のため、多めに読む。履歴に出すのは新しい10件
     // 今開いている予約は「これまで」に入れない（その予約自体が「前に来た1件」に見えてしまうので。2026/11/3）
-    const pastAll = (q(await sb.from("kb_reservations").select("id,biz_date,store_key,cast_id,dummy_name,course,status,total,address").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(200)) || [])
+    const pastAll = (q(await sb.from("kb_reservations").select("id,biz_date,store_key,cast_id,dummy_name,course,status,total,address,free_kind").eq("customer_id", c.id).eq("deleted", false).order("biz_date", {ascending:false}).limit(200)) || [])
       .filter(x => !(editing && x.id === editing.id));
     custPast = pastAll;
     // 台帳エクセルの過去の利用もいっしょに（これまで・指名したことのあるキャスト・新規／店リピ／本指名の自動）
     let xl = [];
-    try{ const h = await sb.from("kb_cust_history").select("biz_date,store_key,store_raw,cast_id,cast_raw,course,status,total,place").eq("customer_id", c.id).order("biz_date", { ascending: false }).limit(300);
-      xl = (h.data || []).map(x => ({ biz_date: x.biz_date || "", store_key: x.store_key, store_raw: x.store_raw, cast_id: x.cast_id, cast_raw: x.cast_raw, dummy_name: "", course: x.course, status: x.status, total: x.total, place: x.place, excel: true })); }catch(e){}
+    try{ const h = await sb.from("kb_cust_history").select("biz_date,store_key,store_raw,cast_id,cast_raw,course,status,total,place,free_kind").eq("customer_id", c.id).order("biz_date", { ascending: false }).limit(300);
+      xl = (h.data || []).map(x => ({ biz_date: x.biz_date || "", store_key: x.store_key, store_raw: x.store_raw, cast_id: x.cast_id, cast_raw: x.cast_raw, dummy_name: "", course: x.course, status: x.status, total: x.total, place: x.place, free_kind: x.free_kind || "", excel: true })); }catch(e){}
     // 台帳エクセルの行が、記録簿の予約と キャスト・お店・総額・場所 まで同じなら、同じ利用を2回書いたもの（日付が打ちまちがいで別の日になっていても）
     //   → 数えない・出さない（本指名と判断されないように）。台帳のデータは変えない
     const pk = s => String(s || "").normalize("NFKC").replace(/\s/g, "");
@@ -1893,7 +1896,8 @@ async function lookupCustomer(keepName){
     custSeen = pastAll.concat(xl).sort((a, b) => String(b.biz_date).localeCompare(String(a.biz_date)));
     const seenAll = custSeen;
     const past = seenAll.slice(0, 10);
-    const casts = [...new Set(seenAll.filter(p => !["cancel", "tobi", "flowed"].includes(p.status)).map(p => p.cast_id ? castName(p.cast_id) : p.cast_raw).filter(Boolean))];
+    // 指名したことのあるキャスト：フリーで入った回は「指名」ではないので入れない（2026/11/9 内勤さん）
+    const casts = [...new Set(seenAll.filter(p => !["cancel", "tobi", "flowed"].includes(p.status) && !isFreeVisit(p)).map(p => p.cast_id ? castName(p.cast_id) : p.cast_raw).filter(Boolean))];
     $("custInfo").innerHTML = (c.ng && c.ng_ask ? `<div class="ngask">🤔 <b>出禁・店NG？</b>（台帳エクセルの備考から見分けました。条件つきの書き方なので、内勤が決めてください）<div class="q">${esc(c.ng_reason || "")}</div>
         <button type="button" class="btn btn-danger btn-sm" onclick="custNgDecide(${c.id},true)">⚠️ 店NG（受けない）</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="custNgDecide(${c.id},false)">NGではない（受けてOK）</button></div>`
@@ -1908,7 +1912,7 @@ async function lookupCustomer(keepName){
       `<div class="custhist"><div class="ch-head">📋 これまで ${seenAll.length}件${xl.length ? `（うち台帳エクセル ${xl.length}件）` : ""}${seenAll.length > 10 ? "（新しい10件）" : ""}</div>
         ${past.map(p => { const x = p.status === "cancel" ? "キャンセル" : p.status === "tobi" ? "トビ" : "";
           return `<div class="ch-row ${x ? "chx" : ""} ${M.stores.some(s => s.dummy && s.key === p.store_key) ? "dm" : ""}"><span class="d">${p.biz_date ? (p.biz_date.slice(2, 4) !== new Date().toISOString().slice(2, 4) ? p.biz_date.slice(2, 4) + "/" : "") + p.biz_date.slice(5).replace("-","/") : "日付なし"}</span><span class="s">${esc(p.store_key ? storeLabel(p.store_key) : p.store_raw || "")}${p.excel ? " 📚" : ""}</span>
-            <span class="c">${p.dummy_name ? `<span class="dn">🎭${esc(p.dummy_name)}</span> → ` : ""}<b>${esc(p.cast_id ? castName(p.cast_id) : p.cast_raw || "")}</b></span><span class="k">${esc(p.course)}</span>${x ? `<span class="xx">${x}</span>` : ""}</div>`; }).join("") || `<div class="ch-row">なし</div>`}
+            <span class="c">${p.dummy_name ? `<span class="dn">🎭${esc(p.dummy_name)}</span> → ` : ""}<b>${esc(p.cast_id ? castName(p.cast_id) : p.cast_raw || "")}</b></span><span class="k">${esc(p.course)}</span>${isFreeVisit(p) ? `<span class="frv">フリー</span>` : ""}${x ? `<span class="xx">${x}</span>` : ""}</div>`; }).join("") || `<div class="ch-row">なし</div>`}
         <div class="ch-foot">指名したことのあるキャスト：<b>${casts.map(esc).join("、") || "なし"}</b></div></div>`;
     if(!editing){
       const cid = $("f_cast").value;
@@ -1925,7 +1929,10 @@ function renderNomiChips(){
   $("f_nomiChips").innerHTML = NOMI.map(([k, l])=>`<button type="button" class="chip ${nomiChosen && v === k ? "on" : ""}" onclick="setNomi('${k}')">${l}</button>`).join("");
   if($("afReq")){ const fr = !!$("f_free").value; $("afReq").textContent = fr ? "フリーは任意" : "必須"; $("afReq").style.opacity = fr ? ".5" : ""; }
 }
-function setNomi(v){ nomiChosen = true; $("f_free").value = v; renderNomiChips(); recalc(); }
+function setNomi(v){ nomiChosen = true; $("f_free").value = v; renderNomiChips();
+  // フリー ⇔ 指名あり を変えたら、新規・店リピ・本指名も決めなおす（新しい受付で、お客さんを調べてあるとき）2026/11/9
+  if(!editing && typeof custPast !== "undefined" && custPast) visit = visitFrom(custSeen || custPast, $("f_cast").value);
+  if(typeof setVisit === "function") setVisit(visit); else recalc(); }
 // 必須の項目で、まだ入っていないもの [名前, 場所の id]（キャンセル・トビにするときは見ない）
 function missingRequired(quiet){   // quiet：ピカピカ用（たたんである所を開かない）
   return [
@@ -2644,7 +2651,13 @@ recalc = function(){
   el.innerHTML = `<div class="l1">${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${$("f_start").value || "--:--"}〜${$("endView").textContent}　${esc(place)}</div>
     <div class="l2">${dummy ? `🎭 ${esc(dummy)}（実際：${esc(cname)}）` : esc(cname)}　${esc(course)}</div>
     ${last.opts.length ? `<div class="l2" style="font-size:16px">OP：${esc(last.opts.map(o => o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・"))}</div>` : ""}
-    <div class="l3">総額 <b>${yen(last.total)}</b>（${pay}）</div>`;
+    ${last.pay === "split"
+      // 💴＋💳 現金＋カード：現金で払う額と、カードで払う額（手数料こみ）を分けて読み上げる（2026/11/9 内勤さん）
+      ? `<div class="l3">総額 <b>${yen(last.total)}</b>（現金＋カード）</div>
+         <div class="l3 splitl">💴 現金で <b>${yen(last.total - (last.splitCard || 0))}</b>　＋　💳 カードで <b>${yen(last.splitCard || 0)}</b><small>（カードの分は手数料こみ）</small></div>`
+      : last.pay === "card" || last.pay === "card_paid"
+      ? `<div class="l3">総額 <b>${yen(last.total)}</b>（${pay}）</div><div class="l3 splitl">💳 カードで払う額 <b>${yen(last.total)}</b><small>（手数料こみ）</small></div>`
+      : `<div class="l3">総額 <b>${yen(last.total)}</b>（${pay}）</div>`}`;
   // 👥 3P・4P（キャスト複数）：全員ぶんの総額を読み上げる
   if(party.kind === "cast" && !editing && partyMembers().length > 1){
     const sh = partyShares(), sum = sh.reduce((a, x) => a + x.total, 0);
@@ -4129,7 +4142,7 @@ renderListTable = function(){
         const st = boardState(x), col = boardCol(x, st), gk = goneKind(x.cd);
         const sub = `${x.shift ? "出勤 " + tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) + (x.shift.kanzen ? "（完）" : "") + (x.shiftOrig ? "（予定 " + tlLabel(x.shiftOrig.start) + "〜" + tlLabel(x.shiftOrig.end) + "）" : "") : "シフトなし"}・${STATE[st]}${st !== "gone" && col ? "（" + col + "）" : gk ? "（" + gk + "）" : ""}`;
         const cls = st === "gone" ? (gk === "お茶" ? "tea" : gk === "欠勤" ? "absent" : "away") : "";
-        return block("【" + esc(castLabel(x)) + "】" + (x.c && typeof kbPendingAfterSettle === "function" && kbPendingAfterSettle(x.cd, rows.filter(r=>r.cast_id === x.c.id)).length ? `<span class="part2chip" title="精算済のあとで予約がふえました。💴 精算で②の精算をしてください">⚠️ ②の精算がまだ</span>` : ""), esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart) : [], x.c ? x.c.id : "", cls);
+        return block("【" + esc(castLabel(x)) + "】" + (x.c && typeof kbPendingAfterSettle === "function" && kbPendingAfterSettle(x.cd, rows.filter(r=>r.cast_id === x.c.id)).length ? `<span class="part2chip" title="精算済のあとで予約がふえました。💴 精算で②の精算をしてください">⚠️ ②の精算がまだ</span>` : ""), esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart).sort(offLast) : [], x.c ? x.c.id : "", cls);
       }).join("") : `<div class="gate">${mode === "freeNow" ? "今すぐ行けるキャストはいません" : mode === "onNow" ? "今出勤しているキャストはいません" : mode === "booked" ? "予約があるキャストはいません" : "この日のキャストがいません"}</div>`) + cancelSection();
 };
 
@@ -4847,8 +4860,14 @@ function visitFrom(past, cid){
   const fd = ($("f_day") && $("f_day").value) || day;   // 予約の日より前だけ（台帳エクセルには、この日の利用そのものが入っていることがある）
   const prev = (past || []).filter(p=>p.status === "done" && !(editing && p.id === editing.id) && p.biz_date && p.biz_date < fd);
   if(!prev.length) return "new";
+  // 今回フリー（フリー・特別フリー・イベフリー）なら、前にその子を指名していても本指名ではない → 店リピ（2026/11/9 内勤さん）
+  if($("f_free") && $("f_free").value) return "repeat";
   return cid && prev.some(p=>p.cast_id === cid) ? "honshi" : "repeat";
 }
+// その回がフリーだったか（記録簿の予約：free_kind／台帳エクセル：フリーの欄に「フリー」「イベ」など）
+function isFreeVisit(p){ return !!(p && p.free_kind && String(p.free_kind).trim()); }
+// キャストの枠の予約：流れた・キャンセル・トビは、いちばん下に（ほかは時間の順のまま）2026/11/9 内勤さん
+const offLast = (a, b) => (["cancel", "tobi", "flowed"].includes(a.status) ? 1 : 0) - (["cancel", "tobi", "flowed"].includes(b.status) ? 1 : 0);
 // 予約を開いたとき、そのお客さんのこれまでを読んでおく（キャストを変えたら決めなおせるように。開いただけでは変えない）
 const __openFormP = openForm;
 openForm = function(id){
@@ -5978,7 +5997,7 @@ renderListTable = function(){
         const st = boardState(x), col = boardCol(x, st), gk = goneKind(x.cd);
         const sub = `${x.shift ? "出勤 " + tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) + (x.shift.kanzen ? "（完）" : "") + (x.shiftOrig ? "（予定 " + tlLabel(x.shiftOrig.start) + "〜" + tlLabel(x.shiftOrig.end) + "）" : "") : "シフトなし"}・${STATE[st]}${st !== "gone" && col ? "（" + col + "）" : gk ? "（" + gk + "）" : ""}`;
         const cls = st === "gone" ? (gk === "お茶" ? "tea" : gk === "欠勤" ? "absent" : "away") : "";
-        return block("【" + esc(castLabel(x)) + "】" + (x.c && typeof kbPendingAfterSettle === "function" && kbPendingAfterSettle(x.cd, rows.filter(r=>r.cast_id === x.c.id)).length ? `<span class="part2chip" title="精算済のあとで予約がふえました。💴 精算で②の精算をしてください">⚠️ ②の精算がまだ</span>` : ""), esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart) : [], x.c ? x.c.id : "", cls);
+        return block("【" + esc(castLabel(x)) + "】" + (x.c && typeof kbPendingAfterSettle === "function" && kbPendingAfterSettle(x.cd, rows.filter(r=>r.cast_id === x.c.id)).length ? `<span class="part2chip" title="精算済のあとで予約がふえました。💴 精算で②の精算をしてください">⚠️ ②の精算がまだ</span>` : ""), esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart).sort(offLast) : [], x.c ? x.c.id : "", cls);
       }).join("") : `<div class="gate">${mode === "freeNow" ? "今すぐ行けるキャストはいません" : mode === "onNow" ? "今出勤しているキャストはいません" : mode === "booked" ? "予約があるキャストはいません" : "この日のキャストがいません"}</div>`)
     + cancelSection();
 };
@@ -7464,7 +7483,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .custhist .ch-row{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;padding:5px 2px;border-top:1px dashed #EEE3F3}
   .custhist .ch-row .d{font-weight:800;min-width:42px} .custhist .ch-row .s{color:#7a6468;font-size:13px} .custhist .ch-row .k{color:#7a6468;font-size:13px}
   .custhist .ch-row .c b{font-size:15px} .custhist .ch-row .dn{background:#EFE6FA;color:#5c3d7a;border-radius:99px;padding:1px 8px;font-weight:800;font-size:13px}
-  .custhist .ch-row.dm{background:#FAF6FE} .custhist .ch-row.chx{opacity:.55} .custhist .ch-row .xx{color:#d9534f;font-weight:800;font-size:12.5px}
+  .custhist .ch-row.dm{background:#FAF6FE} .custhist .ch-row.chx{opacity:.55} .custhist .ch-row .xx{color:#d9534f;font-weight:800;font-size:12.5px} .custhist .ch-row .frv{background:#E3F1FF;color:#2f5f8f;border-radius:99px;padding:0 8px;font-size:12px;font-weight:900;margin-left:4px} #finalSummary .splitl{font-size:17px;margin-top:4px} #finalSummary .splitl small{font-size:12px;color:var(--sub);margin-left:6px}
   .custhist .ch-foot{border-top:1px solid #EEE3F3;margin-top:4px;padding-top:5px;font-size:13px;color:#7a6468} .custhist .ch-foot b{color:var(--ink)}
   #dmModeChips .chip.on{background:#8a6fd1;border-color:#8a6fd1;color:#fff}
   #dmModeChips .dmgrp{background:#fff;border-radius:10px;padding:5px 8px;margin-bottom:5px} #dmModeChips .dmgl{font-size:12px;font-weight:800;color:#5c3d7a;margin-bottom:3px}
