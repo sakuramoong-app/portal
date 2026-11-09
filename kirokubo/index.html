@@ -333,6 +333,7 @@
       <div id="e_notesMove"></div>
       <div id="e_checks"></div>
     </div></details>
+    <details class="pfPanel" data-p="pops"><summary class="pfHead">🎁 個人オプション <small style="font-weight:400;color:#9C8B8F">（個人コスプレ・撮影など。受付のオプションに出る）</small></summary><div class="pfBody"><div id="e_pops"></div></div></details>
     <details class="pfPanel" data-p="etc"><summary class="pfHead">🗂 移動・コース・系統・メモ</summary><div class="pfBody">
       <div class="subT">🚃 最寄り駅・移動</div>
       <div class="areaGrid">
@@ -656,6 +657,85 @@ async function openTerms(){
   $("termsBg").classList.add("show");
 }
 function closeTerms(){ $("termsBg").classList.remove("show"); }
+/* ---------- 🎁 個人オプション（キャストごと。kb_personal_ops・SQL 236）2026/11/10 ----------
+   ここで登録 → 記録簿の受付で、そのキャストを選ぶとオプションの一覧に出る（料金・バックはそのまま入る。受付でその場で直せる）
+   「📋 公式HP用の文」で、店長から一言に貼る文を作る */
+let popRows = null, popCastId = null, popAns = null;   // popAns＝確認フォームのいちばん新しい答え（個人オプションの欄）
+async function renderPops(id){
+  const el = $("e_pops"); if(!el) return;
+  popCastId = id || null;
+  if(!id){ el.innerHTML = `<div class="hint">キャストを保存してから使えます。</div>`; return; }
+  el.innerHTML = `<div class="hint">読んでいます…</div>`;
+  try{ popRows = q(await sb.from("kb_personal_ops").select("*").eq("cast_id", id).eq("active", true).order("sort").order("id")) || []; }
+  catch(e){ popRows = null; }
+  try{ const a = q(await sb.from("prof_confirm_answers").select("data").eq("cast_id", id).order("submitted_at", { ascending: false }).limit(1)) || []; popAns = a[0] ? a[0].data : null; }catch(e){ popAns = null; }
+  if(!popRows){ el.innerHTML = `<div class="hint" style="color:#B7791F">個人オプションが読めませんでした（SQL 236 はもう実行しましたか？）</div>`; return; }
+  if(editingId !== id) return;
+  paintPops();
+}
+function paintPops(){
+  const el = $("e_pops"); if(!el || !popRows) return;
+  const ro = CAN_EDIT ? "" : "disabled";
+  const ans = popAns;
+  el.innerHTML = `<div class="hint" style="margin:0 0 6px">登録すると、記録簿の受付でこのキャストを選んだとき、オプションの一覧に出ます。料金＝お客さんが払う額、バック＝キャストに入る額（1回・1着あたり）。</div>
+    ${popRows.length ? `<table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="background:#FCE4EC"><th style="text-align:left;padding:3px 6px">名前</th><th>料金</th><th>バック</th><th>数える</th><th style="text-align:left">メモ（本指名限定・前日までなど）</th><th></th></tr>
+      ${popRows.map(p => `<tr style="border-top:1px solid #f3e3e8"><td><input id="pp_l_${p.id}" value="${esc(p.label)}" ${ro} style="width:100%"></td>
+        <td><input id="pp_p_${p.id}" type="number" min="0" step="500" value="${p.price}" ${ro} style="width:90px;text-align:right"></td>
+        <td><input id="pp_b_${p.id}" type="number" min="0" step="500" value="${p.back}" ${ro} style="width:90px;text-align:right"></td>
+        <td><select id="pp_u_${p.id}" ${ro}><option value="once" ${p.unit === "once" ? "selected" : ""}>1回</option><option value="per_item" ${p.unit === "per_item" ? "selected" : ""}>1着・1枚ごと</option></select></td>
+        <td><input id="pp_n_${p.id}" value="${esc(p.note || "")}" ${ro} style="width:100%"></td>
+        <td style="white-space:nowrap">${CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="popSave(${p.id})">💾</button><button class="btn btn-ghost btn-sm" style="color:#C0392B" onclick="popDel(${p.id})">🗑</button>` : ""}</td></tr>`).join("")}</table>`
+      : `<div class="hint">まだありません</div>`}
+    ${CAN_EDIT ? `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;border:2px dashed #F2C94C;background:#FFFDF2;border-radius:12px;padding:8px">
+      <b style="font-size:13px">＋ 足す</b><input id="pp_new_l" placeholder="名前（例：個人コスプレ）" style="width:180px">
+      料金 <input id="pp_new_p" type="number" min="0" step="500" placeholder="円" style="width:90px"> バック <input id="pp_new_b" type="number" min="0" step="500" placeholder="円" style="width:90px">
+      <select id="pp_new_u"><option value="once">1回</option><option value="per_item">1着・1枚ごと</option></select>
+      <input id="pp_new_n" placeholder="メモ（本指名限定 など）" style="width:180px"><button class="btn btn-primary btn-sm" onclick="popAdd()">足す</button></div>` : ""}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      ${CAN_EDIT && ans && (ans.personalOptions || []).length ? `<button class="btn btn-ghost btn-sm" onclick="popFromAnswer()">📨 確認フォームの答えから入れる（${ans.personalOptions.length}こ）</button>` : ""}
+      ${popRows.length ? `<button class="btn btn-ghost btn-sm" onclick="popCopyHp()">📋 公式HP用の文をコピー（店長から一言に貼る）</button>` : ""}</div>`;
+}
+const popNum = id => Math.max(0, Math.round(Number($(id).value) || 0));
+async function popAdd(){
+  const label = ($("pp_new_l").value || "").trim();
+  if(!label){ toast("名前を入れてください"); return; }
+  if($("pp_new_b").value === ""){ toast("バック（キャストに入る額）を入れてください。なければ 0"); return; }
+  const row = { cast_id: popCastId, label, price: popNum("pp_new_p"), back: popNum("pp_new_b"), unit: $("pp_new_u").value, note: ($("pp_new_n").value || "").trim(), sort: popRows.length + 1, by_name: operatorName() };
+  try{ q(await sb.from("kb_personal_ops").insert(row)); toast("🎁 足しました。記録簿は開きなおすと受付に出ます"); await renderPops(popCastId); }
+  catch(e){ toast("足せませんでした（SQL 236 はもう実行しましたか？）：" + (e.message || e)); }
+}
+async function popSave(id){
+  const label = ($("pp_l_" + id).value || "").trim(); if(!label){ toast("名前を入れてください"); return; }
+  const patch = { label, price: popNum("pp_p_" + id), back: popNum("pp_b_" + id), unit: $("pp_u_" + id).value, note: ($("pp_n_" + id).value || "").trim(), by_name: operatorName(), updated_at: new Date().toISOString() };
+  try{ q(await sb.from("kb_personal_ops").update(patch).eq("id", id)); toast("💾 保存しました（もう入っている予約の金額は変わりません）"); await renderPops(popCastId); }
+  catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+async function popDel(id){
+  const p = popRows.find(x => x.id === id); if(!p || !confirm(`「${p.label}」を消しますか？（もう入っている予約はそのままです）`)) return;
+  try{ q(await sb.from("kb_personal_ops").update({ active: false, by_name: operatorName(), updated_at: new Date().toISOString() }).eq("id", id)); await renderPops(popCastId); }
+  catch(e){ toast("消せませんでした：" + (e.message || e)); }
+}
+// 確認フォームの答え（自分だけの個人オプション：名前・料金の文字）から入れる。バックは0で入るので、あとで直す
+async function popFromAnswer(){
+  const ans = popAns; if(!ans) return;
+  const have = new Set(popRows.map(p => p.label));
+  const add = (ans.personalOptions || []).filter(o => o && String(o.name || "").trim() && !have.has(String(o.name).trim()))
+    .map((o, i) => ({ cast_id: popCastId, label: String(o.name).trim().slice(0, 60), price: Number(String(o.price || "").normalize("NFKC").replace(/[^\d]/g, "")) || 0, back: 0, unit: "once", note: "確認フォームから（バックを直してください）", sort: popRows.length + i + 1, by_name: operatorName() }));
+  if(!add.length){ toast("入れるものがありません（もう入っています）"); return; }
+  if(!confirm(`確認フォームの答えから ${add.length}こ 入れます。\n${add.map(x => "・" + x.label + "　" + x.price.toLocaleString() + "円").join("\n")}\n\n⚠️ バックは0円で入るので、入れたあと直してください。`)) return;
+  try{ q(await sb.from("kb_personal_ops").insert(add)); toast("📨 入れました。バックを直して 💾 してください"); await renderPops(popCastId); }
+  catch(e){ toast("入れられませんでした：" + (e.message || e)); }
+}
+// 📋 公式HP用の文（店長から一言に貼る）
+function popHpText(name, rows){
+  return `★${name}個人オプション\n` + rows.map(p => `・${p.label}　${p.unit === "per_item" ? "各" : ""}¥${Number(p.price).toLocaleString()}${p.note ? "（" + p.note + "）" : ""}`).join("\n");
+}
+function popCopyHp(){
+  const c = casts.find(x => x.id === popCastId); const nm = c ? (c.official_name || c.temp_name || "") : "";
+  const rows = popRows.map(p => Object.assign({}, p, { note: /確認フォームから/.test(p.note || "") ? "" : p.note }));
+  const t = popHpText(nm, rows);
+  navigator.clipboard.writeText(t).then(() => toast("📋 コピーしました。プロフの「店長から一言」に貼って保存してください"));
+}
 let backRanks = null;   // バック表（kb_back）にあるランク
 /* ---------- 💴 バック表（ランク × コース → キャストのバック。kb_back）を直す（2026/11/10 店長：まちがいを現場ですぐ直せるように）----------
    ・ランクを選ぶと、コースごとに「ふつう・本指・フリー・特別フリー・イベフリー」のバックが出る。直して「💾 保存」
@@ -4196,7 +4276,7 @@ function kbAreaOf(el){
   if(el.closest("#e_private")) return "private";
   if(el.closest("#e_hotel")) return "hotel";
   if(el.closest("#e_prof")) return "prof";
-  if(el.closest("#e_logs") || el.closest("#e_confirm") || el.closest(".jump")) return "";
+  if(el.closest("#e_logs") || el.closest("#e_confirm") || el.closest("#e_pops") || el.closest(".jump")) return "";   // 🎁 個人オプションは行ごとに 💾
   if(el.closest("#editBg .modal")) return "cast";
   return "";
 }
@@ -4244,6 +4324,7 @@ function openEdit(id){
   $("termsBtn").style.display = id && CAN_EDIT ? "" : "none";
   renderChecks(id);
   renderNotesMove(id);
+  renderPops(id);   // 🎁 個人オプション
   renderProf(id);
   renderPrivateClosed(id);
   renderOnb(id ? c : null);

@@ -758,6 +758,7 @@
           <input type="hidden" id="f_ext" value="0"><input type="hidden" id="f_date" value="0">
         </div>
         <div id="f_opts"></div>
+        <div id="f_pops"></div><!-- 🎁 個人オプション（キャストごと） -->
         <button type="button" class="btn btn-ghost btn-sm" style="margin-top:4px" onclick="openOptOrder()">↕ OPの並びを直す（よく出るものを上に）</button>
         <div class="opt" style="margin-top:4px">
           <span></span><input type="text" id="f_xop_label" placeholder="ほかのOP（自由入力）" oninput="recalc()">
@@ -890,6 +891,7 @@ async function init(){
     M = { stores, casts, prices, options, rules, media, courseInfo, rankHist: rankHist || [], dummies: dummies || [], castChecks: castChecks || [], hotels: hotels || [], back: {}, set: {} };
     back.forEach(b=>{ M.back[b.rank + "|" + b.course] = b.amount; });
     settings.forEach(s=>{ M.set[s.key] = s.value; });
+  try{ M.pops = q(await sb.from("kb_personal_ops").select("*").eq("active", true).order("sort").order("id")) || []; }catch(e){ M.pops = []; }   // 🎁 個人オプション（SQL 236 がまだでも動く）
     M.casts.sort((a,b)=> String(a.kana || a.official_name || a.temp_name).localeCompare(String(b.kana || b.official_name || b.temp_name), "ja"));
   }catch(e){ $("gate").textContent = "読み込みに失敗しました：" + (e.message || e); return; }
   $("gate").style.display = "none"; $("main").style.display = "";
@@ -1076,6 +1078,7 @@ function onStore(r){
   $("f_media").innerHTML = M.media.map(m=>`<button type="button" class="chip ${mediaSel.includes(m.code)?"on":""}" onclick="toggleMedia('${m.code}')">${esc(m.label)}</button>`).join("");
   $("f_visit").innerHTML = VISIT.map(([k,l])=>`<button type="button" class="chip ${visit===k?"on":""}" onclick="setVisit('${k}')">${l}</button>`).join("");
   renderNomiChips();
+  renderPops(r ? (r.options || []) : undefined);   // 🎁 個人オプション（予約を開いたときは、入っていた分にチェック。お店を変えただけならチェックはそのまま）
   storeOnlyFields();
   optSummary();
   // ダミーのお店：ダミー名を選ぶ
@@ -1628,10 +1631,30 @@ function showHear(i){
   alert("💬 ヒアリング" + (h.by ? "（" + h.by + (d ? "　" + (d.getMonth()+1) + "/" + d.getDate() : "") + "）" : "") + "\n\n" + (h.text || "（記録がありません）"));
 }
 
+// 🎁 個人オプション：選んだキャストの分だけ、オプションの下に出す（キャスト台帳の「🎁 個人オプション」で登録）2026/11/10
+//   sel：予約を開いたときの options（入っていた個人OPにチェック・そのときの料金とバックのまま）。なければ、いまの画面のチェックを残す
+function renderPops(sel){
+  const el = $("f_pops"); if(!el) return;
+  const cast = M.casts && M.casts.find(x => x.id === ($("f_cast") ? $("f_cast").value : ""));
+  const list = cast ? (M.pops || []).filter(p => p.cast_id === cast.id) : [];
+  const keep = {};
+  if(Array.isArray(sel)) sel.filter(o => /^pop_\d+$/.test(o.code || "")).forEach(o => { keep[o.code] = o; });
+  else list.forEach(p => { const cb = $("pp_" + p.id); if(cb && cb.checked) keep["pop_" + p.id] = { qty: +$("ppq_" + p.id).value || 1, price: +$("ppp_" + p.id).value || 0, back: +$("ppb_" + p.id).value || 0 }; });
+  el.innerHTML = list.length ? `<div style="margin-top:6px;font-weight:800;font-size:13px">🎁 ${esc(cast.official_name || cast.temp_name || "")}の個人オプション</div>` + list.map(p => {
+    const s = keep["pop_" + p.id];
+    return `<div class="opt">
+      <input type="checkbox" id="pp_${p.id}" ${s ? "checked" : ""} onchange="recalc()">
+      <label class="lbl" for="pp_${p.id}">🎁 ${esc(p.label)}${p.note ? `<br><small>${esc(p.note)}</small>` : ""}</label>
+      <input type="number" id="ppq_${p.id}" min="1" value="${s ? s.qty || 1 : 1}" title="着数・枚数" oninput="recalc()" ${p.unit === "per_item" ? "" : 'style="visibility:hidden"'}>
+      <input type="number" id="ppp_${p.id}" value="${s ? s.price : p.price}" title="料金（1回あたり）" oninput="recalc()">
+      <input type="number" id="ppb_${p.id}" value="${s ? s.back : p.back}" title="バック（1回あたり）" oninput="recalc()">
+    </div>`;
+  }).join("") : "";
+}
 function onCast(){
   const c = M.casts.find(x=>x.id===$("f_cast").value);
   renderCastChecks(c);
-  if(!c){ $("castInfo").innerHTML = ""; recalc(); return; }
+  if(!c){ $("castInfo").innerHTML = ""; renderPops(); recalc(); return; }
   hearings = [];
   const GL = {sakurana:"サクラナ",cutie:"CC",gokumon:"極門",event:"イベ"};
   const rr = rankRowsOn(c), rks = ranksOn(c);
@@ -1642,6 +1665,7 @@ function onCast(){
     (c.special_notes ? `<div class="info">📝 特記事項：${esc(c.special_notes)}</div>` : "") +
     (c.ng_notes ? `<div class="warn">🚫 NG：${esc(c.ng_notes)}</div>` : "") +
     (rules ? `<div class="info">🧮 このキャストの条件：<br>${rules}</div>` : "");
+  renderPops();   // 🎁 個人オプション
   recalc();
 }
 
@@ -2085,6 +2109,12 @@ function calc(){
   if($("f_xop_label").value.trim()){
     opts.push({ group:g, code:"custom", label:$("f_xop_label").value.trim(), qty:1, price:+$("f_xop_price").value||0, back:+$("f_xop_back").value||0, manual:true });
   }
+  // 🎁 個人オプション（キャストごと。kb_personal_ops・SQL 236）2026/11/10
+  (M.pops || []).filter(p => cast && p.cast_id === cast.id).forEach(p => {
+    const cb = $("pp_" + p.id); if(!cb || !cb.checked) return;
+    const qty = p.unit === "per_item" ? Math.max(1, +$("ppq_" + p.id).value || 1) : 1;
+    opts.push({ group:g, code:"pop_" + p.id, label:"🎁" + p.label, qty, price: Math.max(0, +$("ppp_" + p.id).value || 0), back: Math.max(0, +$("ppb_" + p.id).value || 0), manual:true });
+  });
   const optionTotal = opts.reduce((a,o)=>a + o.price*o.qty, 0);
   const optionBack = opts.reduce((a,o)=>a + o.back*o.qty, 0);
   const transport = Math.max(0, +$("f_transport").value||0), discount = Math.max(0, +$("f_discount").value||0);
