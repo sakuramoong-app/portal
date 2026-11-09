@@ -189,6 +189,19 @@ async function toggleTodo(id, i){
 }
 
 /* ---------- 📊 今日の数字（内勤用）：店落ち（暫定＋雑費・22時まで／22時から）・カード・件数・人数・お茶・欠勤 ---------- */
+// 店落ち（暫定的な残額＋雑費）を [22時まで, 22時から] に分ける。rs＝その日の予約（キャンセルなども入れて渡す）、zappiOf(castId)＝その子の雑費
+//   雑費は、その子のその日最初の予約の時間帯に入れる。交通費バック・プラスマイナス（雑費以外）と内勤日払いは入れない（今日の数字・前の日の売上の報告で同じ計算）2026/11/10
+function dropParts(rs, zappiOf){
+  const live = (rs || []).filter(r => KBM.isLive(r));
+  const night = r => !!r.start_at && hourOf(r.start_at) >= 22;
+  const part = [0, 0];
+  [...new Set(live.map(r => r.cast_id).filter(Boolean))].forEach(id => {
+    const mine = live.filter(r => r.cast_id === id).sort((a, b) => String(a.start_at || "").localeCompare(String(b.start_at || "")));
+    mine.forEach(r => { part[night(r) ? 1 : 0] += (r.total || 0) - (Number(backOf(r)) || 0); });
+    try{ part[mine[0] && night(mine[0]) ? 1 : 0] += zappiOf(id) || 0; }catch(e){}
+  });
+  return part;
+}
 function renderToday(){
   const el = $("todayGrid"); if(!el) return;
   const live = rows.filter(r=>r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed");
@@ -198,29 +211,58 @@ function renderToday(){
   const t = (k, v)=>`<div class="t"><div class="k">${k}</div><div class="v">${v}</div></div>`;
   // 店落ち（暫定的な残額＋雑費）を22時まで／22時からに分ける（予約の始まりで分ける）。雑費は、その子のその日最初の予約の時間帯に入れる
   // 交通費バック・プラスマイナス（雑費以外）と内勤日払いは入れない
-  const night = r => !!r.start_at && hourOf(r.start_at) >= 22;
-  const part = [0, 0];
-  ids.forEach(id => {
-    const mine = live.filter(r => r.cast_id === id).sort((a, b) => String(a.start_at || "").localeCompare(String(b.start_at || "")));
-    mine.forEach(r => { part[night(r) ? 1 : 0] += (r.total || 0) - (Number(backOf(r)) || 0); });
-    try{ part[mine[0] && night(mine[0]) ? 1 : 0] += calcCast(id).zappi || 0; }catch(e){}
-  });
+  const part = dropParts(rows, id => calcCast(id).zappi || 0);
   // 今日の店落ち＝暫定＋雑費 − 内勤の日払い（まだ払っていない人も。エクセルの「店落ち」と同じ）
-  const spRows = (typeof staffPay !== "undefined" && staffPay.rows) || [];
-  const staffPaid = spRows.reduce((a, r) => a + (r.amount != null ? Number(r.amount) || 0 : spAuto(r)), 0);
-  el.innerHTML = t("今日の店落ち", yen(part[0] + part[1] - staffPaid) + `<div style="font-size:11.5px;font-weight:700;color:var(--sub);margin-top:2px">暫定＋雑費 ${yen(part[0] + part[1])} − 内勤の日払い ${yen(staffPaid)}</div>`) + t("☀️ 22時までの店落ち", yen(part[0])) + t("🌙 22時からの店落ち", yen(part[1])) + t("カード合計", yen(card)) + t("予約件数", live.length + "件")
+  //   内勤さんの画面は、日払いの一覧は自分の分だけ。でも店落ちは全員分で引く（staffPay.all）2026/11/10
+  const spRows = (typeof staffPay !== "undefined" && (staffPay.all || staffPay.rows)) || [];
+  const staffPaid = staffPaidSum(spRows);
+  el.innerHTML = t("今日の店落ち", yen(part[0] + part[1] - staffPaid) + `<div style="font-size:11.5px;font-weight:700;color:var(--sub);margin-top:2px">暫定＋雑費 ${yen(part[0] + part[1])} − 内勤の日払い${KB.IS_BOSS ? " " + yen(staffPaid) : "（全員分）"}</div>`) + t("☀️ 22時までの店落ち", yen(part[0])) + t("🌙 22時からの店落ち", yen(part[1])) + t("カード合計", yen(card)) + t("予約件数", live.length + "件")
     + t("予約のあるキャスト", ids.length + "名") + t("お茶", st.filter(s=>s === "お茶").length + "名") + t("欠勤", st.filter(s=>s === "欠勤").length + "名")
     + t("キャンセル・トビ", rows.filter(r=>r.status === "cancel").length + "件・" + rows.filter(r=>r.status === "tobi").length + "件");
-  // 📋 売上の報告（社長に送る文）：見ている日の「今日の店落ち」（暫定＋雑費 − 内勤の日払い）。2026/11/7 店長：前の日の店落ちを、次の日に送る
-  //   今日（営業日）を見ているときは、前の日を見て送れるように「◀ 前の日の報告へ」
-  const drop = part[0] + part[1] - staffPaid, dd = new Date(day + "T12:00:00Z"), isToday = day === KB.bizDateOf(), prev = addDays(day, -1), pd = new Date(prev + "T12:00:00Z");
-  salesReport = `お疲れ様です。\n${dd.getUTCMonth() + 1}月${dd.getUTCDate()}日\n売上   ${drop.toLocaleString("ja-JP")}円\nお願いします<(_ _)>`;
-  el.insertAdjacentHTML("beforeend", `<div class="t salesrep"><div class="k">📋 売上の報告（${dd.getUTCMonth() + 1}/${dd.getUTCDate()}の店落ち・コピーして送る）</div>
-    ${isToday ? `<div class="hint2" style="margin:4px 0">ふつうは前の日の分を送ります → <button type="button" class="btn btn-primary btn-sm" onclick="salesPrevDay()">◀ ${pd.getUTCMonth() + 1}/${pd.getUTCDate()}の報告へ</button></div>` : ""}
-    <pre>${esc(salesReport)}</pre>
-    <button type="button" class="btn ${isToday ? "btn-ghost" : "btn-primary"} btn-sm" onclick="navigator.clipboard.writeText(salesReport).then(()=>toast('📋 売上の報告をコピーしました'),()=>prompt('コピーしてください',salesReport))">📋 コピー</button></div>`);
+  // 📋 売上の報告（社長に送る文）：ふつうは前の日の店落ち（暫定＋雑費 − 内勤の日払い）を、次の日に送る（2026/11/7 店長）
+  //   2026/11/10 店長：今日（営業日）を開いたまま、前の日の報告を出してコピーできるように（日付は変えない）
+  const isToday = day === KB.bizDateOf();
+  salesToday = { d: day, drop: part[0] + part[1] - staffPaid };
+  if(isToday) salesPrevLoad();
+  paintSales();
 }
-async function salesPrevDay(){ $("day").value = addDays(day, -1); await loadDay(); const b = $("todayBox"); if(b){ b.open = true; b.scrollIntoView({ block: "start", behavior: "smooth" }); } }
+// 売上の報告の文
+const salesText = (d, drop) => { const dd = new Date(d + "T12:00:00Z"); return `お疲れ様です。\n${dd.getUTCMonth() + 1}月${dd.getUTCDate()}日\n売上   ${Number(drop).toLocaleString("ja-JP")}円\nお願いします<(_ _)>`; };
+const mdOf = d => { const dd = new Date(d + "T12:00:00Z"); return (dd.getUTCMonth() + 1) + "/" + dd.getUTCDate(); };
+let salesToday = null, salesPrev = null, salesShowToday = false, salesPrevBusy = false;
+// 前の日の店落ちを、日付を変えずに読んで計算する（今日の店落ちと同じ計算：dropParts＋KBM.calcCast の雑費 − 全員分の日払い）
+async function salesPrevLoad(){
+  const prev = addDays(day, -1);
+  if(salesPrevBusy || (salesPrev && salesPrev.d === prev && Date.now() - salesPrev.at < 60000)) return;
+  salesPrevBusy = true;
+  try{
+    const [rs, ds] = await Promise.all([
+      sb.from("kb_reservations").select("*").eq("biz_date", prev).eq("deleted", false),
+      sb.from("kb_cast_days").select("*").eq("biz_date", prev),
+    ]);
+    const pr = q(rs) || [], pd = {}; (q(ds) || []).forEach(x => { pd[x.cast_id] = x; });
+    const zappiOf = id => { try{ return KBM.calcCast({ all: pr.filter(r => r.cast_id === id), cd: pd[id] || {}, rules: KBM.rulesOn(M.rules, id, prev), day: prev }).zappi || 0; }catch(e){ return 0; } };
+    const p2 = dropParts(pr, zappiOf), sp = await staffRowsOf(prev);
+    salesPrev = { d: prev, drop: p2[0] + p2[1] - staffPaidSum(sp), at: Date.now() };
+  }catch(e){ salesPrev = { d: prev, err: e.message || String(e), at: Date.now() }; }
+  salesPrevBusy = false;
+  paintSales();
+}
+function paintSales(){
+  const el = $("todayGrid"); if(!el || !salesToday) return;
+  const old = el.querySelector(".salesrep"); if(old) old.remove();
+  const isToday = salesToday.d === KB.bizDateOf();
+  // 今日を見ているとき：前の日の報告（読みこみ中なら待つ）。「今日の分」に切りかえもできる。今日でない日を見ているとき：その日の報告
+  const usePrev = isToday && !salesShowToday;
+  const cur = usePrev ? salesPrev : salesToday;
+  const ready = cur && cur.d === (usePrev ? addDays(salesToday.d, -1) : salesToday.d) && !cur.err && cur.drop != null;
+  salesReport = ready ? salesText(cur.d, cur.drop) : "";
+  const tgt = usePrev ? addDays(salesToday.d, -1) : salesToday.d;
+  el.insertAdjacentHTML("beforeend", `<div class="t salesrep"><div class="k">📋 売上の報告（${mdOf(tgt)}の店落ち・コピーして送る）</div>
+    ${isToday ? `<div class="hint2" style="margin:4px 0">${usePrev ? `ふつうは前の日の分を送ります（日付はそのまま）。<a href="javascript:void(0)" onclick="salesShowToday=true;paintSales()">今日（${mdOf(salesToday.d)}）の分を見る</a>` : `今日の分です（まだ途中）。<a href="javascript:void(0)" onclick="salesShowToday=false;paintSales()">◀ 前の日（${mdOf(addDays(salesToday.d, -1))}）の分にもどす</a>`}</div>` : ""}
+    ${ready ? `<pre>${esc(salesReport)}</pre><button type="button" class="btn btn-primary btn-sm" onclick="navigator.clipboard.writeText(salesReport).then(()=>toast('📋 売上の報告をコピーしました'),()=>prompt('コピーしてください',salesReport))">📋 コピー</button>`
+      : cur && cur.err ? `<div class="hint2" style="color:#C0392B">前の日の数字が読めませんでした：${esc(cur.err)}</div>` : `<div class="hint2">前の日の数字を計算しています…</div>`}</div>`);
+}
 let salesReport = "";
 document.head.insertAdjacentHTML("beforeend", `<style>.todaygrid .salesrep pre{font-family:inherit;font-size:14px;font-weight:800;white-space:pre-wrap;margin:4px 0 6px;color:var(--ink)}</style>`);
 const __renderListT = renderList;

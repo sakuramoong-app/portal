@@ -968,23 +968,31 @@ function parseShiftTime(t){   // 内勤カレンダーの「20-5」「12:30-22�
   return { in: a, out: b };
 }
 const halfLabel = h => { const x = h >= 24 ? h - 24 : h; return (h >= 24 ? "翌" : "") + Math.floor(x) + ":" + (x % 1 ? "30" : "00"); };
+// その日の内勤の日払いの行（全員分）。d＝営業日（前の日の売上の報告でも使う）2026/11/10
+async function staffRowsOf(d){
+  const [rates, work, shifts] = await Promise.all([
+    sb.from("kb_staff_rates").select("*").order("from_date"),
+    sb.from("kb_staff_work").select("*").eq("biz_date", d),
+    sb.from("naikin_shifts").select("staff_id,time").eq("date", d),
+  ]);
+  const rt = q(rates) || [], wk = work.error ? [] : (work.data || []), sh = shifts.error ? [] : (shifts.data || []);
+  const ids = [...new Set(rt.filter(r=>r.from_date <= d).map(r=>r.staff_id))];
+  return ids.map(id=>{
+    const r = rt.filter(x=>x.staff_id === id && x.from_date <= d).pop();
+    const w = wk.find(x=>x.staff_id === id), s = sh.find(x=>x.staff_id === id), p = s && parseShiftTime(s.time);
+    return { id, name: r.record_name || id, hourly: (w && w.hourly) || r.hourly,
+      in: w && w.clock_in != null ? Number(w.clock_in) : p ? p.in : null, out: w && w.clock_out != null ? Number(w.clock_out) : p ? p.out : null,
+      saved: !!w, fromShift: !w && !!p, paid: !!(w && w.paid), src: (w && w.pay_source) || "", kiki: w && w.paid_kiki != null ? Number(w.paid_kiki) : null, amount: w && w.day_paid ? w.day_paid : null, note: (w && w.note) || "", by: (w && w.paid_by) || "", at: w && w.paid_at };
+  });
+}
+// 内勤の日払いの合計（店落ちから引く額。まだ払っていない人も）
+const staffPaidSum = list => (list || []).reduce((a, r) => a + (r.amount != null ? Number(r.amount) || 0 : spAuto(r)), 0);
 async function loadStaffPay(){
   const box = $("staffPayGrid"); if(!box) return;
   try{
-    const [rates, work, shifts] = await Promise.all([
-      sb.from("kb_staff_rates").select("*").order("from_date"),
-      sb.from("kb_staff_work").select("*").eq("biz_date", day),
-      sb.from("naikin_shifts").select("staff_id,time").eq("date", day),
-    ]);
-    const rt = q(rates) || [], wk = work.error ? [] : (work.data || []), sh = shifts.error ? [] : (shifts.data || []);
-    const ids = [...new Set(rt.filter(r=>r.from_date <= day).map(r=>r.staff_id))];
-    staffPay.rows = ids.map(id=>{
-      const r = rt.filter(x=>x.staff_id === id && x.from_date <= day).pop();
-      const w = wk.find(x=>x.staff_id === id), s = sh.find(x=>x.staff_id === id), p = s && parseShiftTime(s.time);
-      return { id, name: r.record_name || id, hourly: (w && w.hourly) || r.hourly,
-        in: w && w.clock_in != null ? Number(w.clock_in) : p ? p.in : null, out: w && w.clock_out != null ? Number(w.clock_out) : p ? p.out : null,
-        saved: !!w, fromShift: !w && !!p, paid: !!(w && w.paid), src: (w && w.pay_source) || "", kiki: w && w.paid_kiki != null ? Number(w.paid_kiki) : null, amount: w && w.day_paid ? w.day_paid : null, note: (w && w.note) || "", by: (w && w.paid_by) || "", at: w && w.paid_at };
-    });
+    staffPay.rows = await staffRowsOf(day);
+    // 店落ちの計算には全員分（内勤さんの画面でも、店長の画面と同じ店落ちになるように）2026/11/10
+    staffPay.all = staffPay.rows.slice();
     // 内勤は、自分の日払いだけ見える（店長・社長は全員）。共通ログインもGoogleログインも、ポータルの担当者の名前で決める 2026/11/4
     if(!KB.IS_BOSS){
       const me = { "きゃ": "kya", "すや": "suya", "らん": "ran", "かみ": "kami", "わか": "waka" }[KB.operatorName()] || "";
