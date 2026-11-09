@@ -883,7 +883,7 @@ async function init(){
       sb.from("kb_rank_history").select("cast_id,grp,rank,valid_from,id,hearing_text,by_name,at"),
       sb.from("kb_dummy_names").select("*").eq("active", true).order("sort").order("id"),
       sb.from("kb_cast_checks").select("*").eq("active", true).order("sort").order("id"),
-      sb.from("prof_hotels").select("hotel_id,area,hotel_name,map_url,store_status,note").order("seq"),
+      sb.from("prof_hotels").select("hotel_id,area,hotel_name,map_url,store_status,note,tags").order("seq"),
     ]);
     const [stores, casts, prices, back, options, rules, settings, media, courseInfo, rankHist, dummies, castChecks, hotels] = r.map(q);
     M = { stores, casts, prices, options, rules, media, courseInfo, rankHist: rankHist || [], dummies: dummies || [], castChecks: castChecks || [], hotels: hotels || [], back: {}, set: {} };
@@ -1719,7 +1719,17 @@ function renderCastChecks(c){
   // ⌛ 長いコース
   const mins = formMinutes(), warn = ngWarnings(c);
   // 👥 3P・4P のとき：3Pができるホテルを案内する（2026/11/9 内勤さん）
-  if(typeof party !== "undefined" && party.kind) ann.unshift({ text: "✅ 3P可能なホテルを案内する（" + (party.kind === "guest" ? "お客様2名" : "キャスト" + party.n + "名") + "）" });
+  if(typeof party !== "undefined" && party.kind){
+    // 👥 ホテル一覧（キャスト台帳）で「3P可」にしたホテルを、選んだエリアの分だけ出す（2026/11/9）
+    const area = ($("f_area") && $("f_area").value.trim()) || "", h3 = (M.hotels || []).filter(h => Array.isArray(h.tags) && h.tags.includes("3P可"));
+    const inArea = area ? h3.filter(h => h.area && (area.includes(h.area) || h.area.includes(area))) : [];
+    const addr = ($("f_address") && $("f_address").value.trim()) || "", curH = (M.hotels || []).find(h => h.hotel_name && addr.includes(h.hotel_name));
+    const list = !h3.length ? "（キャスト台帳のホテル一覧で「👥3P可」にチェックすると、ここに出ます）"
+      : !area ? "（エリアを選ぶと、3P可のホテルが出ます）"
+      : inArea.length ? "　3P可：" + inArea.map(h => h.hotel_name).join("・") : "　" + area + "に3P可のホテルが登録されていません";
+    const warn = curH && !(Array.isArray(curH.tags) && curH.tags.includes("3P可")) ? `　⚠️ 今のホテル「${curH.hotel_name}」は3P可になっていません` : "";
+    ann.unshift({ text: "✅ 3P可能なホテルを案内する（" + (party.kind === "guest" ? "お客様2名" : "キャスト" + party.n + "名") + "）" + list + warn });
+  }
   // 🌙 お泊り：池袋・鶯谷・五反田以外（遠方）は本指名のみ（新規・店リピのときに出す）
   try{
     const area = $("f_area").value.trim();
@@ -4866,6 +4876,8 @@ function visitFrom(past, cid){
 }
 // その回がフリーだったか（記録簿の予約：free_kind／台帳エクセル：フリーの欄に「フリー」「イベ」など）
 function isFreeVisit(p){ return !!(p && p.free_kind && String(p.free_kind).trim()); }
+// 3Pの案内のホテルは、エリア・ホテルを変えたら出しなおす（2026/11/9）
+["change", "input"].forEach(ev => document.addEventListener(ev, e => { const id = e.target && e.target.id; if(!["f_areaSel", "f_area", "f_address"].includes(id) || typeof party === "undefined" || !party.kind) return; clearTimeout(window.__p3t); window.__p3t = setTimeout(() => { try{ renderCastChecks(M.casts.find(c => c.id === $("f_cast").value)); }catch(_){} }, 300); }, true));
 // キャストの枠の予約：流れた・キャンセル・トビは、いちばん下に（ほかは時間の順のまま）2026/11/9 内勤さん
 const offLast = (a, b) => (["cancel", "tobi", "flowed"].includes(a.status) ? 1 : 0) - (["cancel", "tobi", "flowed"].includes(b.status) ? 1 : 0);
 // 予約を開いたとき、そのお客さんのこれまでを読んでおく（キャストを変えたら決めなおせるように。開いただけでは変えない）
