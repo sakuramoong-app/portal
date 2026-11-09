@@ -2062,25 +2062,36 @@ function pfBulkOpen(){
       <div style="padding-left:8px">${PF_BASIC.map(([f, l]) => chk("bkB", f, `${l}：<small style="color:#9C8B8F">${esc(String(profGet(data, sk, f) || "（空）")).slice(0, 30)}</small>`, true)).join("")}</div></details>
     <details style="margin-top:6px"><summary style="cursor:pointer;font-weight:800;font-size:13px">✅ オプション可否${all("bkO")}</summary>
       <div style="padding-left:8px">${keys.map(k => chk("bkO", k, `${esc(PF_OPT_LABEL[k] || k)} <b>${esc(o[k] || "—")}</b>`, true)).join("")}</div></details>
-    <div style="margin-top:6px">${chk("bkC", "comment", "💬 本人から一言", false)}${chk("bkC", "mgrComment", "✍️ 店長から一言", false)}
-      <div class="hint" style="margin:0">紹介文は、写メ日記のウィジェットなどがお店ごとにちがうので、最初はチェックを外しています。</div></div>
+    <div style="margin-top:8px;font-weight:800;font-size:13px">💬 本人から一言の写し方</div>
+    <div style="padding-left:8px;font-size:13px">${[["none", "写さない"], ["tpl", "🎀 お店ごとの飾りテンプレで入れる（タイトル・本文だけ。テンプレがないお店は文だけ）"], ["plain", "📝 文だけ（タイトル・本文。飾りなし）"], ["raw", "そのまま写す（飾り・ウィジェットごと。おすすめしません）"]].map(([v, l], i) => `<label style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer"><input type="radio" name="bkCm" value="${v}" ${i === 0 ? "checked" : ""} style="width:auto"> ${l}</label>`).join("")}
+      <a href="javascript:void(0)" class="hint" onclick="openIntroTplEditor()">🎀 飾りテンプレの登録・直す</a></div>
+    <div style="margin-top:4px">${chk("bkC", "mgrComment", "✍️ 店長から一言（そのまま写す）", false)}</div>
     <div style="font-size:12px;font-weight:800;color:#9C8B8F;margin-top:10px">写す先のお店</div>
     ${targets.map(t => chk("bkT", t, esc(STORE_LABEL_OF(t)) + (PROF_DUMMY.includes(t) ? ' <small style="color:#c77700">（名前・年齢を変えたダミー店）</small>' : ""), !PROF_DUMMY.includes(t))).join("")}
     <div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-primary" style="flex:1" onclick="pfBulkRun()">📋 写す</button>
       <button class="btn btn-ghost" style="flex:1" onclick="document.getElementById('bulkBg').remove()">やめる</button></div></div>`;
   document.body.appendChild(bg);
 }
-function pfBulkRun(){
+async function pfBulkRun(){
   const val = cls => [...document.querySelectorAll("." + cls + ":checked")].map(b => b.dataset.v);
   const bf = val("bkB"), ok = val("bkO"), cf = val("bkC"), ts = val("bkT");
+  const cm = (document.querySelector('input[name="bkCm"]:checked') || {}).value || "none";
   if(!ts.length){ toast("写す先のお店を選んでください"); return; }
-  if(!bf.length && !ok.length && !cf.length){ toast("写すものを選んでください"); return; }
+  if(!bf.length && !ok.length && !cf.length && cm === "none"){ toast("写すものを選んでください"); return; }
   const { data, sk } = pf, src = profOpts(data, sk);
   data.storeProfiles = data.storeProfiles || {};
+  // 💬 本人から一言：飾りテンプレ／文だけ／そのまま（2026/11/9）
+  const intro = introSrcOf(data, sk), tpls = cm === "tpl" ? await introTplLoad(true) : {}, how = {};
   ts.forEach(t => {
     const sp = data.storeProfiles[t] = data.storeProfiles[t] || { active: true };
     bf.forEach(f => { sp[f] = String(profGet(data, sk, f) || ""); });
     cf.forEach(f => { sp[f] = String(profGet(data, sk, f) || ""); });
+    if(cm === "raw") sp.comment = String(profGet(data, sk, "comment") || "");
+    else if(cm === "plain" || cm === "tpl"){
+      const tp = cm === "tpl" ? tpls[skKeyOf(t)] : null;
+      sp.comment = tp && tp.html ? introTplRender(tp, intro.title, intro.body) : introPlain(intro.title, intro.body);
+      how[t] = tp && tp.html ? "飾りテンプレ" : "文だけ";
+    }
     if(ok.length){
       const cur = profOpts(data, t), opts = Object.assign({}, cur.options), memo = Object.assign({}, cur.optMemo);
       ok.forEach(k => { const v = (src.options || {})[k], m = (src.optMemo || {})[k];
@@ -2091,7 +2102,8 @@ function pfBulkRun(){
     pf.dirty.add(t);
   });
   $("bulkBg").remove(); paintProf();
-  toast(`${ts.map(STORE_LABEL_OF).join("・")} に写しました。「💾 保存だけ」か「💾 プロフを保存」で保存してください`);
+  const hw = Object.keys(how).length ? "（本人から一言：" + Object.entries(how).map(([t, h]) => STORE_LABEL_OF(t) + "＝" + h).join("・") + "）" : "";
+  toast(`${ts.map(STORE_LABEL_OF).join("・")} に写しました${hw}。「💾 保存だけ」か「💾 プロフを保存」で保存してください`);
 }
 // 📷 写真（公式HPに出ている写真。このお店のタブの在籍番号で）：ほかのお店からコピー・撮影準備中（お店のNG画像）にする
 const PF_SLOT_LABEL = ["一覧用", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧"];
@@ -2447,7 +2459,9 @@ function paintProf(){
         <select class="ed" id="pf_b_castType" ${ro}>${["", ...CAST_TYPES].map(t => `<option value="${t}" ${t === v ? "selected" : ""}>${t || "（なし）"}</option>`).join("")}</select></div>`; })()}
       <div class="hint" style="grid-column:1/-1;font-size:12px">🌐 公式HPのアイコンは自動：メイン＝キャストの種類／サブ＝状態（ありあり・ありなし・なしなし）→ Pサイズ（13cm〜20cm）→ 雰囲気（公式HPにあるアイコンの言葉だけ）の順に入ります</div></div></div></details>
     <details ${pfAcc("intro")}><summary class="pfHead">💬 紹介文</summary><div class="pfBody">
-      ${CAN_EDIT && hpNoOf(pf.c, sk).mk === "sakuramoon" ? `<div style="margin-bottom:8px"><button type="button" class="btn btn-primary btn-sm" onclick="tplOpen()">🎨 テンプレで作る（デリヘルタウン欄・本人から一言）</button>${tplPending[sk] ? ` <span class="hint" style="color:#B7791F">デリヘルタウン欄は、保存すると公式HPに入ります</span>` : ""}</div>` : ""}
+      ${CAN_EDIT && hpNoOf(pf.c, sk).mk === "sakuramoon" ? `<div style="margin-bottom:8px"><button type="button" class="btn btn-primary btn-sm" onclick="tplOpen()">🎨 テンプレで作る（デリヘルタウン欄・本人から一言）</button>${tplPending[sk] ? ` <span class="hint" style="color:#B7791F">デリヘルタウン欄は、保存すると公式HPに入ります</span>` : ""}</div>`
+        : CAN_EDIT && !PROF_DUMMY.includes(sk) ? `<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><button type="button" class="btn btn-primary btn-sm" onclick="introTplApplyOpen()">🎀 このお店の飾りテンプレで作る（サクラムーンの文から）</button>
+          <a href="javascript:void(0)" class="hint" onclick="openIntroTplEditor('${skKeyOf(sk)}')">🎀 飾りテンプレの登録・直す</a></div>` : ""}
       <div class="hint" style="display:flex;align-items:center;gap:6px">本人から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_c')">📋 コピー</button>${CAN_EDIT ? tplSnipSelect('pf_c') : ""}</div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
       <div class="hint" style="margin-top:8px;display:flex;align-items:center;gap:6px">店長から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_m')">📋 コピー</button>${CAN_EDIT ? tplSnipSelect('pf_m') : ""}</div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></details>
     <details ${pfAcc("opts")}><summary class="pfHead">✅ オプション可否◎○△×${CAN_EDIT ? `<button type="button" class="pfEditBtn" onclick="event.preventDefault();pfToggleEdit('opts')">${pfEdit.opts ? "✓ 見る形にもどす" : "✏️ 編集する"}</button>` : ""}</summary>
@@ -2996,7 +3010,7 @@ function openFreeUp(onDone, store){
   fuFile = null;
   const stores = Object.entries(PROF_STORE_OF).filter(([k]) => HP_SITE_OF[k]);
   bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:620px;width:100%;max-height:90vh;overflow:auto;font-size:14px">
-    <b style="font-size:17px">🖼 フリー画像をアップ</b>
+    <div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">🖼 フリー画像をアップ</b><span style="margin-left:auto"></span><button class="btn btn-ghost btn-sm" onclick="openVideoUp(null, $('fu_store').value)">🎥 動画はこちら</button></div>
     <div class="hint" style="margin:4px 0 10px">画像を選ぶと、公式HPの「FreeJPG画像」の <b>空いている番号</b> に入れて、紹介文に貼るコードを出します。使っている番号は上書きしません。</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">お店 <select id="fu_store">${stores.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select></div>
     <label id="fu_drop" style="display:block;border:2.5px dashed #F2A7C3;border-radius:14px;padding:18px;text-align:center;cursor:pointer;background:#FFF7FA">
@@ -3075,6 +3089,105 @@ async function fuLib(){
       <img loading="lazy" src="${esc(base)}/FreePIC/Free${n}.jpg" style="width:100%;height:110px;object-fit:cover;border-radius:6px;cursor:pointer;background:#f6f6f6" onclick="fuCopy('%MJPGFREE${n}-W%')" title="押すとコードをコピー">
       <div style="font-size:12px;font-weight:800">${n}番</div>
       ${fuOnDone ? `<button class="btn btn-sm btn-primary" style="width:100%" onclick="fuUse(${n})">これを使う</button>` : `<button class="btn btn-sm btn-ghost" style="width:100%" onclick="fuCopy('%MJPGFREE${n}-W%')">📋 コピー</button>`}</div>`).join("")}</div>`;
+}
+/* ---------- 🎥 Free動画（MP4ムービー）をアップ（2026/11/9）----------
+   動画（MP4・40MBまで＝約2分）を選ぶ → 表紙は動画の1秒目を自動で作る（べつの画像も選べる）
+   → いったん Supabase の cms-upload-tmp に置く → 自動反映のロボットが空いている番号に入れて、置いたものは消す（SQL 235） */
+let vuFile = null, vuCover = null, vuBusy = false, vuOnDone = null;
+const vuDone = [];
+function openVideoUp(onDone, store){
+  if(!CAN_EDIT) return;
+  vuOnDone = typeof onDone === "function" ? onDone : null; vuFile = null; vuCover = null;
+  let bg = document.getElementById("vidUpBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "vidUpBg"; bg.style.cssText = "position:fixed;inset:0;z-index:331;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg);
+    bg.addEventListener("click", e => { if(e.target === bg && !vuBusy) bg.remove(); }); }
+  const stores = Object.entries(PROF_STORE_OF).filter(([k]) => HP_SITE_OF[k]);
+  bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:640px;width:100%;max-height:90vh;overflow:auto;font-size:14px">
+    <b style="font-size:17px">🎥 Free動画をアップ</b>
+    <div class="hint" style="margin:4px 0 10px">MP4の動画（<b>40MBまで・約2分</b>）を、公式HPの「MP4ムービー」の <b>空いている番号</b> に入れて、紹介文に貼るコード（%MP4FREE番号-W%）を出します。表紙は動画の1秒目から自動で作ります。</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">お店 <select id="vu_store">${stores.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select></div>
+    <label style="display:block;border:2.5px dashed #9FC5E8;border-radius:14px;padding:16px;text-align:center;cursor:pointer;background:#F5FAFF">
+      <input type="file" id="vu_input" accept="video/mp4" style="display:none" onchange="vuPick(this.files[0])">
+      <div id="vu_prev">🎥 ここを押して動画（MP4）を選ぶ</div></label>
+    <div id="vu_cover" style="margin-top:8px"></div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="vu_go" onclick="vuUpload()" disabled>⬆ 空いている番号にアップ</button>
+      <button class="btn btn-ghost" onclick="if(!vuBusy) document.getElementById('vidUpBg').remove()">閉じる</button></div>
+    <div id="vu_msg" style="margin-top:8px"></div><div id="vu_done"></div></div>`;
+  if(store && $("vu_store")) $("vu_store").value = store;
+  vuPaintDone();
+}
+// 動画の1秒目（短い動画は真ん中）を JPEG の表紙に
+function vuGrabCover(file){
+  return new Promise(ok => {
+    const v = document.createElement("video"), url = URL.createObjectURL(file);
+    let done = false; const fin = b => { if(done) return; done = true; URL.revokeObjectURL(url); ok(b); };
+    v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = url;
+    v.onloadedmetadata = () => { try{ v.currentTime = Math.min(1, (v.duration || 2) / 2); }catch(e){ fin(null); } };
+    v.onseeked = () => {
+      try{ const k = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight || 1)); const cv = document.createElement("canvas"); cv.width = Math.round(v.videoWidth * k); cv.height = Math.round(v.videoHeight * k);
+        cv.getContext("2d").drawImage(v, 0, 0, cv.width, cv.height); cv.toBlob(b => fin(b ? new File([b], "cover.jpg", { type: "image/jpeg" }) : null), "image/jpeg", 0.88); }catch(e){ fin(null); }
+    };
+    v.onerror = () => fin(null); setTimeout(() => fin(null), 15000);
+  });
+}
+async function vuPick(f){
+  $("vu_msg").innerHTML = "";
+  if(!f || !/^video\/mp4$/.test(f.type)){ $("vu_msg").innerHTML = `<span style="color:#C0392B">MP4の動画を選んでください</span>`; $("vu_go").disabled = true; return; }
+  if(f.size > 40e6){ $("vu_msg").innerHTML = `<span style="color:#C0392B">動画が大きすぎます（${Math.round(f.size / 1e6)}MB）。管理画面のきまりで40MB（約2分）までです</span>`; $("vu_go").disabled = true; return; }
+  vuFile = f;
+  $("vu_prev").innerHTML = `<video src="${URL.createObjectURL(f)}" controls muted style="max-width:100%;max-height:220px;border-radius:10px"></video><div class="hint">${Math.round(f.size / 1e5) / 10}MB・べつの動画にするときは、もう一度ここを押す</div>`;
+  $("vu_cover").innerHTML = `<span class="hint">表紙を作っています…</span>`;
+  vuCover = await vuGrabCover(f);
+  vuPaintCover();
+  $("vu_go").disabled = false;
+}
+function vuPaintCover(){
+  $("vu_cover").innerHTML = `<div style="display:flex;gap:10px;align-items:center">${vuCover ? `<img src="${URL.createObjectURL(vuCover)}" style="width:120px;border-radius:8px">` : `<span class="hint">表紙は作れませんでした（なしでも入れられます）</span>`}
+    <div><div style="font-weight:800;font-size:13px">表紙の画像</div><label class="btn btn-ghost btn-sm" style="cursor:pointer">べつの画像にする<input type="file" accept="image/jpeg,image/png" style="display:none" onchange="vuCoverPick(this.files[0])"></label></div></div>`;
+}
+async function vuCoverPick(f){ try{ const p = await fuPrepare(f); vuCover = p.type === "image/jpeg" ? p : await new Promise(ok => { const u = URL.createObjectURL(p), i = new Image(); i.onload = () => { const cv = document.createElement("canvas"); cv.width = i.naturalWidth; cv.height = i.naturalHeight; cv.getContext("2d").drawImage(i, 0, 0); cv.toBlob(b => { URL.revokeObjectURL(u); ok(new File([b], "cover.jpg", { type: "image/jpeg" })); }, "image/jpeg", 0.9); }; i.src = u; }); vuPaintCover(); }catch(e){ toast(e.message || String(e)); } }
+async function vuUpload(){
+  if(!vuFile || vuBusy) return;
+  const store = $("vu_store").value, label = PROF_STORE_OF[store] || store;
+  if(!confirm(`${label} の公式HPの「MP4ムービー」に、空いている番号で動画をアップします。いいですか？`)) return;
+  vuBusy = true; $("vu_go").disabled = true;
+  const id = Date.now() + "_" + Math.random().toString(36).slice(2, 8), vp = `${store}/${id}.mp4`, cp = vuCover ? `${store}/${id}_cover.jpg` : null;
+  try{
+    $("vu_msg").innerHTML = "⏳ 動画を送っています…（大きい動画は1〜2分かかります。閉じないでね）";
+    const up1 = await sb.storage.from("cms-upload-tmp").upload(vp, vuFile, { contentType: "video/mp4", upsert: false });
+    if(up1.error) throw new Error("動画を置けませんでした（SQL 235 はもう実行しましたか？）：" + up1.error.message);
+    if(cp){ const up2 = await sb.storage.from("cms-upload-tmp").upload(cp, vuCover, { contentType: "image/jpeg", upsert: false }); if(up2.error) throw new Error("表紙を置けませんでした：" + up2.error.message); }
+    $("vu_msg").innerHTML = "⏳ 公式HPに入れています…（1〜2分）";
+    const r = await hpFn({ action: "free_mp4_upload", store, video: vp, cover: cp });
+    if(r && r.no && r.tags && (r.ok || /確かめられません/.test(r.error || ""))){
+      vuDone.unshift({ sk: store, store: label, no: r.no, tags: r.tags, warn: r.ok ? (r.coverOk === false ? "表紙は入りませんでした（管理画面で入れてください）" : "") : r.error });
+      $("vu_msg").innerHTML = r.ok ? `<b style="color:#1E8E5A">✅ ${r.no}番にアップしました</b>` : `<span style="color:#B7791F">⚠ ${esc(r.error)}</span>`;
+      vuFile = null; vuCover = null; $("vu_prev").innerHTML = "🎥 ほかの動画もアップするときは、ここを押して選ぶ"; $("vu_cover").innerHTML = "";
+      if(vuOnDone){ try{ vuOnDone(r.no); }catch(e){} $("vu_msg").innerHTML += `<div style="margin-top:4px"><b>🎨 テンプレの動画ブロックに ${r.no}番 を入れました。</b> <button class="btn btn-sm btn-primary" onclick="document.getElementById('vidUpBg').remove()">テンプレにもどる</button></div>`; }
+      vuPaintDone();
+    } else { $("vu_msg").innerHTML = `<span style="color:#C0392B">⚠ ${esc((r && r.error) || "うまくいきませんでした")}</span>`; $("vu_go").disabled = false; }
+  }catch(e){ $("vu_msg").innerHTML = `<span style="color:#C0392B">⚠ ${esc(e.message || String(e))}</span>`; $("vu_go").disabled = false;
+    try{ await sb.storage.from("cms-upload-tmp").remove([vp, cp].filter(Boolean)); }catch(x){} }
+  vuBusy = false;
+}
+async function vuUndo(i){
+  const d = vuDone[i]; if(!d || d.deleted || vuBusy) return;
+  if(!confirm(`${d.store} の ${d.no}番の動画を消します（いまアップしたもの）。いいですか？`)) return;
+  vuBusy = true; $("vu_msg").innerHTML = `⏳ ${d.no}番を消しています…`;
+  const r = await hpFn({ action: "free_mp4_upload", store: d.sk, no: d.no, mode: "delete" });
+  vuBusy = false;
+  if(r && r.ok){ d.deleted = true; $("vu_msg").innerHTML = `<b style="color:#1E8E5A">↩ ${d.no}番を消しました</b>`; }
+  else $("vu_msg").innerHTML = `<span style="color:#C0392B">⚠ ${esc((r && r.error) || "消せませんでした")}</span>`;
+  vuPaintDone();
+}
+function vuPaintDone(){
+  const el = $("vu_done"); if(!el) return;
+  el.innerHTML = vuDone.length ? `<div style="margin-top:12px;font-weight:800">📋 紹介文に貼るコード</div>` + vuDone.map((d, i) => d.deleted ? `<div style="border:1.5px dashed var(--line);border-radius:12px;padding:8px 10px;margin-top:6px;color:#9C8B8F">${esc(d.store)}　${d.no}番 … ↩ 消しました</div>` : `<div style="border:1.5px solid var(--line);border-radius:12px;padding:10px;margin-top:6px">
+      <div style="display:flex;gap:8px;align-items:center"><b style="flex:1">${esc(d.store)}　動画 ${d.no}番</b>
+      <button class="btn btn-sm btn-ghost" style="color:#C0392B" onclick="vuUndo(${i})" title="まちがえてアップしたとき">↩ 取り消す</button></div>${d.warn ? `<div class="hint" style="color:#B7791F">${esc(d.warn)}</div>` : ""}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button class="btn btn-sm btn-primary" onclick="fuCopy('${d.tags.spW}')">${d.tags.spW}<br><span style="font-size:10.5px;font-weight:600">横いっぱい（ふだんはこれ）</span></button>
+        <button class="btn btn-sm btn-ghost" onclick="fuCopy('${d.tags.sp}')">${d.tags.sp}<br><span style="font-size:10.5px">元の大きさ</span></button></div></div>`).join("") : "";
 }
 function fuUse(n){ if(fuOnDone){ try{ fuOnDone(n); }catch(e){} } const bg = document.getElementById("freeUpBg"); if(bg) bg.remove(); toast(`🎨 画像ブロックに ${n}番 を入れました`); }
 // ↩ 取り消す（消す）／🔁 上書き：この画面でいまアップしたものだけ（前からある画像はアプリから消さない）
@@ -3176,8 +3289,8 @@ const TPL_BTN_STYLE = `<!-- 共通ボタンスタイル -->
 }
 </style>
 `;
-function tplBody(text, indent){
-  const pad = indent == null ? "        " : indent;
+function tplBody(text, indent, color){
+  const pad = indent == null ? "        " : indent, hl = color || "#ffb6c1";
   const lines = String(text || "").replace(/\r/g, "").split("\n");
   while(lines.length && !lines[lines.length - 1].trim()) lines.pop();
   return lines.map((l, i) => {
@@ -3187,7 +3300,7 @@ function tplBody(text, indent){
     const raw = l.trim().replace(/^[＊*]\s*/, ""), isHtml = /<(a|font|b|strong|span|img|br)\b[^>]*>/i.test(raw);
     const pink = /^[＊*]/.test(l.trim()), t = isHtml ? raw : tplEsc(raw);
     const br = last ? "" : (lines[i + 1] !== undefined && !lines[i + 1].trim() ? "<br /><br />" : "<br />");
-    return pad + (pink ? `<font color="#ffb6c1">${t}</font>` : t) + br;
+    return pad + (pink ? `<font color="${hl}">${t}</font>` : t) + br;
   }).filter(Boolean).join("\n");
 }
 function tplCard(b){
@@ -3475,7 +3588,8 @@ function tplBlockForm(b){
   const f = (k, l, ph) => `<label style="display:block;margin-top:3px"><span class="hint">${l}</span><input value="${esc(b[k] || "")}" placeholder="${esc(ph)}" oninput="tplSet(${b.id},'${k}',this.value)"></label>`;
   const t = (k, l, ph, h) => { const id = `tpb_${b.id}_${k}`; return `<label style="display:block;margin-top:3px"><span class="hint" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${l} ${tplSnipSelect(id)}</span><textarea id="${id}" style="min-height:${h || 80}px" placeholder="${esc(ph)}" oninput="tplSet(${b.id},'${k}',this.value)">${esc(b[k] || "")}</textarea></label>`; };
   if(b.type === "card") return f("title", "タイトル", "例：『恋人みたいに甘く、楽しく♡』") + t("body", "本文（行の頭に「＊」でピンクの行・空の行で段落があく）", "", 180);
-  if(b.type === "video") return f("no", "Free動画（MP4）の番号", "例：2");
+  if(b.type === "video") return `<div style="display:flex;gap:6px;align-items:flex-end"><div style="flex:1">${f("no", "Free動画（MP4）の番号", "例：2")}</div>
+    <button type="button" class="btn btn-sm btn-primary" style="white-space:nowrap" onclick="tplVidFor(${b.id})" title="動画をアップして、この番号の欄に自動で入れる">🎥 アップして入れる</button></div>`;
   if(b.type === "image") return `<div style="display:flex;gap:6px;align-items:flex-end"><div style="flex:1">${f("no", "FreeJPGの番号（いくつでも。例：116, 117）", "例：116")}</div>
     <button type="button" class="btn btn-sm btn-primary" style="white-space:nowrap" onclick="tplUpFor(${b.id})" title="画像をアップして、この番号の欄に自動で入れる">🖼 アップして入れる</button></div>` + f("url", "押したときに開くURL（なくてもいい）", "https://…");
   if(b.type === "banner") return f("no", "FreeGIFの番号（バナーの画像）", "例：27") + f("url", "押したときに開くURL（空なら、ヘブンのその子のページ）", "https://…");
@@ -3563,6 +3677,7 @@ function tplDrop(id, place, tid, before){
   else { const last = bl.map(x => x.place).lastIndexOf(place); bl.splice(last + 1, 0, b); }
   tplPaint();
 }
+function tplVidFor(id){ openVideoUp(no => { const b = tplCur && tplFind(id); if(!b) return; b.no = String(no); tplPaint(); }, tplCur && tplCur.mk); }
 function tplUpFor(id){
   openFreeUp(no => { const b = tplCur && tplFind(id); if(!b) return; const ns = tplNums(b.no); if(!ns.includes(no)) ns.push(no); b.no = ns.join(", "); tplPaint(); }, tplCur && tplCur.mk);
 }
@@ -3636,6 +3751,125 @@ function tplApply(){
   document.getElementById("tplBg").remove();
   paintProf();
   toast("プロフに入れました。下の「💾 プロフを保存」を押すと、公式HPにも入れる画面が出ます");
+}
+/* ---------- 🎀 お店ごとの「本人から一言」の飾りテンプレ（2026/11/9）----------
+   ・prof_settings の introTemplates：{ お店のキー: { name, html, color, by, at } }（SQL 235）
+   ・html の中の {{タイトル}} と {{本文}} に、タイトル・本文が入る。本文の「＊」の行は color の色
+   ・サクラムーンは 🎨 テンプレ（花びらカード）が組みこみなので、ここでは登録しない
+   ・サクラムーンからほかのお店に写すとき（📋 他店舗へ一括反映）に「飾りテンプレで入れる／文だけ／入れない」を選べる */
+let introTpls = null;   // 読んだテンプレ（null＝まだ読んでいない）
+async function introTplLoad(force){
+  if(introTpls && !force) return introTpls;
+  try{ const r = q(await sb.from("prof_settings").select("value").eq("key", "introTemplates").maybeSingle()); introTpls = (r && r.value && typeof r.value === "object" && !Array.isArray(r.value)) ? r.value : {}; }
+  catch(e){ introTpls = introTpls || {}; }
+  return introTpls;
+}
+const skKeyOf = label => Object.keys(PROF_STORE_OF).find(k => PROF_STORE_OF[k] === label) || "";
+function introTplRender(t, title, body){
+  if(!t || !t.html) return "";
+  const b = tplBody(body, "", t.color || "#ff6699");
+  return String(t.html).replace(/\{\{\s*タイトル\s*\}\}/g, tplEsc(title || "")).replace(/\{\{\s*本文\s*\}\}/g, b);
+}
+// 文だけ（飾りなし）：タイトル＋空行＋本文（＊はとる）
+function introPlain(title, body){
+  const b = String(body || "").replace(/\r/g, "").split("\n").map(l => l.replace(/^\s*[＊*]\s*/, "")).join("\n").trim();
+  return (String(title || "").trim() ? String(title).trim() + "\n\n" : "") + b;
+}
+// そのお店の「本人から一言」から、タイトル・本文をとりだす（テンプレの材料 → 花びらカード → 文のまま）
+function introSrcOf(data, sk){
+  const html = String(profGet(data, sk, "comment") || "");
+  const m = tplUnpack(html), card = m && (m.blocks || []).find(b => b.type === "card");
+  if(card && (card.title || card.body)) return { title: card.title || "", body: card.body || "" };
+  const r = tplReadBack(html); if(r.title || r.body) return { title: r.title || "", body: r.body || "" };
+  const tx = document.createElement("div"); tx.innerHTML = html.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, "").replace(/<br\s*\/?>/gi, "\n");
+  return { title: "", body: tx.textContent.replace(/\n{3,}/g, "\n\n").trim() };
+}
+// 🎀 テンプレの登録画面
+async function openIntroTplEditor(mk){
+  if(!CAN_EDIT) return;
+  await introTplLoad(true);
+  const keys = Object.keys(PROF_STORE_OF).filter(k => k !== "sakuramoon");
+  mk = keys.includes(mk) ? mk : keys[0];
+  let bg = document.getElementById("itBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "itBg"; bg.style.cssText = "position:fixed;inset:0;z-index:335;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg);
+    bg.addEventListener("click", e => { if(e.target === bg && confirm("飾りテンプレの画面を閉じますか？（保存していない分は消えます）")) bg.remove(); }); }
+  const t = introTpls[mk] || {};
+  bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:980px;width:100%;max-height:92vh;overflow:auto;font-size:14px">
+    <b style="font-size:17px">🎀 お店ごとの飾りテンプレ（本人から一言）</b>
+    <div class="hint" style="margin:4px 0 8px">お店の紹介文の飾り（HTML）を登録しておくと、サクラムーンから写すときに、タイトル・本文をこの飾りに入れられます。<b>{{タイトル}}</b> と <b>{{本文}}</b> のところに入ります。サクラムーンは花びらカード（🎨 テンプレ）を使います。</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">お店 <select id="it_store" onchange="openIntroTplEditor(this.value)">${keys.map(k => `<option value="${k}" ${k === mk ? "selected" : ""}>${esc(PROF_STORE_OF[k])}${introTpls[k] && introTpls[k].html ? " ✅" : ""}</option>`).join("")}</select>
+      名前 <input id="it_name" value="${esc(t.name || "")}" placeholder="例：ラナの紫リボン" style="width:180px">
+      「＊」の行の色 <input id="it_color" type="color" value="${esc(t.color || "#ff6699")}" oninput="introTplPv()" style="width:48px;padding:0">
+      ${t.at ? `<span class="hint">最後に保存：${esc(String(t.at).slice(0, 16).replace("T", " "))} ${esc(t.by || "")}</span>` : ""}</div>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:8px" class="tplGrid">
+      <div><div class="hint" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">飾りのHTML
+        <button type="button" class="btn btn-ghost btn-sm" onclick="introTplIns('{{タイトル}}')">＋ {{タイトル}}</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="introTplIns('{{本文}}')">＋ {{本文}}</button></div>
+        <textarea id="it_html" oninput="introTplPv()" style="width:100%;min-height:340px;font-family:monospace;font-size:12px" placeholder="例：&lt;div style=&quot;border:3px solid #b07cc6;border-radius:16px;padding:16px;text-align:center&quot;&gt;&#10;  &lt;b style=&quot;font-size:20px;color:#8e44ad&quot;&gt;{{タイトル}}&lt;/b&gt;&lt;br /&gt;&lt;br /&gt;&#10;  {{本文}}&#10;&lt;/div&gt;">${esc(t.html || "")}</textarea>
+        <div class="hint">いまの公式HPの紹介文（そのお店の、いちばん気に入っている子のもの）を貼って、タイトルと本文の文字を {{タイトル}} {{本文}} に書きかえるのがかんたんです。</div></div>
+      <div><div class="hint">見え方（見本の文で）</div><div id="it_pv" style="border:1.5px solid var(--line);border-radius:12px;min-height:340px;max-height:60vh;overflow:auto;padding:6px;background:#fff"></div></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+      ${t.html ? `<button class="btn btn-ghost" style="color:#C0392B;margin-right:auto" onclick="introTplDel('${mk}')">🗑 このお店のテンプレを消す</button>` : ""}
+      <button class="btn btn-ghost" onclick="document.getElementById('itBg').remove()">閉じる</button>
+      <button class="btn btn-primary" onclick="introTplSave('${mk}')">💾 保存</button></div></div>`;
+  introTplPv();
+}
+function introTplIns(s){ const ta = $("it_html"); const p = ta.selectionStart != null ? ta.selectionStart : ta.value.length; ta.value = ta.value.slice(0, p) + s + ta.value.slice(ta.selectionEnd != null ? ta.selectionEnd : p); ta.focus(); ta.selectionStart = ta.selectionEnd = p + s.length; introTplPv(); }
+function introTplPv(){
+  const host = $("it_pv"); if(!host) return;
+  const html = introTplRender({ html: $("it_html").value, color: $("it_color").value }, "『見本のタイトル♡』", "はじめまして！見本の本文です。\n＊ここは「＊」をつけた行（色がつく）\n\n2つ目の段落です。\n会えるのを楽しみにしてるね");
+  tplShadow(host, html.trim() ? html : `<div style="color:#bbb;padding:20px;text-align:center">（左に飾りのHTMLを入れると、ここに見え方が出ます）</div>`, TPL_STORES.sakuramoon);
+}
+async function introTplSave(mk){
+  const html = $("it_html").value.trim();
+  if(html && !/\{\{\s*本文\s*\}\}/.test(html)){ toast("{{本文}} を入れてください（本文が入る場所）"); return; }
+  await introTplLoad(true);
+  const all = Object.assign({}, introTpls);
+  if(html) all[mk] = { name: $("it_name").value.trim(), html, color: $("it_color").value, by: (typeof operatorName === "function" ? operatorName() : ""), at: new Date().toISOString() };
+  else delete all[mk];
+  try{ q(await sb.from("prof_settings").upsert({ key: "introTemplates", value: all })); introTpls = all; toast("💾 保存しました"); openIntroTplEditor(mk); }
+  catch(e){ toast("保存できませんでした（SQL 235 はもう実行しましたか？）：" + (e.message || e)); }
+}
+async function introTplDel(mk){
+  if(!confirm(`${PROF_STORE_OF[mk]} の飾りテンプレを消しますか？（もう入れた紹介文は、そのままです）`)) return;
+  $("it_html").value = ""; await introTplSave(mk);
+}
+// 🎀 このお店のタブで：タイトル・本文（サクラムーンから）→ このお店の飾りテンプレで「本人から一言」に入れる
+async function introTplApplyOpen(){
+  if(!pf || !CAN_EDIT) return;
+  pfCollect();
+  await introTplLoad(true);
+  const mk = skKeyOf(pf.sk), t = introTpls[mk];
+  if(!t || !t.html){ if(confirm(`${pf.sk} の飾りテンプレがまだありません。いま登録しますか？`)) openIntroTplEditor(mk); return; }
+  const src = introSrcOf(pf.data, "サクラムーン");
+  let bg = document.getElementById("itaBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "itaBg"; bg.style.cssText = "position:fixed;inset:0;z-index:325;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
+  bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:980px;width:100%;max-height:92vh;overflow:auto;font-size:14px">
+    <b style="font-size:17px">🎀 ${esc(pf.sk)} の飾りテンプレで「本人から一言」を作る</b><span class="hint">（${esc(t.name || "飾りテンプレ")}）</span>
+    <div class="hint" style="margin:4px 0 8px">タイトル・本文は、サクラムーンの紹介文から入れてあります。このお店用に直してもOK。「✍️ 入れる」で、このお店のタブの「本人から一言」がこれに入れかわります。</div>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px" class="tplGrid">
+      <div><label class="hint">タイトル</label><input id="ita_title" value="${esc(src.title)}" oninput="introTplApplyPv()" style="width:100%">
+        <label class="hint" style="display:flex;gap:6px;align-items:center;margin-top:6px">本文（行の頭に「＊」で色の行・空の行で段落があく） ${tplSnipSelect("ita_body")}</label>
+        <textarea id="ita_body" oninput="introTplApplyPv()" style="width:100%;min-height:300px">${esc(src.body)}</textarea></div>
+      <div><div class="hint">見え方</div><div id="ita_pv" style="border:1.5px solid var(--line);border-radius:12px;min-height:300px;max-height:60vh;overflow:auto;padding:6px;background:#fff"></div></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-ghost" style="margin-right:auto" onclick="openIntroTplEditor('${mk}')">🎀 飾りテンプレを直す</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('itaBg').remove()">閉じる</button>
+      <button class="btn btn-primary" onclick="introTplApplyRun()">✍️ 本人から一言に入れる</button></div></div>`;
+  introTplApplyPv();
+}
+function introTplApplyPv(){
+  const t = (introTpls || {})[skKeyOf(pf && pf.sk)]; if(!t || !$("ita_pv")) return;
+  tplShadow($("ita_pv"), introTplRender(t, $("ita_title").value, $("ita_body").value), TPL_STORES.sakuramoon);
+}
+function introTplApplyRun(){
+  const t = (introTpls || {})[skKeyOf(pf.sk)]; if(!t) return;
+  if(!$("ita_body").value.trim()){ toast("本文を書いてください"); return; }
+  $("pf_c").value = introTplRender(t, $("ita_title").value, $("ita_body").value); reflPv("pf_c");
+  pfCollect(); document.getElementById("itaBg").remove(); paintProf();
+  toast("入れました。下の「💾 プロフを保存」を押すと、公式HPにも入れる画面が出ます");
 }
 /* ---------- 🧩 よく使うHTML（紹介文を書くときに、カーソルのところに入れる）2026/11/9 ---------- */
 const TPL_SNIPS = [
