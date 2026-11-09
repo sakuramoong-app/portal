@@ -128,7 +128,11 @@
   }
   /* 📝 プロフ（キャストプロフと同じ見た目） */
   .pfTabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
-  .h3p{font-size:12px;font-weight:800;color:#2f5f8f;margin-right:6px;cursor:pointer;white-space:nowrap}
+  .h3prow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:2px}
+  .h3p{display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:900;color:#2f5f8f;cursor:pointer;white-space:nowrap;border:1.5px solid #CFE0F6;border-radius:99px;padding:3px 12px;background:#fff}
+  .h3p input{width:auto !important;margin:0}
+  .h3p.on{background:#2f7fd0;border-color:#2f7fd0;color:#fff}
+  .h3pm{flex:1;min-width:220px;padding:5px 10px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:12.5px;background:#fff}
   .pfTab{border:1.5px solid #F1E3E7;background:#fff;border-radius:99px;padding:5px 12px;font-family:inherit;font-size:12.5px;font-weight:800;color:#9C8B8F;cursor:pointer}
   .pfTab.on{background:#FF9EC0;border-color:#FF9EC0;color:#fff}
   .pfPanel{background:#fff;border:1.5px solid #F7D9E2;border-radius:16px;margin-bottom:10px;overflow:hidden}
@@ -1236,7 +1240,7 @@ function paintAnswer(){
       <b style="font-size:15px">📨 ${esc(nameOf(c))}さんの答え</b><span class="hint">${fmtDT(a.submitted_at)}</span><span style="flex:1"></span>
       <span class="ansProg">対応 ${nDone} / ${ANS_SECTIONS.length}</span></div>
     <div class="hint" style="margin:4px 0 8px">上から順に見て、台帳・キャストプロフ・受付ルールに入れたら「対応した」にチェック。全部終わったら、いちばん下の「✅ 照合した」。</div>
-    ${CAN_EDIT && c.prof_id && !a.reviewed_at ? `<button class="btn btn-primary" style="width:100%;margin-bottom:8px" onclick="finOpen()">✏️ この画面で直して完成させる</button>` : ""}
+    ${CAN_EDIT && c.prof_id && !a.reviewed_at ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><button class="btn btn-primary" style="flex:1" onclick="finOpen()">✏️ この画面で直して完成させる</button><button class="btn btn-ghost" onclick="reviewOnly()">✅ 照合済みにするだけ（自分で直したとき）</button></div>` : ""}
     ${sec("profile", "📝 プロフィール", prof, "")}
     ${sec("intro", "💬 紹介文", intro, "")}
     ${sec("options", "✅ オプション", optBody, "")}
@@ -1359,6 +1363,7 @@ function paintFin(){
       <div class="ansTools">${answerToolsHtml(d, a.id)}</div><div class="hint">受付ルール・インターバルなどは、台帳（記録簿）に入れるものです（公式HPには入れません）</div></div>
     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="finPreview()">👀 完成イメージを見る（→ 完成）</button>
+      <button class="btn btn-ghost" onclick="reviewOnly()" title="キャストプロフ・公式HPを自分で直し終わったとき。アプリからは何も入れません">✅ 照合済みにするだけ（自分で直したとき）</button>
       <button class="btn btn-ghost" onclick="$('e_answer').innerHTML=''">閉じる（とちゅうの内容は残ります）</button></div></div>`;
   reflPv("fin_c"); reflPv("fin_m");
   document.querySelectorAll("#e_answer textarea.finIn[rows='1']").forEach(finGrow);
@@ -2678,34 +2683,62 @@ function paintHotelList(){
   const ro = CAN_EDIT ? "" : "disabled";
   bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:820px;width:100%;max-height:90vh;overflow:auto;font-size:13.5px">
     <b style="font-size:16px">🏨 ホテル一覧</b>
-    <div class="hint" style="margin:4px 0 8px">受付の「エリア・ホテル」とキャストごとの◎△×に使う一覧です。直したら行ごとに「💾」。</div>
+    <div class="hint" style="margin:4px 0 8px">受付の「エリア・ホテル」とキャストごとの◎△×に使う一覧です。<b>直すと自動で保存</b>されます（💾 は押さなくてもOK）。窓の外を押すと閉じます。</div>
     <div class="pfTabs">${areas.map(a => `<button type="button" class="pfTab ${a === hlArea ? "on" : ""}" onclick="hlArea='${esc(a)}';paintHotelList()">${esc(a)}（${pfHotels.filter(h => h.area === a).length}）</button>`).join("")}</div>
     ${pfHotels.filter(h => h.area === hlArea).map(h => `<div style="display:grid;grid-template-columns:1.2fr 1fr 1.2fr auto;gap:6px;align-items:center;padding:5px 0;border-top:1px dashed #F1E3E7">
       <input id="hl_n_${esc(h.hotel_id)}" value="${esc(h.hotel_name)}" ${ro}>
       <select id="hl_s_${esc(h.hotel_id)}" ${ro}>${Object.entries(ST).map(([k, l]) => `<option value="${k}" ${(h.store_status || "") === k ? "selected" : ""}>${l}</option>`).join("")}</select>
       <input id="hl_m_${esc(h.hotel_id)}" value="${esc(h.map_url || "")}" placeholder="地図のURL" ${ro}>
-      <span style="white-space:nowrap"><label class="h3p" title="3P（お客様2名・キャスト2名以上）ができるホテル。受付の3Pの案内に出ます"><input type="checkbox" id="hl_3p_${esc(h.hotel_id)}" ${hotel3p(h) ? "checked" : ""} ${ro} style="width:auto"> 👥3P可</label>${CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="saveHotel('${esc(h.hotel_id)}')">💾</button><button class="btn btn-ghost btn-sm" onclick="delHotel('${esc(h.hotel_id)}')">🗑</button>` : ""}</span>
-      <input id="hl_t_${esc(h.hotel_id)}" value="${esc(h.note || "")}" placeholder="メモ（部屋・注意など）" style="grid-column:1/-1;font-size:12.5px" ${ro}></div>`).join("") || '<div class="hint">ホテルがありません</div>'}
+      <span style="white-space:nowrap">${CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="saveHotel('${esc(h.hotel_id)}')">💾</button><button class="btn btn-ghost btn-sm" onclick="delHotel('${esc(h.hotel_id)}')">🗑</button>` : ""}</span>
+      <input id="hl_t_${esc(h.hotel_id)}" value="${esc(h.note || "")}" placeholder="メモ（部屋・注意など）" style="grid-column:1/-1;font-size:12.5px" ${ro}>
+      <div class="h3prow" style="grid-column:1/-1"><label class="h3p ${hotel3p(h) ? "on" : ""}" title="3P（お客様2名・キャスト2名以上）ができるホテル。受付の3Pの案内に出ます"><input type="checkbox" id="hl_3p_${esc(h.hotel_id)}" ${hotel3p(h) ? "checked" : ""} ${ro}> 👥 3P可能</label>
+        <input id="hl_3pm_${esc(h.hotel_id)}" class="h3pm" value="${esc(hotel3pMemo(h))}" placeholder="3Pのメモ（例：3Pは料金＋2,000円・部屋は○○のみ）→ 受付の3Pの案内に出ます" ${ro}></div></div>`).join("") || '<div class="hint">ホテルがありません</div>'}
     ${CAN_EDIT ? `<div style="background:#FFF5F8;border-radius:12px;padding:8px 10px;margin-top:10px">
       <b style="font-size:13px">＋ ホテルを足す</b>
       <div style="display:grid;grid-template-columns:1fr 1.4fr 1.4fr auto;gap:6px;margin-top:6px">
         <input id="hl_new_a" placeholder="エリア（例：池袋）" value="${esc(hlArea)}"><input id="hl_new_n" placeholder="ホテルの名前"><input id="hl_new_m" placeholder="地図のURL（なくてもOK）">
         <button class="btn btn-primary btn-sm" onclick="addHotel()">足す</button></div></div>` : ""}
     <div style="text-align:right;margin-top:10px"><button class="btn btn-ghost" onclick="document.getElementById('hotelBg').remove();if(editingId&&pf){pfCollect();paintProf();}">閉じる</button></div></div>`;
-  bg.querySelectorAll("input:not([style*='grid-column']),select").forEach(el => { el.style.cssText += ";width:100%;padding:6px 8px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;background:#FFF5F8"; });
+  bg.querySelectorAll("input:not([style*='grid-column']):not([type=checkbox]):not(.h3pm),select").forEach(el => { el.style.cssText += ";width:100%;padding:6px 8px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;background:#FFF5F8"; });
   bg.querySelectorAll("input[style*='grid-column']").forEach(el => { el.style.cssText += ";padding:5px 8px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:#fff"; });
+  // 直したら自動で保存（行ごと。💾 を押さなくてOK・窓の外を押して閉じても消えない）2026/11/9
+  if(CAN_EDIT) bg.querySelectorAll("[id^='hl_n_'],[id^='hl_s_'],[id^='hl_m_'],[id^='hl_t_'],[id^='hl_3p_'],[id^='hl_3pm_']").forEach(el => {
+    const id = el.id.replace(/^hl_(n|s|m|t|3p|3pm)_/, "");
+    el.addEventListener("change", () => { saveHotel(id, true); if(el.type === "checkbox") el.closest("label").classList.toggle("on", el.checked); });
+  });
 }
 // 👥 3P可のホテル：ホテルのタグ（prof_hotels.tags）に「3P可」を入れる（データベースの形は変えない）2026/11/9
 const TAG_3P = "3P可";
 function hotel3p(h){ return Array.isArray(h && h.tags) && h.tags.includes(TAG_3P); }
-async function saveHotel(id){
+// 3Pのメモ（料金など）もタグに「3Pメモ:…」で入れる → 受付の3Pの案内に出る
+function hotel3pMemo(h){ const t = (Array.isArray(h && h.tags) ? h.tags : []).find(x => String(x).startsWith("3Pメモ:")); return t ? String(t).slice(5) : ""; }
+async function saveHotel(id, quiet){
   const v = k => $(k + id).value.trim();
-  const h0 = pfHotels.find(h => h.hotel_id === id) || {}, t0 = (Array.isArray(h0.tags) ? h0.tags : []).filter(t => t !== TAG_3P);
-  const row = { hotel_name: v("hl_n_"), store_status: $("hl_s_" + id).value, map_url: v("hl_m_"), note: v("hl_t_"), tags: $("hl_3p_" + id) && $("hl_3p_" + id).checked ? t0.concat(TAG_3P) : t0 };
+  const h0 = pfHotels.find(h => h.hotel_id === id) || {}, t0 = (Array.isArray(h0.tags) ? h0.tags : []).filter(t => t !== TAG_3P && !String(t).startsWith("3Pメモ:"));
+  const memo = $("hl_3pm_" + id) ? $("hl_3pm_" + id).value.trim().slice(0, 100) : "";
+  const tags = t0.concat($("hl_3p_" + id) && $("hl_3p_" + id).checked ? [TAG_3P] : [], memo ? ["3Pメモ:" + memo] : []);
+  const row = { hotel_name: v("hl_n_"), store_status: $("hl_s_" + id).value, map_url: v("hl_m_"), note: v("hl_t_"), tags };
   if(!row.hotel_name){ toast("ホテルの名前を入れてください"); return; }
-  try{ q(await sb.from("prof_hotels").update(row).eq("hotel_id", id)); Object.assign(pfHotels.find(h => h.hotel_id === id) || {}, row); toast("保存しました"); }
+  try{ q(await sb.from("prof_hotels").update(row).eq("hotel_id", id)); Object.assign(pfHotels.find(h => h.hotel_id === id) || {}, row); toast(quiet ? "💾 自動で保存しました（" + row.hotel_name + "）" : "保存しました"); }
   catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
+/* 🪟 キャスト台帳の小窓：窓の外を押したら閉じる（記録簿と同じ。2026/11/9 店長）
+   ・ホテル一覧は直すと自動で保存されるので、そのまま閉じる
+   ・紹介文などを書いている窓は、書きかけがあれば「閉じますか？」と聞く
+   ・公式HPに入れている途中（進み具合の窓）・完成させている途中は閉じない */
+(function(){
+  const OK = ["hotelBg", "finPvBg", "mailBg", "sameBg", "shiftBg", "reflBg", "hpBg", "hpNewBg", "pfImpBg"];
+  let downEl = null;
+  document.addEventListener("mousedown", e => { downEl = e.target; }, true);
+  document.addEventListener("input", e => { const bg = e.target && e.target.closest && e.target.closest(OK.map(x => "#" + x).join(",")); if(bg && bg.id !== "hotelBg") bg.dataset.dirty = "1"; }, true);
+  document.addEventListener("click", e => {
+    const t = e.target; if(!t || !t.id || !OK.includes(t.id) || downEl !== t) return;
+    if((t.id === "hpBg" || t.id === "hpNewBg") && /入れています|確かめています|登録しています/.test(t.textContent || "")){ toast("公式HPに入れている途中です。終わるまで待ってください"); return; }
+    if(t.dataset.dirty && !confirm("書きかけの内容があります。保存しないで閉じますか？")) return;
+    t.remove();
+    if(t.id === "hotelBg" && typeof editingId !== "undefined" && editingId && typeof pf !== "undefined" && pf){ try{ pfCollect(); paintProf(); }catch(_){} }
+  }, true);
+})();
 async function delHotel(id){
   const h = pfHotels.find(x => x.hotel_id === id);
   if(!h || !confirm(`「${h.hotel_name}」を一覧から消しますか？（キャストの◎△×からも見えなくなります）`)) return;
@@ -2922,6 +2955,22 @@ function answerToolsHtml(d, aid){
     <div style="font-weight:800;font-size:12px">⚡ 台帳に入れる</div>
     ${items.join("") || ""}${sets.length ? `<div style="margin-top:4px">${sets.join("")}</div>` : ""}
     <div class="hint">ルールは押すと上の「📋 受付ルール」に入力欄が開きます（直して💾保存）。設定は入れたあと、いちばん下の「💾 保存する」。</div></div>`;
+}
+// ✅ 照合済みにするだけ（キャストプロフ・公式HPを自分で直し終わったとき。アプリからは何も入れない）2026/11/9 内勤さん
+async function reviewOnly(){
+  const a = (typeof fin !== "undefined" && fin && fin.a) || (ansCur && ansCur.a); if(!a) return;
+  if(!confirm("照合済みにしますか？\n\nキャストプロフ・公式HPには、アプリからは何も入れません（自分で直し終わったとき用）。\nあとで「↩ 照合済みを取り消す」で戻せます。")) return;
+  clearTimeout(typeof finTimer !== "undefined" ? finTimer : 0);
+  const rs = Object.assign({}, a.review_state || {}, { manual: true, completed_at: new Date().toISOString(), completed_by: operatorName() });
+  ["profile", "intro", "options"].forEach(k => { rs[k] = { done: true, by: operatorName(), at: new Date().toISOString() }; });
+  try{
+    q(await sb.from("prof_confirm_answers").update({ review_state: rs, reviewed_at: new Date().toISOString(), reviewed_by: operatorName() }).eq("id", a.id));
+    a.review_state = rs; a.reviewed_at = new Date().toISOString(); a.reviewed_by = operatorName();
+    if(typeof fin !== "undefined") fin = null;
+    toast("✅ 照合済みにしました（自分で直した分）");
+    await renderConfirm(editingId); refreshAnsCount(); if($("ansListBox").style.display !== "none"){ $("ansListBox").style.display = "none"; toggleAnsList(); }
+    ansCur.a = a; paintAnswer();
+  }catch(e){ toast("できませんでした：" + (e.message || e)); }
 }
 async function markReviewed(aid){
   try{

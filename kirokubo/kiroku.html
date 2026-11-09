@@ -1726,7 +1726,7 @@ function renderCastChecks(c){
     const addr = ($("f_address") && $("f_address").value.trim()) || "", curH = (M.hotels || []).find(h => h.hotel_name && addr.includes(h.hotel_name));
     const list = !h3.length ? "（キャスト台帳のホテル一覧で「👥3P可」にチェックすると、ここに出ます）"
       : !area ? "（エリアを選ぶと、3P可のホテルが出ます）"
-      : inArea.length ? "　3P可：" + inArea.map(h => h.hotel_name).join("・") : "　" + area + "に3P可のホテルが登録されていません";
+      : inArea.length ? "　3P可：" + inArea.map(h => { const m = (h.tags || []).find(t => String(t).startsWith("3Pメモ:")); return h.hotel_name + (m ? "（" + String(m).slice(5) + "）" : ""); }).join("・") : "　" + area + "に3P可のホテルが登録されていません";   // 3Pのメモ（料金など）もいっしょに
     const warn = curH && !(Array.isArray(curH.tags) && curH.tags.includes("3P可")) ? `　⚠️ 今のホテル「${curH.hotel_name}」は3P可になっていません` : "";
     ann.unshift({ text: "✅ 3P可能なホテルを案内する（" + (party.kind === "guest" ? "お客様2名" : "キャスト" + party.n + "名") + "）" + list + warn });
   }
