@@ -925,7 +925,10 @@ async function setCamera(id, v){
 }
 
 document.head.insertAdjacentHTML("beforeend", `<style>
-  .card.svc.tea{background:#D6EFD7;border-color:#7FC583} .card.svc.absent{background:#F9D3DC;border-color:#E58AA0}   /* お茶＝緑・欠勤＝赤（記録簿の本日のキャストと同じ色） */
+  /* お茶＝こい緑・欠勤＝こい赤（文字は白で見やすく）・精算済＝うすい緑＋「精算済」のはんこ（2026/11/11 店長。記録簿の本日のキャストと同じ色） */
+  .card.svc.tea{background:#43A047;border-color:#2E7D32} .card.svc.tea > h2{color:#fff} .card.svc.absent{background:#E02424;border-color:#A81414} .card.svc.absent > h2{color:#fff}
+  .card.svc.done{background:#D6EFD7 !important;border-color:#7FC583 !important;position:relative}
+  .card.svc.done::after, #list > .cblock.sdone::after{content:"精算済";position:absolute;top:6px;right:16px;transform:rotate(-12deg);border:3px solid #D32F2F;color:#D32F2F;font-weight:900;font-size:17px;letter-spacing:3px;padding:1px 10px;border-radius:10px;background:rgba(255,255,255,.55);opacity:.9;pointer-events:none;z-index:2}
   .svr.need{border-radius:14px;padding:8px;animation:svrBlink 1.1s ease-in-out infinite;border:3px solid #FFD54A}
   @keyframes svrBlink{0%,100%{box-shadow:0 0 0 0 rgba(255,193,7,.0);background:#FFFDF3}50%{box-shadow:0 0 18px 4px rgba(255,193,7,.75);background:#FFF5C9}}
   .needmsg{font-weight:900;color:#B26A00;font-size:13.5px;margin:0 0 6px}
