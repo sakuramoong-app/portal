@@ -821,6 +821,7 @@ cardHtml = function(id, c){
     <h2>${typeof KBF !== "undefined" ? KBF.img(id, 40) : ""}${esc(castName(id))}${cd.status === "お茶" ? `<span class="st tea">🟩 お茶</span>` : cd.status === "欠勤" ? `<span class="st absent">🟥 欠勤</span>` : ""}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : home ? "🏠 直帰" : nothing ? "精算なし（キャンセル・トビだけ）" : "未精算"}</span>${done && (UNS || []).some(x => x.cast_id === id && x.biz_date === day && !x.done_on) ? `<span class="st" style="background:#FDE7E7;color:#c0392b;margin-left:4px">⚠️ 未精算あり</span>` : ""}
       ${done && cd.settled_at ? (() => { const s = cd.settle_snapshot || {}, later = s.paidOn && s.paidOn !== day;   // いつ・どこで・だれが（後日の合算・個別の精算も）2026/11/5
         return `<small class="hint2 sdwho">${later ? `<b>${s.only ? "📮 後日に個別精算" : "📮 後日に合算で精算"}</b>：` : ""}${esc(logWhen(cd.settled_at))}${cd.settle_place ? "・" + esc(cd.settle_place) : ""}${cd.settled_by ? "・" + esc(cd.settled_by) : ""}</small>`; })() : ""}</h2>
+    ${!done && !off && !nothing ? sgHtml(id, c, cd) : ""}
     ${resPickHtml(id, c)}
     <div class="svg2"><div class="svl">
     <details class="svf" ${svOpen.has(id) ? "open" : ""} ontoggle="this.open ? svOpen.add('${id}') : svOpen.delete('${id}')">
@@ -966,20 +967,48 @@ const phCache = {};   // "営業日|キャスト" → [{ name, url }] ／ null�
 const phKey = id => day + "|" + id;
 const plSel = {};   // 精算場所のプルダウンで選んだもの（精算済にするまで覚えておく）
 const noPhoto = {};   // 📷 写真なし（キャストがくれなかった）にチェックした子（精算済にすると、精算の履歴に残る）
+/* ---------- 🎲 精算のすごろく（2026/11/11 店長：ぱっと見でどこまで終わったかわかるように）----------
+   ① 予約がぜんぶ終わった → ② 投函の額を入れた → ③ お金の写真（または「写真なし」）→ ④ 📹 監視カメラの確認（ポスティングのときだけ）→ ⑤ 精算済 */
+function sgSteps(id, c, cd){
+  c = c || calcCast(id); cd = cd || unsCD()[id] || {};
+  const live = (c.live || []).filter(r => !["cancel", "tobi", "flowed"].includes(r.status));
+  const ph = phCache[phKey(id)], place = plSel[id] || cd.settle_place || PLACES[0];
+  const s = [
+    { k: "res", l: "予約が終わった", ok: live.length > 0 && live.every(r => r.status === "done") },
+    { k: "dep", l: "投函の額", ok: c.deposited != null },
+    { k: "ph", l: "お金の写真", ok: !!(ph && ph.length) || !!noPhoto[id] },
+  ];
+  if(place && place !== "回収") s.push({ k: "cam", l: "📹 カメラ確認", ok: (cd.camera_check || "") === "ok" });
+  s.push({ k: "done", l: "精算済", ok: !!cd.settled });
+  return s;
+}
+function sgHtml(id, c, cd){
+  const s = sgSteps(id, c, cd), next = s.findIndex(x => !x.ok);
+  return `<div class="sg" id="sg-${id}">${s.map((x, i) => `<span class="sgs ${x.ok ? "ok" : i === next ? "now" : ""}"><b>${x.ok ? "✓" : "①②③④⑤"[i]}</b>${esc(x.l)}</span>${i < s.length - 1 ? `<span class="sga ${x.ok ? "ok" : ""}"></span>` : ""}`).join("")}</div>`;
+}
+function sgRepaint(id){ const el = document.getElementById("sg-" + id); if(el){ try{ el.outerHTML = sgHtml(id); }catch(e){} } }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .sg{display:flex;align-items:center;flex-wrap:wrap;gap:2px;margin:4px 0 8px;font-size:12px;font-weight:800}
+  .sg .sgs{display:inline-flex;align-items:center;gap:4px;padding:3px 9px 3px 4px;border-radius:99px;background:#F4EEF0;color:#9C8B8F;border:1.5px solid #E6DADE}
+  .sg .sgs b{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#fff;color:#9C8B8F;font-size:12px}
+  .sg .sgs.ok{background:#E3F6E8;color:#1E7A3C;border-color:#8FD3A0} .sg .sgs.ok b{background:#2E9E4A;color:#fff}
+  .sg .sgs.now{background:#FFF3C4;color:#8A6100;border-color:#F2C94C;animation:svrBlink 1.4s ease-in-out infinite} .sg .sgs.now b{background:#F2A900;color:#fff}
+  .sg .sga{display:inline-block;width:14px;height:3px;background:#E6DADE;border-radius:2px} .sg .sga.ok{background:#8FD3A0}
+</style>`);
 function photoBox(id){
   const k = phKey(id);
   if(!(k in phCache)){ phCache[k] = null; setTimeout(() => phLoad(id), 0); }
   const list = phCache[k] || [], ed = KB.CAN_EDIT, cd = unsCD()[id] || {}, done = !!cd.settled, snapNo = !!(cd.settle_snapshot || {}).noPhoto;
   return `<div class="phbox" id="ph-${id}" ${ed ? `tabindex="0" onpaste="phPaste(event,'${id}')"` : ""}>
     <div class="phh">📷 お金・領収書の写真 <b style="color:#c0392b;font-size:12px">（必須）</b> <small>${phCache[k] === null ? "読みこみ中…" : list.length ? list.length + "枚" : "まだありません"}</small></div>
-    ${!list.length && (done ? snapNo : ed) ? `<label class="nophoto"><input type="checkbox" ${noPhoto[id] || snapNo ? "checked" : ""} ${done ? "disabled" : ""} onchange="noPhoto['${id}'] = this.checked"> 📷 写真なし（キャストがくれなかった）</label>` : ""}
+    ${!list.length && (done ? snapNo : ed) ? `<label class="nophoto"><input type="checkbox" ${noPhoto[id] || snapNo ? "checked" : ""} ${done ? "disabled" : ""} onchange="noPhoto['${id}'] = this.checked; sgRepaint('${id}')"> 📷 写真なし（キャストがくれなかった）</label>` : ""}
     ${list.length ? `<div class="phthumbs">${list.map(p => `<span class="pht"><a href="${p.url}" target="_blank" rel="noopener"><img src="${p.url}" alt="写真" loading="lazy"></a>${ed ? `<button type="button" class="phdel" title="この写真を消す" onclick="phDel('${id}','${p.name}')">×</button>` : ""}</span>`).join("")}</div>` : ""}
     ${ed ? `<div class="phbtns"><label class="btn btn-ghost btn-sm">📷 写真をとる<input type="file" accept="image/*" capture="environment" hidden onchange="phFiles(this,'${id}')"></label>
       <label class="btn btn-ghost btn-sm">🖼 写真を選ぶ<input type="file" accept="image/*" multiple hidden onchange="phFiles(this,'${id}')"></label>
       <small class="phhint">PCは、この枠をクリックしてから Ctrl＋V で貼り付けられます</small></div>` : ""}
   </div>`;
 }
-function phRepaint(id){ const el = document.getElementById("ph-" + id); if(el) el.outerHTML = photoBox(id); }
+function phRepaint(id){ const el = document.getElementById("ph-" + id); if(el) el.outerHTML = photoBox(id); sgRepaint(id); }   // 写真を入れたら、すごろくも
 async function phLoad(id){
   const k = phKey(id), dir = day + "/" + id;
   try{
