@@ -7,6 +7,7 @@
 <link rel="icon" type="image/png" href="../favicon.png?v=3">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
+<script src="kb_face.js?v=1"></script><!-- 🖼 キャストの写真アイコン -->
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
 <style>
   /* 色・文字はキャストプロフ（内勤ページ）と同じ */
@@ -552,7 +553,7 @@ function render(){
     const links = (c.shift_name?'<span class="bd link">📅シフト</span>':"") + (c.prof_id?'<span class="bd link">📝プロフ</span>':"") + ((c.room_ids||[]).length?'<span class="bd link">🚪ルーム</span>':"");
     return `<div class="row ${$("editBg").classList.contains("show") && c.id === editingId ? "sel" : ""}" data-g="${gyouOf(c)}" onclick="openEdit('${c.id}')">
       <span class="id">${c.id}</span>
-      <span class="nm">${esc(nameOf(c))}<small>${esc(c.kana || (c.official_name ? "" : "仮の名前"))}</small></span>
+      ${typeof KBF !== "undefined" ? KBF.img(c, 36) : ""}<span class="nm">${esc(nameOf(c))}<small>${esc(c.kana || (c.official_name ? "" : "仮の名前"))}</small></span>
       <span class="badges">${ranks}${links}</span>${sendMode ? sendCell(c) : ""}
       <span class="st ${c.status}">${STATUS[c.status]||c.status}</span>
     </div>`;
@@ -4316,7 +4317,7 @@ function openEdit(id){
   if($("e_hotel")) $("e_hotel").innerHTML = `<div class="hint">プロフとつながると、ここでこのキャストのホテルの◎△×を入れられます</div>`;
   pfOpen.clear(); pfEdit.basic = pfEdit.opts = false;
   const c = id ? casts.find(x=>x.id===id) : { status:"interview", aliases:[], stores:{}, ranks:{}, room_ids:[] };
-  $("editTitle").textContent = id ? `${nameOf(c)}（${id}）` : "＋ キャストを追加";
+  $("editTitle").innerHTML = id ? `${typeof KBF !== "undefined" ? KBF.img(c, 60) : ""}${esc(nameOf(c))}（${esc(id)}）` : "＋ キャストを追加";   // 🖼 写真つき（2026/11/11）
   $("editHint").textContent = id ? "直したら「保存する」を押してください。" : "名前が決まっていなければ、仮の名前だけでOKです。";
   $("e_official").value = c.official_name || ""; $("e_kana").value = c.kana || ""; $("e_temp").value = c.temp_name || "";
   $("e_status").value = c.status || "active"; $("e_join").value = c.join_date || ""; $("e_leave").value = c.leave_date || "";

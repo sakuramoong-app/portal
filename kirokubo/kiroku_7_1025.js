@@ -1440,5 +1440,16 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 document.head.insertAdjacentHTML("beforeend", `<style>textarea.msg.msgedit{background:#FFFBEA !important;border:2px solid #F2B705 !important}</style>`);
 
+// 🖼 受付でキャストを選んだら、写真（公式HPのサムネ。18・極門の本物のキャストも）2026/11/11 店長
+{ const __onCastFace = onCast; onCast = function(){
+  const r = __onCastFace.apply(this, arguments);
+  // 写真は専用の場所（#castFace）に：キャストの情報（#castInfo）は、あとからプロフを読んで書きなおされるため
+  const info = $("castInfo"); if(!info) return r;
+  let el = $("castFace"); if(!el){ el = document.createElement("div"); el.id = "castFace"; info.parentNode.insertBefore(el, info); }
+  const c = M.casts.find(x => x.id === $("f_cast").value);
+  el.innerHTML = c && typeof KBF !== "undefined" ? `<div class="castface" style="display:flex;gap:8px;align-items:flex-end;margin:4px 0 6px">${KBF.img(c, 90, $("f_store").value)}<div><b style="font-size:15px">${esc(c.official_name || c.temp_name || "")}</b>${isDummyStore($("f_store").value) ? `<br><small style="color:var(--sub)">⭐ 本物のキャスト</small>` : ""}</div></div>` : "";
+  return r;
+}; }
+
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
 init();
