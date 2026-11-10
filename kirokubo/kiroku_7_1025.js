@@ -1451,5 +1451,40 @@ document.head.insertAdjacentHTML("beforeend", `<style>textarea.msg.msgedit{backg
   return r;
 }; }
 
+// 🖼 受付のキャストを「写真の一覧」で選ぶ（2026/11/11 店長：ビジュアルでわかるように）。プルダウンもそのまま使える
+//   その日の出勤の子を、出勤が早い順に写真のカードで。押すとその子を選ぶ（プルダウンを変えたのと同じ）
+function paintCastGrid(){
+  const sel = $("f_cast"); if(!sel || typeof KBF === "undefined") return;
+  let box = $("castGrid");
+  if(!box){ box = document.createElement("div"); box.id = "castGrid"; sel.insertAdjacentElement("afterend", box); }
+  const opts = [...sel.querySelectorAll("option")].filter(o => o.value);
+  if(!opts.length){ box.innerHTML = ""; return; }
+  const cur = sel.value, store = $("f_store") ? $("f_store").value : "";
+  box.innerHTML = opts.map(o => {
+    const c = M.casts.find(x => x.id === o.value); if(!c) return "";
+    const tm = (o.textContent.split("　")[1] || "").trim();   // 「名前　12:00〜22:00」の時間
+    const off = o.parentElement && /シフトにない/.test(o.parentElement.label || "");
+    return `<button type="button" class="cg-c ${o.value === cur ? "on" : ""} ${off ? "off" : ""}" onclick="pickCastGrid('${o.value}')" title="${esc(o.textContent)}">${KBF.img(c, 48, store)}<span class="cg-n">${esc(c.official_name || c.temp_name || "")}</span>${tm ? `<span class="cg-t">${esc(tm)}</span>` : ""}</button>`;
+  }).join("");
+}
+function pickCastGrid(id){
+  const sel = $("f_cast"); if(!sel || sel.value === id) return;
+  sel.value = id; sel.dispatchEvent(new Event("change", { bubbles: true }));
+  if(typeof formDirty !== "undefined") formDirty = true;
+  paintCastGrid();
+}
+{ const __fillCastSelG = fillCastSel; fillCastSel = function(){ const r = __fillCastSelG.apply(this, arguments); paintCastGrid(); return r; }; }
+{ const __onCastG = onCast; onCast = function(){ const r = __onCastG.apply(this, arguments); document.querySelectorAll("#castGrid .cg-c").forEach(b => b.classList.toggle("on", (b.getAttribute("onclick") || "").includes("'" + $("f_cast").value + "'"))); return r; }; }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  #castGrid{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;max-height:300px;overflow:auto;padding:2px}
+  #castGrid .cg-c{font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:2px;width:78px;padding:5px 3px 6px;border:2px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
+  #castGrid .cg-c .kbface{margin:0}
+  #castGrid .cg-c:hover{border-color:#F2A7C3}
+  #castGrid .cg-c.on{border-color:#E5638C;background:#FFE8EF;box-shadow:0 0 0 3px #F8BBD0}
+  #castGrid .cg-c.off{opacity:.55}
+  #castGrid .cg-n{font-size:12px;font-weight:900;line-height:1.2;text-align:center;word-break:break-all}
+  #castGrid .cg-t{font-size:10.5px;color:var(--sub);font-weight:700}
+</style>`);
+
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
 init();
