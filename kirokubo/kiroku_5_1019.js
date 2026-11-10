@@ -1287,7 +1287,7 @@ saveRes = async function(){
   const st = $("f_status").value, cid = $("f_cast").value, was = editing ? editing.status : "";
   await __saveResM();
   if(cid && st === "moving" && was !== "moving") markMoving(cid);
-  if(!$("formBg").classList.contains("show")){ try{ localStorage.removeItem(DRAFT_KEY); }catch(e){} draftPaint(); }   // 登録できたら、一時保存は消す
+  if(!$("formBg").classList.contains("show")) draftDone();   // 登録できたら、その一時保存だけ消す（ほかのストックは残す）2026/11/11
 };
 
 /* ---------- 🏨 ホテルの部屋番号を入れたら、新規のお客さんは「在室確認をする？」を窓で聞く ---------- */
@@ -1443,8 +1443,18 @@ function lastNomiPaint(){
       if(d) $("msg").value = $("msg").value.replace(/^(【名前】[^\n]*本指名)(?!（前回)/m, `$1（前回 ${d}）`); }catch(e){}
     return r; }; }
 /* ---------- ⏸ 一時保存（編集中）：受付の外を押す・「⏸ 一時保存」で、入れたところまでとっておく → 右下の点滅ボタンで続きから ---------- */
-const DRAFT_KEY = "kbResDraft";
-function draftGet(){ try{ return JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); }catch(e){ return null; } }
+const DRAFT_KEY = "kbResDraft";        // 前の形（1つだけ）。読んだら新しい形に移す
+const DRAFTS_KEY = "kbResDrafts";      // ⏸ 一時保存のストック（いくつでも。新しい順・10こまで）2026/11/11 店長
+const DRAFT_MAX = 10;
+let draftCur = null;                   // いま続きを書いている一時保存の id（同じものに上書きする）
+function draftList(){
+  let a = [];
+  try{ a = JSON.parse(localStorage.getItem(DRAFTS_KEY) || "[]"); if(!Array.isArray(a)) a = []; }catch(e){ a = []; }
+  try{ const old = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); if(old){ old.key = old.key || ("d" + Date.now()); a.unshift(old); localStorage.removeItem(DRAFT_KEY); localStorage.setItem(DRAFTS_KEY, JSON.stringify(a.slice(0, DRAFT_MAX))); } }catch(e){}
+  return a;
+}
+function draftPut(a){ try{ localStorage.setItem(DRAFTS_KEY, JSON.stringify(a.slice(0, DRAFT_MAX))); }catch(e){} }
+function draftGet(){ return draftList()[0] || null; }   // 前の形の呼び方（いちばん新しいもの）
 function draftSave(close){
   if(!KB.CAN_EDIT || !$("formBg").classList.contains("show")) return;
   // 開いただけで何も変えていないときは、一時保存しない（閉じるだけ）2026/11/4
@@ -1455,17 +1465,22 @@ function draftSave(close){
     vals[el.id] = el.type === "checkbox" ? el.checked : el.value;
   });
   document.querySelectorAll("#formBg input[type=radio][name]:checked").forEach(el => { radios[el.name] = el.value; });
-  const d = { id: editing ? editing.id : null, day, at: new Date().toISOString(), by: KB.operatorName(), vals, radios,
-    st: { visit, mediaSel, free: $("f_free").value, wig: typeof wigSel !== "undefined" ? wigSel : "", under: typeof underSel !== "undefined" ? underSel : "", party: JSON.parse(JSON.stringify(party)), biz: typeof bizState !== "undefined" ? Object.assign({}, bizState) : null },
+  const id = editing ? editing.id : null;
+  // 同じ一時保存（続きから開いたもの）・同じ予約の一時保存があれば上書き。なければ新しく足す（いちばん上に）
+  const a = draftList(), key = draftCur || (id != null && (a.find(x => x.id === id) || {}).key) || ("d" + Date.now() + Math.random().toString(36).slice(2, 6));
+  const d = { key, id, day, at: new Date().toISOString(), by: KB.operatorName(), vals, radios,
+    st: { visit, mediaSel, free: $("f_free").value, wig: typeof wigSel !== "undefined" ? wigSel : "", under: typeof underSel !== "undefined" ? underSel : "", party: JSON.parse(JSON.stringify(party)), biz: typeof bizState !== "undefined" ? JSON.parse(JSON.stringify(bizState)) : null },
     label: [$("f_start").value, $("f_cast").value ? castName($("f_cast").value) : "", $("f_name").value].filter(Boolean).join(" ") || "（まだ何も入っていない）" };
-  try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); }catch(e){}
-  if(close){ closeForm(); toast("⏸ 編集中として一時保存しました（右下のボタンで続きから）"); }
+  draftCur = key;
+  draftPut([d].concat(a.filter(x => x.key !== key)));
+  if(close){ closeForm(); toast("⏸ 編集中として一時保存しました（右下から続きを開けます）"); }
   draftPaint();
 }
-async function draftResume(){
-  const d = draftGet(); if(!d) return;
+async function draftResume(key){
+  const a = draftList(), d = key ? a.find(x => x.key === key) : a[0]; if(!d) return;
   if(d.day && d.day !== day && $("day")){ $("day").value = d.day; await loadDay(); }
   openForm(d.id);
+  draftCur = d.key;   // openForm のあとに（openForm で空になるので）
   const v = d.vals || {}, set = id => { const el = $(id); if(!el || !(id in v)) return; if(el.type === "checkbox") el.checked = !!v[id]; else el.value = v[id]; };
   set("f_store"); onStore(); set("f_cast"); onCast();
   Object.keys(v).forEach(id => { const m = /^f_xop_label_(\d+)$/.exec(id); if(m) addXop(Number(m[1])); });   // ＋で足したほかのOPの欄も
@@ -1483,26 +1498,36 @@ async function draftResume(){
   recalc(); draftPaint(); formDirty = true;   // 続きから開いたものは、閉じるとまた一時保存する
   toast("✏️ 一時保存したところから続けます");
 }
-function draftDrop(){ if(!confirm("一時保存した受付を消しますか？")) return; try{ localStorage.removeItem(DRAFT_KEY); }catch(e){} draftPaint(); }
+function draftDrop(key){
+  const a = draftList(), d = a.find(x => x.key === key) || a[0]; if(!d) return;
+  if(!confirm(`一時保存した受付「${d.label}」を消しますか？`)) return;
+  draftPut(a.filter(x => x.key !== d.key)); if(draftCur === d.key) draftCur = null; draftPaint();
+}
+// 登録できたら、その一時保存だけ消す（ほかのストックは残す）
+function draftDone(){ if(!draftCur) return; draftPut(draftList().filter(x => x.key !== draftCur)); draftCur = null; draftPaint(); }
+let draftOpenList = false;
 function draftPaint(){
   let el = $("draftBtn");
-  const d = draftGet(), open = $("formBg").classList.contains("show");
-  if(!d || open){ if(el) el.remove(); return; }
+  const a = draftList(), open = $("formBg").classList.contains("show");
+  if(!a.length || open){ if(el) el.remove(); return; }
   if(!el){ el = document.createElement("div"); el.id = "draftBtn"; document.body.appendChild(el); }
-  el.innerHTML = `<button type="button" class="dr-go" onclick="draftResume()">✏️ 編集中の受付：${esc(d.label)}<small>（${esc(d.by || "")} ${whenShort(d.at)}・押すと続きから）</small></button><button type="button" class="dr-x" onclick="draftDrop()" title="消す">✕</button>`;
+  const item = d => `<div class="dr-row"><button type="button" class="dr-go" onclick="draftResume('${d.key}')">✏️ ${esc(d.label)}<small>（${d.day && d.day !== day ? esc(d.day.slice(5).replace("-", "/")) + "の受付・" : ""}${esc(d.by || "")} ${whenShort(d.at)}・押すと続きから）</small></button><button type="button" class="dr-x" onclick="draftDrop('${d.key}')" title="消す">✕</button></div>`;
+  el.innerHTML = a.length === 1 ? item(a[0])
+    : `<div class="dr-head"><button type="button" class="dr-go" onclick="draftOpenList=!draftOpenList;draftPaint()">⏸ 一時保存の受付が <b>${a.length}こ</b> あります<small>（${draftOpenList ? "押すとしまう" : "押すと一覧"}）</small></button></div>${draftOpenList ? `<div class="dr-list">${a.map(item).join("")}</div>` : ""}`;
 }
 // 受付の外を押したときの一時保存は、上の KB.closeOnBackdrop で（閉じる前に保存する）
 // 別のタブ・アプリに移ったとき・ページを閉じるときも、入力中なら一時保存しておく（閉じない）
 document.addEventListener("visibilitychange", () => { if(document.visibilityState === "hidden") draftSave(false); });
 window.addEventListener("pagehide", () => draftSave(false));
 { const __closeFormD = closeForm; closeForm = function(){ const r = __closeFormD.apply(this, arguments); setTimeout(draftPaint, 0); return r; }; }
-{ const __openFormD = openForm; openForm = function(){ formDirty = false; const r = __openFormD.apply(this, arguments); draftPaint(); return r; }; }
+{ const __openFormD = openForm; openForm = function(){ formDirty = false; draftCur = null; const r = __openFormD.apply(this, arguments); draftPaint(); return r; }; }
 // 受付の中で何か入れた・選んだ・押した → 「変えた」とする（開いたときに自動で入る値は数えない）
 var formDirty = false;
 ["input", "change"].forEach(ev => $("formBg").addEventListener(ev, e => { if(e.isTrusted) formDirty = true; }, true));
 $("formBg").addEventListener("click", e => { if(e.isTrusted && e.target.closest && e.target.closest("#formBg .drawer button:not(.x), #formBg .drawer .chip, #formBg .drawer .ynp")) formDirty = true; }, true);
 document.head.insertAdjacentHTML("beforeend", `<style>
-  #draftBtn{position:fixed;right:14px;bottom:70px;z-index:960;display:flex;gap:4px;align-items:stretch}
+  #draftBtn{position:fixed;right:14px;bottom:70px;z-index:960;display:flex;flex-direction:column;gap:4px;align-items:flex-end;max-height:70vh;overflow:auto}
+  #draftBtn .dr-row{display:flex;gap:4px;align-items:stretch} #draftBtn .dr-list{display:flex;flex-direction:column;gap:4px}
   body:has(#draftBtn) #toTopBtn{bottom:136px}   /* 一時保存の札があるときは、⬆（上に戻る）をその上へ（かぶらないように）2026/11/7 */
   #draftBtn .dr-go{font-family:inherit;font-size:14px;font-weight:800;border:2.5px solid #E5486C;background:#FFE8EC;color:#B0213F;border-radius:14px;padding:8px 14px;cursor:pointer;text-align:left;display:flex;flex-direction:column;animation:blinkwarn 1.1s ease-in-out infinite;box-shadow:0 4px 14px rgba(0,0,0,.18)}
   #draftBtn .dr-go small{font-size:11px;font-weight:700;opacity:.8}
