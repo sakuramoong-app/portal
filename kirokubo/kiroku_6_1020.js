@@ -639,7 +639,7 @@ function resCard(r, i){
   const told = r.cast_notified_at   // 押すと「キャストまだ」⇔「キャストOK」（伝えたか）
     ? `<button class="told on" onclick="toggleNotified(${r.id})" title="${esc(r.cast_notified_by || "")} ${whenShort(r.cast_notified_at)}に伝えた。押すと取り消し">✅ キャストOK</button>`
     : `<button class="told" onclick="toggleNotified(${r.id})" title="キャストに伝えたら押す">⚠️ キャストまだ</button>`;
-  const ops = (r.options || []).filter(o=>!["af", "gyakuaf"].includes(o.code)).map(o=>o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・");
+  const ops = (r.options || []).filter(o=>!["af", "gyakuaf"].includes(o.code)).map(o=>(typeof KBF !== "undefined" && !/^[🎁👥]/.test(o.label) ? KBF.opIcon(o.label) : "") + o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・");
   const afw = [r.af_wish === "yes" ? "AF" : "", r.rev_af_wish === "yes" ? "逆AF" : ""].filter(Boolean).join("・");
   const cardStep = r.payment !== "cash" || isSplitPay(r) ? cardSel(r).replace(/^<br>/, "") : "";
   const payUrl = (r.payment === "card" || isSplitPay(r)) && (r.card_step || "unsent") === "unsent" ? `<a class="payurl" href="${PAY_ADMIN_URL}" target="_blank" rel="noopener" title="${esc(PAY_ADMIN_URL)}">💳 決済URL</a>` : "";
@@ -649,13 +649,13 @@ function resCard(r, i){
   const lastLogs = logOf(r).filter(x => x.text && String(x.text).trim()).slice(-2).reverse();
   const memoInline = lastLogs.length ? `<div class="rc-memo" title="${esc(lastLogs.map(l => String(l.text).trim() + "（" + (l.by || "") + " " + whenShort(l.at) + "）").join("\n"))}">📝 ${lastLogs.map(l => esc(String(l.text).trim())).join("<i>／</i>")}</div>` : "";
   const mates = partyMates(r);
-  return `<div class="rescard ${cx ? "cx" : ""} ${no == null ? "" : "rcs rs-" + r.status}" id="rc-${r.id}">   <!-- ①〜⑥の色は、予約の状態の色（2026/11/5） -->
+  return `<div class="rescard ${cx ? "cx" : ""} ${no == null ? "" : "rcs rs-" + r.status}" id="rc-${r.id}" style="border-top:4px solid ${typeof KBF !== "undefined" ? KBF.storeColor(r.store_key) : "transparent"}">   <!-- ①〜⑥の色は、予約の状態の色（2026/11/5） -->
     <div class="rc-top">
       ${noTxt ? `<span class="rc-no st ${r.status}">${noTxt}</span>` : ""}
       <span class="stbox">${stSel}${statusAtChip(r, ed)}</span>
       <small class="rc-lbl">開始</small>${ed ? `<input type="time" class="rc-time" value="${hmIn(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>
       ${r.phone_draft ? `<span class="rc-draft" title="スマホで仮入力。PCで開いて確かめると取り入れます">📱仮入力</span>` : ""}${r.dummy_name ? `<span class="rc-store">🎭${esc(r.dummy_name)}</span>` : ""}
-      <span class="rc-k">📍<b>${esc(r.area || "エリアなし")}</b></span>
+      ${typeof KBF !== "undefined" ? KBF.storeChip(r.store_key) : ""}<span class="rc-k">📍<b>${esc(r.area || "エリアなし")}</b></span>
       ${ed ? `<button type="button" class="rc-hotel" onclick="openHotelBox(${r.id})" title="ホテル名・部屋番号・地図（開かずに入れられる）">🏨 ${esc(r.address || "ホテル・部屋を入れる")}</button>${cx ? "" : rcHotelWarn(r)}` : r.address ? `<span class="rc-k">🏨 ${esc(r.address)}</span>` : ""}${r.address ? `<button type="button" class="rc-hcopy" title="ホテル名と部屋番号をコピー" onclick="rcCopyAddr(${r.id})">📋</button>` : ""}
       <span class="rc-k">${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""}${r.extension_count ? "＋延長" + r.extension_count : ""}</span>
       <span class="rc-k">総額 <b class="rc-yen">${yen(r.total)}</b><small>（${r.payment === "cash" && Number(r.card_total) > 0 ? "現金＋カード " + yen(Number(r.card_total)) : esc(PAY_LABEL[r.payment] || "")}）</small></span>

@@ -214,6 +214,8 @@ function openForm(id){
 function closeForm(){ $("formBg").classList.remove("show"); }
 
 function onStore(r){
+  // 🏪 受付のお店の欄を、お店の色に（2026/11/11）
+  { const sel = $("f_store"), col = typeof KBF !== "undefined" && sel.value ? KBF.storeColor(sel.value) : ""; sel.style.boxShadow = col ? "inset 8px 0 0 " + col : ""; sel.style.borderColor = col || ""; }
   const store = $("f_store").value, g = storeGroup(store);
   const list = M.prices.filter(p=>p.store_key===store);
   const keep = (r && r.course) || $("f_course").value;
@@ -227,7 +229,7 @@ function onStore(r){
     // AF・逆AF は上の「必ず聞く」で選ぶので、ここには出さない（チェックだけ自動）
     return `<div class="opt" ${["af", "gyakuaf"].includes(o.code) ? 'style="display:none"' : ""}>
       <input type="checkbox" id="o_${o.code}" ${s?"checked":""} onchange="recalc()">
-      <label class="lbl" for="o_${o.code}">${esc(o.label)}${o.note?`<br><small>${esc(o.note)}</small>`:""}</label>
+      <label class="lbl" for="o_${o.code}">${typeof KBF !== "undefined" ? `<span class="opic">${KBF.opIcon(o.label)}</span>` : ""}${esc(o.label)}${o.note?`<br><small>${esc(o.note)}</small>`:""}</label>
       <input type="number" id="oq_${o.code}" min="1" value="${qty}" title="${o.unit==="per_item"?"枚数":o.unit==="per_cast"?"キャストの人数":"回数"}" oninput="recalc()" ${o.unit==="once"?'style="visibility:hidden"':""}>
       <input type="number" id="op_${o.code}" value="${s?s.price:o.price}" title="料金（1回あたり）" oninput="recalc()" ${o.manual?"":"readonly"}>
       <input type="number" id="ob_${o.code}" value="${s?s.back:o.back}" title="バック（1回あたり）" oninput="recalc()" ${o.manual?"":"readonly"}>
@@ -813,7 +815,7 @@ function renderPops(sel){
     const s = keep["pop_" + p.id];
     return `<div class="opt">
       <input type="checkbox" id="pp_${p.id}" ${s ? "checked" : ""} onchange="recalc()">
-      <label class="lbl" for="pp_${p.id}">🎁 ${esc(p.label)}${p.note ? `<br><small>${esc(p.note)}</small>` : ""}</label>
+      <label class="lbl" for="pp_${p.id}">🎁${typeof KBF !== "undefined" ? `<span class="opic">${KBF.opIcon(p.label)}</span>` : " "}${esc(p.label)}${p.note ? `<br><small>${esc(p.note)}</small>` : ""}</label>
       <input type="number" id="ppq_${p.id}" min="1" value="${s ? s.qty || 1 : 1}" title="着数・枚数" oninput="recalc()" ${p.unit === "per_item" ? "" : 'style="visibility:hidden"'}>
       <input type="number" id="ppp_${p.id}" value="${s ? s.price : p.price}" title="料金（1回あたり）" oninput="recalc()">
       <input type="number" id="ppb_${p.id}" value="${s ? s.back : p.back}" title="バック（1回あたり）" oninput="recalc()">

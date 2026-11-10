@@ -120,7 +120,7 @@ renderBoard = function(){
     }
     // その子の今日の予約（何時から・場所・コース・お客さん）を箇条書きで
     const bl = x.bks.filter(b=>!["cancel", "tobi", "flowed"].includes(b.r.status)).sort((a, b)=>a.s - b.s)
-      .map(b=>`<li class="${b.r.status === "done" ? "dn" : ""}">${esc(hm(b.r.start_at))} ${esc(b.r.area || "")} ${esc(b.r.course || "")}${/^\d+$/.test(b.r.course || "") ? "分" : ""} ${esc((b.r.kb_customers || {}).name || "")} <span class="st ${b.r.status}" style="font-size:10.5px;padding:0 6px">${esc(STATUS[b.r.status] || "")}</span></li>`).join("");
+      .map(b=>`<li class="${b.r.status === "done" ? "dn" : ""}">${typeof KBF !== "undefined" ? KBF.storeDot(b.r.store_key) : ""}${esc(hm(b.r.start_at))} ${esc(b.r.area || "")} ${esc(b.r.course || "")}${/^\d+$/.test(b.r.course || "") ? "分" : ""} ${esc((b.r.kb_customers || {}).name || "")} <span class="st ${b.r.status}" style="font-size:10.5px;padding:0 6px">${esc(STATUS[b.r.status] || "")}</span></li>`).join("");
     const cd1 = x.cd || {};
     // 中抜け：もどる時間・再開する場所／直帰／🈵 満了／出張・他エリアは行き先（2026/11/7）
     const brk = cd1.status === "中抜け" ? `<small class="brk">（中抜け${cd1.break_back ? " 〜" + esc(cd1.break_back) + "にもどる" : ""}${cd1.break_place ? "・" + esc(cd1.break_place) + "で再開" : ""}）</small>` : "";

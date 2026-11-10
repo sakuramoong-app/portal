@@ -43,9 +43,27 @@
     const s = document.createElement("span"); s.className = "kbface kbface-ini"; s.style.cssText = `width:${w}px;height:${h}px;font-size:${Math.round(w * .5)}px`; s.textContent = el.dataset.ini || "？";
     el.replaceWith(s);
   }
+  // 🏪 お店の色（どの画面でも同じ色。2026/11/11 店長：ビジュアルでわかるように）
+  const STORE_COLOR = { sakuramoon: "#E5638C", lana_uguisu: "#8E5BD6", lana_kinshi: "#5C6BC0", dressgarden: "#00897B", peachmoon: "#F57C4A",
+    gyakuanal: "#B71C1C", cutie: "#E6A700", eighteen: "#1E88E5", gokumon: "#37474F" };
+  const STORE_SHORT = { sakuramoon: "サクラムーン", lana_uguisu: "ラナ鶯谷", lana_kinshi: "ラナ錦糸町", dressgarden: "ドレスガーデン", peachmoon: "ピーチムーン",
+    gyakuanal: "逆AF倶楽部", cutie: "キューティー", eighteen: "18", gokumon: "極門" };
+  const storeColor = k => STORE_COLOR[k] || "#9C8B8F";
+  // お店の札（色の帯＋名前）。label を渡さなければ短い名前
+  const storeChip = (k, label) => k ? `<span class="kbstore" style="background:${storeColor(k)}">${esc(label || STORE_SHORT[k] || k)}</span>` : "";
+  const storeDot = k => k ? `<span class="kbsdot" style="background:${storeColor(k)}" title="${esc(STORE_SHORT[k] || k)}"></span>` : "";
+  // 🎨 オプションのアイコン（名前の言葉で自動。上から先に当たったもの）2026/11/11
+  const OP_ICON = [[/逆AF|逆ＡＦ/, "🔄"], [/AF|ＡＦ|アナル/, "🍑"], [/射精|発射|ザーメン/, "💦"], [/コスプレ|衣装|制服|ナース|セーラー|メイド|バニー/, "👗"],
+    [/パンスト|ストッキング|網タイツ|タイツ/, "🦵"], [/ランジェリー|下着|ブラ|ショーツ/, "👙"], [/SM|ＳＭ|拘束|ロープ|縄|手錠|ボンデージ|ムチ|鞭/, "⛓️"],
+    [/おもちゃ|バイブ|ローター|ディルド|ペニバン|電マ/, "🪄"], [/撮影|ポラ|写真|動画/, "📷"], [/聖水|おしっこ|放尿/, "🚿"], [/キス|ディープ/, "💋"],
+    [/女装|女レ|メイク/, "💄"], [/3P|4P|３Ｐ|４Ｐ/, "👥"], [/延長/, "⏱️"], [/泊|お泊/, "🌙"], [/マッサージ|オイル|ローション/, "🧴"], [/足|脚|フェチ/, "🦶"]];
+  const opIcon = label => { const t = String(label || ""); for(const [re, ic] of OP_ICON) if(re.test(t)) return ic; return "✨"; };
   const st = document.createElement("style");
   st.textContent = `.kbface{display:inline-block;flex:none;vertical-align:middle;object-fit:cover;object-position:center top;border-radius:8px;border:1.5px solid #F3D3DD;background:#FFF2F6;box-shadow:0 1px 3px rgba(92,75,79,.12);margin-right:6px}
-    .kbface-ini{display:inline-flex;align-items:center;justify-content:center;font-weight:900;color:#C2185B;background:linear-gradient(160deg,#FFE3EC,#FFF7FA)}`;
+    .kbface-ini{display:inline-flex;align-items:center;justify-content:center;font-weight:900;color:#C2185B;background:linear-gradient(160deg,#FFE3EC,#FFF7FA)}
+    .kbstore{display:inline-block;color:#fff;font-weight:900;font-size:12px;border-radius:99px;padding:2px 10px;white-space:nowrap;vertical-align:middle;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+    .kbsdot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;margin-right:4px;box-shadow:0 0 0 1.5px #fff}
+    .opic{display:inline-block;font-size:17px;margin-right:4px;vertical-align:-2px}`;
   (document.head || document.documentElement).appendChild(st);
-  window.KBF = { SITE, ORDER, byId, src, img, ini, broken };
+  window.KBF = { SITE, ORDER, byId, src, img, ini, broken, STORE_COLOR, STORE_SHORT, storeColor, storeChip, storeDot, OP_ICON, opIcon };
 })();
