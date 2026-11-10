@@ -26,12 +26,37 @@ function workNow(x){
 // 仕事中：①予約の状態が「仕事中」②今の時刻に予約がある → 自動。ただし、そのあとに札を動かしていたら、動かしたほうが勝ち（新しいほう）
 function autoWork(x){
   if(!x.c) return null;
+  const isToday = day === KB.bizDateOf(), now = nowHour();
   const w = rows.find(r=>r.cast_id === x.c.id && r.status === "working");
-  if(w) return { r: w, t: Date.parse(w.updated_at || w.start_at || 0) || 0 };
+  // 「仕事中」のまま終わりの時刻をすぎた予約は、仕事中にしない（⏹ 仕事終了（振り分け待ち）へ）2026/11/11 店長
+  const wb = w && x.bks.find(b => b.r === w);
+  if(w && !(isToday && wb && now > wb.e)) return { r: w, t: Date.parse(w.updated_at || w.start_at || 0) || 0 };
   const b = workNow(x);
+  if(b && b.r.status === "working" && isToday && now > b.e) return null;
   return b ? { r: b.r, t: Date.parse(b.r.start_at) || 0 } : null;
 }
-const manualT = x=>(x.cd && x.cd.updated_at) ? Date.parse(x.cd.updated_at) || 0 : 0;
+// 手で動かした時刻：札・今どこ・状態を変えた（kb_cast_days.updated_at）か、鶯谷の席に座らせた時刻の、新しいほう
+const manualT = x=>{
+  const a = (x.cd && x.cd.updated_at) ? Date.parse(x.cd.updated_at) || 0 : 0;
+  const s = x.c && typeof seatsOk !== "undefined" && seatsOk && typeof seatOf === "function" ? seatOf(x.c.id) : null;
+  return Math.max(a, s ? Date.parse(s.start_at) || 0 : 0);
+};
+// ⏹ 仕事終了（振り分け待ち）：予約を「終了」にした・「仕事中」のまま終わりの時刻をすぎた → そのあと手で動かしていなければ、この段に（2026/11/11 店長）
+//   内勤さんが札を動かす・今どこ・状態を変える・鶯谷の席に座らせると、ふつうの段にもどる
+function endedOf(x){
+  if(!x.c || day !== KB.bizDateOf()) return null;
+  const now = nowHour(), msOf = h => { const d0 = Date.parse(day + "T00:00:00+09:00"); return d0 + h * 3600000; };
+  let best = null;
+  x.bks.forEach(b => {
+    let t = 0;
+    if(b.r.status === "done") t = Math.max(Date.parse(b.r.status_at || b.r.updated_at || 0) || 0, Math.min(msOf(b.e), Date.now()));
+    else if(b.r.status === "working" && now > b.e) t = msOf(b.e);
+    if(t && (!best || t > best.t)) best = { r: b.r, b, t };
+  });
+  if(!best || best.t <= manualT(x)) return null;
+  if(workNow(x) && !(workNow(x).r.status === "working" && now > workNow(x).e)) return null;   // いま別の予約の時間なら、仕事中のほう
+  return best;
+}
 boardState = function(x){
   const cd = x.cd || {};
   const aw = autoWork(x);
@@ -39,6 +64,7 @@ boardState = function(x){
   if(cd.settled && !["待機中", "仕事中"].includes(cd.status)) return "gone";   // 先に精算して待機中・仕事中のままの子は、まだいる（2026/11/6）
   if(["不在", "お茶", "欠勤", "中抜け"].includes(cd.status)) return "gone";
   if(cd.direct_home && !["待機中", "仕事中"].includes(cd.status)) return "gone";   // 精算で直帰 → 今いない（直帰）2026/11/7
+  if(endedOf(x)) return "ended";   // ⏹ 仕事終了（振り分け待ち）2026/11/11
   if(cd.status === "仕事中") return "work";
   if(cd.status === "予約スタート") return "start";   // 待機しないで、最初の予約から仕事を始める
   if(cd.status === "出勤前連絡") return "precall";   // 出勤前に「何時からどこで待機」と連絡があった
@@ -53,6 +79,7 @@ boardCol = function(x, state){
     if(aw && aw.t >= manualT(x)){ const a = aw.r.area || ""; return STANDBY.find(s=>a.includes(s)) || inList(sb) || "出張・他エリア"; }
     return inList(sb) || "出張・他エリア";
   }
+  if(state === "ended"){ const en = endedOf(x), a = (en && en.r.area) || ""; return STANDBY.find(s => a.includes(s)) || inList(sb) || "出張・他エリア"; }   // 仕事をしたエリアの列に
   return inList(sb);
 };
 const autoLeft = new Set();
@@ -111,17 +138,17 @@ renderBoard = function(){
     if(st === "gone"){   // 今いない：いちばん最後の予約を1行で
       const lastB = x.bks.filter(b => !["cancel", "tobi", "flowed"].includes(b.r.status)).sort((a, b) => b.s - a.s)[0];
       sub = lastB ? `<div class="cc-sub">${esc(hm(lastB.r.start_at))} ${esc(lastB.r.area || "")} ${esc(lastB.r.course || "")}${/^\d+$/.test(lastB.r.course || "") ? "分" : ""} ${esc((lastB.r.kb_customers || {}).name || "")}　${esc(STATUS[lastB.r.status] || "")}</div>` : `<div class="cc-sub">予約なし</div>`;
-    }else sub = `${trip}${pill}${bl ? `<ul class="bkl">${bl}</ul>` : ""}`;
+    }else sub = `${trip}${pill}${st === "ended" ? (() => { const en = endedOf(x); return en ? `<br><span class="endnote">⏹ ${esc(hm(en.r.end_at))}に終わり${en.r.status === "working" ? "（まだ「仕事中」のまま）" : ""}・札を動かして場所を決めてね</span>` : ""; })() : ""}${bl ? `<ul class="bkl">${bl}</ul>` : ""}`;
     return `<div class="chipc ${cls}${cd1.status === "中抜け" ? " brkc" : ""}" data-cid="${cid}" data-st="${st}"><div class="cc-top"><b class="cc-nm">【${esc(castLabel(x))}】${esc(sh)}</b>${badges}</div>${sub}${movingHtml(x)}${seat}<span class="cc-go">›</span></div>`;
   };
   const th = c=>`<th class="${AREA_CLASS[c] || ""}">📍 ${esc(c)}${c === "鶯谷" ? ` <button type="button" class="logbtn" onclick="openSeatLog()">📜 ログ</button>` : ""}</th>`;
   const fulls = tlRows().filter(x => x.c && x.cd && x.cd.full_at);
-  const ROWS = [["wait", "⏳ 待機中"], ["work", "💼 仕事中"], ["start", "▶️ 予約スタート"], ["precall", "📞 出勤前連絡"]];
+  const ROWS = [["wait", "⏳ 待機中"], ["work", "💼 仕事中"], ["ended", "⏹ 仕事終了<br><small>振り分け待ち</small>"], ["start", "▶️ 予約スタート"], ["precall", "📞 出勤前連絡"]];
   const cnt = k => cols.reduce((a, c) => a + (cell[k + "|" + c] || []).length, 0), all = ROWS.reduce((a, [k]) => a + cnt(k), 0) + gone.length;
   const bf = boardFilter, hide = k => bf && bf !== k ? " bf-hide" : "";
   const fchip = (k, l, n) => `<button type="button" class="bfc ${k || "all"} ${bf === k ? "on" : ""}" onclick="setBoardFilter('${k}')">${l} <b>${n}</b></button>`;
   el.innerHTML = (fulls.length ? `<div class="fullbar">🈵 満了：${fulls.map(x => `<b>${esc(castLabel(x))}</b>`).join("、")}　<small>（この日の新しい予約は受けません）</small></div>` : "")
-    + `<div class="bfbar">${fchip("", "すべて", all)}${ROWS.map(([k, l]) => fchip(k, l.replace(/^\S+\s/, ""), cnt(k))).join("")}${fchip("gone", "今いない", gone.length)}</div>`
+    + `<div class="bfbar">${fchip("", "すべて", all)}${ROWS.map(([k, l]) => fchip(k, l.replace(/^\S+\s/, "").replace(/<br>.*$/, ""), cnt(k))).join("")}${fchip("gone", "今いない", gone.length)}</div>`
     + `<table class="board"><tr><th class="corner"></th>${cols.map(th).join("")}</tr>`
     + ROWS.map(([k, l])=>`<tr class="${k}${hide(k)}"><th>${l}</th>${cols.map(c=>`<td class="${AREA_CLASS[c] || ""}" data-drop="${k}|${esc(c)}">${(cell[k + "|" + c] || []).map(x=>chip(x, k, c)).join("")}</td>`).join("")}</tr>`).join("")
     + `<tr class="gone${hide("gone")}"><th>🙈 今いない<div class="gonen">${gone.length}人</div><div class="golegend"><span class="lg tea"></span>お茶 <span class="lg abs"></span>欠勤<br><span class="lg"></span>不在 <span class="lg brk"></span>中抜け<br><small>押すと色：不在→お茶→欠勤</small></div></th><td colspan="${cols.length}" data-drop="gone">${gone.length ? `<div class="gonegrid">${gone.map(x=>chip(x, "gone", "")).join("")}</div>` : `<span class="hist" style="margin:0">なし</span>`}</td></tr>`
@@ -134,7 +161,9 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .bfbar{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}
   .bfc{font-family:inherit;font-size:14px;font-weight:800;border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:5px 14px;cursor:pointer;color:#5C4B4F;box-shadow:0 1px 3px rgba(0,0,0,.05)}
   .bfc b{display:inline-block;min-width:22px;margin-left:4px;padding:0 6px;border-radius:99px;background:#F4EEF0;color:#8a7f83;font-size:12.5px}
-  .bfc.wait{color:#9a7000} .bfc.work{color:#c9556a} .bfc.start{color:#1f5d99} .bfc.precall{color:#6c5896} .bfc.gone{color:#666}
+  .bfc.wait{color:#9a7000} .bfc.work{color:#c9556a} .bfc.ended{color:#B26A00} .bfc.start{color:#1f5d99} .bfc.precall{color:#6c5896} .bfc.gone{color:#666}
+  table.board tr.ended > th:first-child{background:#FFF1D6;color:#B26A00} table.board tr.ended td{background-image:repeating-linear-gradient(135deg,rgba(255,193,7,.08) 0 10px,transparent 10px 20px)}
+  #boardGrid .chipc.ended{border:2.5px dashed #F2A900;background:#FFFBEF} #boardGrid .endnote{display:inline-block;margin-top:3px;font-size:11.5px;font-weight:800;color:#B26A00;background:#FFF1D6;border-radius:99px;padding:1px 8px}
   .bfc.on{background:#E5638C;border-color:#E5638C;color:#fff} .bfc.on b{background:rgba(255,255,255,.3);color:#fff}
   table.board tr.bf-hide{display:none}
   table.board th.a-ike, table.board th.a-ugu, table.board th.a-goh, table.board th.a-kin, table.board th.a-home, table.board th.a-other{font-size:15px;padding:10px 8px}
@@ -299,7 +328,7 @@ function tlNowLoc(x){
   try{ st = boardState(x); col = boardCol(x, st) || ""; }catch(e){ return ""; }
   const gk = goneKind(x.cd, x);
   const t = st === "work" ? "🔴 仕事中" + (col ? "（" + col + "）" : "") : st === "wait" ? "🟡 " + (col ? col + "で待機" : "待機中") : st === "before" ? "🟪 出勤前" + (col ? "（" + col + "）" : "")
-    : st === "start" ? "🔵 予約スタート" : gk ? (gk === "お茶" ? "🟩 お茶" : "🟥 欠勤") : (x.cd && x.cd.settled) ? "✅ 精算済" : "⬜ 今いない";
+    : st === "ended" ? "🟧 仕事終了（振り分け待ち）" + (col ? "（" + col + "）" : "") : st === "start" ? "🔵 予約スタート" : gk ? (gk === "お茶" ? "🟩 お茶" : "🟥 欠勤") : (x.cd && x.cd.settled) ? "✅ 精算済" : "⬜ 今いない";
   return `<span class="tlloc ${st}">${esc(t)}</span>`;
 }
 document.head.insertAdjacentHTML("beforeend", `<style>.tlloc{display:inline-block;margin-left:4px;font-size:11px;font-weight:800;border-radius:99px;padding:0 6px;background:#F3F3F3;color:#555;vertical-align:middle} .tlloc.work{background:#EADCFB;color:#6c3fb5} .tlloc.wait{background:#FFF4C9;color:#8a6d00} .tlloc.before{background:#EEE8FB;color:#5b3fa6}</style>`);

@@ -1176,6 +1176,9 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   /* やわらかい色（原色はやめる。2026/11/4 きゃ）：さくらピンクと、ラベンダー */
   #list > .cblock.cb-a{border:4px solid #F4A3BE;background:#FFF2F6;}
   #list > .cblock.cb-b{border:4px solid #F4A3BE;background:#FFF2F6;}   /* 2026/11/5：色ちがいはチカチカするので、全部ピンクに */
+  /* お茶＝こい緑・欠勤＝こい赤：交互の色より強く（2026/11/11 名前が見えなかった） */
+  #list > .cblock.tea, #list > .cblock.tea.cb-a, #list > .cblock.tea.cb-b{background:#43A047;border-color:#2E7D32;}
+  #list > .cblock.absent, #list > .cblock.absent.cb-a, #list > .cblock.absent.cb-b{background:#E02424;border-color:#A81414;}
   /* 予約①〜⑥の色（カードの左の線と番号の札）：さくら・ピーチ・ミント・そら・ラベンダー・レモン */
   .rescard.rcn1{border-left:6px solid #F4A3BE;} .rescard.rcn1 .rc-no{background:#FDE3EC;color:#B2456B;border-color:#F4A3BE;}
   .rescard.rcn2{border-left:6px solid #F7BE95;} .rescard.rcn2 .rc-no{background:#FDEBDD;color:#A35A22;border-color:#F7BE95;}
