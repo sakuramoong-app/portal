@@ -1503,6 +1503,7 @@ function draftDrop(key){
   if(!confirm(`一時保存した受付「${d.label}」を消しますか？`)) return;
   draftPut(a.filter(x => x.key !== d.key)); if(draftCur === d.key) draftCur = null; draftPaint();
 }
+function draftDropAll(){ const a = draftList(); if(!a.length || !confirm(`一時保存した受付 ${a.length}こを、全部消しますか？`)) return; draftPut([]); draftCur = null; draftOpenList = false; draftPaint(); }
 // 登録できたら、その一時保存だけ消す（ほかのストックは残す）
 function draftDone(){ if(!draftCur) return; draftPut(draftList().filter(x => x.key !== draftCur)); draftCur = null; draftPaint(); }
 let draftOpenList = false;
@@ -1511,9 +1512,10 @@ function draftPaint(){
   const a = draftList(), open = $("formBg").classList.contains("show");
   if(!a.length || open){ if(el) el.remove(); return; }
   if(!el){ el = document.createElement("div"); el.id = "draftBtn"; document.body.appendChild(el); }
-  const item = d => `<div class="dr-row"><button type="button" class="dr-go" onclick="draftResume('${d.key}')">✏️ ${esc(d.label)}<small>（${d.day && d.day !== day ? esc(d.day.slice(5).replace("-", "/")) + "の受付・" : ""}${esc(d.by || "")} ${whenShort(d.at)}・押すと続きから）</small></button><button type="button" class="dr-x" onclick="draftDrop('${d.key}')" title="消す">✕</button></div>`;
+  // 一覧の1つずつに「🗑 消す」、一覧のいちばん下に「🗑 全部消す」（2026/11/11 店長）
+  const item = d => `<div class="dr-row"><button type="button" class="dr-go" onclick="draftResume('${d.key}')">✏️ ${esc(d.label)}<small>（${d.day && d.day !== day ? esc(d.day.slice(5).replace("-", "/")) + "の受付・" : ""}${esc(d.by || "")} ${whenShort(d.at)}・押すと続きから）</small></button><button type="button" class="dr-x" onclick="draftDrop('${d.key}')" title="この一時保存を消す">🗑 消す</button></div>`;
   el.innerHTML = a.length === 1 ? item(a[0])
-    : `<div class="dr-head"><button type="button" class="dr-go" onclick="draftOpenList=!draftOpenList;draftPaint()">⏸ 一時保存の受付が <b>${a.length}こ</b> あります<small>（${draftOpenList ? "押すとしまう" : "押すと一覧"}）</small></button></div>${draftOpenList ? `<div class="dr-list">${a.map(item).join("")}</div>` : ""}`;
+    : `<div class="dr-head"><button type="button" class="dr-go" onclick="draftOpenList=!draftOpenList;draftPaint()">⏸ 一時保存の受付が <b>${a.length}こ</b> あります<small>（${draftOpenList ? "押すとしまう" : "押すと一覧"}）</small></button></div>${draftOpenList ? `<div class="dr-list">${a.map(item).join("")}<div class="dr-row" style="justify-content:flex-end"><button type="button" class="dr-x" onclick="draftDropAll()">🗑 全部消す</button></div></div>` : ""}`;
 }
 // 受付の外を押したときの一時保存は、上の KB.closeOnBackdrop で（閉じる前に保存する）
 // 別のタブ・アプリに移ったとき・ページを閉じるときも、入力中なら一時保存しておく（閉じない）

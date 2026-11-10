@@ -221,7 +221,7 @@ function rowsOf(c){
     course: r.course + (/^\d+$/.test(r.course) ? "分" : "") + (r.extension_count ? " 延長" + r.extension_count : ""), place: [r.area, r.address].filter(Boolean).join(" "), total: r.total,
     status: ["cancel", "tobi", "flowed"].includes(r.status) ? r.status : r.status === "done" ? "done" : "yet", card: r.payment !== "cash",
     memo: (r.memo_log || []).map(m=>m.text).join("\n"), castng: false, marks: null }));
-  const b = c._hist.map(h=>({ src: "excel", row: h.src_row, date: h.biz_date, store: h.store_key ? storeLabel(h.store_key) : h.store_raw, cast: h.cast_id ? castLabel(h.cast_id) : h.cast_raw, cast_id: h.cast_id,
+  const b = c._hist.map(h=>({ src: h.marks && h.marks.kind === "inquiry" ? "inquiry" : "excel", by: (h.marks && h.marks.by) || "", row: h.src_row, date: h.biz_date, store: h.store_key ? storeLabel(h.store_key) : h.store_raw, cast: h.cast_id ? castLabel(h.cast_id) : h.cast_raw, cast_id: h.cast_id,
     course: h.course, place: [h.area, h.place].filter(Boolean).join(" "), total: h.total, status: h.status, card: h.card, memo: h.memo, castng: h.cast_ng, marks: h.marks, hid: h.id }));
   // 台帳エクセルの行が、記録簿の予約と キャスト・お店・総額・場所 まで同じなら、同じ利用を2回書いたもの（日付の打ちまちがいがあっても）
   //   → 出さない・数えない（記録簿の受付と同じ）。キャストNG・備考がある行だけは、消えないように出す（利用の数には入れない）
@@ -297,6 +297,7 @@ function paintDetail(){
     </div>
 
     <div class="csec"><h3>📜 利用の履歴（新しい順・${all.length}件）</h3>
+      ${KB.CAN_EDIT ? `<div style="margin:0 0 8px"><button class="btn btn-ghost btn-sm" onclick="addInquiry()">📞 ＋ 問い合わせだけの記録を足す（予約にならなかった話のメモ）</button></div>` : ""}
       ${all.length ? `<div class="hfilter">
           <button class="btn btn-sm ${histOnly ? "btn-ghost" : "btn-primary"}" onclick="histOnly=false;openCustomer(cur.id)">全部（${all.length}）</button>
           <button class="btn btn-sm ${histOnly ? "btn-primary" : "btn-ghost"}" onclick="histOnly=true;openCustomer(cur.id)">⚠️ 何かあった回だけ（${all.filter(isTrouble).length}）</button></div>
@@ -314,7 +315,7 @@ function histCard(r){
   const st = STATUS[r.status] || (r.status === "yet" ? "これから" : "");
   const memoRed = r.marks && Object.keys(r.marks).some(k => /^font:#FF0000/i.test(k) && (r.marks[k] || []).includes("AB"));
   return `<div class="hc ${r.status} ${r.castng ? "castng" : ""}">
-    <div class="hh"><b>${md(r.date) || "日付なし"}</b>${r.src === "excel" ? `<span class="tag">台帳${r.row ? " " + r.row + "行目" : ""}</span>` : ""}${r.dupNote ? `<span class="tag">記録簿の予約と同じ利用（数えない）</span>` : ""}
+    <div class="hh"><b>${md(r.date) || "日付なし"}</b>${r.src === "inquiry" ? `<span class="tag" style="background:#E3F2FD;color:#1565C0">📞 問い合わせの記録${r.by ? "（" + esc(r.by) + "）" : ""}</span>${KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11.5px;color:#C0392B" onclick="delInquiry(${r.hid})">🗑 消す</button>` : ""}` : r.src === "excel" ? `<span class="tag">台帳${r.row ? " " + r.row + "行目" : ""}</span>` : ""}${r.dupNote ? `<span class="tag">記録簿の予約と同じ利用（数えない）</span>` : ""}
       ${st ? `<span class="badge ${r.status}">${esc(st)}</span>` : ""}${r.castng ? `<span class="badge tobi">🙅 キャストNG</span>${KB.CAN_EDIT && r.hid ? `<button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11.5px" onclick="histNgOff(${r.hid})">NGではない</button>` : ""}` : ""}${r.card ? '<span class="tag">💳 カード</span>' : ""}${colorDots(r.marks)}</div>
     <div class="hm">${[r.store, r.cast, r.course, r.place].filter(Boolean).map(esc).join("　・　")}${r.total ? "　・　" + yen(r.total) : ""}</div>
     ${r.memo ? `<div class="hmemo ${memoRed ? "red" : ""}">${hl(r.memo)}</div>` : ""}</div>`;
@@ -525,12 +526,30 @@ async function custNgDecide(isNg){
   const u = isNg ? { ng_ask: false, ng_ask_done: true } : { ng: false, ng_ask: false, ng_ask_done: true };
   try{ q(await sb.from("kb_customers").update(u).eq("id", cur.id)); toast(isNg ? "⚠️ 店NGにしました" : "NGではない、にしました"); openCustomer(cur.id); search(); }catch(e){ toast("できませんでした：" + (e.message || e)); }
 }
+// 📞 問い合わせだけの記録（予約にならなかった話のメモ）：利用の履歴に「流れた」の行として残す（kb_cust_history・marks.kind=inquiry）2026/11/11 内勤さん
+async function addInquiry(custId, text){
+  const id = custId || (cur && cur.id); if(!id) return;
+  let t = text;
+  if(t == null){ t = prompt("どんな話をしたか（例：明日の20時で90分を聞かれたが、空きがなく流れた）"); if(t == null) return; }
+  t = String(t).trim(); if(!t){ toast("内容を入れてください"); return; }
+  const d0 = KB.bizDateOf(), d = (text == null ? (prompt("日付（そのままで今日）", d0) || d0) : d0).trim();
+  if(!/^\d{4}-\d\d-\d\d$/.test(d)){ toast("日付は 2026-11-11 のように入れてください"); return; }
+  try{
+    q(await sb.from("kb_cust_history").insert({ customer_id: id, biz_date: d, status: "flowed", memo: "📞 問い合わせのみ：" + t.slice(0, 500), marks: { kind: "inquiry", by: KB.operatorName(), at: new Date().toISOString() } }));
+    toast("📞 問い合わせの記録を足しました"); if(cur && cur.id === id) await openCustomer(id);
+  }catch(e){ toast("足せませんでした：" + (e.message || e)); }
+}
+async function delInquiry(hid){
+  if(!confirm("この問い合わせの記録を消しますか？")) return;
+  try{ q(await sb.from("kb_cust_history").delete().eq("id", hid)); toast("消しました"); await openCustomer(cur.id); }catch(e){ toast("消せませんでした：" + (e.message || e)); }
+}
 async function newCustomer(){
   const phone = phoneNormC(prompt("電話番号（海外は + から）") || ""); if(!phone) return;
   const ex = q(await sb.from("kb_customers").select("id").eq("phone", phone).limit(1).maybeSingle());
   if(ex){ toast("この電話番号のお客さんは、もういます"); openCustomer(ex.id); return; }
   const name = (prompt("名前") || "").trim();
-  try{ const r = q(await sb.from("kb_customers").insert({ phone, name, updated_by: KB.operatorName() }).select("id").single()); toast("足しました"); await search(); openCustomer(r.id); }
+  try{ const r = q(await sb.from("kb_customers").insert({ phone, name, updated_by: KB.operatorName() }).select("id").single()); toast("足しました"); await search(); await openCustomer(r.id);
+    const t = prompt("問い合わせだけのとき：どんな話をしたか（なければ空のまま OK）"); if(t && t.trim()) await addInquiry(r.id, t); }
   catch(e){ toast("足せませんでした：" + (e.message || e)); }
 }
 init();
