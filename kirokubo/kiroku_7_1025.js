@@ -1218,13 +1218,13 @@ const settledDone = x => !!(x.c && x.cd && x.cd.settled && !["待機中", "仕�
 const __sortRowsTea = sortRows;
 sortRows = function(list){
   const out = __sortRowsTea(list);
-  const off = x => !!goneKind(x.cd), sd = x => !off(x) && settledDone(x);
+  const off = x => !!goneKind(x.cd, x), sd = x => !off(x) && settledDone(x);
   return out.filter(x=>!off(x) && !sd(x)).concat(out.filter(sd), out.filter(off));
 };
 const __renderListTea = renderListTable;
 renderListTable = function(){
   __renderListTea.apply(this, arguments);
-  tlRows().filter(x => !goneKind(x.cd) && settledDone(x)).forEach(x => { const el = $("cb-" + x.c.id); if(el && el.parentElement && el.parentElement.id === "list") el.classList.add("sdone"); });
+  tlRows().filter(x => !goneKind(x.cd, x) && settledDone(x)).forEach(x => { const el = $("cb-" + x.c.id); if(el && el.parentElement && el.parentElement.id === "list") el.classList.add("sdone"); });
   const sel = "#list > .cblock.sdone, #list > .cblock.tea, #list > .cblock.absent", first = document.querySelector(sel);
   if(first){
     const n = k => document.querySelectorAll("#list > .cblock." + k).length;

@@ -12,10 +12,11 @@
    ・📋 本日のキャスト一覧：1キャスト1枠（予約一覧のかわり）。並び・絞りは全体を見たいと共通
    ============================================================ */
 const GONE_CYCLE = ["", "お茶", "欠勤"];   // 今いない：押すたびに ⬜不在 → 🟩お茶 → 🟥欠勤
-function goneKind(cd){
+function goneKind(cd, x){   // x：tlRows の行（前の日までにシフトを取り下げた子は「シフト取り下げ」2026/11/11）
   const s = (cd && cd.status) || "";
   // 出勤前（出勤前連絡）は、今いないではなく「出勤前連絡」の段に
   if(s === "お茶" || s === "欠勤") return s;
+  if(!s && x && x.shift && x.shift.early) return "シフト取り下げ";
   return "";
 }
 function workNow(x){
@@ -76,7 +77,7 @@ renderBoard = function(){
   const chip = (x, st, col)=>{
     const cid = x.c ? x.c.id : "";
     const sh = x.shift ? `${hShort(x.shift.start)}-${hShort(x.shift.end)}${x.shift.kanzen ? "完" : ""}` : "";
-    const gk = goneKind(x.cd);
+    const gk = goneKind(x.cd, x);
     const now = nowHour(), live = x.bks.filter(b=>!["done", "cancel", "tobi", "flowed"].includes(b.r.status));
     const rel = x.bks.find(b=>b.r.status === "working") || live.filter(b=>b.e > now).sort((a, b)=>a.s - b.s)[0];
     // 予約スタート：最初の予約の時刻を大きめに
@@ -296,7 +297,7 @@ function tlNowLoc(x){
   if(day !== KB.bizDateOf() || !x || !x.c) return "";
   let st = "gone", col = "";
   try{ st = boardState(x); col = boardCol(x, st) || ""; }catch(e){ return ""; }
-  const gk = goneKind(x.cd);
+  const gk = goneKind(x.cd, x);
   const t = st === "work" ? "🔴 仕事中" + (col ? "（" + col + "）" : "") : st === "wait" ? "🟡 " + (col ? col + "で待機" : "待機中") : st === "before" ? "🟪 出勤前" + (col ? "（" + col + "）" : "")
     : st === "start" ? "🔵 予約スタート" : gk ? (gk === "お茶" ? "🟩 お茶" : "🟥 欠勤") : (x.cd && x.cd.settled) ? "✅ 精算済" : "⬜ 今いない";
   return `<span class="tlloc ${st}">${esc(t)}</span>`;
@@ -382,7 +383,7 @@ renderListTable = function(){
   const mode = $("s_sort").value;
   el.innerHTML = (noCast.length ? block("キャスト未定", "", noCast, "") : "")
     + (casts.length ? casts.map(x=>{
-        const st = boardState(x), col = boardCol(x, st), gk = goneKind(x.cd);
+        const st = boardState(x), col = boardCol(x, st), gk = goneKind(x.cd, x);
         const sub = `${x.shift ? "出勤 " + tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) + (x.shift.kanzen ? "（完）" : "") + (x.shiftOrig ? "（予定 " + tlLabel(x.shiftOrig.start) + "〜" + tlLabel(x.shiftOrig.end) + "）" : "") : "シフトなし"}・${STATE[st]}${st !== "gone" && col ? "（" + col + "）" : gk ? "（" + gk + "）" : ""}`;
         const cls = st === "gone" ? (gk === "お茶" ? "tea" : gk === "欠勤" ? "absent" : "away") : "";
         return block("【" + esc(castLabel(x)) + "】" + (x.c && typeof kbPendingAfterSettle === "function" && kbPendingAfterSettle(x.cd, rows.filter(r=>r.cast_id === x.c.id)).length ? `<span class="part2chip" title="精算済のあとで予約がふえました。💴 精算で②の精算をしてください">⚠️ ②の精算がまだ</span>` : ""), esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart).sort(offLast) : [], x.c ? x.c.id : "", cls);

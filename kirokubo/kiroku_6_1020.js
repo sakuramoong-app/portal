@@ -74,7 +74,18 @@ document.head.insertAdjacentHTML("beforeend", `<style>.rm-r{display:flex;justify
   .rm-hint{font-size:11.5px;color:var(--sub);margin-top:6px}</style>`);
 /* ---------- 🏨 予約のカードから小窓で：ホテル名・部屋番号・地図（エリア〜交通費も見られる）。新しいホテルはリストに足せる・Googleで調べる窓（2026/11/5） ---------- */
 // 📋 ホテル名と部屋番号をいっしょにコピー（2026/11/6）
-function rcCopyAddr(id){ const r = rows.find(x => x.id === id); if(!r || !r.address) return; navigator.clipboard.writeText(r.address).then(() => toast("📋 「" + r.address + "」をコピーしました")); }
+//   2026/11/11 店長：地図のURLもいっしょに（ホテル一覧にあるホテルなら、その地図。なければ Google マップで探すURL）
+function rcMapOf(r){
+  const addr = String(r.address || "").replace(/\s/g, ""); if(!addr) return "";
+  const list = (M.hotels || []).filter(h => !r.area || !h.area || h.area === r.area).sort((a, b) => String(b.hotel_name).length - String(a.hotel_name).length);
+  const h = list.find(x => x.hotel_name && addr.includes(String(x.hotel_name).replace(/\s/g, "")));
+  return mapLink(h || { area: r.area || "", hotel_name: String(r.address).replace(/[\s　]*[0-9０-９]+[号室]*$/, "") });
+}
+function rcCopyAddr(id){
+  const r = rows.find(x => x.id === id); if(!r || !r.address) return;
+  const u = rcMapOf(r), t = r.address + (u ? "\n" + u : "");
+  navigator.clipboard.writeText(t).then(() => toast("📋 「" + r.address + "」と地図のURLをコピーしました"));
+}
 document.head.insertAdjacentHTML("beforeend", `<style>.rc-hcopy{font-family:inherit;font-size:12px;background:#fff;border:1.5px solid #9cc6ee;border-radius:99px;padding:2px 7px;cursor:pointer;margin-left:2px}</style>`);
 function openHotelBox(id){
   const r = rows.find(x => x.id === id); if(!r) return;
@@ -590,6 +601,15 @@ function memoBoxes(r){
       : `<div class="none">まだ備考はありません（受付：${esc(r.created_by || "")} ${whenShort(r.created_at)}）</div>`}</div>
     ${KB.CAN_EDIT ? `<button type="button" class="addbiko" onclick="event.stopPropagation();addLogPrompt(${r.id})">＋ 備考を書く</button>` : ""}`;
 }
+// 🚫 キャストNGのお客さんの予約を受けてしまったとき：予約のカード（小窓）にも出す（2026/11/11 店長）
+let castNgPairs = new Set();   // "お客さんのid|キャストのid"
+async function loadCastNgPairs(){
+  const ids = [...new Set((rows || []).map(r => r.customer_id).filter(Boolean))];
+  if(!ids.length){ castNgPairs = new Set(); return; }
+  try{ const d = q(await sb.from("kb_cust_cast_ng").select("customer_id,cast_id").in("customer_id", ids)) || []; castNgPairs = new Set(d.map(x => x.customer_id + "|" + x.cast_id)); }catch(e){}
+}
+{ const __loadDayNg = loadDay; loadDay = async function(){ const r = await __loadDayNg.apply(this, arguments); await loadCastNgPairs(); if(castNgPairs.size) renderList(); return r; }; }
+document.head.insertAdjacentHTML("beforeend", `<style>.rc-castng{display:inline-block;margin-left:4px;background:#C0392B;color:#fff;font-size:11.5px;font-weight:900;border-radius:99px;padding:1px 8px;animation:livePulse 1.4s ease-in-out infinite}</style>`);
 function resCard(r, i){
   const c = r.kb_customers || {}, ed = KB.CAN_EDIT, cx = ["cancel", "tobi", "flowed"].includes(r.status);
   // キャストの枠の中の何番目の予約か：予約①〜⑥（色も6色。7件目からは色をくり返す）2026/11/4
@@ -621,7 +641,7 @@ function resCard(r, i){
       ${ed ? `<button type="button" class="rc-hotel" onclick="openHotelBox(${r.id})" title="ホテル名・部屋番号・地図（開かずに入れられる）">🏨 ${esc(r.address || "ホテル・部屋を入れる")}</button>` : r.address ? `<span class="rc-k">🏨 ${esc(r.address)}</span>` : ""}${r.address ? `<button type="button" class="rc-hcopy" title="ホテル名と部屋番号をコピー" onclick="rcCopyAddr(${r.id})">📋</button>` : ""}
       <span class="rc-k">${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""}${r.extension_count ? "＋延長" + r.extension_count : ""}</span>
       <span class="rc-k">総額 <b class="rc-yen">${yen(r.total)}</b><small>（${r.payment === "cash" && Number(r.card_total) > 0 ? "現金＋カード " + yen(Number(r.card_total)) : esc(PAY_LABEL[r.payment] || "")}）</small></span>
-      <span class="rc-k">👤<b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${custTagsHtml(c)}${digits(c.phone || "").length >= 6 ? ` <span class="tel">📞${esc(c.phone)}</span>` : ` <span class="rc-nophone">📞番号まだ</span>`}</span>
+      <span class="rc-k">👤<b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${castNgPairs.has(r.customer_id + "|" + r.cast_id) && !cx ? `<span class="rc-castng" title="このお客さんは、このキャストのNGに入っています（キャストNG）">🚫 キャストNGのお客さん</span>` : ""}${custTagsHtml(c)}${digits(c.phone || "").length >= 6 ? ` <span class="tel">📞${esc(c.phone)}</span>` : ` <span class="rc-nophone">📞番号まだ</span>`}</span>
       ${told}
 
       ${mates.map(m => `<button type="button" class="rc-mate" onclick="rcJump(${m.id})">👥 ${esc(castName(m.cast_id))}の予約へ</button>`).join("")}
@@ -672,7 +692,7 @@ renderListTable = function(){
   const mode = $("s_sort").value;
   el.innerHTML = (noCast.length ? block("キャスト未定", "", noCast, "") : "")
     + (casts.length ? casts.map(x=>{
-        const st = boardState(x), col = boardCol(x, st), gk = goneKind(x.cd);
+        const st = boardState(x), col = boardCol(x, st), gk = goneKind(x.cd, x);
         const sub = `${x.shift ? "出勤 " + tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end) + (x.shift.kanzen ? "（完）" : "") + (x.shiftOrig ? "（予定 " + tlLabel(x.shiftOrig.start) + "〜" + tlLabel(x.shiftOrig.end) + "）" : "") : "シフトなし"}・${STATE[st]}${st !== "gone" && col ? "（" + col + "）" : gk ? "（" + gk + "）" : ""}`;
         const cls = st === "gone" ? (gk === "お茶" ? "tea" : gk === "欠勤" ? "absent" : "away") : "";
         return block("【" + esc(castLabel(x)) + "】" + (x.c && typeof kbPendingAfterSettle === "function" && kbPendingAfterSettle(x.cd, rows.filter(r=>r.cast_id === x.c.id)).length ? `<span class="part2chip" title="精算済のあとで予約がふえました。💴 精算で②の精算をしてください">⚠️ ②の精算がまだ</span>` : ""), esc(sub), x.c ? rows.filter(r=>r.cast_id === x.c.id).sort(byStart).sort(offLast) : [], x.c ? x.c.id : "", cls);

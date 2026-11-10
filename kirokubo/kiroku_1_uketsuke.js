@@ -281,13 +281,19 @@ async function loadShifts(ymd){
     const sh = r.data && r.data.shifts && r.data.shifts[src];
     // 内勤が受理（確認通知）したシフトだけ。サクラシフトでは 受理 → 入力待ち → 内勤入力中 → 確定 と進む（媒体へ入れ終わると確定）。
     // 変更の申請中・入力中・変更確定も、受理したことがあるので出す。出さないのは「未提出」「提出済み（まだ受理していない）」だけ
-    if(!["input_waiting", "inputting", "confirmed", "change_requested", "change_inputting", "change_confirmed"].includes(r.data && r.data.status)) return;
-    if(sh && sh.start != null && sh.end != null) out[r.cast_name] = { start: sh.start, end: sh.end, confirmed: ["confirmed", "change_confirmed"].includes(r.data.status), kanzen: !!((r.data.kanzen || {})[src]) };   // kanzen＝完（完全終了。キャストがシフトで書く）2026/11/5
+    const accepted = ["input_waiting", "inputting", "confirmed", "change_requested", "change_inputting", "change_confirmed"].includes(r.data && r.data.status);
+    if(sh && sh.start != null && sh.end != null){ if(accepted) out[r.cast_name] = { start: sh.start, end: sh.end, confirmed: ["confirmed", "change_confirmed"].includes(r.data.status), kanzen: !!((r.data.kanzen || {})[src]) }; }   // kanzen＝完（完全終了。キャストがシフトで書く）2026/11/5
     else {
-      // その日（営業日の朝6時より後）にシフトで消された子は、記録簿には「欠勤」として残す（元のシフトの時間で）2026/11/6 店長OK
-      const h = ((r.data.changeHistory || {})[src]) || [], first = h[0], last = h[h.length - 1];
-      if(first && first.before && last && !last.after && last.at && new Date(last.at) >= new Date(src + "T06:00:00+09:00"))
-        out[r.cast_name] = { start: first.before.start, end: first.before.end, confirmed: false, kanzen: false, dropped: true, droppedAt: last.at, droppedBy: last.by || "" };
+      // シフトで消された子は、記録簿から消さないで下に残す（元のシフトの時間で）2026/11/6・2026/11/11 店長
+      //   ・「最後に消したときの記録」（before があって after がない）を見る（前は「その日の最初の記録」を見ていて、その日に時間を変えたり足したりした子が消えていた）
+      //   ・サクラシフトの状態（受理など）にかかわらず残す
+      //   ・その日（営業日の朝6時より後）に消された → 欠勤（記録簿に欠勤の記録も残す）／前の日までに取り下げ → 「シフト取り下げ」（欠勤の記録はつけない）
+      const h = ((r.data && r.data.changeHistory || {})[src]) || [], last = h[h.length - 1];
+      const rm = [...h].reverse().find(e => e && e.before && e.before.start != null && !e.after);
+      if(rm && last && !last.after){
+        const sameDay = !!rm.at && new Date(rm.at) >= new Date(src + "T06:00:00+09:00");
+        out[r.cast_name] = { start: rm.before.start, end: rm.before.end, confirmed: false, kanzen: false, dropped: true, early: !sameDay, droppedAt: rm.at || "", droppedBy: rm.by || "" };
+      }
     }
   });
   return (shiftCache[ymd] = out);

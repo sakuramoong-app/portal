@@ -232,7 +232,7 @@ async function markDroppedAbsent(){
   if(droppedBusy || !KB.CAN_EDIT || day === KB.PRACTICE_DAY) return;
   const sh = shiftCache[day] || {}, todo = [];
   Object.keys(sh).forEach(name => {
-    if(!sh[name].dropped) return;
+    if(!sh[name].dropped || sh[name].early) return;   // 前の日までに取り下げたシフトは、欠勤の記録をつけない（2026/11/11）
     const c = M.casts.find(x => x.shift_name === name || x.official_name === name); if(!c) return;
     const cd = castDays[c.id] || {};
     if(cd.status === "欠勤" || (cd.attend_log || []).some(a => a.kind === "欠勤")) return;

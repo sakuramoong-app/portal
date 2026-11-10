@@ -2170,6 +2170,13 @@ function pfCopy(btn, id){
   navigator.clipboard.writeText(v).then(() => toast("📋 コピーしました")).catch(() => toast("コピーできませんでした"));
 }
 // 📋 完成プロフ全文（内勤管理ページの「完成プロフ全文をコピー」と同じ形。在籍作成・媒体に貼る用）
+// 紹介文がHTML（🎨 テンプレの花びらカードなど）のときは、文字だけに（AIに渡すとき読みやすいように）2026/11/11
+function pfPlainText(h){
+  h = String(h || ""); if(!/<[a-z!]/i.test(h)) return h;
+  const d = document.createElement("div");
+  d.innerHTML = h.replace(/<!--[\s\S]*?-->/g, "").replace(/<(script|style|iframe)\b[\s\S]*?<\/\1>/gi, "").replace(/<br\s*\/?>\s*\n?/gi, "\n").replace(/<\/(div|p|li)>/gi, "\n");
+  return d.textContent.split("\n").map(l => l.trim()).join("\n").replace(/%[A-Z]*FREE\d+(-W)?%/g, "").replace(/\n{3,}/g, "\n\n").trim();
+}
 function pfCopyAll(){
   if(!pf) return;
   pfCollect();
@@ -2192,15 +2199,10 @@ ${g("age")}歳 / ${g("size")} / Pサイズ：${g("psize")}
 性感帯：${g("erogenous")} / 得意技：${g("skill")}
 
 ■ 本人から一言
-${g("comment")}
+${pfPlainText(g("comment"))}
 
-■ 店長から一言
-${g("mgrComment")}
-
-■ オプション
-OK：${by(["◎", "○"]).join(" / ")}
-△：${by(["△"]).join(" / ") || "なし"}
-NG：${by(["×"]).join(" / ") || "なし"}`;
+■ オプション（◎ とくに得意・○ OK・△ 条件つき・× NG）
+${ks.map(k => `${lab(k)}：${o[k] || "－"}`).join("\n")}`;   // 2026/11/11 店長：店長から一言はいらない・オプションは◎○△×で
   navigator.clipboard.writeText(text).then(() => toast("📋 完成プロフをコピーしました")).catch(() => toast("コピーできませんでした"));
 }
 // 🗓 記録・ヒアリング（大きい項目。キャストプロフの記録 prof_logs）
@@ -4334,7 +4336,9 @@ function openEdit(id){
   $("e_longMax").value = c.long_max || ""; $("e_longOver").value = c.long_over || ""; setArea(c.area_note || "");
   renderLook(c);
   const st = c.stores || {};
-  $("e_stores").innerHTML = stores.map(s=>{
+  // 並びは、ほかの所と同じ（サクラムーン→ラナ鶯谷→ラナ錦糸町→ドレスガーデン→ピーチムーン…）2026/11/11 店長
+  const ordOf = s => { const i = FIN_STORE_ORDER.indexOf(PROF_STORE_OF[s.key] || ""); return i < 0 ? 99 : i; };
+  $("e_stores").innerHTML = stores.slice().sort((a, b) => ordOf(a) - ordOf(b)).map(s=>{
     const v = st[s.key];
     return `<div class="store-row">
       <input type="checkbox" id="es_${s.key}" ${v?"checked":""}>
