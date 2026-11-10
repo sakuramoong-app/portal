@@ -66,7 +66,7 @@ function renderSlots(){
     el.innerHTML = list.length ? list.map(x=>{
       const ok = times.filter(t=>canGo(x, t, mins));
       return `<div class="slotcast">
-        <div class="nm">${esc(castLabel(x))}<small>出勤 ${tlLabel(x.shift.start)}〜${tlLabel(x.shift.end)}${x.cd && x.cd.standby ? "・" + esc(x.cd.standby) : ""}${gapOf(x) ? "・予約の間" + x.c.interval_min + "分" : ""}</small></div>
+        <div class="nm">${x.c && typeof KBF !== "undefined" ? KBF.img(x.c, 30) : ""}${esc(castLabel(x))}<small>出勤 ${tlLabel(x.shift.start)}〜${tlLabel(x.shift.end)}${x.cd && x.cd.standby ? "・" + esc(x.cd.standby) : ""}${gapOf(x) ? "・予約の間" + x.c.interval_min + "分" : ""}</small></div>
         <div class="times">${ok.length ? ok.map(t=>`<button class="pick" onclick="slotBook('${x.c.id}',${t})">${tlLabel(t)}</button>`).join("") : `<span class="hist" style="margin:0">${mins}分で空いている時間はありません</span>`}</div>
       </div>`;
     }).join("") : `<div class="gate">上のボタンでキャストを選んでください（複数OK）</div>`;

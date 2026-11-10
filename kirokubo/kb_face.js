@@ -12,7 +12,8 @@
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
   // キャストのid → キャスト（記録簿・精算は M.casts、キャスト台帳は casts）
   function byId(id){
-    const lists = [window.M && window.M.casts, typeof casts !== "undefined" ? casts : null].filter(Array.isArray);
+    // M・casts は let で作られているので window.M では読めない → 名前のまま読む（2026/11/11 写真が出なかった）
+    const lists = [typeof M !== "undefined" && M ? M.casts : null, typeof casts !== "undefined" ? casts : null, window.KBF_CASTS].filter(Array.isArray);   // KBF_CASTS：回収明細・顧客台帳など、キャストの一覧の名前がちがうページ
     for(const l of lists){ const c = l.find(x => x && x.id === id); if(c) return c; }
     return null;
   }
@@ -32,7 +33,8 @@
   // 写真（縦長＝公式HPのサムネと同じ 3:4。顔が見えるように上のほうを出す）
   function img(cOrId, w, store){
     const c = typeof cOrId === "string" ? byId(cOrId) : cOrId; w = w || 40;
-    const u = src(c, store); if(!u) return ini(c, w);
+    let u = src(c, store); if(!u) return ini(c, w);
+    if(window.KBF_TEST) u = "data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACw=#" + u;   // テストのときだけ：ネットの写真を読まない（本番は使わない）
     const h = Math.round(w * 4 / 3);
     return `<img class="kbface" src="${esc(u)}" alt="" loading="lazy" width="${w}" height="${h}" style="width:${w}px;height:${h}px" data-ini="${esc((nameOf(c).replace(/^[【\s]+/, "")[0]) || "？")}" onerror="KBF.broken(this)">`;
   }

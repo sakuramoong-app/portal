@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_common.js?v=24"></script>
-<script src="kb_face.js?v=1"></script><!-- 🖼 キャストの写真アイコン -->
+<script src="kb_face.js?v=2"></script><!-- 🖼 キャストの写真アイコン -->
 <style>
   body{font-size:14.5px;}
   .wrap.wide{max-width:1280px;}
@@ -139,7 +139,7 @@ async function init(){
   if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
   try{
     const [casts, stores] = await Promise.all([
-      sb.from("master_casts").select("id,official_name,temp_name,kana,status").order("kana"),
+      sb.from("master_casts").select("id,official_name,temp_name,kana,status,stores").order("kana"),
       sb.from("master_stores").select("key,label").order("sort"),
     ]);
     M.casts = q(casts) || []; M.stores = q(stores) || [];
@@ -318,7 +318,7 @@ function histCard(r){
   return `<div class="hc ${r.status} ${r.castng ? "castng" : ""}">
     <div class="hh"><b>${md(r.date) || "日付なし"}</b>${r.src === "inquiry" ? `<span class="tag" style="background:#E3F2FD;color:#1565C0">📞 問い合わせの記録${r.by ? "（" + esc(r.by) + "）" : ""}</span>${KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11.5px;color:#C0392B" onclick="delInquiry(${r.hid})">🗑 消す</button>` : ""}` : r.src === "excel" ? `<span class="tag">台帳${r.row ? " " + r.row + "行目" : ""}</span>` : ""}${r.dupNote ? `<span class="tag">記録簿の予約と同じ利用（数えない）</span>` : ""}
       ${st ? `<span class="badge ${r.status}">${esc(st)}</span>` : ""}${r.castng ? `<span class="badge tobi">🙅 キャストNG</span>${KB.CAN_EDIT && r.hid ? `<button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11.5px" onclick="histNgOff(${r.hid})">NGではない</button>` : ""}` : ""}${r.card ? '<span class="tag">💳 カード</span>' : ""}${colorDots(r.marks)}</div>
-    <div class="hm">${[r.store, r.cast, r.course, r.place].filter(Boolean).map(esc).join("　・　")}${r.total ? "　・　" + yen(r.total) : ""}</div>
+    <div class="hm">${r.cast_id && typeof KBF !== "undefined" ? KBF.img(r.cast_id, 28) : ""}${[r.store, r.cast, r.course, r.place].filter(Boolean).map(esc).join("　・　")}${r.total ? "　・　" + yen(r.total) : ""}</div>
     ${r.memo ? `<div class="hmemo ${memoRed ? "red" : ""}">${hl(r.memo)}</div>` : ""}</div>`;
 }
 // 台帳エクセルで色がついていたところ：色の小さい四角だけ（どの欄かは、押すと出る）

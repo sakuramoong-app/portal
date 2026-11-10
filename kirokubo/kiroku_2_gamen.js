@@ -413,7 +413,7 @@ function renderTL(){
         cells.push(`<div class="c ${inShift ? "on" : ""} ${i % 2 ? "half" : ""}" data-t="${tlLabel(h)}" onclick="tlCell('${cid}',${h})"></div>`);
       }
       return `<div class="r ${want != null && x.ok === false ? "dim" : ""}">
-        <div class="nm ${x.ok ? "ok" : ""}" onclick="jumpCast('${cid}')">${esc(castLabel(x))}${st}${tlNowLoc(x)}<small>${shiftTxt}${x.cd && x.cd.standby ? "・" + esc(x.cd.standby) : ""}${g ? "・間" + x.c.interval_min + "分" : ""}${esc(playMarks(x))}</small></div>
+        <div class="nm ${x.ok ? "ok" : ""}" onclick="jumpCast('${cid}')">${x.c && typeof KBF !== "undefined" ? KBF.img(x.c, 30) : ""}${esc(castLabel(x))}${st}${tlNowLoc(x)}<small>${shiftTxt}${x.cd && x.cd.standby ? "・" + esc(x.cd.standby) : ""}${g ? "・間" + x.c.interval_min + "分" : ""}${esc(playMarks(x))}</small></div>
         <div class="cells">${cells.join("")}
           ${g ? x.bks.map(b=>`<div class="gap" style="left:${p(b.s - g)}%;width:${p(b.s) - p(b.s - g)}%"></div><div class="gap" style="left:${p(b.e)}%;width:${p(b.e + g) - p(b.e)}%"></div>`).join("") : ""}
           ${x.bks.map(b=>`<div class="bk st ${b.r.status}" style="left:${p(b.s)}%;width:${Math.max(1.5, p(b.e) - p(b.s))}%"
