@@ -1225,13 +1225,14 @@ const __renderListTea = renderListTable;
 renderListTable = function(){
   __renderListTea.apply(this, arguments);
   tlRows().filter(x => !goneKind(x.cd, x) && settledDone(x)).forEach(x => { const el = $("cb-" + x.c.id); if(el && el.parentElement && el.parentElement.id === "list") el.classList.add("sdone"); });
-  const sel = "#list > .cblock.sdone, #list > .cblock.tea, #list > .cblock.absent", first = document.querySelector(sel);
-  if(first){
-    const n = k => document.querySelectorAll("#list > .cblock." + k).length;
-    first.insertAdjacentHTML("beforebegin", `<div class="teahead" style="margin:18px 0 6px;padding:6px 12px;border-radius:12px;background:#F3F3F3;border:1.5px dashed #CFCFCF;font-weight:900;color:#666">${[n("sdone") ? "✅ 精算済（" + n("sdone") + "名）" : "", n("tea") + n("absent") ? "🟩 お茶・🟥 欠勤（" + (n("tea") + n("absent")) + "名）" : ""].filter(Boolean).join("　")}</div>`);
-  }
+  // 見出しは2つに分ける：✅ 精算済（うすい緑）→ その下に お茶・欠勤（2026/11/11 店長）。精算済でも「待機中・仕事中」の子は、ふつうの並びのまま（settledDone）
+  const n = k => document.querySelectorAll("#list > .cblock." + k).length, head = (txt, bg, bd, fg) => `<div class="teahead" style="margin:18px 0 6px;padding:6px 12px;border-radius:12px;background:${bg};border:1.5px dashed ${bd};font-weight:900;color:${fg}">${txt}</div>`;
+  const sd = document.querySelector("#list > .cblock.sdone");
+  if(sd) sd.insertAdjacentHTML("beforebegin", head("✅ 精算済（" + n("sdone") + "名）", "#E6F6EA", "#8FD3A0", "#1E7A3C"));
+  const off = document.querySelector("#list > .cblock.tea, #list > .cblock.absent");
+  if(off) off.insertAdjacentHTML("beforebegin", head("🟩 お茶・🟥 欠勤（" + (n("tea") + n("absent")) + "名）", "#F3F3F3", "#CFCFCF", "#666"));
 };
-document.head.insertAdjacentHTML("beforeend", `<style>#list > .cblock.sdone{background:#EFEFEF !important;border-color:#CFCFCF !important;opacity:.8} #list > .cblock.sdone:hover{opacity:1}</style>`);
+document.head.insertAdjacentHTML("beforeend", `<style>#list > .cblock.sdone{background:#EAF7EE !important;border-color:#9ED8AE !important} #list > .cblock.sdone .cbhead, #list > .cblock.sdone .rescard{background-color:#F3FBF5 !important}</style>`);
 
 /* ---------- ✏️ この場だけ直す：キャストへの予約連絡・お客さまへの返信の文を、その場で書きかえる（テンプレは変えない）2026/11/5
    書きかえている間は、受付の内容を変えても文は自動で作りなおさない。「↺ 自動の文にもどす」でもとにもどる。受付を開きなおすと自動にもどる ---------- */

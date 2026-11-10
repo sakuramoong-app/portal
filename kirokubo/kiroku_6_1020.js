@@ -75,12 +75,30 @@ document.head.insertAdjacentHTML("beforeend", `<style>.rm-r{display:flex;justify
 /* ---------- 🏨 予約のカードから小窓で：ホテル名・部屋番号・地図（エリア〜交通費も見られる）。新しいホテルはリストに足せる・Googleで調べる窓（2026/11/5） ---------- */
 // 📋 ホテル名と部屋番号をいっしょにコピー（2026/11/6）
 //   2026/11/11 店長：地図のURLもいっしょに（ホテル一覧にあるホテルなら、その地図。なければ Google マップで探すURL）
-function rcMapOf(r){
-  const addr = String(r.address || "").replace(/\s/g, ""); if(!addr) return "";
+// 予約の「ホテル・部屋」に書いたホテルが、ホテル一覧のどれか（長い名前から先に探す）
+function rcHotelOf(r){
+  const addr = String((r && r.address) || "").replace(/\s/g, ""); if(!addr) return null;
   const list = (M.hotels || []).filter(h => !r.area || !h.area || h.area === r.area).sort((a, b) => String(b.hotel_name).length - String(a.hotel_name).length);
-  const h = list.find(x => x.hotel_name && addr.includes(String(x.hotel_name).replace(/\s/g, "")));
-  return mapLink(h || { area: r.area || "", hotel_name: String(r.address).replace(/[\s　]*[0-9０-９]+[号室]*$/, "") });
+  return list.find(x => x.hotel_name && addr.includes(String(x.hotel_name).replace(/\s/g, ""))) || null;
 }
+function rcMapOf(r){
+  if(!String(r.address || "").trim()) return "";
+  return mapLink(rcHotelOf(r) || { area: r.area || "", hotel_name: String(r.address).replace(/[\s　]*[0-9０-９]+[号室]*$/, "") });
+}
+// 🏨 このキャストがNG（×）・条件つき（△）のホテル、店としてNGのホテル → 予約のカードに出す（2026/11/11 店長：まちがえて受けたとき気づけるように）
+//   キャストの◎△×は、キャストプロフの hotelPrefs（キャスト台帳の「🏨 ホテル」）
+function rcHotelWarn(r){
+  const h = rcHotelOf(r); if(!h) return "";
+  const out = [];
+  if(h.store_status === "ng") out.push(`<span class="rc-castng" title="ホテル一覧で「店としてNG」になっているホテル">🚫 店NGのホテル</span>`);
+  const c = r.cast_id && M.casts.find(x => x.id === r.cast_id), p = c && c.prof_id && typeof profById !== "undefined" && profById ? profById[c.prof_id] : null, hp = (p && p.hotelPrefs) || null;
+  if(hp){
+    if((hp.ng || []).includes(h.hotel_id)) out.push(`<span class="rc-castng" title="キャスト台帳のホテルで、このキャストが × にしているホテル">🚫 キャストNGのホテル</span>`);
+    else if((hp.conditional || []).includes(h.hotel_id)){ const m = (hp.memo || {})[h.hotel_id] || ""; out.push(`<span class="rc-hcond" title="${esc(m || "条件つき")}">△ 条件つきのホテル${m ? "：" + esc(m) : ""}</span>`); }
+  }
+  return out.join("");
+}
+document.head.insertAdjacentHTML("beforeend", `<style>.rc-hcond{display:inline-block;margin-left:4px;background:#FFF3C4;color:#7a5600;border:1.5px solid #F2C94C;font-size:11.5px;font-weight:900;border-radius:99px;padding:1px 8px}</style>`);
 function rcCopyAddr(id){
   const r = rows.find(x => x.id === id); if(!r || !r.address) return;
   const u = rcMapOf(r), t = r.address + (u ? "\n" + u : "");
@@ -608,7 +626,7 @@ async function loadCastNgPairs(){
   if(!ids.length){ castNgPairs = new Set(); return; }
   try{ const d = q(await sb.from("kb_cust_cast_ng").select("customer_id,cast_id").in("customer_id", ids)) || []; castNgPairs = new Set(d.map(x => x.customer_id + "|" + x.cast_id)); }catch(e){}
 }
-{ const __loadDayNg = loadDay; loadDay = async function(){ const r = await __loadDayNg.apply(this, arguments); await loadCastNgPairs(); if(castNgPairs.size) renderList(); return r; }; }
+{ const __loadDayNg = loadDay; loadDay = async function(){ const r = await __loadDayNg.apply(this, arguments); const hadProfs = typeof profById !== "undefined" && !!profById; await loadCastNgPairs(); try{ await loadProfs(); }catch(e){} if(castNgPairs.size || !hadProfs) renderList(); return r; }; }   // ホテルのNG（キャストプロフ）も読む
 document.head.insertAdjacentHTML("beforeend", `<style>.rc-castng{display:inline-block;margin-left:4px;background:#C0392B;color:#fff;font-size:11.5px;font-weight:900;border-radius:99px;padding:1px 8px;animation:livePulse 1.4s ease-in-out infinite}</style>`);
 function resCard(r, i){
   const c = r.kb_customers || {}, ed = KB.CAN_EDIT, cx = ["cancel", "tobi", "flowed"].includes(r.status);
@@ -638,7 +656,7 @@ function resCard(r, i){
       <small class="rc-lbl">開始</small>${ed ? `<input type="time" class="rc-time" value="${hmIn(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>
       ${r.phone_draft ? `<span class="rc-draft" title="スマホで仮入力。PCで開いて確かめると取り入れます">📱仮入力</span>` : ""}${r.dummy_name ? `<span class="rc-store">🎭${esc(r.dummy_name)}</span>` : ""}
       <span class="rc-k">📍<b>${esc(r.area || "エリアなし")}</b></span>
-      ${ed ? `<button type="button" class="rc-hotel" onclick="openHotelBox(${r.id})" title="ホテル名・部屋番号・地図（開かずに入れられる）">🏨 ${esc(r.address || "ホテル・部屋を入れる")}</button>` : r.address ? `<span class="rc-k">🏨 ${esc(r.address)}</span>` : ""}${r.address ? `<button type="button" class="rc-hcopy" title="ホテル名と部屋番号をコピー" onclick="rcCopyAddr(${r.id})">📋</button>` : ""}
+      ${ed ? `<button type="button" class="rc-hotel" onclick="openHotelBox(${r.id})" title="ホテル名・部屋番号・地図（開かずに入れられる）">🏨 ${esc(r.address || "ホテル・部屋を入れる")}</button>${cx ? "" : rcHotelWarn(r)}` : r.address ? `<span class="rc-k">🏨 ${esc(r.address)}</span>` : ""}${r.address ? `<button type="button" class="rc-hcopy" title="ホテル名と部屋番号をコピー" onclick="rcCopyAddr(${r.id})">📋</button>` : ""}
       <span class="rc-k">${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""}${r.extension_count ? "＋延長" + r.extension_count : ""}</span>
       <span class="rc-k">総額 <b class="rc-yen">${yen(r.total)}</b><small>（${r.payment === "cash" && Number(r.card_total) > 0 ? "現金＋カード " + yen(Number(r.card_total)) : esc(PAY_LABEL[r.payment] || "")}）</small></span>
       <span class="rc-k">👤<b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${castNgPairs.has(r.customer_id + "|" + r.cast_id) && !cx ? `<span class="rc-castng" title="このお客さんは、このキャストのNGに入っています（キャストNG）">🚫 キャストNGのお客さん</span>` : ""}${custTagsHtml(c)}${digits(c.phone || "").length >= 6 ? ` <span class="tel">📞${esc(c.phone)}</span>` : ` <span class="rc-nophone">📞番号まだ</span>`}</span>
