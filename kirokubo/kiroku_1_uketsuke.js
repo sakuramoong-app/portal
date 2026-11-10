@@ -1415,7 +1415,8 @@ function buildMsg(c){
     const mins = minutesOf(c.course) + c.ext*30 + c.date*30, t = s0 + mins; st = lateHM(s0); en = lateHM(t);
     const real = x => { const hh = Math.floor(x / 60) % 24; return (x >= 1440 ? "深夜" : "") + hh + ":" + String(x % 60).padStart(2, "0"); };
     if(t > 1440) lateNote = `\n※${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]})営業日の${s0 >= 1440 ? real(s0) + "〜" + real(t).replace("深夜", "") : real(s0) + "〜" + real(t)}です`; }
-  const opTxt = o => o.label + (o.qty>1?"×"+o.qty:"") + (o.memo ? "（" + o.memo + "）" : "");   // 📝 オプションのメモも（2026/11/10）
+  // 📝 オプションのメモも（2026/11/10）。キャストに送る文では、オプションの名前の絵文字（🎁 など）は出さない（2026/11/11 店長）
+  const opTxt = o => String(o.label || "").replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, "").trim() + (o.qty>1?"×"+o.qty:"") + (o.memo ? "（" + o.memo + "）" : "");
   const backOps = c.opts.filter(o=>o.back>0).map(opTxt).join("・") || "なし";
   const noBackOps = c.opts.filter(o=>!(o.back>0)).map(opTxt).join("・") || "なし";
   // 店名はエリアを伏せる（「五反田逆アナル倶楽部」を見て、行く場所をまちがえる子がいるので。2026/11/3）
