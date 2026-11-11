@@ -27,6 +27,29 @@ function addExtOrder(){
   o.price = (last ? last.total : 0) - before; o.total_after = last ? last.total : 0; o.end_after = $("endView").textContent;
   renderExtList();
 }
+// 💑 デートの中身：先か後か・内容・待ち合わせ場所（先のとき）。キャストに送る文のコースにも出る（2026/11/11 店長）
+const DATE_WHEN = { pre: "先", post: "後" };
+function dateInfoHtml(o, i){
+  const dis = KB.CAN_EDIT ? "" : "disabled";
+  return `<div style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:#FFF0F5;border-radius:8px;padding:6px 8px">
+    <span style="font-weight:800;color:#c2185b">💑 デート</span>
+    <select ${dis} style="max-width:150px" onchange="setDateInfo(${i},'when',this.value)"><option value="">先？後？</option>${Object.entries(DATE_WHEN).map(([k, l]) => `<option value="${k}" ${o.when === k ? "selected" : ""}>${l}（プレイの${k === "pre" ? "前" : "後"}）</option>`).join("")}</select>
+    <input ${dis} value="${esc(o.memo || "")}" maxlength="80" placeholder="デートの内容（例：食事・カラオケ）" style="flex:1;min-width:180px" onchange="setDateInfo(${i},'memo',this.value)">
+    ${o.when === "pre" ? `<input ${dis} value="${esc(o.meet || "")}" maxlength="80" placeholder="📍 待ち合わせ場所（例：池袋駅 東口）" style="flex:1;min-width:180px" onchange="setDateInfo(${i},'meet',this.value)">` : ""}</div>`;
+}
+function setDateInfo(i, k, v){
+  const o = extOrders[i]; if(!o || !KB.CAN_EDIT) return;
+  o[k] = String(v || "").trim();
+  if(k === "when" && v !== "pre") delete o.meet;
+  if(k === "when") renderExtList();
+  try{ recalc(); }catch(e){}
+}
+// キャストに送る文のコース：「＋デート60分（先・待ち合わせ：〇〇・内容：〇〇）」
+function dateMsgText(){
+  const ds = (typeof extOrders !== "undefined" ? extOrders : []).filter(o => o.kind === "date");
+  if(!ds.length || !ds.some(o => o.when || o.memo || o.meet)) return "";
+  return ds.map(o => "＋デート" + (+o.min || 0) + "分" + (() => { const p = [o.when ? DATE_WHEN[o.when] || "" : "", o.when === "pre" && o.meet ? "待ち合わせ：" + o.meet : "", o.memo ? "内容：" + o.memo : ""].filter(Boolean); return p.length ? "（" + p.join("・") + "）" : ""; })()).join("");
+}
 function removeExtOrder(i){
   const o = extOrders[i]; if(!o) return;
   if(!confirm(`${i + 1}つ目の「${EXT_LABEL[o.kind] || o.kind} ${o.min}分」を消しますか？`)) return;
@@ -41,7 +64,8 @@ function renderExtList(){
       <b>${"①②③④⑤⑥⑦⑧⑨⑩"[i] || (i + 1) + "."} ${esc(EXT_LABEL[o.kind] || o.kind)} ${o.min}分</b>
       ${o.legacy ? `<small style="color:var(--sub)">（前に入れた分）</small>` : `<span>＋${yen(o.price || 0)} → 終了 ${esc(o.end_after || "--:--")}・総額 ${yen(o.total_after || 0)}</span>
       <small style="color:var(--sub)">${KBF.staffTag(o.by)} ${dt(o.at)}</small>`}
-      ${KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto;padding:2px 10px" onclick="removeExtOrder(${i})">✖</button>` : ""}</div>`).join("")
+      ${KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto;padding:2px 10px" onclick="removeExtOrder(${i})">✖</button>` : ""}
+      ${o.kind === "date" ? dateInfoHtml(o, i) : ""}</div>`).join("")
     + `<div style="margin-top:6px;padding:6px 8px;background:#fff;border-radius:8px;font-size:13.5px;font-weight:800">計：${sum("ext") ? "延長 " + sum("ext") + "分" : ""}${sum("ext") && sum("date") ? "・" : ""}${sum("date") ? "デート " + sum("date") + "分" : ""}
       → 終了 ${esc($("endView").textContent)}・<span style="color:#e5638c">総額 ${yen(last ? last.total : 0)}</span>${last && (last.extFee + last.dateFee) ? `（延長・デート分 ${yen(last.extFee + last.dateFee)}${last.pay && last.pay !== "cash" ? "＋カード手数料" : ""}）` : ""}</div>`;
 }

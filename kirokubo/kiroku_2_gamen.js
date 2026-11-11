@@ -110,7 +110,9 @@ function drawTimeline(){
   if(!sh && !bd){ loadShifts(day).then(()=>drawTimeline()).catch(()=>{}); }
   const shift = sh ? (sh[c.shift_name] || sh[c.official_name]) : null;
   const others = (bd ? (od ? od.rows : []) : rows).filter(r=>r.cast_id === c.id && (!editing || r.id !== editing.id) && r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed" && r.start_at && r.end_at)
-    .map(r=>{ const s = hourOf(r.start_at); let e = hourOf(r.end_at); if(e < s) e += 24; return { s, e, label: hm(r.start_at) + "〜" + hm(r.end_at) + (r.area ? " " + r.area : ""), st: r.status }; });
+    .map(r=>{ const s = hourOf(r.start_at); let e = hourOf(r.end_at); if(e < s) e += 24; return { s, e, label: hm(r.start_at) + "〜" + hm(r.end_at) + (r.area ? " " + r.area : ""), st: r.status,
+      tm: hm(r.start_at) + "〜" + hm(r.end_at), where: [r.area, r.address].filter(Boolean).join(" "), stl: (typeof STATUS !== "undefined" && STATUS[r.status]) || "", store: r.store_key || "" }; })
+    .sort((a, b) => a.s - b.s);
   let cur = null;
   const st = $("f_start").value;
   if(st && last){
@@ -126,19 +128,24 @@ function drawTimeline(){
   { let a = shift ? shift.start - 2 : TL_FROM, b = shift ? shift.end + 2 : TL_TO;
     others.concat(cur ? [cur] : []).forEach(o=>{ a = Math.min(a, o.s - 0.5); b = Math.max(b, o.e + 0.5); });
     tlA = Math.max(6, Math.floor(a)); tlB = Math.min(36, Math.ceil(b)); if(tlB - tlA < 4) tlB = tlA + 4; }
+  const nowH = !bd && day === KB.bizDateOf() ? nowHour() : null;   // ✨ いまの線（その日のときだけ）2026/11/11
   const span = tlB - tlA, step = span > 14 ? 3 : span > 8 ? 2 : 1, tk = [];
   for(let h = tlA; h <= tlB; h += step) tk.push(h);
   if(tk[tk.length - 1] !== tlB && tlB - tk[tk.length - 1] >= step / 2) tk.push(tlB);
   const ticks = tk.map(h=>`<span style="position:absolute;left:${pct(h)}%;transform:translateX(${h === tlA ? "0" : h === tlB ? "-100%" : "-50%"})">${h >= 24 ? "翌" + (h - 24) : h}時</span>`).join("");
   el.innerHTML = `<div class="tl"><div class="ttl">📅 ${bd ? Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) + " の" : "本日の"}タイムライン（${esc(c.official_name || c.temp_name)}）
-      ${shift ? `<span style="font-weight:400;color:#c9cbe0">出勤 ${hourLabel(shift.start)}〜${hourLabel(shift.end)}${shift.confirmed ? "" : "（未確定）"}</span>` : `<span style="font-weight:400;color:#c9cbe0">${sh ? "シフトが見つかりません" : "シフトを読み込み中…"}</span>`}</div>
+      ${shift ? `<span style="font-weight:400;color:#c9cbe0">出勤 ${hourLabel(shift.start)}〜${hourLabel(shift.end)}${shift.confirmed ? "" : "（未確定）"}</span>` : `<span style="font-weight:400;color:#c9cbe0">${sh ? "シフトが見つかりません" : "シフトを読み込み中…"}</span>`}
+      ${!bd && (castDays[c.id] || {}).full_at ? `<span class="tlfull">🈵 満了</span>` : ""}</div>
     <div class="axis" style="position:relative;height:14px;display:block">${ticks}</div>
     <div class="bar">
       ${shift ? `<div class="shift" style="left:${pct(shift.start)}%;width:${pct(shift.end) - pct(shift.start)}%"></div>` : ""}
       ${others.map(o=>`<div class="bk st ${o.st}" style="left:${pct(o.s)}%;width:${Math.max(2, pct(o.e) - pct(o.s))}%" title="${esc(o.label)}">${esc(o.label)}</div>`).join("")}
       ${cur ? `<div class="bk ${clash ? "clash" : "cur"}" style="left:${pct(cur.s)}%;width:${Math.max(2, pct(cur.e) - pct(cur.s))}%">${esc(cur.label)}</div>` : ""}
+      ${nowH != null && nowH >= tlA && nowH <= tlB ? `<div class="tlnow" style="left:${pct(nowH)}%" title="いま"></div>` : ""}
     </div>
-    <div class="leg">■ 出勤時間　入っている予約（状態の色）　<span style="color:#ffbe5c">■</span> この予約${clash ? '　<b style="color:#ff8a8a">重なっています</b>' : ""}</div></div>`;
+    <div class="tljobs">${others.length ? others.map(o => `<div class="tljob${nowH != null && o.s <= nowH && nowH < o.e ? " now" : ""}"><b>🕒 ${esc(o.tm)}</b>${o.where ? ` <span>📍 ${esc(o.where)}</span>` : ""}${o.store && typeof KBF !== "undefined" ? " " + KBF.storeChip(o.store) : ""}${o.stl ? ` <span class="st ${esc(o.st)}">${esc(o.stl)}</span>` : ""}</div>`).join("")
+      : `<div class="tljob none">この日はまだ仕事が入っていません</div>`}</div>
+    <div class="leg">■ 出勤時間　入っている予約（状態の色）　<span style="color:#ffbe5c">■</span> この予約　<span style="color:#ffe066">┃</span> いま${clash ? '　<b style="color:#ff8a8a">重なっています</b>' : ""}</div></div>`;
 }
 
 /* ---------- キャストの情報：受付ではランクは出さない。特記事項・NG・条件はたたんでおく ----------

@@ -114,6 +114,17 @@
   .tl .bk{position:absolute;top:4px;bottom:4px;border-radius:6px;font-size:10.5px;font-weight:800;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden;}
   .tl .bk.other{background:#5b8def;} .tl .bk.cur{background:#ff9f1a;color:#2a1a00;} .tl .bk.clash{background:#ef4444;color:#fff;}
   .tl .leg{font-size:11px;color:#c9cbe0;margin-top:5px;}
+  /* 2026/11/11 店長：受付のタイムラインはいつも見える（上にくっつく）・幅広く・何時にどこで・いまの線・満了 */
+  #castTimeline{position:sticky;top:0;z-index:30;margin:0 -6px}
+  #castTimeline .tl{box-shadow:0 6px 14px rgba(31,33,64,.25)}
+  .tl .bar{height:40px} .tl .bk{font-size:12px}
+  .tlnow{position:absolute;top:-2px;bottom:-2px;width:3px;margin-left:-1px;background:#ffe066;box-shadow:0 0 8px 2px rgba(255,224,102,.9);animation:tlnow 1.4s ease-in-out infinite;z-index:3}
+  @keyframes tlnow{0%,100%{opacity:1;box-shadow:0 0 8px 2px rgba(255,224,102,.9)}50%{opacity:.55;box-shadow:0 0 16px 6px rgba(255,240,170,.95)}}
+  .tljobs{display:flex;flex-direction:column;gap:3px;margin-top:6px;max-height:110px;overflow:auto}
+  .tljob{font-size:13px;background:rgba(255,255,255,.08);border-radius:6px;padding:3px 8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .tljob.now{background:rgba(255,224,102,.22);outline:1.5px solid #ffe066} .tljob.none{color:#c9cbe0}
+  .tljob .st{font-size:11px;border-radius:99px;padding:1px 8px}
+  .tlfull{display:inline-block;margin-left:8px;background:#E02424;color:#fff;border-radius:99px;padding:1px 10px;font-weight:900;animation:tlnow 1.4s ease-in-out infinite}
   /* いつも下に：総額と登録 */
   .foot{position:fixed;left:0;right:0;bottom:0;z-index:60;background:rgba(255,255,255,.97);border-top:1.5px solid var(--line);box-shadow:0 -6px 18px rgba(92,75,79,.12);}
   .foot .in{max-width:760px;margin:0 auto;padding:10px 18px;display:flex;gap:10px;align-items:center;}
@@ -843,13 +854,13 @@
   </div></div>
 </div>
 
-<script src="kiroku_1_uketsuke.js?v=8"></script>
-<script src="kiroku_2_gamen.js?v=3"></script>
+<script src="kiroku_1_uketsuke.js?v=9"></script>
+<script src="kiroku_2_gamen.js?v=4"></script>
 <script src="kiroku_3_seisan.js?v=2"></script>
 <script src="kiroku_4_ichiran.js?v=8"></script>
 <script src="kiroku_5_1019.js?v=10"></script>
 <script src="kiroku_6_1020.js?v=7"></script>
-<script src="kiroku_7_1025.js?v=8"></script>
+<script src="kiroku_7_1025.js?v=9"></script>
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 <script src="kb_cal.js?v=1"></script>
 <script src="unsettled.js?v=62"></script>

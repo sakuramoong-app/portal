@@ -1433,7 +1433,7 @@ function buildMsg(c){
       + (() => { const dm = M.dummies.find(x => x.store_key === c.store && x.name === $("f_dummy").value), u = dmProfUrl(dm); return u ? "\n【プロフ】" + u : ""; })() : "",
     日時: `${d.getUTCMonth()+1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st||"--:--"}〜${en||"--:--"}${lateNote}`,
     店名: storeNoArea(c.store), 名前: $("f_name").value || "お客", 種別: visitTxt,
-    コース: `${c.course}${/^\d+$/.test(c.course)?"分":""}${c.free?"（"+FREE_SUFFIX[c.free]+"）":""}${c.ext?"＋延長"+c.ext*30+"分":""}${c.date?"＋デート"+c.date*30+"分":""}`,   // デートも（2026/11/11 出ていなかった）
+    コース: `${c.course}${/^\d+$/.test(c.course)?"分":""}${c.free?"（"+FREE_SUFFIX[c.free]+"）":""}${c.ext?"＋延長"+c.ext*30+"分":""}${c.date?((typeof dateMsgText === "function" && dateMsgText()) || "＋デート"+c.date*30+"分"):""}`,   // デートも（2026/11/11 出ていなかった）
     場所見出し: { love: "ホテル", biz: "ホテル", home: "自宅" }[$("f_place").value] || "ホテル・自宅",
     場所: `${$("f_area").value} ${$("f_address").value}`,
     ビジホ行: (() => { try{ return $("f_place").value === "biz" ? "\n【ビジホ】" + bizText(bizState) : ""; }catch(e){ return ""; } })(),
