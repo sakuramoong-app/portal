@@ -132,7 +132,9 @@ const ALL_PLACES = ["池袋", "鶯谷", "五反田", "回収"];
 const PLACE_COLOR = { "池袋": "#FFC966", "鶯谷": "#CCCCFF", "五反田": "#C6E0B4", "回収": "#FFC2D1" };
 const DOW = ["日","月","火","水","木","金","土"];
 const STATE = { day: "✔ 当日回収", later: "✔ 後日内勤回収", me: "✔ 店長回収", none: "■ 未回収" };   // later：あとの日に内勤が受け取った（SQL 225。2026/11/6）
-const when = t => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+// 日時は営業日で（朝6時まえは前の営業日の 24〜29時。2026/11/11 店長）
+const when = t => { const d = new Date(t); if(isNaN(d)) return ""; const b = KB.realBizDateOf(d), p = b.split("-"), j = new Date(d.getTime() + 9 * 3600000), h = j.getUTCHours() + (j.toISOString().slice(0, 10) !== b ? 24 : 0);
+  return `${Number(p[1])}/${Number(p[2])} ${String(h).padStart(2, "0")}:${String(j.getUTCMinutes()).padStart(2, "0")}`; };
 const md = s => { const p = String(s).split("-"); return `${Number(p[1])}/${Number(p[2])}`; };
 const num = n => (Number(n) || 0).toLocaleString("ja-JP");
 const sgn = n => (n > 0 ? "＋" : n < 0 ? "−" : "") + num(Math.abs(n));
@@ -261,11 +263,14 @@ function rowsFor(day, R){
       tr = mine.filter(r => r.transfer_status && Number(r.transfer_amount)).reduce((a, r) => a + (Number(r.transfer_amount) || 0), 0);
       exact = false;
     }
-    const kind = cd.settled ? (s.paidOn && s.paidOn !== day ? "later" : "done") : cd.direct_home ? "home" : "open";
+    // 精算した営業日：後日の精算（paidOn）のほか、その日のページで「次の営業日」に精算したもの（精算した時刻の営業日）も後日（2026/11/11 おりひめ：翌日の昼に回収したのに当日回収になっていた）
+    //   エクセルから取りこんだ日（settled_by＝エクセル）は、取りこんだ時刻なので見ない
+    const paidOn = s.paidOn || (cd.settled && cd.settled_at && cd.settled_by !== "エクセル" ? KB.realBizDateOf(new Date(cd.settled_at)) : "");
+    const kind = cd.settled ? (paidOn && paidOn > day ? "later" : "done") : cd.direct_home ? "home" : "open";
     // 精算場所が「回収」（内勤がその場でお金を受け取った）なら、チェックしなくても ✔ 当日回収（精算した内勤・時刻を出す）
     //   あとの日に精算して受け取った（kind＝later）なら ✔ 後日内勤回収（2026/11/6）
     const auto = !cl.state && (kind === "done" || kind === "later") && cd.settle_place === "回収";
-    return { id, cd, s, cl, day, shop, card, tr, amt: shop - card - tr, exact, kind, place: cd.settle_place || "", state: cl.state || (auto ? (kind === "later" ? "later" : "day") : ""), auto, done: !!cl.done, nRes: mine.length };
+    return { id, cd, s, cl, day, paidOn, shop, card, tr, amt: shop - card - tr, exact, kind, place: cd.settle_place || "", state: cl.state || (auto ? (kind === "later" ? "later" : "day") : ""), auto, done: !!cl.done, nRes: mine.length };
   })
   // 売上0の子（予約なし・店落ちもカードも振込も投函も0：お茶・休みなど）は回収明細に出さない（合計は0円なので変わらない）2026/11/7
   .filter(r => r.nRes || r.shop || r.card || r.tr || Number(r.cd.deposited || 0))
@@ -280,7 +285,7 @@ function extraList(r){
   if(Number(s.minus || 0)) a.push({ key: "minus", html: `➖ マイナス ${num(s.minus)}` });
   if(s.diff) a.push({ key: "diff", warn: true, html: `<span style="color:#c0392b">⚠️ 精算ミス：投函が${s.diff < 0 ? "足りない " + num(-s.diff) + "（未精算へ）" : "多い " + num(s.diff) + "（お釣りへ）"} ${jump(r.day, id)}</span>` });
   (s.uns || []).forEach(x => a.push({ key: "uns:" + x.date, html: `<span style="color:#5b3fa6">↔ ${md(x.date)} の${x.kind === "day" ? "精算" : x.amount >= 0 ? "未精算 " + num(x.amount) : "お釣り " + num(-x.amount)} をいっしょに精算 ${jump(x.date, id)}</span>` }));
-  if(r.kind === "later") a.push({ key: "", html: `<span style="color:#5b3fa6">→ ${md(r.s.paidOn)}${r.s.only ? (r.s.at ? " " + when(r.s.at).split(" ")[1] : "") + " に個別精算" : " にまとめて精算"} ${jump(r.s.paidOn, id)}</span>` });
+  if(r.kind === "later") a.push({ key: "", html: `<span style="color:#5b3fa6">→ ${md(r.paidOn)}${!r.s.paidOn ? " " + when(r.cd.settled_at).split(" ")[1] + " に精算" : r.s.only ? (r.s.at ? " " + when(r.s.at).split(" ")[1] : "") + " に個別精算" : " にまとめて精算"} ${jump(r.s.paidOn || r.day, id)}</span>` });
   // 📒 まだ精算していない未精算・お釣り（この子のぶん・ほかの日も）
   (D && D.unsOpen ? D.unsOpen.filter(u => u.cast_id === id) : []).forEach(u => a.push({ key: "", html: `<span style="color:#c0392b">📒 ${md(u.biz_date)} の${Number(u.amount) >= 0 ? "未精算 " + num(u.amount) : "お釣り " + num(-Number(u.amount))}（まだ） ${jump(u.biz_date, id)}</span>` }));
   if(r.kind === "home") a.push({ key: "", html: `<span style="color:#9C8B8F">🏠 直帰（精算はまだ） ${jump(r.day, id)}</span>` });
