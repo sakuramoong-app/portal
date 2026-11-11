@@ -168,3 +168,22 @@
   (document.head || document.documentElement).appendChild(st);
   window.KBF = { SITE, ORDER, byId, src, img, ini, broken, STORE_COLOR, STORE_SHORT, storeColor, storeChip, storeDot, OP_ICON, opIcon, STAFF_ICON, STAFF_ALIAS, staffTag, iconOf, setStaffIcons, loadStaff, staffEditor, staffSave, edSet, edClose };
 })();
+
+/* ⬆ マウスのホイール（まん中のボタン）を2回つづけて押すと、いちばん上へ（2026/11/12 店長）
+   ・そのとき見ている枠（受付の小窓など）も、ページも、いちばん上に */
+(function(){
+  if(window.__kbTopDbl) return; window.__kbTopDbl = true;
+  let last = 0;
+  window.KBF_toTop = function(target){
+    for(let el = target; el && el !== document.body && el !== document.documentElement; el = el.parentElement){
+      if(el.scrollTop > 0 && el.scrollHeight > el.clientHeight + 4){ el.scrollTop = 0; }
+    }
+    window.scrollTo(0, 0);
+  };
+  document.addEventListener("mousedown", e => {
+    if(e.button !== 1) return;
+    const now = Date.now();
+    if(now - last < 450){ e.preventDefault(); last = 0; window.KBF_toTop(e.target); }
+    else last = now;
+  }, true);
+})();

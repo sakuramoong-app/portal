@@ -1594,5 +1594,22 @@ function checkKari(){
 setInterval(checkKari, 20000);
 document.head.insertAdjacentHTML("beforeend", `<style>.rc-kari{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 10px;background:#FFF7FB;font-size:12.5px;font-weight:700}</style>`);
 
+/* ---------- 🎨 受付の項目ごとの絵文字（2026/11/12 店長）：ラベルの頭に絵文字（もう絵文字がついている項目はそのまま） ---------- */
+const LABEL_ICON = [[/^電話番号/, "📞"], [/^お客さんの名前/, "👤"], [/^メールアドレス/, "✉️"], [/^種別/, "🏷️"], [/^指名する/, "⭐"], [/^売上店舗/, "🏪"],
+  [/^キャスト（/, "💃"], [/^日付・開始時刻/, "🕒"], [/^終了時刻/, "⏰"], [/^コース/, "⏳"], [/^割引/, "🎟️"], [/^エリア/, "📍"], [/^ホテル・自宅/, "🏨"], [/^交通費/, "🚕"],
+  [/^支払い方法/, "💳"], [/^媒体/, "📣"], [/^状態/, "🚦"], [/^店NG・キャストNG/, "🚫"], [/^NGの理由/, "🗒️"], [/^お客様のこと/, "🙋"], [/^希望プレイ/, "💗"],
+  [/^身長/, "📏"], [/^体重/, "⚖️"], [/^ウィッグ/, "💇"], [/^洋服/, "👗"], [/^スタイルブック/, "📖"]];
+function paintLabelIcons(){
+  document.querySelectorAll("#formBg label").forEach(l => {
+    if(l.querySelector(".lbic")) return;
+    const t = (l.textContent || "").trim();
+    if(!t || /^[\p{Extended_Pictographic}]/u.test(t) || l.querySelector("input,select,textarea")) return;   // もう絵文字がある・チェックボックスの文字は、そのまま
+    const hit = LABEL_ICON.find(([re]) => re.test(t)); if(!hit) return;
+    l.insertAdjacentHTML("afterbegin", `<span class="lbic">${hit[1]}</span>`);
+  });
+}
+paintLabelIcons();
+document.head.insertAdjacentHTML("beforeend", `<style>.lbic{margin-right:4px;font-size:1.05em}</style>`);
+
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
 init();
