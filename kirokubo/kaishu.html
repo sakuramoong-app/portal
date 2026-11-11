@@ -273,7 +273,7 @@ function rowsFor(day, R){
     }
     // 精算した営業日：後日の精算（paidOn）のほか、その日のページで「次の営業日」に精算したもの（精算した時刻の営業日）も後日（2026/11/11 おりひめ：翌日の昼に回収したのに当日回収になっていた）
     //   エクセルから取りこんだ日（settled_by＝エクセル）は、取りこんだ時刻なので見ない
-    const paidOn = s.paidOn || (cd.settled && cd.settled_at && cd.settled_by !== "エクセル" ? KB.realBizDateOf(new Date(cd.settled_at)) : "");
+    const paidOn = (s && s.paidOn) || (cd.settled && cd.settled_at && cd.settled_by !== "エクセル" ? KB.realBizDateOf(new Date(cd.settled_at)) : "");
     const kind = cd.settled ? (paidOn && paidOn > day ? "later" : "done") : cd.direct_home ? "home" : "open";
     // 精算場所が「回収」（内勤がその場でお金を受け取った）なら、チェックしなくても ✔ 当日回収（精算した内勤・時刻を出す）
     //   あとの日に精算して受け取った（kind＝later）なら ✔ 後日内勤回収（2026/11/6）
