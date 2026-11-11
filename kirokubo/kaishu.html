@@ -97,6 +97,14 @@
   .gh{border:2px solid;border-radius:12px 12px 0 0;margin-top:10px;overflow:hidden;} .ght{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 12px;font-size:15px;} .ghs{font-size:13px;font-weight:700;color:#5C4B4F;}
   .payline,.envline{padding:6px 12px;font-size:13.5px;background:#fff;border-top:1px dashed #E8D8DC;} .envres{margin-left:6px;font-weight:800;}
   .tk{font-size:13px;font-weight:700;margin-left:6px;white-space:nowrap;}
+  /* 💰 袋の中身 ①②③（2026/11/11） */
+  .bag3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin:10px 0 14px}
+  .b3{border-radius:14px;padding:10px 12px;border:2px solid #ddd;background:#fff}
+  .b3one{border-color:#5C4B4F;background:#FAFAFA} .b3two{border-color:#2e8b57;background:#EEF8F0} .b3three{border-color:#E0001B;background:#FFF3F3}
+  .b3h{display:flex;justify-content:space-between;align-items:center;font-weight:900;font-size:15px;margin-bottom:6px} .b3h b{font-size:20px}
+  .b3three .b3h b{color:#E0001B;font-size:24px}
+  .b3l{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:13px;margin-bottom:6px} .b3c small{color:#7a6a6f} .b3none{color:#9C8B8F}
+  .b3f{font-size:12.5px;color:#5C4B4F;border-top:1px dashed #ccc;padding-top:6px} .b3in{margin:4px 0}
 </style>
 </head>
 <body>
@@ -284,7 +292,7 @@ function extraList(r){
   if(tb) a.push({ key: "tb", html: `🚃 交通費・プラス ${num(tb)}（キャッシュフローから）` });
   if(Number(s.minus || 0)) a.push({ key: "minus", html: `➖ マイナス ${num(s.minus)}` });
   if(s.diff) a.push({ key: "diff", warn: true, html: `<span style="color:#c0392b">⚠️ 精算ミス：投函が${s.diff < 0 ? "足りない " + num(-s.diff) + "（未精算へ）" : "多い " + num(s.diff) + "（お釣りへ）"} ${jump(r.day, id)}</span>` });
-  (s.uns || []).forEach(x => a.push({ key: "uns:" + x.date, html: `<span style="color:#5b3fa6">↔ ${md(x.date)} の${x.kind === "day" ? "精算" : x.amount >= 0 ? "未精算 " + num(x.amount) : "お釣り " + num(-x.amount)} をいっしょに精算 ${jump(x.date, id)}</span>` }));
+  (s.uns || []).forEach(x => a.push({ key: "uns:" + x.date, html: `<span style="color:#5b3fa6">↔ ${md(x.date)} の${x.kind === "day" ? "精算" + (x.amount != null && Number(x.amount) ? " " + num(x.amount) : "") : x.amount >= 0 ? "未精算 " + num(x.amount) : "お釣り " + num(-x.amount)} をいっしょに精算 ${jump(x.date, id)}</span>` }));
   if(r.kind === "later") a.push({ key: "", html: `<span style="color:#5b3fa6">→ ${md(r.paidOn)}${!r.s.paidOn ? " " + when(r.cd.settled_at).split(" ")[1] + " に精算" : r.s.only ? (r.s.at ? " " + when(r.s.at).split(" ")[1] : "") + " に個別精算" : " にまとめて精算"} ${jump(r.s.paidOn || r.day, id)}</span>` });
   // 📒 まだ精算していない未精算・お釣り（この子のぶん・ほかの日も）
   (D && D.unsOpen ? D.unsOpen.filter(u => u.cast_id === id) : []).forEach(u => a.push({ key: "", html: `<span style="color:#c0392b">📒 ${md(u.biz_date)} の${Number(u.amount) >= 0 ? "未精算 " + num(u.amount) : "お釣り " + num(-Number(u.amount))}（まだ） ${jump(u.biz_date, id)}</span>` }));
@@ -356,6 +364,36 @@ async function loadDay(quiet){   // quiet：保存のあと（「読み込み中
   paintDay();
   if(keepY != null) window.scrollTo(0, keepY);
 }
+/* 💰 袋の中身（2026/11/11 店長）
+   ① 当日回収：当日回収したキャストと額 − 日払い・経費（回収金から出たお金）
+   ② その後に店長が回収：後日内勤回収・店長回収したキャストと額 ＋ 手で足すお金（キキララへの返金分など。袋に入るお金）
+   ③ 袋の中身の総額 ＝ ① ＋ ② */
+function bag3Calc(rows, ex, staff, ho){
+  const sum = l => l.reduce((a, r) => a + (Number(r.amt) || 0), 0);
+  const dayL = rows.filter(r => r.state === "day"), laterL = rows.filter(r => r.state === "later" || r.state === "me");
+  const paidCash = (staff || []).filter(x => x.paid).reduce((a, x) => a + Number(x.day_paid || 0) - kikiAmt(x), 0);
+  const items = (ho && Array.isArray(ho.expenses) ? ho.expenses : []).map((x, i) => Object.assign({ i }, x)).filter(x => x.type === "bagin");
+  const inSum = items.reduce((a, x) => a + (Number(x.amount) || 0), 0);
+  const one = sum(dayL) - (Number(ex) || 0) - paidCash, two = sum(laterL) + inSum;
+  return { dayL, laterL, paidCash, items, inSum, dayAmt: sum(dayL), laterAmt: sum(laterL), one, two, three: one + two };
+}
+function bag3Html(rows, ex, staff, ho, ed){
+  const B = bag3Calc(rows, ex, staff, ho);
+  const who = l => l.length ? l.map(r => `<span class="b3c">${esc(names[r.id] || r.id)} <b>${num(r.amt)}</b>${r.state === "later" ? `<small>（後日内勤${r.paidOn ? "・" + md(r.paidOn) : ""}）</small>` : r.state === "me" ? "<small>（店長回収）</small>" : ""}</span>`).join("") : `<span class="b3none">なし</span>`;
+  return `<div class="bag3">
+    <div class="b3 b3one"><div class="b3h">① 当日回収（${B.dayL.length}人）<b>${yen(B.one)}</b></div>
+      <div class="b3l">${who(B.dayL)}</div>
+      <div class="b3f">回収 ${yen(B.dayAmt)} − 経費 ${yen(ex)} − 回収金から払った日払い ${yen(B.paidCash)} ＝ <b>${yen(B.one)}</b></div></div>
+    <div class="b3 b3two"><div class="b3h">② その後に店長が回収（${B.laterL.length}人）<b>${yen(B.two)}</b></div>
+      <div class="b3l">${who(B.laterL)}</div>
+      ${B.items.length || ed ? `<table class="ex b3in">${B.items.map(x => `<tr><td class="l">${ed ? `<input value="${esc(x.memo || "")}" placeholder="メモ（例：キキララへの返金分）" maxlength="60" style="width:100%" onchange="setExp(${x.i},'memo',this.value)">` : esc(x.memo || "")}</td>
+        <td>＋ ${ed ? `<input type="number" value="${Number(x.amount) || ""}" placeholder="金額" style="width:100px;text-align:right" onchange="setExp(${x.i},'amount',this.value)">` : num(x.amount)}</td>
+        <td class="l">${ed ? `<a class="j" href="javascript:void 0" onclick="delExp(${x.i})">🗑</a>` : ""}</td></tr>`).join("")}
+        ${ed ? `<tr><td class="l" colspan="3"><button class="btn btn-ghost btn-sm" onclick="addExp('bagin')">＋ 袋に入れたお金を足す（キキララへの返金分など）</button></td></tr>` : ""}</table>` : ""}
+      <div class="b3f">後日内勤回収・店長回収 ${yen(B.laterAmt)}${B.inSum ? " ＋ 手で足したお金 " + yen(B.inSum) : ""} ＝ <b>${yen(B.two)}</b></div></div>
+    <div class="b3 b3three"><div class="b3h">③ 袋の中身の総額（① ＋ ②）<b>${yen(B.three)}</b></div>
+      <div class="b3f">${yen(B.one)} ＋ ${yen(B.two)} ＝ <b>${yen(B.three)}</b></div></div></div>`;
+}
 function paintDay(){
   if(!D) return;
   const all = rowsFor(D.day, D), rows = all.filter(r => !place || r.place === place);
@@ -370,6 +408,7 @@ function paintDay(){
     <div class="s">回収サイン<b><span class="mk day">✔${T.dayN}</span>　<span class="mk later">✔${T.laterN}</span>　<span class="mk me">✔${T.meN}</span>　<span class="mk none">■${T.noneN}</span></b></div>
     <div class="s ${T.yetN ? "ng" : ""}">まだチェックしていない<b>${T.yetN}人</b></div>
     <div class="s ${T.todo ? "ng" : ""}">処理まだ（交通費・経費・精算ミス）<b>${T.todo}件</b></div></div>`;
+  h += bag3Html(rows, ex, staff, ho, ed);   // 💰 ① 当日回収 ② その後に店長が回収 ③ 袋の中身の総額（2026/11/11 店長：上にまとめる）
   /* 👛 回収を3つに分ける（2026/11/4 店長の希望）
      ① 内勤者ごと：精算場所「回収」（内勤がその場で受け取った）。精算した内勤ごと。内勤の日払いをどこから取ったかも
      ② 池袋・鶯谷・五反田：封筒（ポスティング）。待機場ごと。あるはずの封筒の数もいっしょに
@@ -441,7 +480,7 @@ function paintDay(){
     ${(() => { /* ✔ 回収した額から、経費と回収金から払った日払いを引いた額（2026/11/7 店長）。キキララから払った分・まだ払っていない分は回収金から出ていないので引かない */
       const col = sAmt(byS("day")) + sAmt(byS("later")) + sAmt(byS("me"));
       const paidCash = staff.filter(x => x.paid).reduce((a, x) => a + Number(x.day_paid || 0) - kikiAmt(x), 0);
-      return `<div class="pf-net"><span>✔ 回収した額 ${yen(col)} − 経費 ${yen(ex)} − 回収金から払った日払い ${yen(paidCash)} ＝</span><b>${yen(col - ex - paidCash)}</b></div>`; })()}</div>`;
+      return ""; /* 2026/11/11：上の ①②③（袋の中身）に移した */ })()}</div>`;
   // 📮 封筒（ポスティングの金庫）：この日の封筒の数・前回からたまっている封筒・回収した封筒の数
   h += `<h3 class="sec">📮 ポスティングの封筒</h3>` + PLACES.filter(p => !place || place === p).map(p => {
     const posted = rows.filter(r => r.cd.settled && r.place === p).length;
@@ -665,7 +704,7 @@ async function setBag(v){
   loadDay(true);   // 保存のあと：画面を消さずに、今の場所のまま描きなおす
 }
 const exList = () => ((HO() && Array.isArray(HO().expenses)) ? HO().expenses : []).map(x => Object.assign({}, x));
-function addExp(type){ const l = exList(); l.push(type === "transfer" ? { type, memo: "キャンセル料", amount: 0 } : type === "advance" ? { type, memo: "両替が足りない", amount: 0, from: "", settled: false } : { memo: "キャッシュフロー補充", amount: 0, from: "", taken: false }); saveHo({ expenses: l }); }
+function addExp(type){ const l = exList(); l.push(type === "bagin" ? { type, memo: "キキララへの返金分", amount: 0 } : type === "transfer" ? { type, memo: "キャンセル料", amount: 0 } :type === "advance" ? { type, memo: "両替が足りない", amount: 0, from: "", settled: false } : { memo: "キャッシュフロー補充", amount: 0, from: "", taken: false }); saveHo({ expenses: l }); }
 function delExp(i){ const l = exList(); if(!confirm("この行を消しますか？")) return; l.splice(i, 1); saveHo({ expenses: l }); }
 function setExp(i, k, v){
   const l = exList(); if(!l[i]) return;
