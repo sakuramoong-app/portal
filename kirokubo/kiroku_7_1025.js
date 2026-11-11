@@ -1576,7 +1576,8 @@ function kariAll(){   // 開いている日の予約（いちばん新しい）�
 }
 function kariMsg(r){
   const d = String(r.biz_date || "");
-  return `📌 仮予約がまだです：${d ? Number(d.slice(5, 7)) + "/" + Number(d.slice(8)) + " " : ""}${r.cast_id ? castName(r.cast_id) : "キャスト未定"}${r.start_at ? " " + hm(r.start_at) + "〜" : ""}。続きを入れて「登録する」を押してください`;
+  // 読み上げ：「11月12日予約　あすかさんの仮予約がまだです」（2026/11/12 店長）
+  return `${d ? Number(d.slice(5, 7)) + "月" + Number(d.slice(8)) + "日予約　" : ""}${r.cast_id ? castName(r.cast_id) + "さん" : "キャスト未定"}の仮予約がまだです`;
 }
 function checkKari(){
   if(!M.casts || KB.PRACTICE || !HAS_KARI) return;

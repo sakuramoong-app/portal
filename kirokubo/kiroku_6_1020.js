@@ -649,7 +649,7 @@ function resCard(r, i){
   const lastLogs = logOf(r).filter(x => x.text && String(x.text).trim()).slice(-2).reverse();
   const memoInline = lastLogs.length ? `<div class="rc-memo" title="${esc(lastLogs.map(l => String(l.text).trim() + "（" + (l.by || "") + " " + whenShort(l.at) + "）").join("\n"))}">📝 ${lastLogs.map(l => esc(String(l.text).trim())).join("<i>／</i>")}</div>` : "";
   const mates = partyMates(r);
-  return `<div class="rescard ${cx ? "cx" : ""} ${r.kari_at && !cx ? "kari" : ""} ${no == null ? "" : "rcs rs-" + r.status}" id="rc-${r.id}" style="border-top:4px solid ${typeof KBF !== "undefined" ? KBF.storeColor(r.store_key) : "transparent"}">   <!-- ①〜⑥の色は、予約の状態の色（2026/11/5） -->
+  return `<div class="rescard ${cx ? "cx" : ""} ${r.kari_at && !cx ? "kari" : ""} ${no == null ? "" : "rcs rs-" + r.status}" id="rc-${r.id}">   <!-- ①〜⑥の色は、予約の状態の色（2026/11/5） -->
     ${r.kari_at && !cx ? `<div class="rc-kari"><span class="kari-badge">📌 仮予約</span> <small>${KBF.staffTag(r.kari_by)} ${whenShort(r.kari_at)}・ぜんぶ入れて「💾 登録する」を押すと消えます</small> <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ 続きを入れる</button></div>` : ""}
     ${!cx && !r.cast_notified_at && r.status !== "done" && r.cast_id ? `<div class="toldov"><button type="button" onclick="toggleNotified(${r.id})" title="キャストに伝えたら押す">⚠️ キャストにまだ伝えていません<small>伝えたら押す</small></button></div>` : ""}
     <div class="rc-top">
