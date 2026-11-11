@@ -1561,5 +1561,37 @@ document.head.insertAdjacentHTML("beforeend", `<style>.hmemo{background:#F4F1FF;
   .hmrow{display:flex;flex-direction:column;gap:2px;margin-bottom:6px;font-size:13px} .hmrow textarea{width:100%;font-family:inherit;font-size:13.5px;border:1.5px solid #D9CFF5;border-radius:8px;padding:4px 8px}
   .hmtxt{font-size:13.5px;white-space:pre-wrap} .hmo{font-size:12.5px;margin-bottom:6px}</style>`);
 
+/* ---------- 📌 仮予約のお知らせ（2026/11/12 店長）：1日4回（13時・17時・21時・深夜1時）声つきで知らせる。ふつうに登録して仮予約の印が消えたら止まる ---------- */
+const KARI_SLOTS = ["13:00", "17:00", "21:00", "1:00"];
+let kariList = [], kariLoadedAt = 0;
+async function loadKari(){
+  if(!HAS_KARI) return;
+  try{ kariList = (q(await sb.from("kb_reservations").select("id,biz_date,kari_at,kari_by,cast_id,start_at,store_key,deleted").not("kari_at", "is", null)) || []).filter(r => !r.deleted); }catch(e){}
+}
+function kariAll(){   // 開いている日の予約（いちばん新しい）＋ほかの日の仮予約
+  const m = new Map();
+  kariList.forEach(r => m.set(r.id, r));
+  (rows || []).forEach(r => { if(r.kari_at && !r.deleted) m.set(r.id, r); else m.delete(r.id); });
+  return [...m.values()];
+}
+function kariMsg(r){
+  const d = String(r.biz_date || "");
+  return `📌 仮予約がまだです：${d ? Number(d.slice(5, 7)) + "/" + Number(d.slice(8)) + " " : ""}${r.cast_id ? castName(r.cast_id) : "キャスト未定"}${r.start_at ? " " + hm(r.start_at) + "〜" : ""}。続きを入れて「登録する」を押してください`;
+}
+function checkKari(){
+  if(!M.casts || KB.PRACTICE || !HAS_KARI) return;
+  if(Date.now() - kariLoadedAt > 5 * 60000){ kariLoadedAt = Date.now(); loadKari(); }
+  const bd = KB.bizDateOf(), now = Date.now(), fired = lsGet("kbFired");
+  kariAll().forEach(r => KARI_SLOTS.forEach(t => {
+    const due = customDue({ time: t }, bd), key = bd + "|kari" + r.id + "|" + t;
+    if(due == null || fired[key] || now < due || now > due + 10 * 60000) return;
+    fired[key] = 1;
+    notify("alarm", { 時間: "📌 仮予約", 内容: kariMsg(r), 名前: r.kari_by || "" }, `jumpToRes(${Number(r.id)},'${String(r.biz_date || "").replace(/[^0-9-]/g, "")}')`);
+  }));
+  lsSet("kbFired", fired);
+}
+setInterval(checkKari, 20000);
+document.head.insertAdjacentHTML("beforeend", `<style>.rc-kari{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 10px;background:#FFF7FB;font-size:12.5px;font-weight:700}</style>`);
+
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
 init();

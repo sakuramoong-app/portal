@@ -925,7 +925,7 @@ function renderCastChecks(c){
       : !area ? "（エリアを選ぶと、3P可のホテルが出ます）"
       : inArea.length ? "　3P可：" + inArea.map(h => { const m = (h.tags || []).find(t => String(t).startsWith("3Pメモ:")); return h.hotel_name + (m ? "（" + String(m).slice(5) + "）" : ""); }).join("・") : "　" + area + "に3P可のホテルが登録されていません";   // 3Pのメモ（料金など）もいっしょに
     const warn = curH && !(Array.isArray(curH.tags) && curH.tags.includes("3P可")) ? `　⚠️ 今のホテル「${curH.hotel_name}」は3P可になっていません` : "";
-    ann.unshift({ text: "✅ 3P可能なホテルを案内する（" + (party.kind === "guest" ? "お客様2名" : "キャスト" + party.n + "名") + "）" + list + warn });
+    know.unshift({ text: "👥 3P可能なホテルを案内する（" + (party.kind === "guest" ? "お客様2名" : "キャスト" + party.n + "名") + "）" + list + warn });   // 2026/11/12 店長：必須のチェックはいらない → 知っておくことに
   }
   // 🌙 お泊り：池袋・鶯谷・五反田以外（遠方）は本指名のみ（新規・店リピのときに出す）
   try{
@@ -1179,38 +1179,32 @@ function paintReqBar(){
   if(!bar){ const m = fb.querySelector(".drawer") || fb.querySelector(".modal"), h = $("formTitle"); if(!m) return; (h || m).insertAdjacentHTML(h ? "afterend" : "afterbegin", `<div id="reqBar" class="reqbar"></div>`); bar = $("reqBar"); }
   const cancelLike = ["cancel", "tobi", "flowed"].includes(($("f_status") || {}).value);
   let list = []; try{ list = cancelLike ? [] : missingRequired(true); }catch(e){}
-  const tent = isTentative();
-  bar.className = "reqbar " + (tent ? "tent" : list.length ? "ng" : "ok");
-  bar.innerHTML = (list.length ? `⚠️ 必須でまだ：${list.map(([n, id]) => `<button type="button" onclick="const el=$('${id}');if(el){el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.add('miss');}">${esc(n)}</button>`).join("")}`
-    : "✅ 必須はぜんぶ入っています")
-    + (cancelLike ? "" : `<div class="tentrow"><label><input type="checkbox" id="f_tent" ${tent ? "checked" : ""} onchange="setTentative(this.checked)"> 🟡 確認中にする（必須がそろっていなくても登録できる）</label>
-      ${tent ? `<select id="f_tentSel" onchange="setTentative(true,this.value)">${TENT_STATES.map(k => `<option value="${k}" ${$("f_status").value === k ? "selected" : ""}>${esc(STATUS[k])}</option>`).join("")}</select>` : ""}</div>`);
+  bar.className = "reqbar " + (list.length ? "ng" : "ok");
+  bar.innerHTML = list.length ? `⚠️ 必須でまだ：${list.map(([n, id]) => `<button type="button" onclick="const el=$('${id}');if(el){el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.add('miss');}">${esc(n)}</button>`).join("")}`
+    : "✅ 必須はぜんぶ入っています";
   fb.style.setProperty("--reqh", bar.offsetHeight + "px");   // タイムラインは、この帯の下にくっつく
 }
-/* 🟡 確認中（2026/11/11 店長）：返事待ちの3つ（キャスト・お客様・外国人1コール待ち）の予約は「確認中」
-   ・必須がそろっていなくても登録できる（キャスト・売上店舗・開始時刻・コースだけは、お金と時間の計算に使うので要る）
-   ・予約の枠ごと「びかびか」光る */
-const TENT_STATES = ["wait_cast_reply", "wait_guest_reply", "wait_foreign_call"];
-function isTentative(){ return TENT_STATES.includes(($("f_status") || {}).value); }
-function setTentative(on, st){
-  const s = $("f_status"); if(!s) return;
-  if(on){ const v = st || (TENT_STATES.includes(s.value) ? s.value : TENT_STATES[0]); if(![...s.options].some(o => o.value === v)) s.insertAdjacentHTML("beforeend", `<option value="${v}">${esc(STATUS[v])}</option>`); s.value = v; }
-  else if(TENT_STATES.includes(s.value)) s.value = "";
-  try{ stColor(); }catch(e){}
-  paintReqBar();
-}
-// 確認中でも要るもの（お金・時間の計算に使う）
-function tentativeMissing(){
-  return [[!$("f_store").value, "売上店舗", "f_store"], [!$("f_start").value, "開始時刻", "f_start"], [!$("f_course").value, "コース", "f_course"]].filter(x => x[0]).map(x => [x[1], x[2]]);
+/* 📌 仮予約（2026/11/11 店長。「確認中にする」のチェックはやめて、こちらに）
+   ・一時保存とは別の「📌 仮予約で登録」ボタン：必須・確認を全部とばして、いったん登録する（売上店舗だけは要る：データベースの決まり）
+   ・仮予約の印（kari_at）がある予約は、枠ごとレインボーにびかびか・1日4回 声つきでお知らせ
+   ・全部入れて、ふつうに「登録」したら仮予約の印は消える（お知らせも止まる） */
+let KARI = false;
+function isTentative(){ return KARI; }
+function tentativeMissing(){ return [[!$("f_store").value, "売上店舗", "f_store"]].filter(x => x[0]).map(x => [x[1], x[2]]); }
+let HAS_KARI = false;
+Promise.resolve(sb.from("kb_reservations").select("kari_at").limit(1)).then(res => { HAS_KARI = !!res && !res.error; }).catch(() => {});
+async function saveKari(){
+  if(!KB.CAN_EDIT) return;
+  if(!HAS_KARI){ toast("📌 仮予約には SQL 237 の実行が必要です"); return; }
+  if(!$("f_store").value){ toast("📌 仮予約でも、売上店舗だけは選んでください"); $("f_store").scrollIntoView({ block: "center" }); return; }
+  KARI = true;
+  try{ await saveRes(); } finally { KARI = false; }
 }
 { let reqT = null; document.addEventListener("input", e => { if(e.target.closest && e.target.closest("#formBg")){ clearTimeout(reqT); reqT = setTimeout(paintReqBar, 300); } }, true);
   document.addEventListener("change", e => { if(e.target.closest && e.target.closest("#formBg")){ clearTimeout(reqT); reqT = setTimeout(paintReqBar, 300); } }, true);
   document.addEventListener("click", e => { if(e.target.closest && e.target.closest("#formBg")){ clearTimeout(reqT); reqT = setTimeout(paintReqBar, 400); } }, true); }
 document.head.insertAdjacentHTML("beforeend", `<style>.reqbar{position:sticky;top:0;z-index:30;margin:-4px 0 8px;padding:6px 10px;border-radius:12px;font-size:13px;font-weight:800;box-shadow:0 4px 10px -6px rgba(0,0,0,.3)}
   .reqbar.ng{background:#FFE8EC;border:2px solid #F09AAA;color:#B0213F} .reqbar.ok{background:#E5F6EC;border:2px solid #9AD3A8;color:#2e8b57}
-  .reqbar.tent{background:#FFF6CC;border:2px solid #F2C200;color:#7a5a00} .tentrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;font-size:13px} .tentrow select{font-size:13px;padding:2px 6px}
-  .rescard.rs-wait_cast_reply,.rescard.rs-wait_guest_reply,.rescard.rs-wait_foreign_call,.tlg .bk.st.wait_cast_reply,.tlg .bk.st.wait_guest_reply,.tlg .bk.st.wait_foreign_call{animation:bikabika .8s steps(1) infinite}
-  @keyframes bikabika{0%{box-shadow:0 0 0 3px #FFD400,0 0 14px 4px rgba(255,212,0,.85)}50%{box-shadow:0 0 0 3px #FF3B6B,0 0 14px 4px rgba(255,59,107,.7)}}
   .reqbar button{font-family:inherit;font-size:12.5px;font-weight:800;background:#fff;border:1.5px solid #F09AAA;color:#B0213F;border-radius:99px;padding:1px 8px;margin:2px 3px;cursor:pointer}</style>`);
 function markMissing(list){
   document.querySelectorAll("#formBg .miss").forEach(el=>el.classList.remove("miss"));
@@ -1604,34 +1598,34 @@ function startAt(){
 }
 async function saveRes(){
   if(!KB.CAN_EDIT){ toast("作成中のため、直せるのは店長だけです"); return; }
-  if(!$("f_cast").value){ toast(isDummyStore($("f_store").value) ? "実際に行くキャストを選んでください" : "キャストを選んでください"); return; }
+  if(!KARI && !$("f_cast").value){ toast(isDummyStore($("f_store").value) ? "実際に行くキャストを選んでください" : "キャストを選んでください"); return; }
   // 専用在籍指名で子を選んでいるのに、名前の欄が空のとき（念のため）：選んだ子の専用の名前を入れなおす
   if(isDummyStore($("f_store").value) && !$("f_dummy").value && typeof dmMode !== "undefined" && dmMode === "named" && $("f_named") && $("f_named").value){ try{ onNamedPick(true); }catch(e){} }
-  if(isDummyStore($("f_store").value) && !$("f_dummy").value){ toast(typeof dmMode !== "undefined" && dmMode === "named" ? "「ダミー or 本物の一覧」から指名された子（⭐ 本物）を選んでください" : "「ダミー or 本物の一覧」から選んでください（ダミー名がなければ ⚙️ から足せます）"); return; }
+  if(!KARI && isDummyStore($("f_store").value) && !$("f_dummy").value){ toast(typeof dmMode !== "undefined" && dmMode === "named" ? "「ダミー or 本物の一覧」から指名された子（⭐ 本物）を選んでください" : "「ダミー or 本物の一覧」から選んでください（ダミー名がなければ ⚙️ から足せます）"); return; }
   // 受付ルール：📣は全部チェック／✅はチェックするまで「〜待ち」でしか保存できない／⌛受けない長さは保存できない（キャンセル・トビは除く）
-  if(!$("f_status").value){ toast("⚠️ 状態を選んでください"); $("f_status").scrollIntoView({ block: "center" }); return; }
+  if(!KARI && !$("f_status").value){ toast("⚠️ 状態を選んでください"); $("f_status").scrollIntoView({ block: "center" }); return; }
   const cancelLike = ["cancel", "tobi", "flowed"].includes($("f_status").value);
   // 必須の項目（キャンセル・トビにするときは、なくても保存できる）
   //   🟡 確認中（返事待ちの3つ）は、売上店舗・開始時刻・コースだけあれば登録できる（2026/11/11）
-  const tentSave = !cancelLike && isTentative();
+  const tentSave = !cancelLike && KARI;   // 📌 仮予約は、必須・確認をとばす
   const miss = cancelLike ? [] : tentSave ? tentativeMissing() : missingRequired();
   if(miss.length){ toast("⚠️ まだ入っていない必須の項目：" + miss.map(x=>x[0]).join("・")); markMissing(miss); return; }
   const waiting = String($("f_status").value).startsWith("wait_");
   const ck = checksForSave();
   // 出禁・店NGのお客さんは受けない（NGが解除になったら「店NG」を「NGではない」に直してから）
-  if(!cancelLike && curCustomer && curCustomer.ng && curCustomer.ng_ask){ toast("🤔 このお客さんが出禁・店NGか、先に決めてください（お客さんの欄のボタン）"); $("custInfo").scrollIntoView({ block: "center" }); return; }
+  if(!cancelLike && !tentSave && curCustomer && curCustomer.ng && curCustomer.ng_ask){ toast("🤔 このお客さんが出禁・店NGか、先に決めてください（お客さんの欄のボタン）"); $("custInfo").scrollIntoView({ block: "center" }); return; }
   // 止めるのは「新しい予約」で「もともと店NG」のお客さんだけ。終わった予約などを開いて、今回 店NG にする（記録する）のは保存できる
   if(!cancelLike && !editing && $("f_ng").value === "1" && curCustomer && curCustomer.ng){ toast("🚫 出禁・店NGのお客さんです。受けられません（解除なら、お客さんの「店NG」を直してから）"); $("custInfo").scrollIntoView({ block: "center" }); return; }
   // 🈵 満了のキャストは、その日の新しい予約を受けない（受けるときは、キャストの枠の「🈵 満了」を外してから）2026/11/7
   if(!cancelLike && !editing && (($("f_day") && $("f_day").value) || day) === day && (castDays[$("f_cast").value] || {}).full_at){ toast("🈵 " + castName($("f_cast").value) + "さんは満了です。受けるときは、キャストの枠の「🈵 満了」を外してから"); return; }
   // 🔎 要確認のお客さん：新しい予約は、キャストに確認したかを聞く（返事待ちの状態なら聞かない）2026/11/7
-  if(!cancelLike && !editing && !waiting && curCustomer && (curCustomer.tags || []).some(x => /要確認/.test(x)) && !confirm("🔎 要確認のお客さんです。\nキャストに確認しましたか？\n（まだなら「キャンセル」を押して、状態を「キャスト返事待ち」にしてください）")) return;
+  if(!cancelLike && !tentSave && !editing && !waiting && curCustomer && (curCustomer.tags || []).some(x => /要確認/.test(x)) && !confirm("🔎 要確認のお客さんです。\nキャストに確認しましたか？\n（まだなら「キャンセル」を押して、状態を「キャスト返事待ち」にしてください）")) return;
   if(!cancelLike && ck.longNg){ toast("🚫 このキャストでは受けられません（赤い枠の理由を見てください）"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && !tentSave && ck.missAnnounce){ toast("📣 お客様に案内することに、まだチェックがついていません"); $("castChecks").scrollIntoView({ block: "center" }); return; }
-  if(!cancelLike && ck.missConfirm && !waiting){ toast("✅ キャストに確認してから受けるものがあります。確認したらチェック、まだなら状態を「キャスト返事待ち」に"); $("castChecks").scrollIntoView({ block: "center" }); return; }
+  if(!cancelLike && !tentSave && ck.missConfirm && !waiting){ toast("✅ キャストに確認してから受けるものがあります。確認したらチェック、まだなら状態を「キャスト返事待ち」に"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   const checks = ck.list;
   if(!cancelLike && !tentSave && !$("f_free").value && (!radioVal("f_afw") || !radioVal("f_rafw"))){ toast("🔸 AF・逆AF のご希望を聞いて、選んでください"); $("optDetails").scrollIntoView({ block: "center" }); return; }
-  if(!$("f_course").value){ toast("コースを選んでください"); return; }
+  if(!tentSave && !$("f_course").value){ toast("コースを選んでください"); return; }
   if(!(await KB.staffSession())){ toast("ログインの期限が切れました。ポータルから開き直してください"); return; }
   const c = calc(), by = KB.operatorName();
   try{
@@ -1665,7 +1659,7 @@ async function saveRes(){
     const mins = minutesOf(c.course) + c.ext*30 + c.date*30;
     const ovRaw = $("f_backov") ? $("f_backov").value : "";
     const row = {
-      biz_date: ($("f_day") && $("f_day").value) || day, store_key: c.store, cast_id: $("f_cast").value, customer_id: customerId,
+      biz_date: ($("f_day") && $("f_day").value) || day, store_key: c.store, cast_id: $("f_cast").value || null, customer_id: customerId,
       dummy_name: isDummyStore(c.store) ? $("f_dummy").value : "",
       checks,
       ...(("guest_flags" in (rows[0] || editing || {}) || M.castChecks.some(x=>"kind" in x)) ? { guest_flags: [...guestFlags], todos: ck.todos } : {}),
@@ -1691,7 +1685,8 @@ async function saveRes(){
       ...(("back_override_note" in (rows[0] || editing || {})) || ovRaw !== "" ? { back_override_note: ovRaw === "" ? "" : backOvNote.trim() } : {}),
       // 📱 スマホで保存しても、そのまま本予約（2026/11/02 社長OK。前の「仮入力」は使わない）
       ...(("phone_draft" in (rows[0] || editing || {})) ? { phone_draft: false } : {}),
-      status: $("f_status").value, confirm_call: $("f_confirm").value.trim(), note: $("f_note").value, updated_by: by,
+      ...(HAS_KARI ? { kari_at: KARI ? ((editing && editing.kari_at) || new Date().toISOString()) : null, kari_by: KARI ? ((editing && editing.kari_at && editing.kari_by) || by) : "" } : {}),   // 📌 仮予約の印（ふつうに登録したら消える）
+      status: $("f_status").value || (KARI ? "checking" : ""), confirm_call: $("f_confirm").value.trim(), note: $("f_note").value, updated_by: by,
       ...formStatusAtPatch(),   // ⏰ この状態の時刻（SQL 182）
       ...(() => { const v = $("f_castnote") ? $("f_castnote").value.trim() : ""; return v || rows.some(x => "cast_note" in x) || (editing && "cast_note" in editing) ? { cast_note: v } : {}; })(),   // 📝 キャストに伝える特記事項（SQL 187）
       ...(() => { const lg = statusLog(editing ? (rows.find(x => x.id === editing.id) || editing) : null, $("f_status").value, by); const all = editing ? lg : (lg || []).concat(formPendingNow()); return all && all.length ? { memo_log: all } : {}; })(),   // 備考に状態の経緯
