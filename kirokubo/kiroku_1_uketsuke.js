@@ -1701,7 +1701,7 @@ async function loadLog(id){
       const t = new Date(l.at); const j = new Date(t.getTime()+9*3600*1000);
       const w = `${j.getUTCMonth()+1}/${j.getUTCDate()} ${String(j.getUTCHours()).padStart(2,"0")}:${String(j.getUTCMinutes()).padStart(2,"0")}`;
       const what = l.action === "insert" ? "受付" : l.action === "delete" ? "削除" : "変更（" + Object.keys(l.changes||{}).slice(0,6).join("・") + "）";
-      return `${w} ${esc(l.by_name||"")} ${what}`;
+      return `${w} ${KBF.staffTag(l.by_name)} ${what}`;
     }).join(" ／ ");
   }catch(e){}
 }

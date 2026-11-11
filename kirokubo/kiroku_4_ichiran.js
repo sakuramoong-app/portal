@@ -136,7 +136,7 @@ function renderListTable(){
         : `<button class="told" onclick="event.stopPropagation();toggleNotified(${r.id})">⚠️ まだ<small>押すと「伝えた」</small></button>`;
       const logs = logOf(r).slice().reverse();
       const logHtml = `<div class="mlog">${logs.length
-          ? logs.slice(0, 3).map(l=>`<div><b>${esc(whenShort(l.at))} ${esc(l.by || "")}</b> ${esc(l.text)}</div>`).join("") + (logs.length > 3 ? `<div class="more">ほか ${logs.length - 3}件（予約を開くと全部）</div>` : "")
+          ? logs.slice(0, 3).map(l=>`<div><b>${esc(whenShort(l.at))} ${KBF.staffTag(l.by)}</b> ${esc(l.text)}</div>`).join("") + (logs.length > 3 ? `<div class="more">ほか ${logs.length - 3}件（予約を開くと全部）</div>` : "")
           : `<div class="none">受付：${esc(r.created_by || "")} ${whenShort(r.created_at)}</div>`}
         ${KB.CAN_EDIT ? `<button class="addlog" onclick="event.stopPropagation();addLogPrompt(${r.id})">＋ 備考</button>` : ""}</div>`;
       return `<tr class="r" onclick="openForm(${r.id})">
@@ -175,7 +175,7 @@ recalc = function(){
 function todosHtml(r){
   const t = r.todos || []; if(!t.length) return "";
   return `<div style="margin-top:4px">${t.map((x, i)=>`<button type="button" class="told ${x.done_at ? "on" : ""}" style="display:block;margin-top:2px;text-align:left"
-      onclick="event.stopPropagation();toggleTodo(${r.id},${i})">${x.done_at ? "✅" : "⏳"} ${esc(x.text)}<small>${x.done_at ? esc(x.done_by || "") + " " + whenShort(x.done_at) : "済んだら押す✅"}</small></button>`).join("")}</div>`;
+      onclick="event.stopPropagation();toggleTodo(${r.id},${i})">${x.done_at ? "✅" : "⏳"} ${esc(x.text)}<small>${x.done_at ? KBF.staffTag(x.done_by) + " " + whenShort(x.done_at) : "済んだら押す✅"}</small></button>`).join("")}</div>`;
 }
 async function toggleTodo(id, i){
   if(!KB.CAN_EDIT){ toast("作成中のため、直せるのは店長だけです"); return; }
@@ -298,7 +298,7 @@ function renderOwner(){
       <div class="t"><div class="k">実質的な店落ち（合計）</div><div class="v">${yen(sum[11])}</div></div></div>
     <div class="wrapx"><table class="list" style="font-size:12.5px"><tr><th>時間</th><th>キャスト</th>${cols.map(([l])=>`<th>${l}</th>`).join("")}</tr>
       ${live.map(r=>`<tr><td>${hm(r.start_at)}</td><td>${esc(castName(r.cast_id))}</td>${cols.map(([, f])=>`<td class="money">${yen(Number(f(r)) || 0)}</td>`).join("")}</tr>`).join("")}
-      ${staff.map(s=>`<tr style="background:#F4F8FF"><td>内勤</td><td>👤 ${esc(s.name)}</td>${s.vals.map((v, i)=>`<td class="money">${i < 8 ? "" : yen(v)}</td>`).join("")}</tr>`).join("")}
+      ${staff.map(s=>`<tr style="background:#F4F8FF"><td>内勤</td><td>${KBF.staffTag(s.name)}</td>${s.vals.map((v, i)=>`<td class="money">${i < 8 ? "" : yen(v)}</td>`).join("")}</tr>`).join("")}
       <tr style="font-weight:800;background:#FFF7FA"><td colspan="2">合計（${live.length}件${staff.length ? "・スタッフ分含む" : ""}）</td>${sum.map(v=>`<td class="money">${yen(v)}</td>`).join("")}</tr></table></div>
     <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:flex-end;margin-top:8px;font-weight:900;font-size:14px">
       <span>雑費合計 <span style="color:#e5638c">${yen(zappi)}</span></span><span>カード合計 <span style="color:#e5638c">${yen(card)}</span></span>
@@ -332,7 +332,7 @@ function renderSeats(){
     <div style="font-weight:800;margin:14px 0 6px">📜 この日の記録</div>
     ${log.length ? `<table class="list"><tr><th>席</th><th>キャスト</th><th>座った</th><th>退席</th><th>時間</th><th>記録</th></tr>${log.map(l=>`<tr>
       <td>${l.seat}番</td><td><b>${esc(castName(l.cast_id))}</b></td><td>${hm(l.start_at)}</td><td>${l.end_at ? hm(l.end_at) : "<b style='color:#6c5ce7'>座っている</b>"}</td>
-      <td>${mins(l)}分</td><td><small>${esc(l.start_by)}${l.end_by ? " → " + esc(l.end_by) : ""}</small></td></tr>`).join("")}</table>` : `<div class="hist">まだ記録はありません</div>`}`;
+      <td>${mins(l)}分</td><td><small>${KBF.staffTag(l.start_by)}${l.end_by ? " → " + KBF.staffTag(l.end_by) : ""}</small></td></tr>`).join("")}</table>` : `<div class="hist">まだ記録はありません</div>`}`;
 }
 async function sitDown(n, castId){
   if(!KB.CAN_EDIT) return;
@@ -378,7 +378,7 @@ function renderFormLog(){
   const el = $("formLog"); if(!el) return;
   // 新しい予約：書いた備考は、保存したときにいっしょに入る
   const logs = editing ? logOf(rows.find(x=>x.id === editing.id) || editing) : formPending;
-  el.innerHTML = `<div class="mlog full">${logs.length ? logs.map(l=>`<div><b>${esc(whenShort(l.at))} ${esc(l.by || "")}</b> ${esc(l.text)}</div>`).join("") : `<div class="none">まだありません</div>`}</div>
+  el.innerHTML = `<div class="mlog full">${logs.length ? logs.map(l=>`<div><b>${esc(whenShort(l.at))} ${KBF.staffTag(l.by)}</b> ${esc(l.text)}</div>`).join("") : `<div class="none">まだありません</div>`}</div>
     ${KB.CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:6px"><input id="formLogText" maxlength="200" placeholder="例：お客様に折り返し済み" style="flex:1"
       onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addFormLog();}"><button type="button" class="btn btn-ghost btn-sm" onclick="addFormLog()">＋ 書く</button></div>` : ""}`;
 }

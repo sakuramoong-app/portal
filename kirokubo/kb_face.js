@@ -58,12 +58,25 @@
     [/おもちゃ|バイブ|ローター|ディルド|ペニバン|電マ/, "🪄"], [/撮影|ポラ|写真|動画/, "📷"], [/聖水|おしっこ|放尿/, "🚿"], [/キス|ディープ/, "💋"],
     [/女装|女レ|メイク/, "💄"], [/3P|4P|３Ｐ|４Ｐ/, "👥"], [/延長/, "⏱️"], [/泊|お泊/, "🌙"], [/マッサージ|オイル|ローション/, "🧴"], [/足|脚|フェチ/, "🦶"]];
   const opIcon = label => { const t = String(label || ""); for(const [re, ic] of OP_ICON) if(re.test(t)) return ic; return "✨"; };
+  // 👤 内勤さんのアイコン（サインの名前の前に。色つきの丸＋絵文字）2026/11/11 店長
+  //   名前はポータルの担当者名。記録簿の日払いの名前（蘭子・上川・若林）も同じ人に。知らない名前は1文字目
+  //   キャストプロフ・内勤カレンダーと同じ絵文字と色（index.html の STAFF_MARKS）
+  const STAFF_ICON = { "きゃ": ["🧡", "#e8590c"], "すや": ["💗", "#d6579e"], "らん": ["💙", "#4d96d9"], "かみ": ["🌙", "#3b5bdb"], "わか": ["🦉", "#8a6fd1"] };
+  const STAFF_ALIAS = { "蘭子": "らん", "上川": "かみ", "若林": "わか", "店長": "きゃ" };
+  function staffTag(name, noName){
+    const raw = String(name || "").trim(); if(!raw) return "";
+    const base = raw.replace(/（.*$|\(.*$/, "").trim(), key = STAFF_ALIAS[base] || base, ic = STAFF_ICON[key];
+    const em = ic ? ic[0] : esc(base[0] || "？"), col = ic ? ic[1] : "#9C8B8F";
+    return `<span class="kbstaff" title="${esc(raw)}"><i style="background:${col}">${em}</i>${noName ? "" : esc(raw)}</span>`;
+  }
   const st = document.createElement("style");
   st.textContent = `.kbface{display:inline-block;flex:none;vertical-align:middle;object-fit:cover;object-position:center top;border-radius:8px;border:1.5px solid #F3D3DD;background:#FFF2F6;box-shadow:0 1px 3px rgba(92,75,79,.12);margin-right:6px}
     .kbface-ini{display:inline-flex;align-items:center;justify-content:center;font-weight:900;color:#C2185B;background:linear-gradient(160deg,#FFE3EC,#FFF7FA)}
     .kbstore{display:inline-block;color:#fff;font-weight:900;font-size:12px;border-radius:99px;padding:2px 10px;white-space:nowrap;vertical-align:middle;box-shadow:0 1px 2px rgba(0,0,0,.15)}
     .kbsdot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;margin-right:4px;box-shadow:0 0 0 1.5px #fff}
-    .opic{display:inline-block;font-size:17px;margin-right:4px;vertical-align:-2px}`;
+    .opic{display:inline-block;font-size:17px;margin-right:4px;vertical-align:-2px}
+    .kbstaff{display:inline-flex;align-items:center;gap:3px;font-weight:800;white-space:nowrap;vertical-align:middle}
+    .kbstaff i{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;font-style:normal;font-size:12px;color:#fff;box-shadow:0 0 0 1.5px #fff,0 1px 3px rgba(0,0,0,.2)}`;
   (document.head || document.documentElement).appendChild(st);
-  window.KBF = { SITE, ORDER, byId, src, img, ini, broken, STORE_COLOR, STORE_SHORT, storeColor, storeChip, storeDot, OP_ICON, opIcon };
+  window.KBF = { SITE, ORDER, byId, src, img, ini, broken, STORE_COLOR, STORE_SHORT, storeColor, storeChip, storeDot, OP_ICON, opIcon, STAFF_ICON, STAFF_ALIAS, staffTag };
 })();

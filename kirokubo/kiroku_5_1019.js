@@ -293,7 +293,7 @@ renderSeats = function(){
   el.innerHTML = `<div class="hint2" style="margin:0 0 8px">${esc(dayTitle())}　今どこに誰がの「鶯谷・待機中」の札で席を選ぶと記録されます。退席・移動すると退席の時刻が入ります。</div>`
     + (log.length ? `<table class="list"><tr><th>席</th><th>キャスト</th><th>座った</th><th>退席</th><th>時間</th><th>記録</th></tr>${log.map(l=>`<tr>
       <td>${l.seat}番</td><td><b>${esc(castName(l.cast_id))}</b></td><td>${hm(l.start_at)}</td><td>${l.end_at ? hm(l.end_at) : "<b style='color:#6c5ce7'>座っている</b>"}</td>
-      <td>${mins(l)}分</td><td><small>${esc(l.start_by)}${l.end_by ? " → " + esc(l.end_by) : ""}</small></td></tr>`).join("")}</table>` : `<div class="hist">まだ記録はありません</div>`);
+      <td>${mins(l)}分</td><td><small>${KBF.staffTag(l.start_by)}${l.end_by ? " → " + KBF.staffTag(l.end_by) : ""}</small></td></tr>`).join("")}</table>` : `<div class="hist">まだ記録はありません</div>`);
 };
 function openSeatLog(){ renderSeats(); $("seatLogBg").classList.add("show"); }
 KB.closeOnBackdrop($("seatLogBg"), ()=>$("seatLogBg").classList.remove("show"));
@@ -388,7 +388,7 @@ function resCells(r){
     : `<button class="told" onclick="event.stopPropagation();toggleNotified(${r.id})">⚠️ まだ<small>押すと「伝えた」</small></button>`;
   const logs = logOf(r).slice().reverse();
   const logHtml = `<div class="mlog">${logs.length
-      ? logs.slice(0, 2).map(l=>`<div><b>${esc(whenShort(l.at))} ${esc(l.by || "")}</b> ${esc(l.text)}</div>`).join("") + (logs.length > 2 ? `<div class="more">ほか ${logs.length - 2}件</div>` : "")
+      ? logs.slice(0, 2).map(l=>`<div><b>${esc(whenShort(l.at))} ${KBF.staffTag(l.by)}</b> ${esc(l.text)}</div>`).join("") + (logs.length > 2 ? `<div class="more">ほか ${logs.length - 2}件</div>` : "")
       : `<div class="none">受付：${esc(r.created_by || "")} ${whenShort(r.created_at)}</div>`}
     ${KB.CAN_EDIT ? `<button class="addlog" onclick="event.stopPropagation();addLogPrompt(${r.id})">＋ 備考</button>` : ""}</div>`;
   return `<td><b>${hm(r.start_at)}</b>〜${hm(r.end_at)}</td>
@@ -633,7 +633,7 @@ function renderDayAlarms(){
   const el = $("dayAlarms"); if(!el || !M.casts) return;
   const base = Date.parse(day + "T00:00:00+09:00"), now = Date.now();
   const list = dayAlarms().filter(a=>a.bd === day).map(a=>({ a, due: customDue(a, day) })).sort((x, y)=>x.due - y.due);
-  el.innerHTML = list.map(({ a, due })=>`<span class="dachip${due && now > due ? " past" : ""}">⏰ <b>${esc(lateHM(Math.round((due - base) / 60000)))}</b> ${esc(a.text)}${a.by ? `<small>（${esc(a.by)}）</small>` : ""}${a.now ? " <small>（すぐ）</small>" : ""}${due && now > due ? " <small>鳴った</small>" : ""}
+  el.innerHTML = list.map(({ a, due })=>`<span class="dachip${due && now > due ? " past" : ""}">⏰ <b>${esc(lateHM(Math.round((due - base) / 60000)))}</b> ${esc(a.text)}${a.by ? `<small>（${KBF.staffTag(a.by)}）</small>` : ""}${a.now ? " <small>（すぐ）</small>" : ""}${due && now > due ? " <small>鳴った</small>" : ""}
       ${KB.CAN_EDIT ? `<button type="button" title="消す" onclick="delDayAlarm('${esc(a.id)}')">×</button>` : ""}</span>`).join("")
     + (KB.CAN_EDIT ? `<span class="daadd"><label><input type="checkbox" id="da_use" checked onchange="$('da_time').disabled = !this.checked"> ⏰ 時刻を指定する</label><input id="da_time" placeholder="21:00" inputmode="numeric"><input id="da_text" placeholder="鳴らす内容（例：〇〇さんに電話）" onkeydown="if(event.key==='Enter')addDayAlarm()"><button type="button" onclick="addDayAlarm()">🔔 アラートを足す</button></span>` : "");
 }
@@ -1082,7 +1082,7 @@ async function editInfoNote(cid){
 function attendHtml(cid){
   const log = ((castDays[cid] || {}).attend_log) || [];
   if(!log.length) return "";
-  return `<div class="attend">${log.map(a=>`<span class="ak ${a.kind === "欠勤" ? "absent" : ""}">📝 <b>${esc(a.kind)}</b>${a.time ? "（" + esc(a.time) + "）" : ""}：${esc(a.reason || "理由なし")}<small> ${esc(a.by || "")} ${whenShort(a.at)}</small></span>`).join("")}</div>`;
+  return `<div class="attend">${log.map(a=>`<span class="ak ${a.kind === "欠勤" ? "absent" : ""}">📝 <b>${esc(a.kind)}</b>${a.time ? "（" + esc(a.time) + "）" : ""}：${esc(a.reason || "理由なし")}<small> ${KBF.staffTag(a.by)} ${whenShort(a.at)}</small></span>`).join("")}</div>`;
 }
 let attendCid = null;
 function openAttend(cid, kind){
@@ -1542,7 +1542,7 @@ function draftPaint(){
   if(!a.length || open){ if(el) el.remove(); return; }
   if(!el){ el = document.createElement("div"); el.id = "draftBtn"; document.body.appendChild(el); }
   // 一覧の1つずつに「🗑 消す」、一覧のいちばん下に「🗑 全部消す」（2026/11/11 店長）
-  const item = d => `<div class="dr-row"><button type="button" class="dr-go" onclick="draftResume('${d.key}')">✏️ ${esc(d.label)}<small>（${d.day && d.day !== day ? esc(d.day.slice(5).replace("-", "/")) + "の受付・" : ""}${esc(d.by || "")} ${whenShort(d.at)}・押すと続きから）</small></button><button type="button" class="dr-x" onclick="draftDrop('${d.key}')" title="この一時保存を消す">🗑 消す</button></div>`;
+  const item = d => `<div class="dr-row"><button type="button" class="dr-go" onclick="draftResume('${d.key}')">✏️ ${esc(d.label)}<small>（${d.day && d.day !== day ? esc(d.day.slice(5).replace("-", "/")) + "の受付・" : ""}${KBF.staffTag(d.by)} ${whenShort(d.at)}・押すと続きから）</small></button><button type="button" class="dr-x" onclick="draftDrop('${d.key}')" title="この一時保存を消す">🗑 消す</button></div>`;
   el.innerHTML = a.length === 1 ? item(a[0])
     : `<div class="dr-head"><button type="button" class="dr-go" onclick="draftOpenList=!draftOpenList;draftPaint()">⏸ 一時保存の受付が <b>${a.length}こ</b> あります<small>（${draftOpenList ? "押すとしまう" : "押すと一覧"}）</small></button></div>${draftOpenList ? `<div class="dr-list">${a.map(item).join("")}<div class="dr-row" style="justify-content:flex-end"><button type="button" class="dr-x" onclick="draftDropAll()">🗑 全部消す</button></div></div>` : ""}`;
 }
@@ -1602,7 +1602,7 @@ function attendShift(a){
 attendHtml = function(cid){
   const log = ((castDays[cid] || {}).attend_log) || [];
   if(!log.length) return "";
-  return `<div class="attend">${log.map((a, i)=>`<span class="ak ${a.kind === "欠勤" ? "absent" : ""}">📝 <b>${esc(a.kind)}</b>${a.time ? "（" + esc(a.time) + "）" : ""}：${esc(a.reason || "理由なし")}<small> ${esc(a.by || "")} ${whenShort(a.at)}</small>
+  return `<div class="attend">${log.map((a, i)=>`<span class="ak ${a.kind === "欠勤" ? "absent" : ""}">📝 <b>${esc(a.kind)}</b>${a.time ? "（" + esc(a.time) + "）" : ""}：${esc(a.reason || "理由なし")}<small> ${KBF.staffTag(a.by)} ${whenShort(a.at)}</small>
     ${KB.CAN_EDIT ? `<button type="button" class="undo" onclick="event.stopPropagation();undoAttend('${cid}',${i})">✖ 取り消し</button>` : ""}</span>`).join("")}</div>`;
 };
 { const __attendInfo = attendHtml; attendHtml = function(cid){ return infoNoteHtml(cid) + __attendInfo(cid); }; }   // 📌 今日のことを、勤怠の上に

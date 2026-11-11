@@ -40,7 +40,7 @@ function renderExtList(){
   el.innerHTML = extOrders.map((o, i)=>`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13.5px;padding:4px 0;border-top:${i ? "1px dashed #C9D8F2" : "0"}">
       <b>${"①②③④⑤⑥⑦⑧⑨⑩"[i] || (i + 1) + "."} ${esc(EXT_LABEL[o.kind] || o.kind)} ${o.min}分</b>
       ${o.legacy ? `<small style="color:var(--sub)">（前に入れた分）</small>` : `<span>＋${yen(o.price || 0)} → 終了 ${esc(o.end_after || "--:--")}・総額 ${yen(o.total_after || 0)}</span>
-      <small style="color:var(--sub)">${esc(o.by || "")} ${dt(o.at)}</small>`}
+      <small style="color:var(--sub)">${KBF.staffTag(o.by)} ${dt(o.at)}</small>`}
       ${KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto;padding:2px 10px" onclick="removeExtOrder(${i})">✖</button>` : ""}</div>`).join("")
     + `<div style="margin-top:6px;padding:6px 8px;background:#fff;border-radius:8px;font-size:13.5px;font-weight:800">計：${sum("ext") ? "延長 " + sum("ext") + "分" : ""}${sum("ext") && sum("date") ? "・" : ""}${sum("date") ? "デート " + sum("date") + "分" : ""}
       → 終了 ${esc($("endView").textContent)}・<span style="color:#e5638c">総額 ${yen(last ? last.total : 0)}</span>${last && (last.extFee + last.dateFee) ? `（延長・デート分 ${yen(last.extFee + last.dateFee)}${last.pay && last.pay !== "cash" ? "＋カード手数料" : ""}）` : ""}</div>`;

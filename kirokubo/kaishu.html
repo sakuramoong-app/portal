@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_common.js?v=24"></script>
-<script src="kb_face.js?v=4"></script><!-- 🖼 キャストの写真アイコン -->
+<script src="kb_face.js?v=5"></script><!-- 🖼 キャストの写真アイコン -->
 <script src="kb_money.js?v=1"></script><!-- 💴 お金の計算はここ1か所 -->
 <style>
   body{font-size:14.5px;}
@@ -504,7 +504,7 @@ function paintDay(){
         <td class="l">${ed ? `<input value="${esc(x.memo || "")}" placeholder="メモ（例：両替が足りない）" maxlength="60" style="width:100%" onchange="setExp(${x.i},'memo',this.value)">` : esc(x.memo || "")}</td>
         <td>${ed ? `<input type="number" value="${Number(x.amount) || ""}" placeholder="金額" style="width:100px;text-align:right" onchange="setExp(${x.i},'amount',this.value)">` : num(x.amount)}</td>
         <td class="l" style="white-space:nowrap">${fromSel(x, ed)}
-          <label class="tk"><input type="checkbox" ${x.settled ? "checked" : ""} ${ed ? "" : "disabled"} onchange="setExp(${x.i},'settled',this.checked)"> 立て替え精算した</label>${x.settled && x.settled_by ? `<small class="who2">${esc(x.settled_by)} ${when(x.settled_at)}</small>` : ""}</td>
+          <label class="tk"><input type="checkbox" ${x.settled ? "checked" : ""} ${ed ? "" : "disabled"} onchange="setExp(${x.i},'settled',this.checked)"> 立て替え精算した</label>${x.settled && x.settled_by ? `<small class="who2">${KBF.staffTag(x.settled_by)} ${when(x.settled_at)}</small>` : ""}</td>
         <td class="l">${ed ? `<a class="j" href="javascript:void 0" onclick="delExp(${x.i})">🗑</a>` : ""}</td></tr>`).join("")}
       ${ed ? `<tr><td class="l" colspan="4"><button class="btn btn-ghost btn-sm" onclick="addExp('advance')">＋ 立て替えを足す</button></td></tr>` : ""}</table>
     <div class="hand"><div class="k">🤝 社長に手渡し（随時の回収合計・現金）</div><div class="v">${yen(hand)}</div></div>
@@ -519,7 +519,7 @@ function rowHtml(r, ed){
   const x = extraItems(r, ed);
   const plTxt = r.place === "回収" ? "手渡し（回収）" : r.place ? r.place + "に投函" : "";
   // だれが・いつ・どこで精算したか（精算の記録から自動）／回収サインを押した人・時刻
-  const who = [r.cd.settled && r.cd.settled_at ? `🧾 精算：${esc(r.cd.settled_by || "")} ${when(r.cd.settled_at)}${plTxt ? "・" + esc(plTxt) : ""}` : r.cd.direct_home ? "🏠 直帰（まだ精算していない）" : "⏳ まだ精算していない",
+  const who = [r.cd.settled && r.cd.settled_at ? `🧾 精算：${KBF.staffTag(r.cd.settled_by)} ${when(r.cd.settled_at)}${plTxt ? "・" + esc(plTxt) : ""}` : r.cd.direct_home ? "🏠 直帰（まだ精算していない）" : "⏳ まだ精算していない",
     r.cl.state && r.cl.updated_by ? `✔ サイン：${esc(r.cl.updated_by)} ${when(r.cl.updated_at)}` : r.auto ? `✔ 自動（${r.state === "later" ? "後日" : "当日"}にその場で受け取った精算）` : ""].filter(Boolean).join("<br>");
   return `<tr class="${countPerfect(r) ? "perfect" : ""}"><td class="l">${typeof KBF !== "undefined" ? KBF.img(r.id, 30) : ""}<b>${esc(names[r.id] || r.id)}</b>${r.place ? ` <span class="st" style="background:${PLACE_COLOR[r.place] || "#eee"};color:#333">${esc(r.place)}</span>` : ""}${histHtml(r)}
           <div class="rowlinks"><a class="j" href="settle.html?d=${r.day}&c=${encodeURIComponent(r.id)}" target="_blank" rel="noopener" title="この日のこの子の精算へ">↗ 精算</a>　<a class="j" href="javascript:void 0" onclick="phView('${r.day}','${esc(r.id)}')">🖼 写真を見る</a>　<a class="j" href="javascript:void 0" onclick="editColNote('${esc(r.id)}')">📝 メモ</a></div>

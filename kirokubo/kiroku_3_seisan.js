@@ -23,7 +23,7 @@ function cardHtml(id, c){
       ${dis ? "" : `<button class="btn btn-ghost btn-sm" onclick="delItem('${id}','${kind}',${i})">🗑</button>`}</div>`).join("");
   return `<div class="card ${done ? "done" : ""}" id="card-${id}">
     <h2>${esc(castName(id))}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : "未精算"}</span>
-      ${done && cd.settled_at ? `<small class="hint2">${esc(cd.settled_by || "")} ${hm(cd.settled_at)}</small>` : ""}</h2>
+      ${done && cd.settled_at ? `<small class="hint2">${KBF.staffTag(cd.settled_by)} ${hm(cd.settled_at)}</small>` : ""}</h2>
     <div class="sbig">
       ${c.drop >= 0
         ? `<div class="sb drop"><div class="k">💰 投函額<small>（封筒に入れて投函する額）</small></div><div class="v">${yen(c.drop)}</div><div class="s">総額 ${yen(c.total)} − 手取り ${yen(c.takeHome)}${c.cardPaid ? " − カード払分 " + yen(c.cardPaid) : ""}</div>

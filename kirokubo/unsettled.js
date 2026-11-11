@@ -193,7 +193,7 @@ function bizTimeAt(v){
 function slogLine(x){
   const head = x.kind ? `<b>${esc(SLOG_KINDS[x.kind] || x.kind)}</b>${x.place ? `（${esc(x.place)}）` : ""}${x.amount ? ` ${yen(x.amount)}` : ""}` : "";
   const cam = x.cam === "ok" ? `📹◎${x.cam_at ? " " + logWhen(x.cam_at) + "確認" : ""}` : x.cam === "ng" ? "📹×" : "";
-  return `<div class="sl"><div class="t"><span class="sw">${logWhen(x.at)}</span> ${head}${head && x.text ? "<br>" : ""}${esc(x.text || "")}</div><div class="s">${esc(x.by || "")}${cam ? "　" + cam : ""}</div></div>`;
+  return `<div class="sl"><div class="t"><span class="sw">${logWhen(x.at)}</span> ${head}${head && x.text ? "<br>" : ""}${esc(x.text || "")}</div><div class="s">${KBF.staffTag(x.by)}${cam ? "　" + cam : ""}</div></div>`;
 }
 function settleLogHtml(id){
   const cd = unsCD()[id] || {};
@@ -468,7 +468,7 @@ function slogPaint(){
       <button type="button" class="btn btn-ghost btn-sm" onclick="SLOG.f={cast:'',day:'',kind:'',by:'',at:''};slogPaint()">クリア</button>
       <small style="color:#9C8B8F">${list.length}件</small></div>
     ${list.length ? `<div style="overflow-x:auto"><table class="slogt"><tr><th>処理した日時</th><th>内勤</th><th>キャスト</th><th>営業日</th><th>種類</th><th>内容</th></tr>
-      ${list.map(r => `<tr><td>${logWhen(r.at)}</td><td>${esc(r.by)}</td><td><b>${esc(castName(r.cid))}</b></td><td>${unsMd(r.bd)}</td><td><span class="sk ${r.kind}">${r.kind}</span></td><td style="white-space:pre-wrap">${esc(r.text)}</td></tr>`).join("")}</table></div>`
+      ${list.map(r => `<tr><td>${logWhen(r.at)}</td><td>${KBF.staffTag(r.by)}</td><td><b>${esc(castName(r.cid))}</b></td><td>${unsMd(r.bd)}</td><td><span class="sk ${r.kind}">${r.kind}</span></td><td style="white-space:pre-wrap">${esc(r.text)}</td></tr>`).join("")}</table></div>`
       : `<div class="hint2">この月のログはありません</div>`}`;
 }
 document.head.insertAdjacentHTML("beforeend", `<style>
@@ -820,7 +820,7 @@ cardHtml = function(id, c){
   return `<div class="card svc ${done ? "done" : ""} ${cd.status === "お茶" ? "tea" : cd.status === "欠勤" ? "absent" : ""}" id="card-${id}">
     <h2>${typeof KBF !== "undefined" ? KBF.img(id, 40) : ""}${esc(castName(id))}${cd.status === "お茶" ? `<span class="st tea">🟩 お茶</span>` : cd.status === "欠勤" ? `<span class="st absent">🟥 欠勤</span>` : ""}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : home ? "🏠 直帰" : nothing ? "精算なし（キャンセル・トビだけ）" : "未精算"}</span>${done && (UNS || []).some(x => x.cast_id === id && x.biz_date === day && !x.done_on) ? `<span class="st" style="background:#FDE7E7;color:#c0392b;margin-left:4px">⚠️ 未精算あり</span>` : ""}
       ${done && cd.settled_at ? (() => { const s = cd.settle_snapshot || {}, later = s.paidOn && s.paidOn !== day;   // いつ・どこで・だれが（後日の合算・個別の精算も）2026/11/5
-        return `<small class="hint2 sdwho">${later ? `<b>${s.only ? "📮 後日に個別精算" : "📮 後日に合算で精算"}</b>：` : ""}${esc(logWhen(cd.settled_at))}${cd.settle_place ? "・" + esc(cd.settle_place) : ""}${cd.settled_by ? "・" + esc(cd.settled_by) : ""}</small>`; })() : ""}</h2>
+        return `<small class="hint2 sdwho">${later ? `<b>${s.only ? "📮 後日に個別精算" : "📮 後日に合算で精算"}</b>：` : ""}${esc(logWhen(cd.settled_at))}${cd.settle_place ? "・" + esc(cd.settle_place) : ""}${cd.settled_by ? "・" + KBF.staffTag(cd.settled_by) : ""}</small>`; })() : ""}</h2>
     ${!done && !off && !nothing ? sgHtml(id, c, cd) : ""}
     ${resPickHtml(id, c)}
     <div class="svg2"><div class="svl">
@@ -844,7 +844,7 @@ cardHtml = function(id, c){
     ${V.shop}
     <div class="sv"><div class="shop"><div class="hd">🏪 お店用${!done && c.partNo > 1 ? `（${PART_MARK[c.partNo - 1] || c.partNo}の精算）` : ""}</div>
     ${shopStatusHtml(id, c, done, home)}
-    ${!done && c.partNo > 1 ? `<div class="prevparts">${(c.prevParts || []).map((p, i) => `<div>✅ ${PART_MARK[i] || i + 1} 精算済：${p.at ? esc(logWhen(p.at)) : ""}${p.place ? "・" + esc(p.place) : ""}${p.by ? "・" + esc(p.by) : ""}・投函 ${yen(p.deposited != null ? p.deposited : p.drop || 0)}</div>`).join("")}
+    ${!done && c.partNo > 1 ? `<div class="prevparts">${(c.prevParts || []).map((p, i) => `<div>✅ ${PART_MARK[i] || i + 1} 精算済：${p.at ? esc(logWhen(p.at)) : ""}${p.place ? "・" + esc(p.place) : ""}${p.by ? "・" + KBF.staffTag(p.by) : ""}・投函 ${yen(p.deposited != null ? p.deposited : p.drop || 0)}</div>`).join("")}
       <small>ここから下は ${PART_MARK[c.partNo - 1] || c.partNo}（のこした予約）の精算です。投函した額も ${PART_MARK[c.partNo - 1] || c.partNo} の分だけ入れてください</small></div>` : ""}
     ${unsBoxHtml(id, c)}
     <div class="acts">
@@ -879,7 +879,7 @@ cardHtml = function(id, c){
 /* 🏪 お店用のすぐ下：この子の精算が今どうなっているか（精算済／直帰／まだ）・未精算をどうしたか・処理した日時と内勤（2026/11/7 店長） */
 function shopStatusHtml(id, c, done, home){
   const cd = c.cd || {}, s = cd.settle_snapshot || {}, logs = Array.isArray(cd.settle_log) ? cd.settle_log : [];
-  const who = (at, by, place) => `<span class="ssw">🕒 ${esc(at ? logWhen(at) : "時刻なし")}${place ? "・📍" + esc(place) : ""}・👤 ${esc(by || "名前なし")}</span>`;
+  const who = (at, by, place) => `<span class="ssw">🕒 ${esc(at ? logWhen(at) : "時刻なし")}${place ? "・📍" + esc(place) : ""}・${by ? KBF.staffTag(by) : "👤 名前なし"}</span>`;
   const lines = [];
   let head;
   if(done){
@@ -900,7 +900,7 @@ function shopStatusHtml(id, c, done, home){
   // この日の未精算（精算のあとで出た・手で足した）が、今どうなっているか
   (UNS || []).filter(x => x.cast_id === id && x.biz_date === day).forEach(x => {
     const amt = Number(x.amount) || 0;
-    lines.push(`${amt >= 0 ? "⚠️ 未精算" : "💴 お釣り"} ${yen(Math.abs(amt))}${x.note ? "（" + esc(x.note) + "）" : ""}：${x.done_on ? `<b style="color:#2e8b57">✅ ${esc(unsMd(x.done_on))}に精算ずみ</b>（${esc(x.done_by || "")}）` : `<b style="color:#c0392b">まだ（つぎの精算で）</b>`}　<small>${esc(x.created_by || "")} ${x.created_at ? esc(logWhen(x.created_at)) : ""}</small>`);
+    lines.push(`${amt >= 0 ? "⚠️ 未精算" : "💴 お釣り"} ${yen(Math.abs(amt))}${x.note ? "（" + esc(x.note) + "）" : ""}：${x.done_on ? `<b style="color:#2e8b57">✅ ${esc(unsMd(x.done_on))}に精算ずみ</b>（${KBF.staffTag(x.done_by)}）` : `<b style="color:#c0392b">まだ（つぎの精算で）</b>`}　<small>${KBF.staffTag(x.created_by)} ${x.created_at ? esc(logWhen(x.created_at)) : ""}</small>`);
   });
   // 最後にしたこと（精算の履歴のいちばん新しいもの）
   const last = logs[logs.length - 1];

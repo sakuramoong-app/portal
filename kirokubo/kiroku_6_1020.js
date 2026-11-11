@@ -615,7 +615,7 @@ async function trStatus(id, st){
 
 function memoBoxes(r){
   const logs = logOf(r).slice().reverse();
-  return `<div class="bikobox">${logs.length ? logs.map(l=>`<div class="bk1"><div class="t">${esc(l.text)}</div><div class="s">${esc(l.by || "")} ${esc(whenShort(l.at))}</div></div>`).join("")
+  return `<div class="bikobox">${logs.length ? logs.map(l=>`<div class="bk1"><div class="t">${esc(l.text)}</div><div class="s">${KBF.staffTag(l.by)} ${esc(whenShort(l.at))}</div></div>`).join("")
       : `<div class="none">まだ備考はありません（受付：${esc(r.created_by || "")} ${whenShort(r.created_at)}）</div>`}</div>
     ${KB.CAN_EDIT ? `<button type="button" class="addbiko" onclick="event.stopPropagation();addLogPrompt(${r.id})">＋ 備考を書く</button>` : ""}`;
 }
