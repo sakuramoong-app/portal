@@ -1143,13 +1143,13 @@ function openPriceEdit(store){
   const row = p => `<tr data-old="${esc(p ? p.course : "")}">
     <td><input class="pe-c" value="${esc(p ? p.course : "")}" placeholder="例：90 / 女レ80 / 泊21-5" style="width:120px"></td>
     <td><input class="pe-p" type="number" min="0" step="500" value="${p ? p.price : ""}" placeholder="13000" style="width:100px"></td>
-    <td><input class="pe-n" value="${esc(p ? p.note : "")}" placeholder="（あれば）" style="width:160px"></td>
+    <td><input class="pe-n" value="${esc(p ? p.note : "")}" placeholder="例：90分（終了時刻に使う）" style="width:180px"></td>
     <td style="white-space:nowrap"><button type="button" class="btn btn-primary btn-sm" onclick="savePriceRow(this,'${esc(store)}')">${p ? "保存" : "＋ 足す"}</button>
       ${p ? `<button type="button" class="btn btn-ghost btn-sm" onclick="delPriceRow(this,'${esc(store)}')">消す</button>` : ""}</td></tr>`;
   bg.innerHTML = `<div class="modal" style="max-width:640px"><button class="x" onclick="$('priceBg').classList.remove('show')">×</button>
     <h2>✏️ コース・料金を直す</h2>
     <div class="f" style="margin:8px 0"><label>お店</label><select id="pe_store" onchange="openPriceEdit(this.value)">${M.stores.map(s=>`<option value="${s.key}" ${s.key === store ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select></div>
-    <p style="font-size:12.5px;color:var(--sub);line-height:1.6;margin:0 0 8px">コースは分だけなら数字（例：90）。料金は基本額（指名料・延長・オプションは別）。<br>新しいコースは、キャストのバックがまだないので、はじめの受付で「キャストの報酬」にバックを入れてください（次から自動）。</p>
+    <p style="font-size:12.5px;color:var(--sub);line-height:1.6;margin:0 0 8px">コースは分だけなら数字（例：90）。<b>専用コースなど名前に時間がないときは、名前か説明に「90分」のように書くと、終了時刻が自動になります。</b>料金は基本額（指名料・延長・オプションは別）。<br>新しいコースは、キャストのバックがまだないので、はじめの受付で「キャストの報酬」にバックを入れてください（次から自動）。</p>
     <div style="overflow-x:auto"><table class="list"><tr><th>コース</th><th>料金（円）</th><th>説明</th><th></th></tr>${list.map(p => row(p)).join("")}${row(null)}</table></div></div>`;
   bg.classList.add("show");
 }

@@ -2220,7 +2220,7 @@ function pfLogsHtml(){
           <span style="flex:1"></span>
           <span style="font-size:10.5px;color:var(--sub)">${esc(logDay(l.date))}</span>
         </div>
-        <div style="font-size:10.5px;font-weight:700;color:${mk.color};margin-bottom:3px">${mk.emoji} ${l.author ? esc(l.author) : "書いた人の記録なし"}</div>
+        <div style="font-size:10.5px;font-weight:700;color:${mk.color};margin-bottom:3px">${siEm(mk)} ${l.author ? esc(l.author) : "書いた人の記録なし"}</div>
         <div style="font-size:14px;white-space:pre-wrap;line-height:1.6">${esc(String(l.content || ""))}</div>
         ${CAN_EDIT ? `<div style="margin-top:4px"><button type="button" class="pfLink" onclick="pfEditLog(${i})">編集</button><button type="button" class="pfLink del" onclick="pfDelLog(${i})">削除</button></div>` : ""}</div>`; }).join("") || `<div class="hint" style="text-align:center;padding:16px 0">記録はまだありません</div>`}
       </div>
@@ -2649,7 +2649,7 @@ function paintProf(){
       <div class="hint" style="grid-column:1/-1;font-size:12px">🌐 公式HPのアイコンは自動：メイン＝キャストの種類／サブ＝状態（ありあり・ありなし・なしなし）→ Pサイズ（13cm〜20cm）→ 雰囲気（公式HPにあるアイコンの言葉だけ）の順に入ります</div></div></div></details>
     <details ${pfAcc("intro")}><summary class="pfHead">💬 紹介文</summary><div class="pfBody">
       ${CAN_EDIT && hpNoOf(pf.c, sk).mk === "sakuramoon" ? `<div style="margin-bottom:8px"><button type="button" class="btn btn-primary btn-sm" onclick="tplOpen()">🎨 テンプレで作る（デリヘルタウン欄・本人から一言）</button>${tplPending[sk] ? ` <span class="hint" style="color:#B7791F">デリヘルタウン欄は、保存すると公式HPに入ります</span>` : ""}</div>`
-        : CAN_EDIT && !PROF_DUMMY.includes(sk) ? `<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><button type="button" class="btn btn-primary btn-sm" onclick="introTplApplyOpen()">🎀 このお店の飾りテンプレで作る（サクラムーンの文から）</button>
+        : CAN_EDIT && !PROF_DUMMY.includes(sk) ? `<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${hpNoOf(pf.c, sk).mk ? `<button type="button" class="btn btn-primary btn-sm" onclick="tplOpen()" title="画像・動画・リンク・説明文を足す（テンプレがなくても使える）">🎨 テンプレで作る（画像・動画など）</button>` : ""}<button type="button" class="btn btn-primary btn-sm" onclick="introTplApplyOpen()">🎀 このお店の飾りテンプレで作る（サクラムーンの文から）</button>
           <a href="javascript:void(0)" class="hint" onclick="openIntroTplEditor('${skKeyOf(sk)}')">🎀 飾りテンプレの登録・直す</a></div>` : ""}
       <div class="hint" style="display:flex;align-items:center;gap:6px">本人から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_c')">📋 コピー</button>${CAN_EDIT ? tplSnipSelect('pf_c') : ""}</div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
       <div class="hint" style="margin-top:8px;display:flex;align-items:center;gap:6px">店長から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_m')">📋 コピー</button>${CAN_EDIT ? tplSnipSelect('pf_m') : ""}</div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></details>
@@ -3011,6 +3011,7 @@ function pfPersonalityHtml(data){
 const STAFF_MARKS = { "きゃ": { emoji: "🧡", color: "#e8590c", bg: "#fff4ee" }, "すや": { emoji: "💗", color: "#d6579e", bg: "#fff3fa" },
   "らん": { emoji: "💙", color: "#4d96d9", bg: "#f1f7fe" }, "かみ": { emoji: "🌙", color: "#3b5bdb", bg: "#f0f3fe" }, "わか": { emoji: "🦉", color: "#8a6fd1", bg: "#f6f2fe" } };
 if (window.StaffIcons) StaffIcons.patch(STAFF_MARKS);   // 👤 自分のアイコン（全アプリ共通）
+const siEm = o => (window.StaffIcons && StaffIcons.html) ? StaffIcons.html(o) : ((o && o.emoji) || "");
 function staffMark(name){ if(!name) return { emoji: "👤", color: "#B8A9B0", bg: "#FAF7F8" };   // 書いた人が残っていない記録（前のしくみのころ）は灰色
   return STAFF_MARKS[name] || { emoji: "🌸", color: "#c9556a", bg: "#FDF3F5" }; }
 // 記録の日付：「2026-09-12T15:00:00.000Z」のような形は日本の日付に（9時間ずれて前の日に見えていた）
@@ -3460,6 +3461,9 @@ const TPL_STORES = {
   sakuramoon: { label: "サクラムーン", site: "https://www.sakura-moon.com", heavenShopId: "1210007164", heavenPath: "tokyo/A1305/A130506/sakura_moon",
     btn: { x: 203, review: 205, youtube: 204 }, heavenBtnGif: 27 }
 };
+// サクラムーンのほかのお店も「テンプレで作る」を開ける（2026/11/12 店長）：画像・動画・リンク・説明文だけ（花びらカード・Xなどのボタン・写メ日記は、お店ごとの番号がないので出さない）
+function tplStoreOf(mk){ if(TPL_STORES[mk]) return TPL_STORES[mk]; const d = (typeof KBF !== "undefined" && KBF.SITE && KBF.SITE[mk]) ? "https://www." + KBF.SITE[mk] + ".com" : ""; return { label: (typeof KBF !== "undefined" && KBF.STORE_SHORT && KBF.STORE_SHORT[mk]) || mk, site: d, heavenShopId: "", heavenPath: "", btn: {}, generic: true }; }
+const TPL_GENERIC_TYPES = ["video", "image", "link", "text", "html"];
 const TPL_PLACES = [["town", "🎬 デリヘルタウン欄（いちばん上）"], ["self", "💗 本人から一言"], ["mgr", "✍️ 店長から一言の下"]];
 const TPL_TYPES = {
   card:   { label: "💗 花びらカード（タイトル・本文）", place: "self" },
@@ -3729,7 +3733,7 @@ function tplPosOf(bl){ const p = new Map(), c = {}; bl.forEach(b => { c[b.place]
 async function tplOpen(){
   if(!pf || !CAN_EDIT) return;
   pfCollect();
-  const { c, data, sk } = pf, { mk, no } = hpNoOf(c, sk), st = TPL_STORES[mk];
+  const { c, data, sk } = pf, { mk, no } = hpNoOf(c, sk), st = mk ? tplStoreOf(mk) : null;
   await introTplLoad(true);   // サクラムーンの飾り（花びらカード）を直していれば、それを使う
   if(!st){ toast("このお店のテンプレはまだありません"); return; }
   let bg = document.getElementById("tplBg");
@@ -3750,7 +3754,7 @@ async function tplOpen(){
   } else {
     const gid = (String(selfHtml || "").match(/girlId=(\d+)/i) || String(selfHtml || "").match(/girlid[-=](\d+)/i) || [])[1] || "";
     m = { v: 3, girlId: gid, blocks: [...tplParse(hp ? hp.HpGalDeTown : "", "town", st), ...tplParse(selfHtml, "self", st)] };
-    if(!m.blocks.some(b => b.type === "card")) m.blocks.splice(m.blocks.filter(b => b.place === "town").length, 0, { type: "card", place: "self", title: "", body: "", _new: true });
+    if(!st.generic && !m.blocks.some(b => b.type === "card")) m.blocks.splice(m.blocks.filter(b => b.place === "town").length, 0, { type: "card", place: "self", title: "", body: "", _new: true });
   }
   m.blocks.forEach(b => b.id = ++tplUid);
   const orig = new Map(m.blocks.filter(b => !b._new).map(b => [b.id, tplSnap(b)]));
@@ -3758,11 +3762,11 @@ async function tplOpen(){
   tplCur = { sk, mk, m, orig, pos: tplPosOf(m.blocks), removed: [], open: new Set(m.blocks.filter(b => !orig.has(b.id)).map(b => b.id)), adding: null, note, hp: !!hp };
   bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:860px;width:100%;max-height:94vh;overflow:auto;font-size:14px" id="tp_box">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">🎨 紹介文をテンプレで作る（${esc(st.label)}）</b><span class="hint">${esc(nameOf(c))}</span>
-      <span style="margin-left:auto"></span><button class="btn btn-ghost btn-sm" onclick="openIntroTplEditor('${mk}')" title="花びらカードのデザイン（HTML）を変える">🎀 カードのデザインを変える</button><button class="btn btn-ghost btn-sm" onclick="openFreeUp(null,'${mk}')">🖼 フリー画像をアップ</button></div>
+      <span style="margin-left:auto"></span>${st.generic ? `<button class="btn btn-ghost btn-sm" onclick="openIntroTplEditor('${skKeyOf(sk)}')" title="このお店の飾り（HTML）を登録・直す">🎀 このお店の飾りテンプレを直す</button>` : `<button class="btn btn-ghost btn-sm" onclick="openIntroTplEditor('${mk}')" title="花びらカードのデザイン（HTML）を変える">🎀 カードのデザインを変える</button>`}<button class="btn btn-ghost btn-sm" onclick="openFreeUp(null,'${mk}')">🖼 フリー画像をアップ</button></div>
     <div class="tpLegend"><span class="tpS same">✅ いま入っている</span><span class="tpS new">🆕 これから足す</span><span class="tpS edit">✏️ 直した</span><span class="tpS moved">↕ 動かした</span><span class="tpS del">🗑 消す</span>
       <span class="hint">… 公式HPと同じ並びで、上から出しています。ブロックはつかんで上下にドラッグ（または ↑↓）で動かせます。</span></div>
     ${note ? `<div class="hint" style="color:#B7791F;margin-top:4px">⚠ ${esc(note)}</div>` : `<div class="hint" style="margin-top:4px">✅ 公式HPのいまの中身を読みました（${esc(st.label)} ${no}番）</div>`}
-    <label style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap"><span style="font-weight:800;font-size:13px">ヘブンの女の子番号</span>
+    <label style="display:${st.generic ? "none" : "flex"};gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap"><span style="font-weight:800;font-size:13px">ヘブンの女の子番号</span>
       <input id="tp_girlId" value="${esc(m.girlId || "")}" placeholder="例：47694060" oninput="tplCur.m.girlId=this.value;tplPaint(true)" style="width:140px">
       <span class="hint">口コミのボタン・写メ日記・イベントバナーのリンクに使う（ヘブンのその子のページのアドレスの「girlid-」のあとの数字）</span></label>
     <div id="tp_list" style="margin-top:6px"></div>
@@ -3838,7 +3842,7 @@ function tplBlockCard(b){
 }
 function tplPaintList(){
   const el = $("tp_list"); if(!el || !tplCur) return;
-  const bl = tplCur.m.blocks, st = TPL_STORES[tplCur.mk];
+  const bl = tplCur.m.blocks, st = tplStoreOf(tplCur.mk);
   const fixed = String($("pf_m") ? $("pf_m").value : "").replace(/<!--tpl:mgr-->[\s\S]*$/, "").trim();
   el.innerHTML = TPL_PLACES.map(([p]) => {
     const info = TPL_SEC_INFO[p], list = bl.filter(b => b.place === p), del = tplCur.removed.filter(b => b.place === p);
@@ -3847,7 +3851,7 @@ function tplPaintList(){
       ${list.map(tplBlockCard).join("") || `<div class="hint" style="padding:6px">（いまは何もありません）</div>`}
       ${del.map(b => `<div class="tpDel">🗑 消す：<b>${TPL_TYPES[b.type].label}</b><span style="margin-left:auto"></span><button type="button" class="btn btn-ghost btn-sm" onclick="tplUndel(${b.id})">↩ もどす</button></div>`).join("")}
       ${tplCur.adding === p ? `<div class="tpAddBox"><div style="display:flex;align-items:center;gap:6px"><b style="font-size:13px;color:#8A6100">🆕 ${info.n} ${info.title}のいちばん下に足す</b><span style="margin-left:auto"></span><button type="button" class="btn btn-ghost btn-sm" onclick="tplCur.adding=null;tplPaint()">やめる</button></div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${Object.entries(TPL_TYPES).map(([k, t]) => `<button type="button" class="btn btn-ghost btn-sm" onclick="tplAdd('${k}','${p}')">${t.label}</button>`).join("")}</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${Object.entries(TPL_TYPES).filter(([k]) => !st.generic || TPL_GENERIC_TYPES.includes(k)).map(([k, t]) => `<button type="button" class="btn btn-ghost btn-sm" onclick="tplAdd('${k}','${p}')">${t.label}</button>`).join("")}</div>
           <div style="font-weight:800;font-size:12px;margin:8px 0 4px;color:#8A6100">⭐ よく使う組み合わせ</div>
           <div style="display:flex;gap:4px;flex-wrap:wrap">${TPL_PRESETS.map(([l], i) => `<button type="button" class="btn btn-ghost btn-sm" onclick="tplPreset(${i},'${p}')">${l}</button>`).join("")}</div></div>`
         : `<button type="button" class="tpAddBtn" onclick="tplCur.adding='${p}';tplPaint()">＋ ${info.n} ${info.title}に足す（いちばん下に入ります）</button>`}
@@ -3865,7 +3869,7 @@ function tplShadow(host, html, st){
 }
 function tplPaintBlockPv(b){
   const host = $("tpPv_" + b.id); if(!host) return;
-  const st = TPL_STORES[tplCur.mk], h = tplBlockHtml(b, tplCur.m, st);
+  const st = tplStoreOf(tplCur.mk), h = tplBlockHtml(b, tplCur.m, st);
   tplShadow(host, h.trim() ? h : `<div class="empty">${esc(TPL_TYPES[b.type].label)}（まだ空です。「✏️ 直す」で中身を入れる）</div>`, st);
   const s = tplStatus(b), badge = $("tpS_" + b.id), card = $("tpB_" + b.id);
   if(badge){ badge.className = "tpS " + s; badge.textContent = TPL_ST_LABEL[s]; }
@@ -3936,7 +3940,7 @@ function tplPreviewHtml(html, st){
 let tplPvTimer = 0;
 function tplPaintOut(){
   if(!tplCur || !$("tp_o1")) return;
-  const st = TPL_STORES[tplCur.mk], m = tplCur.m;
+  const st = tplStoreOf(tplCur.mk), m = tplCur.m;
   $("tp_o1").value = tplPlaceHtml(m, st, "town"); $("tp_o2").value = tplSelfHtml(m, st); $("tp_o3").value = tplMgrHtml($("pf_m") ? $("pf_m").value : "", m, st);
   const cnt = { new: 0, edit: 0, moved: 0 }; m.blocks.forEach(b => { const s = tplStatus(b); if(cnt[s] != null) cnt[s]++; });
   const parts = [cnt.new && `🆕 足す ${cnt.new}`, cnt.edit && `✏️ 直す ${cnt.edit}`, cnt.moved && `↕ 動かす ${cnt.moved}`, tplCur.removed.length && `🗑 消す ${tplCur.removed.length}`].filter(Boolean);
@@ -3980,7 +3984,7 @@ function tplDnd(root){
 }
 function tplApply(){
   if(!tplCur || !pf) return;
-  const st = TPL_STORES[tplCur.mk], m = tplCur.m;
+  const st = tplStoreOf(tplCur.mk), m = tplCur.m;
   if(pf.sk !== tplCur.sk){ toast("お店のタブが変わりました。もう一度開いてください"); return; }
   const card = m.blocks.find(b => b.type === "card");
   if(card && (!String(card.title || "").trim() || !String(card.body || "").trim())){ toast("花びらカードのタイトルと本文を書いてください（使わないなら ✕ で消す）"); tplCur.open.add(card.id); tplPaint(); tplScrollTo(card.id); return; }

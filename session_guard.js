@@ -257,6 +257,8 @@
     try { window.dispatchEvent(new Event("staff-icons")); } catch (e) {}
     return true;
   }
-  window.StaffIcons = { read, patch, refresh };
+  // 表示用：Googleの写真にした人は丸い写真、ほかは絵文字（各アプリの名前の前に）
+  function html(o){ const p = o && o.photo; return okPic(p) ? `<img src="${p}" alt="" referrerpolicy="no-referrer" style="width:1.35em;height:1.35em;border-radius:50%;object-fit:cover;vertical-align:-0.3em;box-shadow:0 0 0 1.5px ${okCol(o.color) ? o.color : "#ccc"}">` : String((o && o.emoji) || ""); }
+  window.StaffIcons = { read, patch, refresh, html };
   setTimeout(() => { refresh().catch(() => {}); }, 300);
 })();

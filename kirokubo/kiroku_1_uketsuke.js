@@ -153,7 +153,12 @@ function storeGroup(store){ const br = M.set.back_ranks || {}; for(const g in br
 function minutesOf(course){
   const s = String(course).normalize("NFKC");
   if(s.includes("泊")){ const t = s.match(/(\d{1,2})\s*[-〜~～]\s*(\d{1,2})/); if(t){ const h = ((Number(t[2]) - Number(t[1])) % 24 + 24) % 24; if(h) return h * 60; } return 480; }
-  const m = s.match(/(\d+)$/); return m ? Number(m[1]) : 0;
+  // 「○○分」と書いてあれば、その数字（例：応援コース90分）2026/11/12 店長
+  const mm = s.match(/(\d+)\s*分/); if(mm) return Number(mm[1]);
+  const m = s.match(/(\d+)$/); if(m) return Number(m[1]);
+  // 名前に時間がないコース（専用コースなど）：「✏️ コース・料金を直す」の説明に書いた「○○分」から
+  const pn = (typeof M !== "undefined" && M.prices ? M.prices : []).map(p => p.course === course ? String(p.note || "").normalize("NFKC").match(/(\d+)\s*分/) : null).find(Boolean);
+  return pn ? Number(pn[1]) : 0;
 }
 
 function openForm(id){
