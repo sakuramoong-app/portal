@@ -1179,15 +1179,38 @@ function paintReqBar(){
   if(!bar){ const m = fb.querySelector(".drawer") || fb.querySelector(".modal"), h = $("formTitle"); if(!m) return; (h || m).insertAdjacentHTML(h ? "afterend" : "afterbegin", `<div id="reqBar" class="reqbar"></div>`); bar = $("reqBar"); }
   const cancelLike = ["cancel", "tobi", "flowed"].includes(($("f_status") || {}).value);
   let list = []; try{ list = cancelLike ? [] : missingRequired(true); }catch(e){}
-  bar.className = "reqbar " + (list.length ? "ng" : "ok");
-  bar.innerHTML = list.length ? `⚠️ 必須でまだ：${list.map(([n, id]) => `<button type="button" onclick="const el=$('${id}');if(el){el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.add('miss');}">${esc(n)}</button>`).join("")}`
-    : "✅ 必須はぜんぶ入っています";
+  const tent = isTentative();
+  bar.className = "reqbar " + (tent ? "tent" : list.length ? "ng" : "ok");
+  bar.innerHTML = (list.length ? `⚠️ 必須でまだ：${list.map(([n, id]) => `<button type="button" onclick="const el=$('${id}');if(el){el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.add('miss');}">${esc(n)}</button>`).join("")}`
+    : "✅ 必須はぜんぶ入っています")
+    + (cancelLike ? "" : `<div class="tentrow"><label><input type="checkbox" id="f_tent" ${tent ? "checked" : ""} onchange="setTentative(this.checked)"> 🟡 確認中にする（必須がそろっていなくても登録できる）</label>
+      ${tent ? `<select id="f_tentSel" onchange="setTentative(true,this.value)">${TENT_STATES.map(k => `<option value="${k}" ${$("f_status").value === k ? "selected" : ""}>${esc(STATUS[k])}</option>`).join("")}</select>` : ""}</div>`);
+  fb.style.setProperty("--reqh", bar.offsetHeight + "px");   // タイムラインは、この帯の下にくっつく
+}
+/* 🟡 確認中（2026/11/11 店長）：返事待ちの3つ（キャスト・お客様・外国人1コール待ち）の予約は「確認中」
+   ・必須がそろっていなくても登録できる（キャスト・売上店舗・開始時刻・コースだけは、お金と時間の計算に使うので要る）
+   ・予約の枠ごと「びかびか」光る */
+const TENT_STATES = ["wait_cast_reply", "wait_guest_reply", "wait_foreign_call"];
+function isTentative(){ return TENT_STATES.includes(($("f_status") || {}).value); }
+function setTentative(on, st){
+  const s = $("f_status"); if(!s) return;
+  if(on){ const v = st || (TENT_STATES.includes(s.value) ? s.value : TENT_STATES[0]); if(![...s.options].some(o => o.value === v)) s.insertAdjacentHTML("beforeend", `<option value="${v}">${esc(STATUS[v])}</option>`); s.value = v; }
+  else if(TENT_STATES.includes(s.value)) s.value = "";
+  try{ stColor(); }catch(e){}
+  paintReqBar();
+}
+// 確認中でも要るもの（お金・時間の計算に使う）
+function tentativeMissing(){
+  return [[!$("f_store").value, "売上店舗", "f_store"], [!$("f_start").value, "開始時刻", "f_start"], [!$("f_course").value, "コース", "f_course"]].filter(x => x[0]).map(x => [x[1], x[2]]);
 }
 { let reqT = null; document.addEventListener("input", e => { if(e.target.closest && e.target.closest("#formBg")){ clearTimeout(reqT); reqT = setTimeout(paintReqBar, 300); } }, true);
   document.addEventListener("change", e => { if(e.target.closest && e.target.closest("#formBg")){ clearTimeout(reqT); reqT = setTimeout(paintReqBar, 300); } }, true);
   document.addEventListener("click", e => { if(e.target.closest && e.target.closest("#formBg")){ clearTimeout(reqT); reqT = setTimeout(paintReqBar, 400); } }, true); }
 document.head.insertAdjacentHTML("beforeend", `<style>.reqbar{position:sticky;top:0;z-index:30;margin:-4px 0 8px;padding:6px 10px;border-radius:12px;font-size:13px;font-weight:800;box-shadow:0 4px 10px -6px rgba(0,0,0,.3)}
   .reqbar.ng{background:#FFE8EC;border:2px solid #F09AAA;color:#B0213F} .reqbar.ok{background:#E5F6EC;border:2px solid #9AD3A8;color:#2e8b57}
+  .reqbar.tent{background:#FFF6CC;border:2px solid #F2C200;color:#7a5a00} .tentrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;font-size:13px} .tentrow select{font-size:13px;padding:2px 6px}
+  .rescard.rs-wait_cast_reply,.rescard.rs-wait_guest_reply,.rescard.rs-wait_foreign_call,.tlg .bk.st.wait_cast_reply,.tlg .bk.st.wait_guest_reply,.tlg .bk.st.wait_foreign_call{animation:bikabika .8s steps(1) infinite}
+  @keyframes bikabika{0%{box-shadow:0 0 0 3px #FFD400,0 0 14px 4px rgba(255,212,0,.85)}50%{box-shadow:0 0 0 3px #FF3B6B,0 0 14px 4px rgba(255,59,107,.7)}}
   .reqbar button{font-family:inherit;font-size:12.5px;font-weight:800;background:#fff;border:1.5px solid #F09AAA;color:#B0213F;border-radius:99px;padding:1px 8px;margin:2px 3px;cursor:pointer}</style>`);
 function markMissing(list){
   document.querySelectorAll("#formBg .miss").forEach(el=>el.classList.remove("miss"));
@@ -1589,7 +1612,9 @@ async function saveRes(){
   if(!$("f_status").value){ toast("⚠️ 状態を選んでください"); $("f_status").scrollIntoView({ block: "center" }); return; }
   const cancelLike = ["cancel", "tobi", "flowed"].includes($("f_status").value);
   // 必須の項目（キャンセル・トビにするときは、なくても保存できる）
-  const miss = cancelLike ? [] : missingRequired();
+  //   🟡 確認中（返事待ちの3つ）は、売上店舗・開始時刻・コースだけあれば登録できる（2026/11/11）
+  const tentSave = !cancelLike && isTentative();
+  const miss = cancelLike ? [] : tentSave ? tentativeMissing() : missingRequired();
   if(miss.length){ toast("⚠️ まだ入っていない必須の項目：" + miss.map(x=>x[0]).join("・")); markMissing(miss); return; }
   const waiting = String($("f_status").value).startsWith("wait_");
   const ck = checksForSave();
@@ -1602,10 +1627,10 @@ async function saveRes(){
   // 🔎 要確認のお客さん：新しい予約は、キャストに確認したかを聞く（返事待ちの状態なら聞かない）2026/11/7
   if(!cancelLike && !editing && !waiting && curCustomer && (curCustomer.tags || []).some(x => /要確認/.test(x)) && !confirm("🔎 要確認のお客さんです。\nキャストに確認しましたか？\n（まだなら「キャンセル」を押して、状態を「キャスト返事待ち」にしてください）")) return;
   if(!cancelLike && ck.longNg){ toast("🚫 このキャストでは受けられません（赤い枠の理由を見てください）"); $("castChecks").scrollIntoView({ block: "center" }); return; }
-  if(!cancelLike && ck.missAnnounce){ toast("📣 お客様に案内することに、まだチェックがついていません"); $("castChecks").scrollIntoView({ block: "center" }); return; }
+  if(!cancelLike && !tentSave && ck.missAnnounce){ toast("📣 お客様に案内することに、まだチェックがついていません"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   if(!cancelLike && ck.missConfirm && !waiting){ toast("✅ キャストに確認してから受けるものがあります。確認したらチェック、まだなら状態を「キャスト返事待ち」に"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   const checks = ck.list;
-  if(!cancelLike && !$("f_free").value && (!radioVal("f_afw") || !radioVal("f_rafw"))){ toast("🔸 AF・逆AF のご希望を聞いて、選んでください"); $("optDetails").scrollIntoView({ block: "center" }); return; }
+  if(!cancelLike && !tentSave && !$("f_free").value && (!radioVal("f_afw") || !radioVal("f_rafw"))){ toast("🔸 AF・逆AF のご希望を聞いて、選んでください"); $("optDetails").scrollIntoView({ block: "center" }); return; }
   if(!$("f_course").value){ toast("コースを選んでください"); return; }
   if(!(await KB.staffSession())){ toast("ログインの期限が切れました。ポータルから開き直してください"); return; }
   const c = calc(), by = KB.operatorName();
