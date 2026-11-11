@@ -1510,5 +1510,56 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   #castGrid .cg-t{font-size:10.5px;color:var(--sub);font-weight:700}
 </style>`);
 
+/* ---------- 🏨 ホテルのメモ（2026/11/11 店長）：記録簿に出す「お店のメモ」と「キャストごとのメモ」
+   kb_settings 'hotel_memos' = { ホテルのid: { shop: "お店のメモ", casts: { キャストのid: "メモ" }, by, at } }
+   受付で、ホテル一覧にあるホテルを入れると出る（キャストを選ぶと、その子のメモも） ---------- */
+function hotelMemos(){ const v = M.set.hotel_memos; return v && typeof v === "object" && !Array.isArray(v) ? v : {}; }
+function curHotel(){
+  const area = $("f_area").value.trim(), addr = $("f_address").value.replace(/\s/g, "");
+  if(!addr) return null;
+  const list = (M.hotels || []).filter(h => !area || h.area === area).sort((a, b) => String(b.hotel_name).length - String(a.hotel_name).length);
+  return list.find(x => x.hotel_name && addr.includes(String(x.hotel_name).replace(/\s/g, ""))) || null;
+}
+function paintHotelMemo(){
+  const el = $("hotelMemoBox"); if(!el) return;
+  const h = curHotel(); if(!h){ el.innerHTML = ""; el.dataset.hid = ""; return; }
+  const cid = $("f_cast").value, key = h.hotel_id + "|" + cid;
+  if(el.dataset.hid === key && el.querySelector(".hmemo")) return;   // 書いている途中で消さない
+  el.dataset.hid = key;
+  const m = hotelMemos()[h.hotel_id] || {}, casts = m.casts || {}, ed = KB.CAN_EDIT;
+  const others = Object.entries(casts).filter(([k, v]) => k !== cid && String(v || "").trim());
+  const box = (id, v, ph) => ed ? `<textarea id="${id}" rows="2" maxlength="400" placeholder="${ph}">${esc(v || "")}</textarea>` : `<div class="hmtxt">${esc(v || "（なし）")}</div>`;
+  el.innerHTML = `<div class="hmemo"><div class="hmh">🏨 ${esc(h.hotel_name)} のメモ${m.at ? `<small>（${KBF.staffTag(m.by)} ${esc(String(m.at).slice(5, 10).replace("-", "/"))}）</small>` : ""}</div>
+    <div class="hmrow"><b>🏪 お店のメモ</b>${box("hm_shop", m.shop, "例：フロントで「〇〇」と言う・駐車場なし など（内勤みんなに出ます）")}</div>
+    ${cid ? `<div class="hmrow"><b>👤 ${esc(castName(cid))}のメモ</b>${box("hm_cast", casts[cid], "例：この子はここのフロントが苦手 など")}</div>` : `<div class="hmtxt" style="color:var(--sub)">キャストを選ぶと、その子のメモも書けます</div>`}
+    ${others.length ? `<details class="hmo"><summary>ほかのキャストのメモ（${others.length}人）</summary>${others.map(([k, v]) => `<div><b>${esc(castName(k))}</b>：${esc(v)}</div>`).join("")}</details>` : ""}
+    ${ed ? `<button type="button" class="btn btn-ghost btn-sm" onclick="saveHotelMemo()">💾 ホテルのメモを保存</button>` : ""}</div>`;
+}
+async function saveHotelMemo(){
+  if(!KB.CAN_EDIT) return;
+  const h = curHotel(); if(!h){ toast("ホテルが見つかりません"); return; }
+  const cid = $("f_cast").value;
+  try{
+    const r = await sb.from("kb_settings").select("value").eq("key", "hotel_memos").maybeSingle();   // ほかの人が書いた分を消さないように、読みなおしてから
+    if(r && r.error) throw r.error;
+    const all = Object.assign({}, (r && r.data && r.data.value) || {});
+    const m = Object.assign({ casts: {} }, all[h.hotel_id] || {}); m.casts = Object.assign({}, m.casts || {});
+    if($("hm_shop")) m.shop = $("hm_shop").value.trim();
+    if(cid && $("hm_cast")){ const v = $("hm_cast").value.trim(); if(v) m.casts[cid] = v; else delete m.casts[cid]; }
+    m.by = KB.operatorName(); m.at = new Date().toISOString();
+    all[h.hotel_id] = m;
+    q(await sb.from("kb_settings").upsert({ key: "hotel_memos", value: all, note: "🏨 ホテルのメモ（お店のメモ・キャストごとのメモ。受付のホテルの下）" }));
+    M.set.hotel_memos = all; $("hotelMemoBox").dataset.hid = ""; paintHotelMemo();
+    toast("🏨 ホテルのメモを保存しました");
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+{ const __pnhM = paintNewHotel; paintNewHotel = function(){ const r = __pnhM.apply(this, arguments); try{ paintHotelMemo(); }catch(e){} return r; };
+  const __onCastHM = onCast; onCast = function(){ const r = __onCastHM.apply(this, arguments); try{ paintHotelMemo(); }catch(e){} return r; };
+  const __openFormHM = openForm; openForm = function(){ const r = __openFormHM.apply(this, arguments); try{ const el = $("hotelMemoBox"); if(el){ el.dataset.hid = ""; el.innerHTML = ""; } paintHotelMemo(); }catch(e){} return r; }; }
+document.head.insertAdjacentHTML("beforeend", `<style>.hmemo{background:#F4F1FF;border:1.5px solid #CBBEF2;border-radius:12px;padding:8px 10px;margin:6px 0}
+  .hmh{font-weight:900;color:#5b3fa6;margin-bottom:4px} .hmh small{font-weight:600;color:var(--sub);margin-left:6px}
+  .hmrow{display:flex;flex-direction:column;gap:2px;margin-bottom:6px;font-size:13px} .hmrow textarea{width:100%;font-family:inherit;font-size:13.5px;border:1.5px solid #D9CFF5;border-radius:8px;padding:4px 8px}
+  .hmtxt{font-size:13.5px;white-space:pre-wrap} .hmo{font-size:12.5px;margin-bottom:6px}</style>`);
+
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
 init();
