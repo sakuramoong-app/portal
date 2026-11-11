@@ -3759,7 +3759,7 @@ async function tplOpen(){
   m.blocks.forEach(b => b.id = ++tplUid);
   const orig = new Map(m.blocks.filter(b => !b._new).map(b => [b.id, tplSnap(b)]));
   m.blocks.forEach(b => delete b._new);
-  tplCur = { sk, mk, m, orig, pos: tplPosOf(m.blocks), removed: [], open: new Set(m.blocks.filter(b => !orig.has(b.id)).map(b => b.id)), adding: null, note, hp: !!hp };
+  tplCur = { sk, mk, m, orig, pos: tplPosOf(m.blocks), removed: [], open: new Set(m.blocks.filter(b => !orig.has(b.id)).map(b => b.id)), adding: null, note, hp: !!hp, hpf: hp || null };   // hpf：公式HPの欄そのまま（白い欄・緑の欄を両方見せる）
   bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:860px;width:100%;max-height:94vh;overflow:auto;font-size:14px" id="tp_box">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:17px">🎨 紹介文をテンプレで作る（${esc(st.label)}）</b><span class="hint">${esc(nameOf(c))}</span>
       <span style="margin-left:auto"></span>${st.generic ? `<button class="btn btn-ghost btn-sm" onclick="openIntroTplEditor('${skKeyOf(sk)}')" title="このお店の飾り（HTML）を登録・直す">🎀 このお店の飾りテンプレを直す</button>` : `<button class="btn btn-ghost btn-sm" onclick="openIntroTplEditor('${mk}')" title="花びらカードのデザイン（HTML）を変える">🎀 カードのデザインを変える</button>`}<button class="btn btn-ghost btn-sm" onclick="openFreeUp(null,'${mk}')">🖼 フリー画像をアップ</button></div>
@@ -3797,6 +3797,7 @@ async function tplOpen(){
       .tpPv{padding:6px 10px;max-height:340px;overflow:auto}
       .tpF{padding:6px 10px 10px;background:#FFF7FA;border-top:1px dashed #F8BBD0}
       .tpF input,.tpF textarea{width:100%}
+      .tpWhite{border-left-color:#bbb !important;background:#fff !important;outline:1.5px dashed #ddd}
       .tpFixed{border-left:4px solid #ddd;padding:6px 10px;color:#777;background:#fafafa;border-radius:8px;max-height:160px;overflow:auto;font-size:12.5px}
       .tpDel{border:1.5px dashed #EF9A9A;border-radius:10px;padding:6px 10px;margin:6px 0;color:#C62828;background:#FFF5F5;display:flex;gap:6px;align-items:center}
       .tpAddBtn{display:block;width:100%;border:2.5px dashed #F2C94C;background:#FFFDF2;color:#8A6100;font-weight:800;border-radius:12px;padding:8px;cursor:pointer;margin-top:6px}
@@ -3843,11 +3844,16 @@ function tplBlockCard(b){
 function tplPaintList(){
   const el = $("tp_list"); if(!el || !tplCur) return;
   const bl = tplCur.m.blocks, st = tplStoreOf(tplCur.mk);
-  const fixed = String($("pf_m") ? $("pf_m").value : "").replace(/<!--tpl:mgr-->[\s\S]*$/, "").trim();
+  // 公式HPの紹介文は「⬜ 白い欄（文だけ）」と「🟩 緑の欄（HTML）」の2つ。公式HPでは白い欄が上・緑の欄が下に出る → 両方見せる（2026/11/12 店長）
+  const hpf = tplCur.hpf, cut = s => String(s || "").replace(/<!--tpl:mgr-->[\s\S]*$/, "").trim();
+  const fixed = hpf ? cut(hpf.comm2a) : cut($("pf_m") ? $("pf_m").value : "");
+  const white = { self: hpf && String(hpf.comm1a || "").trim() ? String(hpf.comm1 || "").trim() : "", mgr: hpf ? String(hpf.comm2 || "").trim() : "" };
+  const whiteBox = p => white[p] ? `<div class="tpFixed tpWhite"><div style="font-weight:800;font-size:11.5px;color:#777">⬜ 白い欄（文だけの欄）… 公式HPでは、下の🟩緑の欄より上に出ます（テンプレでは変わりません）</div><div id="tpWhite_${p}"></div></div>` : "";
   el.innerHTML = TPL_PLACES.map(([p]) => {
     const info = TPL_SEC_INFO[p], list = bl.filter(b => b.place === p), del = tplCur.removed.filter(b => b.place === p);
     return `<div class="tpSec" data-place="${p}"><div class="tpSecH"><b>${info.n} ${info.title}</b><span>… ${info.where}</span></div><div class="tpSecB">
-      ${p === "mgr" ? `<div class="tpFixed"><div style="font-weight:800;font-size:11.5px;color:#999">✅ 店長の文（ここはテンプレでは変わりません。直すときはプロフの「店長から一言」で）</div><div id="tpFixed"></div></div>` : ""}
+      ${p !== "town" ? whiteBox(p) : ""}${p === "self" && white.self ? `<div class="hint" style="font-weight:800;color:#2e8b57;margin:4px 0">🟩 緑の欄（HTML）… ここから下がテンプレで作る分</div>` : ""}
+      ${p === "mgr" ? `<div class="tpFixed"><div style="font-weight:800;font-size:11.5px;color:#999">🟩 緑の欄（HTML）の店長の文（ここはテンプレでは変わりません。直すときはプロフの「店長から一言」で）</div><div id="tpFixed"></div></div>` : ""}
       ${list.map(tplBlockCard).join("") || `<div class="hint" style="padding:6px">（いまは何もありません）</div>`}
       ${del.map(b => `<div class="tpDel">🗑 消す：<b>${TPL_TYPES[b.type].label}</b><span style="margin-left:auto"></span><button type="button" class="btn btn-ghost btn-sm" onclick="tplUndel(${b.id})">↩ もどす</button></div>`).join("")}
       ${tplCur.adding === p ? `<div class="tpAddBox"><div style="display:flex;align-items:center;gap:6px"><b style="font-size:13px;color:#8A6100">🆕 ${info.n} ${info.title}のいちばん下に足す</b><span style="margin-left:auto"></span><button type="button" class="btn btn-ghost btn-sm" onclick="tplCur.adding=null;tplPaint()">やめる</button></div>
@@ -3858,6 +3864,7 @@ function tplPaintList(){
     </div></div>`;
   }).join("");
   if($("tpFixed")) tplShadow($("tpFixed"), fixed ? (/<(br|div|p|font|span|a|img)\b/i.test(fixed) ? fixed : fixed.replace(/\n/g, "<br>")) : `<span style="color:#bbb">（店長の文はまだありません）</span>`, st);
+  ["self", "mgr"].forEach(p => { const w = $("tpWhite_" + p); if(w) tplShadow(w, esc(white[p]).replace(/\n/g, "<br>"), st); });   // 白い欄は文だけ（タグは文字のまま）
   bl.forEach(b => tplPaintBlockPv(b));
   if(!el.dataset.dnd){ el.dataset.dnd = "1"; tplDnd(el); }
 }
