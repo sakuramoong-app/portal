@@ -182,6 +182,7 @@
   };
   document.addEventListener("mousedown", e => {
     if(e.button !== 1) return;
+    if(!(e.target.closest && e.target.closest("a[href]"))) e.preventDefault();   // 1回目でChromeの「自動スクロール」が始まると2回目が届かない（3回いる）→ 自動スクロールは使わない（リンクのまん中押しはそのまま）
     const now = Date.now();
     if(now - last < 450){ e.preventDefault(); last = 0; window.KBF_toTop(e.target); }
     else last = now;

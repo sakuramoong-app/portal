@@ -1488,8 +1488,18 @@ function paintCastGrid(){
     const c = M.casts.find(x => x.id === o.value); if(!c) return "";
     const tm = (o.textContent.split("　")[1] || "").trim();   // 「名前　12:00〜22:00」の時間
     const off = o.parentElement && /シフトにない/.test(o.parentElement.label || "");
-    return `<button type="button" class="cg-c ${o.value === cur ? "on" : ""} ${off ? "off" : ""}" onclick="pickCastGrid('${o.value}')" title="${esc(o.textContent)}">${KBF.img(c, 48, store)}<span class="cg-n">${esc(c.official_name || c.temp_name || "")}</span>${tm ? `<span class="cg-t">${esc(tm)}</span>` : ""}</button>`;
+    return `<button type="button" class="cg-c ${o.value === cur ? "on" : ""} ${off ? "off" : ""}" onclick="pickCastGrid('${o.value}')" title="${esc(o.textContent)}">${KBF.img(c, 48, store)}<span class="cg-n">${esc(c.official_name || c.temp_name || "")}</span>${tm ? `<span class="cg-t">${esc(tm)}</span>` : ""}${cgJobs(c.id)}</button>`;
   }).join("");
+}
+// 🖼 写真の一覧に、その子のその日の予約（時間）・🈵満了・予約なし（2026/11/12 店長）
+function cgJobs(cid){
+  const bd = ($("f_day") && $("f_day").value) || day;
+  const src = bd === day ? rows : (typeof otherDay !== "undefined" && otherDay[bd] ? otherDay[bd].rows : null);
+  if(!src) return "";
+  const list = src.filter(r => r.cast_id === cid && r.start_at && !["cancel", "tobi", "flowed"].includes(r.status) && !(editing && r.id === editing.id))
+    .sort((a, b) => String(a.start_at).localeCompare(String(b.start_at)));
+  const full = bd === day && (castDays[cid] || {}).full_at;
+  return `<span class="cg-jobs">${full ? `<b class="cg-full">🈵満了</b>` : ""}${list.length ? list.slice(0, 3).map(r => `<i>🕒${esc(hm(r.start_at))}</i>`).join("") + (list.length > 3 ? `<i>＋${list.length - 3}</i>` : "") : `<i class="cg-none">予約なし</i>`}</span>`;
 }
 function pickCastGrid(id){
   const sel = $("f_cast"); if(!sel || sel.value === id) return;
@@ -1500,7 +1510,8 @@ function pickCastGrid(id){
 { const __fillCastSelG = fillCastSel; fillCastSel = function(){ const r = __fillCastSelG.apply(this, arguments); paintCastGrid(); return r; }; }
 { const __onCastG = onCast; onCast = function(){ const r = __onCastG.apply(this, arguments); document.querySelectorAll("#castGrid .cg-c").forEach(b => b.classList.toggle("on", (b.getAttribute("onclick") || "").includes("'" + $("f_cast").value + "'"))); return r; }; }
 document.head.insertAdjacentHTML("beforeend", `<style>
-  #castGrid{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;max-height:300px;overflow:auto;padding:2px}
+  #castGrid{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;max-height:560px;overflow:auto;padding:2px}   /* 下の余白まで広く（スクロールを減らす）2026/11/12 */
+  #castGrid .cg-jobs{display:flex;flex-wrap:wrap;justify-content:center;gap:2px;font-size:10.5px;font-weight:800;line-height:1.3} #castGrid .cg-jobs i{font-style:normal;background:#EEF4FF;color:#2b5aa8;border-radius:6px;padding:0 3px} #castGrid .cg-jobs i.cg-none{background:#F1F8F1;color:#2e8b57} #castGrid .cg-full{background:#E02424;color:#fff;border-radius:6px;padding:0 4px}
   #castGrid .cg-c{font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:2px;width:78px;padding:5px 3px 6px;border:2px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
   #castGrid .cg-c .kbface{margin:0}
   #castGrid .cg-c:hover{border-color:#F2A7C3}
