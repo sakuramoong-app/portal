@@ -138,6 +138,7 @@
     }catch(e){ alert("保存できませんでした：" + (e.message || e)); }
   }
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadStaff); else setTimeout(loadStaff, 0);
+  window.addEventListener("staff-icons", () => { if(window.StaffIcons) setStaffIcons(StaffIcons.read()); });   // ほかのページ（session_guard.js）で新しいのを読んだとき
   const st = document.createElement("style");
   st.textContent = `.kbface{display:inline-block;flex:none;vertical-align:middle;object-fit:cover;object-position:center top;border-radius:8px;border:1.5px solid #F3D3DD;background:#FFF2F6;box-shadow:0 1px 3px rgba(92,75,79,.12);margin-right:6px}
     .kbface-ini{display:inline-flex;align-items:center;justify-content:center;font-weight:900;color:#C2185B;background:linear-gradient(160deg,#FFE3EC,#FFF7FA)}

@@ -227,3 +227,36 @@
   // ほかのタブで切りかえたら、こちらもそろえる
   window.addEventListener("storage", e => { if (e.key === KEY) apply(get()); });
 })();
+
+/* ============================================================
+   👤 内勤のアイコン（2026/11/11）：記録簿の「👤 自分のアイコン」で変えたもの（kb_settings の staff_icons）を、全部のアプリで同じに
+   ・この端末にとっておく（kbf_staff_icons。sakuramoong-app.github.io 全体で1つ）→ 各アプリは StaffIcons.patch(内勤の一覧) で絵文字・色を上書き
+   ・開いたときに新しいのを読みにいく。変わっていたら "staff-icons" のお知らせ（アプリは描きなおせる）
+   ============================================================ */
+(function(){
+  if (window.StaffIcons) return;
+  const URL_ = "https://tuxqpqokbvkrckgxcfdn.supabase.co", KEY_ = "sb_publishable_PyvCZHSzYlaqauYbdZybng_zbftghak", TOKEN_KEY = "sb-tuxqpqokbvkrckgxcfdn-auth-token", LS = "kbf_staff_icons";
+  const okCol = c => /^#[0-9a-fA-F]{3,8}$/.test(String(c || "")), okPic = p => /^https:\/\/[^\s"'<>]+$/.test(String(p || ""));
+  function read(){ try { const v = JSON.parse(localStorage.getItem(LS) || "{}"); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; } catch (e) { return {}; } }
+  // 内勤の一覧（{ きゃ: {emoji,color} } でも [{name,emoji,color}] でも）を、変えたアイコンで上書き
+  function patch(target){
+    const m = read();
+    const ap = (o, n) => { const x = o && n && m[n]; if (!x) return; if (x.e) o.emoji = String(x.e); if (okCol(x.c)) o.color = x.c; o.photo = okPic(x.p) ? x.p : ""; };
+    if (Array.isArray(target)) target.forEach(o => ap(o, o && o.name)); else if (target && typeof target === "object") Object.keys(target).forEach(k => ap(target[k], k));
+    return target;
+  }
+  async function refresh(){
+    let s = null; try { s = JSON.parse(localStorage.getItem(TOKEN_KEY) || "null"); } catch (e) {}
+    if (!s || !s.access_token) return false;
+    const r = await fetch(`${URL_}/rest/v1/kb_settings?select=value&key=eq.staff_icons`, { headers: { apikey: KEY_, Authorization: "Bearer " + s.access_token } });
+    if (!r.ok) return false;
+    const j = await r.json(), v = (Array.isArray(j) && j[0] && j[0].value) || {};
+    const nw = JSON.stringify(v && typeof v === "object" && !Array.isArray(v) ? v : {});
+    if (nw === (localStorage.getItem(LS) || "{}")) return false;
+    try { localStorage.setItem(LS, nw); } catch (e) {}
+    try { window.dispatchEvent(new Event("staff-icons")); } catch (e) {}
+    return true;
+  }
+  window.StaffIcons = { read, patch, refresh };
+  setTimeout(() => { refresh().catch(() => {}); }, 300);
+})();
