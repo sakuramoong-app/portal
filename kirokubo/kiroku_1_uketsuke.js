@@ -1710,6 +1710,12 @@ async function saveRes(){
       MONEY_KEYS.forEach(k => { if(k in old) row[k] = old[k]; });
       if(changed.length) toast("🔒 精算済（またはエクセルから取りこんだ）予約なので、金額は前のまま保存しました");
     }
+    // 📌 仮予約：データベースの決まりで空にできない欄は、仮の値で入れる（支払い方法 → 現金・種別 → 新規）。あとで本登録するときに選びなおす 2026/11/12
+    if(KARI){
+      if(!["cash", "card", "card_paid"].includes(row.payment)) row.payment = "cash";
+      if(!["new", "repeat", "honshi"].includes(row.visit_kind)) row.visit_kind = "new";
+      if("place_kind" in row && !["", "love", "biz", "home"].includes(row.place_kind || "")) row.place_kind = "";
+    }
     if(editing) q(await sb.from("kb_reservations").update(row).eq("id", editing.id));
     else { row.created_by = by; const extra = partyExtraRows(row); q(await sb.from("kb_reservations").insert([row, ...extra])); if(extra.length) toast(`👥 ${extra.length + 1}人のキャストの予約を作りました`); }
     { const bd = $("f_day") && $("f_day").value; closeForm();
