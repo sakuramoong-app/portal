@@ -1051,14 +1051,13 @@ function paintStaffPay(){
   const calcAmt = spAuto;
   const paidSum = rows.filter(r=>r.paid).reduce((a, r)=>a + (r.amount != null ? r.amount : calcAmt(r)), 0);
   $("staffPaySum").textContent = rows.length ? `払った ${yen(paidSum)}` : "";
-  box.innerHTML = rows.length ? `<div class="wrapx"><table class="list" style="font-size:13.5px"><tr><th>内勤</th><th>出勤</th><th>退勤</th><th>時間</th><th>時給</th><th>日払い</th><th>払った</th><th>どこから</th><th>メモ</th><th></th></tr>
+  box.innerHTML = rows.length ? `<div class="wrapx"><table class="list" style="font-size:13.5px"><tr><th>内勤</th><th>出勤</th><th>退勤</th><th>時間</th><th>時給</th><th>日払い</th><th>どこから</th><th>メモ</th><th></th></tr>
     ${rows.map((r, i)=>{ const hrs = r.in != null && r.out != null && r.out > r.in ? r.out - r.in : 0, amt = r.amount != null ? r.amount : calcAmt(r);
       return `<tr style="${r.paid ? "background:#EEF9EE" : ""}"><td><b>${esc(r.name)}</b>${r.fromShift ? '<br><small style="color:var(--sub)">内勤カレンダーより</small>' : ""}</td>
       <td><select onchange="spSet(${i},'in',this.value)">${opts(r.in, 6)}</select></td><td><select onchange="spSet(${i},'out',this.value)">${opts(r.out, 6.5)}</select></td>
       <td>${hrs ? hrs + "時間" : ""}</td><td>${yen(r.hourly)}</td>
-      <td><input type="number" value="${amt || ""}" style="width:90px" onchange="spSet(${i},'amount',this.value)"></td>
-      <td><label><input type="checkbox" ${r.paid ? "checked" : ""} onchange="spSet(${i},'paid',this.checked)"> 払った</label>${r.paid && r.by ? `<br><small style="color:var(--sub)">${esc(r.by)}</small>` : ""}</td>
-      <td><select onchange="spSet(${i},'src',this.value)"><option value="">--</option>${Object.entries(PAY_SRC).map(([k, l])=>`<option value="${k}" ${r.src === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <td><input type="number" value="${amt || ""}" style="width:90px" class="${!amt && r.src ? "sp-need" : ""}" onchange="spSet(${i},'amount',this.value)">${r.paid && r.by ? `<br><small style="color:var(--sub)">✅ ${esc(r.by)}</small>` : ""}</td>
+      <td><select class="${amt && !r.src ? "sp-need" : ""}" onchange="spSet(${i},'src',this.value)"><option value="">（どこから？）</option>${Object.entries(PAY_SRC).map(([k, l])=>`<option value="${k}" ${r.src === k ? "selected" : ""}>${l}</option>`).join("")}</select>
         ${r.src === "split" ? `<div style="margin-top:4px;font-size:12.5px;white-space:nowrap">🪙 キキララから <input type="number" value="${r.kiki != null ? r.kiki : ""}" style="width:80px" onchange="spSet(${i},'kiki',this.value)">円
           <br>💴 回収金から <b>${amt && r.kiki != null ? yen(Math.max(0, amt - r.kiki)) : "−"}</b></div>` : ""}</td>
       <td><input value="${esc(r.note)}" maxlength="100" style="width:120px" onchange="spSet(${i},'note',this.value)"></td>
@@ -1072,14 +1071,16 @@ function spSet(i, k, v){
   if(k === "in" || k === "out"){ r[k] = v === "" ? null : Number(v); r.amount = null; }
   else if(k === "amount") r.amount = v === "" ? null : Math.max(0, Number(v) || 0);
   else if(k === "kiki") r.kiki = v === "" ? null : Math.max(0, Number(v) || 0);
-  else if(k === "paid"){ r.paid = !!v; if(r.paid && !r.src) r.src = "drop"; }
+  else if(k === "paid"){ /* 「払った」のチェックはなくした（金額とどこからが入ったら払った）2026/11/12 */ }
   else r[k] = v;
+  { const amt = r.amount != null ? r.amount : spAuto(r); r.paid = !!(amt > 0 && r.src); }   // 金額とどこからの両方で「払った」
   paintStaffPay();
 }
 async function spSave(i){
   const r = staffPay.rows[i]; if(!r) return;
   if(r.in != null && r.out != null && r.out <= r.in){ toast("退勤は出勤より後にしてください"); return; }
-  if(r.paid && !r.src){ toast("どこから払ったか選んでください"); return; }
+  //   「払った」のチェックはなくした：金額とどこからの両方が入ったら払った。片方だけでも保存はする（入れ忘れは、次の営業日に声でお知らせ）2026/11/12
+  { const a0 = r.amount != null ? r.amount : spAuto(r); r.paid = !!(a0 > 0 && r.src); }
   const hrs = r.in != null && r.out != null ? r.out - r.in : null, amt = r.amount != null ? r.amount : spAuto(r);
   // 両方から払った：キキララの分は 1円〜日払いの額より少なく（回収金の分＝日払い−キキララ）。合計（日払い）は変わらないので、店落ちも変わらない
   if(r.paid && r.src === "split" && !(r.kiki > 0 && r.kiki < amt)){ toast("キキララから取った額を入れてください（日払いの額より少なく）。全部キキララなら「キキララ」を選んでください"); return; }
@@ -1090,7 +1091,8 @@ async function spSave(i){
   if(r.src === "split") row.paid_kiki = r.kiki;   // SQL 224 の列（分けたときだけ送る）
   try{
     q(await sb.from("kb_staff_work").upsert(row, { onConflict: "biz_date,staff_id" }));
-    toast(r.name + " の日払いを保存しました"); loadStaffPay();
+    { const a1 = r.amount != null ? r.amount : spAuto(r); toast(r.paid ? r.name + " の日払いを保存しました" : a1 > 0 && !r.src ? "⚠️ " + r.name + "：どこから払ったかがまだです（保存はしました）" : r.src && !(a1 > 0) ? "⚠️ " + r.name + "：日払いの金額がまだです（保存はしました）" : r.name + " を保存しました"); }
+    loadStaffPay();
   }catch(e){ toast("保存できませんでした（SQL 127 は実行ずみ？）：" + (e.message || e)); }
 }
 const __loadDaySP = loadDay;

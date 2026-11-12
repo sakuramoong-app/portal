@@ -1731,5 +1731,26 @@ document.head.insertAdjacentHTML("beforeend", `<style>.halias{background:#F2F7FF
   .hst{border-radius:10px;padding:6px 10px;margin:6px 0;font-size:13.5px;font-weight:700} .hst.ng{background:#FFE8EC;border:2px solid #E02424;color:#B0213F} .hst.far{background:#FFF6CC;border:2px solid #F2C200;color:#7a5a00}
   .hst.list{background:#FAF7F8;border:1.5px solid #E5D9DE;color:#5C4B4F;font-weight:600} .hst.list summary{cursor:pointer;font-weight:800}</style>`);
 
+/* ---------- 👛 内勤の日払い：「金額」と「どこから」は両方いる（2026/11/12 店長）
+   ・片方だけ入れたら、もう片方がピカピカ
+   ・片方だけのまま保存した日があれば、次の営業日から、その内勤が記録簿を開いたときに声でお知らせ（直すまで毎日1回） ---------- */
+document.head.insertAdjacentHTML("beforeend", `<style>@keyframes spneed{0%,100%{box-shadow:0 0 0 0 rgba(255,107,157,0)}50%{box-shadow:0 0 0 4px rgba(255,107,157,.7)}} .sp-need{animation:spneed 1.1s ease-in-out infinite;border-color:#FF6B9D !important}</style>`);
+const SP_ME = () => ({ "きゃ": "kya", "すや": "suya", "らん": "ran", "かみ": "kami", "わか": "waka" })[KB.operatorName()] || "";
+const spMissing = w => (Number(w.day_paid) > 0) !== !!String(w.pay_source || "");   // 金額とどこからの、片方だけ
+async function checkStaffPayMissing(){
+  if(!M.casts || KB.PRACTICE) return;
+  const me = SP_ME(); if(!me) return;
+  const bd = KB.bizDateOf(), key = bd + "|spmiss|" + me, fired = lsGet("kbFired");
+  if(fired[key]) return;
+  let list = [];
+  try{ list = (q(await sb.from("kb_staff_work").select("biz_date,day_paid,pay_source").eq("staff_id", me).lt("biz_date", bd).gte("biz_date", addDays(bd, -31))) || []).filter(spMissing); }catch(e){ return; }
+  fired[key] = 1; lsSet("kbFired", fired);
+  if(!list.length) return;
+  const md = d => Number(String(d).slice(5, 7)) + "月" + Number(String(d).slice(8)) + "日";
+  const what = list.map(w => md(w.biz_date) + (Number(w.day_paid) > 0 ? "（どこから払ったか）" : "（金額）")).join("・");
+  notify("alarm", { 時間: "👛 日払い", 内容: `${KB.operatorName()}さん、日払いの入れ忘れがあります：${what}。記録簿のその日の「内勤の日払い」で入れてください`, 名前: "" }, `$('day').value='${list[0].biz_date}';loadDay()`);
+}
+setTimeout(checkStaffPayMissing, 5000); setInterval(checkStaffPayMissing, 60000);   // 読みこみが終わるのを待って（1日1回だけ出す）
+
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
 init();
