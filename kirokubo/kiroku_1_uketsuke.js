@@ -1350,13 +1350,13 @@ function calc(){
     const suffix = free ? FREE_SUFFIX[free] : (visit === "honshi" ? "本指" : "");
     if(rank){
       let r2 = rank;
-      // 💗 キューティのNH指名（2026/11/12 店長）：バックは「ふつうのランクのバック」＋ Aランク以上 2,000円・B・Cランク 1,000円（下の nhAdd）
+      // 💗 キューティのNH指名（2026/11/12 店長）：バックは「ふつうのランクのバック」＋ どのランクも＋2,000円（下の nhAdd）
       const nhOn = g === "cutie" && !free && $("f_nh").checked, baseRank = String(rank).replace(/\s*\+\s*NH指名\s*$/, "");
       if(nhOn) r2 = baseRank;
       key = course + suffix;
       courseBack = M.back[r2 + "|" + key];
       if(courseBack == null && r2 !== rank){ courseBack = M.back[rank + "|" + key]; if(courseBack != null && nhOn) nhFromTable = true; }   // ふつうのランクの行がないときだけ、NH指名の行（NHの分こみ）
-      if(nhOn && courseBack != null && !nhFromTable) nhAdd = /^[SA]/.test(baseRank) ? 2000 : /^[BC]/.test(baseRank) ? 1000 : 0;
+      if(nhOn && courseBack != null && !nhFromTable) nhAdd = 2000;   // どのランクも＋2,000円（2026/11/12 店長：B・Cも2,000円にもどす）
       if(nhAdd) nhRank = baseRank;
       if(courseBack == null){
         // バック表にないランク×コース：受付で入れた金額を使う（保存すると、このランク×コースが埋まる＝次から自動）
