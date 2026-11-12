@@ -1926,5 +1926,103 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .tl2lg i.ok{background:#BDEFC8} .tl2lg i.wait{background:#FFE08A} .tl2lg i.cur{background:#FF9F43} .tl2lg i.free{border:1.5px dashed #6E67C9} .tl2lg i.mv{background:repeating-linear-gradient(135deg,#5A54A8 0 4px,#C9C5EE 4px 8px)} #tl2Detail .tl2lg i.now{background:#FF4D8D;width:4px}
 </style>`);
 
+/* ---------- 👥 くらべる：写真の一覧で選んだ子のタイムラインを、下にたて並びで（最大4人）2026/11/13 店長
+   ・予約に入るキャストは今までどおり1人（「選ぶ」を押すとその子に） ---------- */
+let TL2_CMP = [], tl2CmpOn = false;
+const TL2_CMP_MAX = 4;
+function tl2CmpToggle(){ tl2CmpOn = !tl2CmpOn; TL2_CMP = []; paintCastGrid(); paintTl2Cmp(); }
+function tl2CmpRemove(id){ TL2_CMP = TL2_CMP.filter(x => x !== id); paintCastGrid(); paintTl2Cmp(); }
+function tl2CmpPick(id){ __pickCastGridTl2(id); paintTl2Cmp(); }
+const __pickCastGridTl2 = pickCastGrid;
+pickCastGrid = function(id){
+  if(!tl2CmpOn) return __pickCastGridTl2(id);
+  if(TL2_CMP.includes(id)) TL2_CMP = TL2_CMP.filter(x => x !== id);
+  else if(TL2_CMP.length >= TL2_CMP_MAX){ toast(`👥 くらべられるのは${TL2_CMP_MAX}人までです`); return; }
+  else TL2_CMP.push(id);
+  paintCastGrid(); paintTl2Cmp();
+};
+{ const __paintCastGridCmp = paintCastGrid; paintCastGrid = function(){
+  const r = __paintCastGridCmp.apply(this, arguments);
+  const box = $("castGrid"); if(!box) return r;
+  let bar = $("tl2CmpBar"); if(!bar){ bar = document.createElement("div"); bar.id = "tl2CmpBar"; }
+  if(box.previousElementSibling !== bar) box.insertAdjacentElement("beforebegin", bar);
+  bar.style.display = box.innerHTML ? "" : "none";
+  bar.innerHTML = tl2CmpOn ? `<button type="button" class="btn btn-sm tl2cmpb on" onclick="tl2CmpToggle()">👥 くらべる中 ✕ やめる</button><span>写真を押すと、タイムラインの下にならびます（${TL2_CMP.length}／${TL2_CMP_MAX}人）</span>`
+    : `<button type="button" class="btn btn-ghost btn-sm tl2cmpb" onclick="tl2CmpToggle()">👥 くらべる</button><span>何人かのタイムラインをならべて見る</span>`;
+  box.classList.toggle("cmpmode", tl2CmpOn);
+  box.querySelectorAll(".cg-c").forEach(b => { const m = (b.getAttribute("onclick") || "").match(/'([^']+)'/); b.classList.toggle("cmp", tl2CmpOn && !!m && TL2_CMP.includes(m[1])); });
+  return r; }; }
+{ const __openFormCmp = openForm; openForm = function(){ tl2CmpOn = false; TL2_CMP = []; const r = __openFormCmp.apply(this, arguments); paintTl2Cmp(); return r; }; }
+{ const __drawTimelineCmp = drawTimeline; drawTimeline = function(){ const r = __drawTimelineCmp.apply(this, arguments); paintTl2Cmp(); return r; }; }
+// 空き：出勤の中で、予約（＋あける時間）がないところ（今日は今から）
+function tl2FreeOf(shift, others, gap, nowH){
+  const free = []; if(!shift) return free;
+  let t = nowH != null ? Math.max(shift.start, nowH) : shift.start;
+  others.map(o => [o.s - gap, o.e + gap]).sort((x, y) => x[0] - y[0]).forEach(([x, y]) => { if(x > t) free.push([t, Math.min(x, shift.end)]); t = Math.max(t, y); });
+  if(t < shift.end) free.push([t, shift.end]);
+  return free.filter(f => f[1] - f[0] >= 0.5);
+}
+function paintTl2Cmp(){
+  const tl = $("castTimeline"); if(!tl) return;
+  let box = $("tl2Cmp"); if(!box){ box = document.createElement("div"); box.id = "tl2Cmp"; }
+  if(tl.nextElementSibling !== box) tl.insertAdjacentElement("afterend", box);
+  if(!tl2CmpOn){ box.innerHTML = ""; return; }
+  const list = TL2_CMP.map(id => M.casts.find(x => x.id === id)).filter(Boolean);
+  if(!list.length){ box.innerHTML = `<div class="tl2cmp"><div class="tl2cmpe">👥 上の写真を押すと、ここにタイムラインがならびます（最大${TL2_CMP_MAX}人）</div></div>`; return; }
+  const bd = $("f_day") && $("f_day").value && $("f_day").value !== day ? $("f_day").value : "";
+  const od = bd ? otherDay[bd] : null;
+  const sh = bd ? (od && od.sh) : shiftCache[day];
+  const nowH = !bd && day === KB.bizDateOf() ? nowHour() : null;
+  const sel = $("f_cast").value, store = $("f_store").value;
+  const data = list.map(c => {
+    const shift = sh ? (sh[c.shift_name] || sh[c.official_name]) : null, gap = (Number(c.interval_min) || 0) / 60;
+    const others = (bd ? (od ? od.rows : []) : rows).filter(r => r.cast_id === c.id && (!editing || r.id !== editing.id) && !["cancel", "tobi", "flowed"].includes(r.status) && r.start_at && r.end_at)
+      .map(r => { const s = hourOf(r.start_at); let e = hourOf(r.end_at); if(e < s) e += 24; return { r, s, e }; }).sort((x, y) => x.s - y.s);
+    return { c, shift, gap, others, free: tl2FreeOf(shift, others, gap, nowH) };
+  });
+  // みんな同じ目盛り：いちばん早い出勤〜いちばん遅い退勤
+  let a = 99, b = 0;
+  data.forEach(d => { if(d.shift){ a = Math.min(a, d.shift.start); b = Math.max(b, d.shift.end); } d.others.forEach(o => { a = Math.min(a, o.s); b = Math.max(b, o.e); }); });
+  if(a > b){ a = 11; b = 29; }
+  a = Math.max(6, Math.floor(a)); b = Math.min(36, Math.ceil(b)); if(b - a < 3) b = a + 3;
+  const P = h => Math.max(0, Math.min(100, (h - a) / (b - a) * 100));
+  const span = b - a, step = span > 14 ? 3 : span > 8 ? 2 : 1, ticks = [];
+  for(let h = a; h <= b; h += step) ticks.push(h);
+  const isWait = r => TL2_WAIT.has(r.status) || !!r.kari_at;
+  const nowLine = nowH != null && nowH >= a && nowH <= b ? `<div class="tlnow" style="left:${P(nowH)}%"></div>` : "";
+  box.innerHTML = `<div class="tl2cmp">
+    <div class="tl2cmpt">👥 くらべる（${bd ? Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) : "本日"}）<span>${nowH != null ? "ピンクの線＝現在 " + tl2Fmt(nowH) : ""}</span></div>
+    <div class="tl2r ax"><div class="tl2rn"></div><div class="tl2ax">${ticks.map(h => `<span style="left:${P(h)}%">${h >= 24 ? "翌" + (h - 24) : h}時</span>`).join("")}</div><div class="tl2rb"></div></div>
+    ${data.map(d => { const c = d.c, fh = Math.round(d.free.reduce((s, f) => s + (f[1] - f[0]), 0) * 10) / 10;
+      return `<div class="tl2r${c.id === sel ? " me" : ""}" data-cid="${esc(c.id)}">
+        <div class="tl2rn">${typeof KBF !== "undefined" ? KBF.img(c, 34, store) : ""}<div><b>${esc(c.official_name || c.temp_name)}</b><small>${d.shift ? `${tl2Fmt(d.shift.start)}〜${tl2Fmt(d.shift.end)}` : sh ? "シフトなし" : "読み込み中…"}</small><small>予約${d.others.length}件・空き${fh}時間</small></div></div>
+        <div class="tl2bar mini">${d.shift ? `<div class="shift" style="left:${P(d.shift.start)}%;width:${P(d.shift.end) - P(d.shift.start)}%"></div>` : ""}
+          ${d.gap ? d.others.map(o => `<div class="b mv" style="left:${P(o.s - d.gap)}%;width:${P(o.s) - P(o.s - d.gap)}%"></div><div class="b mv" style="left:${P(o.e)}%;width:${P(o.e + d.gap) - P(o.e)}%"></div>`).join("") : ""}
+          ${d.free.map(f => `<div class="b free" style="left:${P(f[0])}%;width:${P(f[1]) - P(f[0])}%" title="空き ${tl2Fmt(f[0])}〜${tl2Fmt(f[1])}"><span><i>空き ${Math.round((f[1] - f[0]) * 60)}分</i></span></div>`).join("")}
+          ${d.others.map(o => `<div class="b res ${isWait(o.r) ? "wait" : "ok"}${o.r.status === "done" ? " dn" : ""}" style="left:${P(o.s)}%;width:${Math.max(1.5, P(o.e) - P(o.s))}%" title="${esc(hm(o.r.start_at) + "〜" + hm(o.r.end_at) + " " + (o.r.area || "") + " " + (STATUS[o.r.status] || ""))}"><span><i>${esc(String(o.r.area || "").replace(/^出張（(.*)）$/, "$1"))} ${esc(hm(o.r.start_at))}-${esc(hm(o.r.end_at))}</i></span></div>`).join("")}
+          ${nowLine}</div>
+        <div class="tl2rb">${c.id === sel ? `<span class="tl2me">選択中</span>` : `<button type="button" class="btn btn-sm" onclick="tl2CmpPick('${esc(c.id)}')">この子にする</button>`}<button type="button" class="tl2x" onclick="tl2CmpRemove('${esc(c.id)}')" title="くらべるから外す">✕</button></div></div>`; }).join("")}
+  </div>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  #tl2CmpBar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--sub)}
+  #tl2CmpBar .tl2cmpb.on{background:#3B3480;color:#fff;border-color:#3B3480}
+  #castGrid.cmpmode .cg-c.cmp{border-color:#5B54A8;background:#EEEBFF;box-shadow:0 0 0 3px #C9C5EE;filter:none;opacity:1}
+  .tl2cmp{background:#1E1B3A;color:#EDEBFA;border-radius:16px;padding:8px 10px 10px;margin-top:8px}
+  .tl2cmpt{font-weight:900;font-size:13.5px;margin-bottom:2px} .tl2cmpt span{font-weight:700;font-size:11.5px;color:#FF8DB5;margin-left:8px}
+  .tl2cmpe{font-size:13px;color:#C9C5EE;padding:6px 2px}
+  .tl2r{display:grid;grid-template-columns:150px minmax(0,1fr) 110px;gap:8px;align-items:center;margin-top:5px}
+  .tl2r .tl2ax{margin:0 0 -2px}
+  .tl2r.me .tl2rn b{color:#FFC163}
+  .tl2rn{display:flex;gap:6px;align-items:center;min-width:0} .tl2rn img,.tl2rn .kbface{margin:0;flex:none}
+  .tl2rn b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .tl2rn small{display:block;font-size:11px;color:#C9C5EE;white-space:nowrap}
+  .tl2bar.mini{height:42px} .tl2bar.mini .b{top:4px;bottom:4px;font-size:10.5px;padding:0 4px}
+  .tl2rb{display:flex;gap:4px;align-items:center;justify-content:flex-end}
+  .tl2rb .btn{white-space:nowrap;font-size:12px;padding:4px 8px}
+  .tl2me{font-size:12px;font-weight:900;color:#FFC163;white-space:nowrap}
+  .tl2x{background:none;border:none;color:#C9C5EE;font-size:16px;cursor:pointer;padding:2px 4px}
+  @media (max-width:700px){ .tl2r{grid-template-columns:1fr auto;gap:4px 6px} .tl2r .tl2bar{grid-column:1 / -1;grid-row:2} .tl2r .tl2ax{grid-column:1 / -1} .tl2r.ax .tl2rn,.tl2r.ax .tl2rb{display:none} }
+</style>`);
+
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
 init();
