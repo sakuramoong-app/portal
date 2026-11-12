@@ -236,18 +236,19 @@
   <div id="main" style="display:none">
     <div class="toolbar">
       <input class="search" id="q" placeholder="🔍 名前・読み・別名で検索" oninput="render()">
-      <button class="btn btn-ghost" id="sendModeBtn" onclick="toggleSendMode()">📨 確認フォームをまとめて送る</button>
-      <button class="btn btn-ghost" id="ansListBtn" onclick="toggleAnsList()">📨 届いた答え</button>
-      <button class="btn btn-ghost" onclick="toggleNotesList()">🧹 受付ルールにまとめる</button>
       <button class="btn btn-ghost" id="newProfBtn" onclick="toggleNewProfs()">📥 新しく届いたプロフ</button>
       <button class="btn btn-ghost" onclick="dmOpen()">🎭 18・極門のダミー名</button>
       <button class="btn btn-ghost" onclick="openBackTable()" title="ランク × コースのバック（受付で自動で入る額）を見る・直す">💴 バック表</button>
-      <details class="edit-only" style="font-size:13px"><summary style="cursor:pointer;font-weight:800;color:var(--sub);padding:6px 4px">⚙️ そのほか</summary>
+      <button class="btn btn-ghost" onclick="openHotelList()">🏨 ホテル一覧</button>
+      <!-- そのほか：2026/11/13 店長 確認フォーム・届いた答え・受付ルールにまとめるはここへ（ホテル一覧は上へ） -->
+      <details style="font-size:13px"><summary style="cursor:pointer;font-weight:800;color:var(--sub);padding:6px 4px">⚙️ そのほか</summary>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
-          <button class="btn btn-ghost btn-sm" onclick="hpBulkFill()">🌐 全員の空いている欄を公式HPから取りこむ</button>
-          <button class="btn btn-ghost btn-sm" onclick="hpBulkFill(true)">🌐 全員を公式HPに合わせる（ちがう所も）</button>
-          <button class="btn btn-ghost btn-sm" onclick="openNotifyEmails()">📧 プロフが届いたときの通知メール</button>
-          <button class="btn btn-ghost btn-sm" onclick="openHotelList()">🏨 ホテル一覧（足す・直す）</button>
+          <button class="btn btn-ghost btn-sm" id="sendModeBtn" onclick="toggleSendMode()">📨 確認フォームをまとめて送る</button>
+          <button class="btn btn-ghost btn-sm" id="ansListBtn" onclick="toggleAnsList()">📨 届いた答え</button>
+          <button class="btn btn-ghost btn-sm" onclick="toggleNotesList()">🧹 受付ルールにまとめる</button>
+          <button class="btn btn-ghost btn-sm edit-only" onclick="hpBulkFill()">🌐 全員の空いている欄を公式HPから取りこむ</button>
+          <button class="btn btn-ghost btn-sm edit-only" onclick="hpBulkFill(true)">🌐 全員を公式HPに合わせる（ちがう所も）</button>
+          <button class="btn btn-ghost btn-sm edit-only" onclick="openNotifyEmails()">📧 プロフが届いたときの通知メール</button>
         </div></details>
     </div>
     <div id="newProfBox" style="display:none;background:#fff;border:1.5px solid #F1E3E7;border-radius:12px;padding:10px 12px;margin:6px 0"></div>
