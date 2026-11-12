@@ -1136,7 +1136,7 @@ async function lookupCustomer(keepName){
           <div style="margin-top:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="custNgReason(${c.id})">✏️ 理由を直す</button>
           <button type="button" class="btn btn-ghost btn-sm" onclick="if(confirm('店NGを外しますか？（まちがいだったとき）'))custNgDecide(${c.id},false)">NGを外す（まちがいだった）</button></div></div>` : "") +
       // 📝 お客さんメモ（顧客台帳のメモ。台帳エクセルの電話の欄の文字・⚠️注意の言葉もここ）
-      (String(c.note || "").trim() ? `<div style="background:#FFF8D6;border:1.5px solid #F2C94C;border-radius:12px;padding:8px 12px;margin:8px 0;font-size:14px;line-height:1.7"><b>📝 お客さんメモ</b><br>${esc(String(c.note).trim()).replace(/\n/g, "<br>")}</div>` : "") +
+      (String(c.note || "").trim() ? `<div class="custnote" style="background:#FFF8D6;border:1.5px solid #F2C94C;border-radius:12px;padding:8px 12px;margin:8px 0;font-size:14px;line-height:1.7"><b>📝 お客さんメモ</b><br>${esc(String(c.note).trim()).replace(/\n/g, "<br>")}</div>` : "") +
       // 🏷 顧客タグ（顧客台帳でつける。SQL 217）2026/11/6
       `<div id="custTagBox">${custTagBox(c)}</div>` +
       // 履歴は1回ずつ1行で、大きめ・濃いめに（受付でいちばん大事なので）

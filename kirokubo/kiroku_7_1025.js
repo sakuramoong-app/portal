@@ -1837,8 +1837,8 @@ drawTimeline = function(){
       <div class="tl2n"><div><b>${esc(c.official_name || c.temp_name)}</b><span class="tl2st ${stChip[1]}">${stChip[0]}</span>${cd.full_at ? `<span class="tlfull">🈵 満了</span>` : ""}</div>
         <small>${bd ? "📅 " + Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) + "　" : ""}${shift ? `出勤 ${tl2Fmt(shift.start)}〜${tl2Fmt(shift.end)}（${Math.round((shift.end - shift.start) * 10) / 10}時間）${shift.confirmed ? "" : "・未確定"}` : sh ? "シフトが見つかりません" : "シフトを読み込み中…"}</small></div>
       <div class="tl2s"><span>予約 <b>${others.length}</b>件</span><span>予約 <b>${resH}</b>時間</span><span>空き <b>${freeH}</b>時間</span></div></div>
-    <div class="tl2ax">${ticks.map(h => `<span style="left:${P(h)}%">${h >= 24 ? "翌" + (h - 24) : h}時</span>`).join("")}</div>
-    <div class="tl2bar">${shift ? `<div class="shift" style="left:${P(shift.start)}%;width:${P(shift.end) - P(shift.start)}%"></div>` : ""}${blocks.join("")}${nowLine}</div></div>`;
+    <div class="tl2ax">${tl2Axis(a, b, P)}</div>
+    <div class="tl2bar">${tl2Grid(a, b, P)}${shift ? `<div class="shift" style="left:${P(shift.start)}%;width:${P(shift.end) - P(shift.start)}%"></div>` : ""}${blocks.join("")}${nowLine}</div></div>`;
   // 下：予定一覧（前後の予約との間も）
   const items = others.map(o => ({ s: o.s, e: o.e, o })).concat(cur ? [{ s: cur.s, e: cur.e, cur: true }] : []);
   freeOk.forEach(f => items.push({ s: f[0], e: f[1], free: true }));
@@ -1992,11 +1992,11 @@ function paintTl2Cmp(){
   const nowLine = nowH != null && nowH >= a && nowH <= b ? `<div class="tlnow" style="left:${P(nowH)}%"></div>` : "";
   box.innerHTML = `<div class="tl2cmp">
     <div class="tl2cmpt">👥 くらべる（${bd ? Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) : "本日"}）<span>${nowH != null ? "ピンクの線＝現在 " + tl2Fmt(nowH) : ""}</span></div>
-    <div class="tl2r ax"><div class="tl2rn"></div><div class="tl2ax">${ticks.map(h => `<span style="left:${P(h)}%">${h >= 24 ? "翌" + (h - 24) : h}時</span>`).join("")}</div><div class="tl2rb"></div></div>
+    <div class="tl2r ax"><div class="tl2rn"></div><div class="tl2ax">${tl2Axis(a, b, P)}</div><div class="tl2rb"></div></div>
     ${data.map(d => { const c = d.c, fh = Math.round(d.free.reduce((s, f) => s + (f[1] - f[0]), 0) * 10) / 10;
       return `<div class="tl2r${c.id === sel ? " me" : ""}" data-cid="${esc(c.id)}">
         <div class="tl2rn">${typeof KBF !== "undefined" ? KBF.img(c, 34, store) : ""}<div><b>${esc(c.official_name || c.temp_name)}</b><small>${d.shift ? `${tl2Fmt(d.shift.start)}〜${tl2Fmt(d.shift.end)}` : sh ? "シフトなし" : "読み込み中…"}</small><small>予約${d.others.length}件・空き${fh}時間</small></div></div>
-        <div class="tl2bar mini">${d.shift ? `<div class="shift" style="left:${P(d.shift.start)}%;width:${P(d.shift.end) - P(d.shift.start)}%"></div>` : ""}
+        <div class="tl2bar mini">${tl2Grid(a, b, P)}${d.shift ? `<div class="shift" style="left:${P(d.shift.start)}%;width:${P(d.shift.end) - P(d.shift.start)}%"></div>` : ""}
           ${d.gap ? d.others.map(o => `<div class="b mv" style="left:${P(o.s - d.gap)}%;width:${P(o.s) - P(o.s - d.gap)}%"></div><div class="b mv" style="left:${P(o.e)}%;width:${P(o.e + d.gap) - P(o.e)}%"></div>`).join("") : ""}
           ${d.free.map(f => `<div class="b free" style="left:${P(f[0])}%;width:${P(f[1]) - P(f[0])}%" title="空き ${tl2Fmt(f[0])}〜${tl2Fmt(f[1])}"><span><i>空き ${Math.round((f[1] - f[0]) * 60)}分</i></span></div>`).join("")}
           ${d.others.map(o => `<div class="b res ${isWait(o.r) ? "wait" : "ok"}${o.r.status === "done" ? " dn" : ""}" style="left:${P(o.s)}%;width:${Math.max(1.5, P(o.e) - P(o.s))}%" title="${esc(hm(o.r.start_at) + "〜" + hm(o.r.end_at) + " " + (o.r.area || "") + " " + (STATUS[o.r.status] || ""))}"><span><i>${esc(String(o.r.area || "").replace(/^出張（(.*)）$/, "$1"))} ${esc(hm(o.r.start_at))}-${esc(hm(o.r.end_at))}</i></span></div>`).join("")}
@@ -2022,6 +2022,158 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .tl2me{font-size:12px;font-weight:900;color:#FFC163;white-space:nowrap}
   .tl2x{background:none;border:none;color:#C9C5EE;font-size:16px;cursor:pointer;padding:2px 4px}
   @media (max-width:700px){ .tl2r{grid-template-columns:1fr auto;gap:4px 6px} .tl2r .tl2bar{grid-column:1 / -1;grid-row:2} .tl2r .tl2ax{grid-column:1 / -1} .tl2r.ax .tl2rn,.tl2r.ax .tl2rb{display:none} }
+</style>`);
+
+/* ---------- 🕐 タイムラインの時間軸を見やすく（2026/11/13 店長）：1時間ごとの数字・帯の中に1時間ごとの線（30分は点線）・日付が変わる0時は太線
+   予約の枠はそのまま ---------- */
+function tl2Axis(a, b, P){
+  const out = [];
+  for(let h = a; h <= b; h++){
+    const n = h >= 24 ? h - 24 : h;
+    out.push(`<span class="${h % 2 ? "odd" : ""}${h === 24 ? " mid" : ""}" style="left:${P(h)}%">${h >= 24 ? "<small>翌</small>" : ""}<b>${n}</b>時</span>`);
+  }
+  return out.join("");
+}
+function tl2Grid(a, b, P){
+  const out = [];
+  for(let h = a; h <= b; h += 0.5){ if(h === a || h === b) continue;
+    out.push(`<i class="tl2g${h % 1 ? " half" : ""}${h === 24 ? " mid" : ""}" style="left:${P(h)}%"></i>`); }
+  return out.join("");
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .tl2ax{height:20px;font-size:11px;color:#D9D5FF}
+  .tl2ax span{bottom:0} .tl2ax b{font-size:14px;font-weight:900;color:#fff;margin-right:1px} .tl2ax small{font-size:10px;color:#FFB3CF}
+  .tl2ax span.mid b{color:#FFB3CF}
+  .tl2bar .tl2g{position:absolute;top:0;bottom:0;width:0;border-left:1px solid rgba(255,255,255,.22);z-index:1}
+  .tl2bar .tl2g.half{border-left:1px dashed rgba(255,255,255,.1)}
+  .tl2bar .tl2g.mid{border-left:2px solid rgba(255,179,207,.6)}
+  .tl2bar .b{z-index:2} .tl2bar .cur{z-index:3} .tl2bar .tlnow{z-index:4}
+  @media (max-width:700px){ .tl2ax span.odd{display:none} .tl2ax b{font-size:13px} }
+</style>`);
+
+/* ---------- 👤 受付のお客様情報を整理（2026/11/13 店長：情報が多くて何が何だか → 大事な順に）
+   ① 上：名前・利用回数・最終利用・初回・キャンセル／トビの回数・顧客台帳を開く（タグ・副番号もここ）
+   ② 🚨 重要（受付で必ず確認）：店NG・トビ・キャストNG・キャンセル・要確認・次回の交通費・台帳で何かあった回
+   ③ 左：📝 お客様メモ・👑 指名の傾向（よく指名する子・フリー・よく使うお店とコース）／右：📋 利用履歴とメモ（新しい5件。もっと見るで15件）
+   ・もとの部品（ボタンつき）は、そのまま場所だけ移す。台帳のデータは変えない ---------- */
+const CC2_WD = "日月火水木金土";
+const cc2Date = d => { if(!d) return "日付なし"; const t = new Date(d + "T00:00:00"); const y = d.slice(0, 4) !== String(new Date().getFullYear()) ? d.slice(2, 4) + "/" : ""; return y + d.slice(5).replace("-", "/") + (isNaN(t) ? "" : "（" + CC2_WD[t.getDay()] + "）"); };
+const cc2Live = p => !["cancel", "tobi", "flowed"].includes(p.status);
+const cc2Memo = {};   // お客さんID → { "r123": "メモ", "x2026-10-01|名前": "メモ" }
+let cc2More = false;
+async function cc2LoadMemo(c, list){
+  if(cc2Memo[c.id]) return;
+  cc2Memo[c.id] = {};
+  const m = cc2Memo[c.id];
+  try{
+    const ids = list.filter(p => !p.excel && p.id).map(p => p.id);
+    if(ids.length){ const r = await sb.from("kb_reservations").select("id,note,memo_log").in("id", ids);
+      (r.data || []).forEach(x => { const t = [x.note, ...(Array.isArray(x.memo_log) ? x.memo_log.map(l => l && l.text) : [])].filter(Boolean).join(" ／ "); if(t) m["r" + x.id] = t; }); }
+  }catch(e){}
+  try{
+    if(list.some(p => p.excel)){ const h = await sb.from("kb_cust_history").select("biz_date,cast_id,cast_raw,memo").eq("customer_id", c.id).order("biz_date", { ascending: false }).limit(60);
+      (h.data || []).forEach(x => { if(x.memo) m["x" + x.biz_date + "|" + (x.cast_id || x.cast_raw || "")] = x.memo; }); }
+  }catch(e){}
+  if(curCustomer && curCustomer.id === c.id) cc2PaintHist();
+}
+function cc2MemoOf(c, p){ const m = cc2Memo[c.id] || {}; return p.excel ? m["x" + p.biz_date + "|" + (p.cast_id || p.cast_raw || "")] || "" : m["r" + p.id] || ""; }
+function cc2PaintHist(){
+  const el = $("cc2Hist"), c = curCustomer; if(!el || !c || !Array.isArray(custSeen)) return;
+  const all = custSeen, list = all.slice(0, cc2More ? 15 : 5), today = KB.bizDateOf();
+  const chip = p => p.status === "cancel" ? `<span class="cc2st x">キャンセル</span>` : p.status === "tobi" ? `<span class="cc2st t">トビ</span>` : p.status === "flowed" ? `<span class="cc2st f">流れた</span>`
+    : !p.excel && p.biz_date >= today && p.status !== "done" ? `<span class="cc2st r">予約</span>` : `<span class="cc2st ok">✓ 利用</span>`;
+  el.innerHTML = list.length ? list.map(p => { const memo = cc2MemoOf(c, p);
+    return `<div class="cc2hr${["cancel", "tobi"].includes(p.status) ? " bad" : ""}">
+      <div class="cc2hl"><b class="d">${cc2Date(p.biz_date)}</b><span class="s">${esc(p.store_key ? storeLabel(p.store_key) : p.store_raw || "")}${p.excel ? " 📚" : ""}</span>
+        <span class="c">${p.dummy_name ? `🎭${esc(p.dummy_name)}→` : ""}<b>${esc(p.cast_id ? castName(p.cast_id) : p.cast_raw || "")}</b></span><span class="k">${esc(p.course || "")}</span>${isFreeVisit(p) ? `<span class="cc2st f">フリー</span>` : ""}${chip(p)}</div>
+      ${memo ? `<div class="cc2hm">📝 ${esc(memo)}</div>` : ""}</div>`; }).join("")
+    + (all.length > 5 ? `<button type="button" class="cc2more" onclick="cc2More=!cc2More;cc2PaintHist()">${cc2More ? "▲ たたむ" : `▼ もっと見る（全${all.length}件のうち新しい15件まで）`}</button>` : "")
+    : `<div class="cc2none">まだ利用はありません</div>`;
+}
+function cc2Build(){
+  const box = $("custInfo"), c = curCustomer;
+  if(!box || !c || !c.id || !Array.isArray(custSeen) || !box.querySelector(":scope > .custhist")) return null;
+  let card = $("custCard"); if(card) return card;
+  const today = KB.bizDateOf(), seen = custSeen, live = seen.filter(p => cc2Live(p) && (p.excel || p.status === "done" || String(p.biz_date) < today));   // これからの予約は「利用」に数えない
+  const cnt = s => seen.filter(p => p.status === s).length;
+  const tobi = cnt("tobi"), cancel = cnt("cancel");
+  // 指名の傾向（フリーの回は数えない）
+  const tally = arr => { const m = new Map(); arr.forEach(k => { if(k) m.set(k, (m.get(k) || 0) + 1); }); return [...m].sort((x, y) => y[1] - x[1]); };
+  const noms = tally(live.filter(p => !isFreeVisit(p)).map(p => p.cast_id ? castName(p.cast_id) : p.cast_raw));
+  const free = live.filter(p => isFreeVisit(p)).length;
+  const stores = tally(live.map(p => p.store_key ? storeLabel(p.store_key) : p.store_raw)).slice(0, 2);
+  const courses = tally(live.map(p => p.course)).slice(0, 2);
+  const medal = ["🥇", "🥈", "🥉"];
+  card = document.createElement("div"); card.id = "custCard"; card.className = "cc2";
+  card.innerHTML = `<div class="cc2h">
+      <div class="cc2who"><span class="cc2av">👤</span><div><b>${esc(c.name || "名前なし")}</b><small>📞 ${esc(c.phone || "")}</small></div></div>
+      <div class="cc2stats"><span>利用 <b>${live.length}</b>回</span><span>最終 <b>${live[0] ? cc2Date(live[0].biz_date) : "—"}</b></span><span>初回 <b>${live.length ? cc2Date(live[live.length - 1].biz_date) : "—"}</b></span>
+        ${cancel ? `<span class="w">キャンセル <b>${cancel}</b>回</span>` : ""}${tobi ? `<span class="n">トビ <b>${tobi}</b>回</span>` : ""}</div>
+      <a class="cc2open" href="customers.html?id=${c.id}" target="_blank" rel="noopener">顧客台帳を開く ↗</a>
+      <div class="cc2slot" data-slot="head"></div></div>
+    <div class="cc2imp" data-slot="imp"><div class="cc2t">🚨 重要（受付で必ず確認）</div></div>
+    <div class="cc2g">
+      <div class="cc2col">
+        <div class="cc2box memo"><div class="cc2t">📝 お客様メモ</div>${String(c.note || "").trim() ? `<div class="cc2note">${esc(String(c.note).trim()).replace(/\n/g, "<br>")}</div>` : `<div class="cc2none">メモなし</div>`}</div>
+        <div class="cc2box"><div class="cc2t">👑 指名の傾向</div>
+          ${noms.length ? `<div class="cc2noms">${noms.slice(0, 5).map((n, i) => `<span class="${i < 3 ? "top" : ""}">${medal[i] || ""}<b>${esc(n[0])}</b>${n[1]}回</span>`).join("")}</div>` : `<div class="cc2none">指名なし</div>`}
+          <div class="cc2sub">${free ? `フリー ${free}回　` : ""}${stores.length ? `よく使うお店：${stores.map(s => esc(s[0]) + "（" + s[1] + "）").join("・")}　` : ""}${courses.length ? `コース：${courses.map(s => esc(s[0]) + "（" + s[1] + "）").join("・")}` : ""}</div></div>
+      </div>
+      <div class="cc2box"><div class="cc2t">📋 利用履歴とメモ <small>（新しい順）</small></div><div id="cc2Hist"></div></div>
+    </div>`;
+  box.insertAdjacentElement("afterbegin", card);
+  cc2More = false; cc2PaintHist(); cc2LoadMemo(c, seen.slice(0, 15));
+  return card;
+}
+// もとの部品を、決まった場所へ移す（あとから足される部品も：トビ・キャストNG・交通費・タグ・副番号）
+function cc2Sort(){
+  const box = $("custInfo"); if(!box) return;
+  const card = cc2Build(); if(!card) return;
+  const head = card.querySelector('[data-slot="head"]'), imp = card.querySelector('[data-slot="imp"]');
+  [...box.children].forEach(el => {
+    if(el === card) return;
+    if(el.id === "custTagBox" || el.classList.contains("subph")) head.appendChild(el);
+    else if(el.id === "custCaution") imp.appendChild(el);
+    else if(el.classList.contains("ngask") || (el.classList.contains("warn") && /店NG/.test(el.textContent))) imp.insertBefore(el, imp.children[1] || null);
+    else if(el.classList.contains("warn")) imp.appendChild(el);
+  });
+  // 中身があるときだけ重要の枠を出す（見出しと、台帳の利用回数の行はのぞく）
+  const has = [...imp.querySelectorAll(":scope > *:not(.cc2t)")].some(x => x.id === "custCaution" ? [...x.children].some(y => !y.classList.contains("hist")) : true)
+    || /要確認のお客さん/.test(head.textContent);
+  imp.style.display = has ? "" : "none";
+}
+{ const box = $("custInfo");
+  if(box && typeof MutationObserver !== "undefined"){ let q2 = false; new MutationObserver(() => { if(q2) return; q2 = true; Promise.resolve().then(() => { q2 = false; try{ cc2Sort(); }catch(e){ console.error(e); } }); }).observe(box, { childList: true }); } }
+{ const __custCautionCc2 = custCaution; custCaution = async function(){ const r = await __custCautionCc2.apply(this, arguments); try{ cc2Sort(); }catch(e){} return r; }; }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  #custInfo > .custhist, #custInfo #custLedgerLink, #custInfo .custnote, #custCaution > .hist{display:none}
+  .cc2{border:2px solid #D9D3F5;border-radius:16px;background:#FBFAFF;padding:8px;margin:8px 0;display:flex;flex-direction:column;gap:8px}
+  .cc2h{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;background:#fff;border:1.5px solid #E2DDF7;border-radius:12px;padding:8px 10px}
+  .cc2who{display:flex;gap:8px;align-items:center} .cc2av{width:38px;height:38px;border-radius:10px;background:#EEEBFF;display:flex;align-items:center;justify-content:center;font-size:20px}
+  .cc2who b{display:block;font-size:17px} .cc2who small{font-size:12.5px;color:var(--sub);font-weight:700}
+  .cc2stats{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+  .cc2stats span{background:#F3F1FF;border:1.5px solid #DCD6FA;border-radius:10px;padding:2px 9px;font-size:12px;color:#4B4590;white-space:nowrap} .cc2stats b{font-size:14px;color:#2E2770}
+  .cc2stats .w{background:#FFF6E0;border-color:#F2C94C;color:#8a5a00} .cc2stats .w b{color:#8a5a00} .cc2stats .n{background:#FFE5E8;border-color:#E5484D;color:#B0213F} .cc2stats .n b{color:#B0213F}
+  .cc2open{font-weight:900;font-size:12.5px;color:#fff;background:#6E5BD6;border-radius:10px;padding:5px 10px;text-decoration:none;white-space:nowrap}
+  .cc2slot{flex-basis:100%;display:flex;flex-direction:column;gap:4px} .cc2slot:empty{display:none} .cc2slot .subph{margin:0 !important}
+  .cc2imp{border:2.5px solid #E5484D;background:#FFF5F6;border-radius:14px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+  .cc2imp .warn,.cc2imp .ngask,.cc2imp .tobibox{margin:0}
+  #custCaution{display:flex;flex-direction:column;gap:6px} #custCaution:empty{display:none}
+  .cc2t{font-weight:900;font-size:14px;color:#3B3480;margin-bottom:5px} .cc2imp > .cc2t{color:#C62828;margin:0} .cc2t small{font-weight:700;color:var(--sub);font-size:11.5px}
+  .cc2g{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:8px}
+  @media (max-width:760px){ .cc2g{grid-template-columns:1fr} }
+  .cc2col{display:flex;flex-direction:column;gap:8px;min-width:0}
+  .cc2box{background:#fff;border:1.5px solid #E2DDF7;border-radius:12px;padding:8px 10px;min-width:0}
+  .cc2box.memo{background:#FFFBEA;border-color:#F2C94C} .cc2note{font-size:14px;line-height:1.7;font-weight:700;color:#4a3a00}
+  .cc2noms{display:flex;flex-wrap:wrap;gap:5px} .cc2noms span{border:1.5px solid #E2DDF7;border-radius:10px;padding:3px 9px;font-size:12.5px;background:#FBFAFF} .cc2noms span.top{border-color:#F2C94C;background:#FFFBEA} .cc2noms b{font-size:14px;margin:0 4px}
+  .cc2sub{font-size:12px;color:var(--sub);font-weight:700;margin-top:5px}
+  .cc2none{font-size:13px;color:#9A97AE}
+  .cc2hr{border-top:1px solid #EEEAF9;padding:5px 2px} .cc2hr:first-child{border-top:none} .cc2hr.bad{background:#FFF3F4;border-radius:8px}
+  .cc2hl{display:flex;flex-wrap:wrap;gap:3px 8px;align-items:center;font-size:13.5px} .cc2hl .d{min-width:92px} .cc2hl .s{color:var(--sub);font-size:12.5px} .cc2hl .k{color:#4B4590}
+  .cc2hm{font-size:13px;margin:3px 0 0 4px;padding:3px 8px;background:#FFFBEA;border-radius:8px;white-space:pre-wrap;color:#4a3a00}
+  .cc2st{font-size:11.5px;font-weight:900;border-radius:99px;padding:1px 9px;border:1.5px solid} .cc2st.ok{color:#1E7B46;border-color:#7FD796;background:#EFFBF2} .cc2st.x{color:#B0213F;border-color:#F1A9AF;background:#FFF0F2}
+  .cc2st.t{color:#fff;border-color:#C62828;background:#C62828} .cc2st.f{color:#6B6690;border-color:#D6D3E6;background:#F3F2F7} .cc2st.r{color:#2b5aa8;border-color:#9DBCEB;background:#EEF4FF}
+  .cc2more{margin-top:5px;font-family:inherit;border:1.5px solid #DCD6FA;background:#F3F1FF;color:#3B3480;font-weight:800;border-radius:10px;padding:4px 10px;cursor:pointer;font-size:12.5px}
 </style>`);
 
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
