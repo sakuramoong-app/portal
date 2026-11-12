@@ -217,8 +217,8 @@ async function paintCastNotes(){
   const hl = (ids) => (ids || []).map(hname).filter(Boolean).map(esc).join("、");
   const hotelLines = [];
   if(hl(hp.ok)) hotelLines.push(`<div>◎ ${hl(hp.ok)}</div>`);
-  if(hl(hp.conditional)) hotelLines.push(`<div>△ ${hl(hp.conditional)}</div>`);
-  if(hl(hp.ng)) hotelLines.push(`<div style="color:#B0213F;font-weight:700">× ${hl(hp.ng)}</div>`);
+  if((hp.conditional || []).length) hotelLines.push(`<div>△ ${(hp.conditional || []).map(id => { const n = hname(id); return n ? esc(n) + ((hp.memo || {})[id] ? `<small>（${esc(hp.memo[id])}）</small>` : "") : ""; }).filter(Boolean).join("、")}</div>`);   // △はメモ（条件）も 2026/11/12
+  if((hp.ng || []).length) hotelLines.push(`<div style="color:#B0213F;font-weight:700">× ${(hp.ng || []).map(id => { const n = hname(id); return n ? esc(n) + ((hp.memo || {})[id] ? `<small>（${esc(hp.memo[id])}）</small>` : "") : ""; }).filter(Boolean).join("、")}</div>`);
   M.castChecks.filter(x => x.cast_id === c.id && String(x.text).startsWith("🏨")).forEach(x => hotelLines.push(`<div style="white-space:pre-wrap">${esc(String(x.text).replace(/^🏨\s*/, ""))}</div>`));
   // 🏨 ホテルは「ホテル・自宅」の下、🚃 最寄り駅は「エリア」の下、📒 台帳はキャストの下（いつも同じ場所に）
   $("castHotel").innerHTML = hotelLines.length ? `<div style="background:#F2F7FF;border:1.5px solid #B9CDF2;border-radius:12px;padding:6px 10px;margin:6px 0;font-size:13px">
@@ -1630,6 +1630,106 @@ function paintLabelIcons(){
 }
 paintLabelIcons();
 document.head.insertAdjacentHTML("beforeend", `<style>.lbic{margin-right:4px;font-size:1.05em}</style>`);
+
+/* ---------- 🔔 前の営業日の予約で「終了」になっていないもの：次の営業日の12:15に声でお知らせ（2026/11/12 店長：みすずが「キャストホテル入室待ち」のままだった） ---------- */
+async function checkUnfinished(){
+  if(!M.casts || KB.PRACTICE) return;
+  const bd = KB.bizDateOf(), now = Date.now(), due = customDue({ time: "12:15" }, bd), key = bd + "|unfin";
+  const fired = lsGet("kbFired");
+  if(due == null || fired[key] || now < due || now > due + 30 * 60000) return;   // 12:15〜12:45 に開いていれば1回
+  fired[key] = 1; lsSet("kbFired", fired);
+  const prev = addDays(bd, -1);
+  let list = [];
+  try{ list = (q(await sb.from("kb_reservations").select("id,cast_id,start_at,status,biz_date").eq("biz_date", prev).eq("deleted", false)) || []).filter(r => !["done", "cancel", "tobi", "flowed"].includes(r.status)); }catch(e){ return; }
+  if(!list.length) return;
+  const d = new Date(prev + "T12:00:00Z"), who = list.slice(0, 3).map(r => (r.cast_id ? castName(r.cast_id) : "キャスト未定") + "さん").join("・") + (list.length > 3 ? "ほか" : "");
+  notify("alarm", { 時間: "12:15", 内容: `${d.getUTCMonth() + 1}月${d.getUTCDate()}日の予約で、終了になっていないものが${list.length}件あります（${who}）`, 名前: "" }, `jumpToRes(${Number(list[0].id)},'${prev}')`);
+}
+setInterval(checkUnfinished, 60000);
+
+/* ---------- 🏨 ホテル（2026/11/12 店長）
+   ・別の呼び方（NOX・ノックス・ノクス）：ホテル一覧の tags に「別名:ノクス」。別名で入れても、受付はいつも正式名にかえる
+   ・一覧にない名前を入れたら「どのホテルの別の呼び方？」を選んで登録できる
+   ・店NG（×）・遠い（△）のホテル、このキャストの×△を、ホテルの欄の下にはっきり出す ---------- */
+const hNorm = s => String(s || "").normalize("NFKC").toLowerCase().replace(/[\s　・\-‐ー－.]/g, "").replace(/[ぁ-ゖ]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60)).replace(/^(ホテル|hotel)/, "");
+const hAliases = h => (h.tags || []).filter(t => String(t).startsWith("別名:")).map(t => String(t).slice(3).trim()).filter(Boolean);
+const hAreaOk = (h, area) => !area || !h.area || h.area === area || area.includes(h.area) || h.area.includes(area);
+// 名前（または別名）がぴったり同じホテル（「ホテル」「HOTEL」・空白・カタカナひらがなのちがいは同じとみる）
+function hotelByName(name, area){
+  const k = hNorm(name); if(!k) return null;
+  const list = (M.hotels || []).filter(h => hAreaOk(h, area));
+  return list.find(h => hNorm(h.hotel_name) === k) || list.find(h => hAliases(h).some(a => hNorm(a) === k)) || null;
+}
+// 受付のホテル：正式名でも別名でも見つける
+{ const __curHotelA = curHotel; curHotel = function(){
+    const h = __curHotelA(); if(h) return h;
+    const addr = $("f_address") ? $("f_address").value : ""; if(!addr.trim()) return null;
+    return hotelByName(hotelNameFromAddr(addr), $("f_area").value.trim());
+  }; }
+// 別名で入れたら、正式名にかえる（部屋番号はそのまま）
+function hotelToOfficial(quiet){
+  const el = $("f_address"); if(!el || !el.value.trim()) return false;
+  const name = hotelNameFromAddr(el.value), h = hotelByName(name, $("f_area").value.trim());
+  if(!h || name === h.hotel_name) return false;
+  const rest = el.value.trim().slice(el.value.trim().indexOf(name) + name.length);
+  el.value = h.hotel_name + rest;
+  if(!quiet) toast(`🏨「${name}」→ 正式な名前「${h.hotel_name}」にしました`);
+  try{ recalc(); }catch(e){}
+  return true;
+}
+document.addEventListener("change", e => { if(e.target && e.target.id === "f_address" && hotelToOfficial()){ try{ checkNewHotel(); }catch(x){} } }, true);
+// 一覧にない名前：別の呼び方として登録できるように（似た名前を先に）
+{ const __pnhAlias = paintNewHotel; paintNewHotel = function(){
+    if($("f_address") && hotelByName(hotelNameFromAddr($("f_address").value), $("f_area").value.trim())){ hotelToOfficial(); }
+    const r = __pnhAlias.apply(this, arguments);
+    const box = $("newHotelBox"), nh = box && box.querySelector(".newhotel");
+    if(nh && KB.CAN_EDIT){
+      const name = hotelNameFromAddr($("f_address").value), area = $("f_area").value.trim(), k = hNorm(name);
+      const inArea = (M.hotels || []).filter(h => hAreaOk(h, area));
+      const sim = inArea.filter(h => { const a = hNorm(h.hotel_name); return k.length >= 2 && (a.includes(k) || k.includes(a) || hAliases(h).some(x => hNorm(x).includes(k))); });
+      const rest = inArea.filter(h => !sim.includes(h)).sort((a, b) => String(a.hotel_name).localeCompare(String(b.hotel_name), "ja"));
+      const opt = h => `<option value="${esc(h.hotel_id)}">${h.store_status === "ng" ? "🚫" : h.store_status === "far" ? "△" : ""}${esc(h.hotel_name)}${h.area ? "（" + esc(h.area) + "）" : ""}</option>`;
+      nh.insertAdjacentHTML("afterbegin", `<div class="halias">🔁 <b>${esc(name)}</b> は、一覧のホテルの別の呼び方ですか？
+        <select id="nh_alias"><option value="">（どのホテルの呼び方？）</option>${sim.length ? `<optgroup label="似た名前">${sim.map(opt).join("")}</optgroup>` : ""}<optgroup label="${esc(area || "ぜんぶ")}のホテル">${rest.map(opt).join("")}</optgroup></select>
+        <button type="button" class="btn btn-primary btn-sm" onclick="addHotelAlias()">この別の呼び方として登録</button>
+        <div class="hint">登録すると、次から「${esc(name)}」と入れても正式な名前になります（店NG・メモもそのホテルのものが出ます）</div></div>`);
+    }
+    try{ paintHotelStatus(); }catch(e){}
+    return r;
+  }; }
+async function addHotelAlias(){
+  const id = $("nh_alias") && $("nh_alias").value, h = (M.hotels || []).find(x => x.hotel_id === id);
+  if(!h){ toast("どのホテルの呼び方か選んでください"); return; }
+  const name = hotelNameFromAddr($("f_address").value).trim(); if(!name){ return; }
+  if(!confirm(`「${name}」を「${h.hotel_name}」の別の呼び方として登録しますか？`)) return;
+  const tags = (Array.isArray(h.tags) ? h.tags : []).filter(t => String(t) !== "別名:" + name).concat(["別名:" + name]);
+  try{
+    q(await sb.from("prof_hotels").update({ tags }).eq("hotel_id", h.hotel_id));
+    h.tags = tags; hotelToOfficial(true); checkNewHotel();
+    toast(`🔁「${name}」を「${h.hotel_name}」の別の呼び方にしました`);
+  }catch(e){ toast("登録できませんでした：" + (e.message || e)); }
+}
+// 🚫 店NG・△、このキャストの×△（入れたホテル）＋ そのエリアの店NG・△のホテル
+function paintHotelStatus(){
+  const el = $("hotelStatusBox"); if(!el) return;
+  const area = $("f_area") ? $("f_area").value.trim() : "", h = curHotel();
+  const c = M.casts.find(x => x.id === $("f_cast").value), p = c && c.prof_id && typeof profById !== "undefined" && profById ? profById[c.prof_id] : null, hp = (p && p.hotelPrefs) || {};
+  const out = [];
+  if(h){
+    if(h.store_status === "ng") out.push(`<div class="hst ng">🚫 「${esc(h.hotel_name)}」は<b>店としてNG</b>のホテルです${h.note ? "：" + esc(h.note) : ""}</div>`);
+    else if(h.store_status === "far") out.push(`<div class="hst far">△ 「${esc(h.hotel_name)}」は店として<b>△（遠いから微妙）</b>${h.note ? "：" + esc(h.note) : ""}</div>`);
+    if(c && (hp.ng || []).includes(h.hotel_id)) out.push(`<div class="hst ng">🙅 ${esc(castName(c.id))}さんは「${esc(h.hotel_name)}」が <b>×（NG）</b>${(hp.memo || {})[h.hotel_id] ? "：" + esc(hp.memo[h.hotel_id]) : ""}</div>`);
+    else if(c && (hp.conditional || []).includes(h.hotel_id)) out.push(`<div class="hst far">△ ${esc(castName(c.id))}さんは「${esc(h.hotel_name)}」が △${(hp.memo || {})[h.hotel_id] ? "：" + esc(hp.memo[h.hotel_id]) : "（条件つき）"}</div>`);
+  }
+  const bad = area ? (M.hotels || []).filter(x => hAreaOk(x, area) && x.area && (x.store_status === "ng" || x.store_status === "far")) : [];
+  if(bad.length) out.push(`<details class="hst list"><summary>🏨 ${esc(area)}の 店NG・△ のホテル（${bad.length}）</summary>${bad.map(x => `<div>${x.store_status === "ng" ? "🚫" : "△"} <b>${esc(x.hotel_name)}</b>${hAliases(x).length ? `<small>（${esc(hAliases(x).join("・"))}）</small>` : ""}${x.note ? "：" + esc(x.note) : ""}</div>`).join("")}</details>`);
+  el.innerHTML = out.join("");
+}
+["change", "input"].forEach(ev => document.addEventListener(ev, e => { const id = e.target && e.target.id; if(["f_areaSel", "f_area", "f_address", "f_cast", "f_place"].includes(id)){ clearTimeout(paintHotelStatus.t); paintHotelStatus.t = setTimeout(() => { try{ paintHotelStatus(); }catch(x){} }, 300); } }, true));
+{ const __openFormHS = openForm; openForm = function(){ const r = __openFormHS.apply(this, arguments); try{ paintHotelStatus(); }catch(e){} return r; }; }
+document.head.insertAdjacentHTML("beforeend", `<style>.halias{background:#F2F7FF;border:1.5px solid #B9CDF2;border-radius:10px;padding:6px 10px;margin-bottom:8px;font-size:13px}.halias select{max-width:260px}
+  .hst{border-radius:10px;padding:6px 10px;margin:6px 0;font-size:13.5px;font-weight:700} .hst.ng{background:#FFE8EC;border:2px solid #E02424;color:#B0213F} .hst.far{background:#FFF6CC;border:2px solid #F2C200;color:#7a5a00}
+  .hst.list{background:#FAF7F8;border:1.5px solid #E5D9DE;color:#5C4B4F;font-weight:600} .hst.list summary{cursor:pointer;font-weight:800}</style>`);
 
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
 init();

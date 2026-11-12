@@ -1576,13 +1576,15 @@ function fillCastSel(){
   let sh = shiftCache[day] || {};
   if(bd !== day){ if(typeof otherDay !== "undefined" && otherDay[bd]) sh = otherDay[bd].sh || {}; else { sh = {}; if(typeof loadOtherDay === "function") loadOtherDay(bd); } }
   const dayLbl = bd === day ? "今日" : Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8));
-  const onShift = M.casts.map(c=>{ const nm = Object.keys(sh).find(n=>n === c.shift_name || n === c.official_name); return nm ? { c, s: sh[nm] } : null; })
+  // 🚫 その日に欠勤・精算ずみの子は出さない（選んである子はそのまま）2026/11/12 店長
+  const castOff = id => { if(bd !== day || id === cur) return false; const cd = (typeof castDays !== "undefined" && castDays[id]) || {}; return cd.status === "欠勤" || !!cd.settled; };
+  const onShift = M.casts.filter(c => !castOff(c.id)).map(c=>{ const nm = Object.keys(sh).find(n=>n === c.shift_name || n === c.official_name); return nm ? { c, s: sh[nm] } : null; })
     .filter(Boolean).sort((a, b)=>a.s.start - b.s.start);
   const ids = new Set(onShift.map(x=>x.c.id));
   let h = `<option value="">（キャストを選ぶ）</option>`;
   h += onShift.length ? `<optgroup label="${dayLbl}の出勤">${onShift.map(x=>`<option value="${x.c.id}">${esc(x.c.official_name || x.c.temp_name)}　${tlLabel(x.s.start)}〜${tlLabel(x.s.end)}${x.s.confirmed ? "" : "（未確定）"}</option>`).join("")}</optgroup>`
                       : `<optgroup label="この日のシフトがありません"></optgroup>`;
-  const others = M.casts.filter(c=>!ids.has(c.id) && (c.id === cur || ($("f_castAll") && $("f_castAll").checked && c.status !== "left")));
+  const others = M.casts.filter(c=>!ids.has(c.id) && (c.id === cur || ($("f_castAll") && $("f_castAll").checked && c.status !== "left" && !castOff(c.id))));
   if(others.length) h += `<optgroup label="シフトにない人">${others.map(c=>`<option value="${c.id}">${esc(c.official_name || c.temp_name)}</option>`).join("")}</optgroup>`;
   sel.innerHTML = h; sel.value = cur;
 }

@@ -931,8 +931,9 @@ function renderCastChecks(c){
       : !area ? "（エリアを選ぶと、3P可のホテルが出ます）"
       : inArea.length ? "　3P可：" + inArea.map(h => { const m = (h.tags || []).find(t => String(t).startsWith("3Pメモ:")); return h.hotel_name + (m ? "（" + String(m).slice(5) + "）" : ""); }).join("・") : "　" + area + "に3P可のホテルが登録されていません";   // 3Pのメモ（料金など）もいっしょに
     const warn = curH && !(Array.isArray(curH.tags) && curH.tags.includes("3P可")) ? `　⚠️ 今のホテル「${curH.hotel_name}」は3P可になっていません` : "";
-    know.unshift({ text: "👥 3P可能なホテルを案内する（" + (party.kind === "guest" ? "お客様2名" : "キャスト" + party.n + "名") + "）" + list + warn });   // 2026/11/12 店長：必須のチェックはいらない → 知っておくことに
-  }
+    // 2026/11/12 店長：必須のチェックはいらない・文はホテルの欄のすぐ下に
+    const p3 = $("p3HotelBox"); if(p3) p3.innerHTML = `<div class="p3hint">👥 3P可能なホテルを案内する（${party.kind === "guest" ? "お客様2名" : "キャスト" + party.n + "名"}）${esc(list)}${warn ? `<b>${esc(warn)}</b>` : ""}</div>`;
+  } else { const p3 = $("p3HotelBox"); if(p3) p3.innerHTML = ""; }
   // 🌙 お泊り：池袋・鶯谷・五反田以外（遠方）は本指名のみ（新規・店リピのときに出す）
   try{
     const area = $("f_area").value.trim();
