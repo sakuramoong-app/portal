@@ -446,6 +446,7 @@ function paintDay(){
   const placeOf = r => r.cd.settled ? (r.place || "（場所なし）") : "";
   const keyOf = sortMode === "staff" ? staffOf : sortMode === "place" ? placeOf : null;
   let shown = rows.filter(kana);
+  if(sortMode === "done") shown = shown.filter(r => ["day", "later", "me"].includes(r.state));   // ✅ 回収ずみ（当日・後日内勤・店長）の子だけ 2026/11/12
   if(keyOf){
     const ks = [...new Set(shown.map(keyOf).filter(Boolean))];
     const order = sortMode === "place" ? ALL_PLACES.filter(p => ks.includes(p)).concat(ks.filter(p => !ALL_PLACES.includes(p))) : ks.sort((a, b) => a.localeCompare(b, "ja"));
@@ -463,7 +464,7 @@ function paintDay(){
     return pre + rowHtml(r, ed);
   }).join("");
   h += `<div class="kanabar sortbar"><span style="font-weight:800;align-self:center;margin-right:4px">並び：</span><select class="ssort" onchange="setSettleSort(this.value)" title="並び順（精算と同じ）">${SETTLE_SORTS.map(([v, l]) => `<option value="${v}" ${v === settleSort ? "selected" : ""}>${l}</option>`).join("")}</select>`
-    + `<span style="font-weight:800;align-self:center;margin:0 4px 0 10px">まとめる：</span>` + [["", "まとめない"], ["staff", "🙋 担当内勤ごと"], ["place", "📍 エリアごと"]].map(([k, t]) => `<button type="button" class="kb ${(sortMode || "") === k ? "on" : ""}" onclick="setSort('${k}')">${t}</button>`).join("") + `</div>`;
+    + `<span style="font-weight:800;align-self:center;margin:0 4px 0 10px">まとめる：</span>` + [["", "まとめない"], ["staff", "🙋 担当内勤ごと"], ["place", "📍 エリアごと"], ["done", "✅ 回収ずみだけ"]].map(([k, t]) => `<button type="button" class="kb ${(sortMode || "") === k ? "on" : ""}" onclick="setSort('${k}')">${t}</button>`).join("") + `</div>`;
   h += rows.length ? `<div class="tbl"><table class="coltbl">
     <tr><th class="l">キャスト名</th><th>店落ち（Z列＋雑費）／カード</th><th class="l">回収サイン・だれが いつ どこで</th><th>封筒の中（数えた額）</th><th class="l">交通費・経費・精算ミス（処理したら ✓）</th></tr>
     ${bodyRows}</table></div>` : `<div class="lead">この日の回収はありません。</div>`;
