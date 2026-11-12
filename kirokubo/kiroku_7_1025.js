@@ -1242,25 +1242,32 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 
 /* ---------- 本日のキャスト：お茶・欠勤の子は、あいうえお順（ほかの並び順も）から外して、いちばん下の別枠へ ---------- */
 // ✅ 精算済（ふえた予約もない）の子も、グレーにして下の別枠へ（2026/11/4 店長の希望）
+const homeDone = x => !!(x.c && x.cd && x.cd.direct_home && !x.cd.settled && !["待機中", "仕事中"].includes(x.cd.status));   // 🏠 直帰（まだ精算していない）
 const settledDone = x => !!(x.c && x.cd && x.cd.settled && !["待機中", "仕事中"].includes(x.cd.status) && !(typeof kbPendingAfterSettle === "function" && kbPendingAfterSettle(x.cd, rows.filter(r=>r.cast_id === x.c.id)).length));
 const __sortRowsTea = sortRows;
 sortRows = function(list){
   const out = __sortRowsTea(list);
   const off = x => !!goneKind(x.cd, x), sd = x => !off(x) && settledDone(x);
-  return out.filter(x=>!off(x) && !sd(x)).concat(out.filter(sd), out.filter(off));
+  const hm2 = x => !off(x) && !sd(x) && homeDone(x);   // 🏠 直帰も精算済と同じように下へ（2026/11/12 店長）
+  return out.filter(x=>!off(x) && !sd(x) && !hm2(x)).concat(out.filter(sd), out.filter(hm2), out.filter(off));
 };
 const __renderListTea = renderListTable;
 renderListTable = function(){
   __renderListTea.apply(this, arguments);
   tlRows().filter(x => !goneKind(x.cd, x) && settledDone(x)).forEach(x => { const el = $("cb-" + x.c.id); if(el && el.parentElement && el.parentElement.id === "list") el.classList.add("sdone"); });
+  tlRows().filter(x => !goneKind(x.cd, x) && !settledDone(x) && homeDone(x)).forEach(x => { const el = $("cb-" + x.c.id); if(el && el.parentElement && el.parentElement.id === "list") el.classList.add("shome"); });
   // 見出しは2つに分ける：✅ 精算済（うすい緑）→ その下に お茶・欠勤（2026/11/11 店長）。精算済でも「待機中・仕事中」の子は、ふつうの並びのまま（settledDone）
   const n = k => document.querySelectorAll("#list > .cblock." + k).length, head = (txt, bg, bd, fg) => `<div class="teahead" style="margin:18px 0 6px;padding:6px 12px;border-radius:12px;background:${bg};border:1.5px dashed ${bd};font-weight:900;color:${fg}">${txt}</div>`;
   const sd = document.querySelector("#list > .cblock.sdone");
   if(sd) sd.insertAdjacentHTML("beforebegin", head("✅ 精算済（" + n("sdone") + "名）", "#D6EFD7", "#7FC583", "#1E7A3C"));
+  const sh = document.querySelector("#list > .cblock.shome");
+  if(sh) sh.insertAdjacentHTML("beforebegin", head("🏠 直帰（" + n("shome") + "名）", "#E8F1FB", "#8DB8F2", "#1f5fbf"));
   const off = document.querySelector("#list > .cblock.tea, #list > .cblock.absent");
   if(off) off.insertAdjacentHTML("beforebegin", head("🟩 お茶・🟥 欠勤（" + (n("tea") + n("absent")) + "名）", "#F3F3F3", "#CFCFCF", "#444"));
 };
-document.head.insertAdjacentHTML("beforeend", `<style>#list > .cblock.sdone{background:#D6EFD7 !important;border-color:#7FC583 !important;position:relative}</style>`);
+document.head.insertAdjacentHTML("beforeend", `<style>#list > .cblock.sdone{background:#D6EFD7 !important;border-color:#7FC583 !important;position:relative}
+  #list > .cblock.shome{background:#E8F1FB !important;border-color:#8DB8F2 !important;position:relative}
+  #list > .cblock.shome::after, .card.svc.home::after{content:"直帰";position:absolute;top:6px;right:16px;transform:rotate(12deg);border:3px solid #1f5fbf;color:#1f5fbf;font-weight:900;font-size:17px;letter-spacing:3px;padding:1px 10px;border-radius:10px;background:rgba(255,255,255,.6);pointer-events:none}</style>`);
 
 /* ---------- ✏️ この場だけ直す：キャストへの予約連絡・お客さまへの返信の文を、その場で書きかえる（テンプレは変えない）2026/11/5
    書きかえている間は、受付の内容を変えても文は自動で作りなおさない。「↺ 自動の文にもどす」でもとにもどる。受付を開きなおすと自動にもどる ---------- */

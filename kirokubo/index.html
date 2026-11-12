@@ -402,7 +402,8 @@
     <h2 id="termsTitle">🔁 バック・条件を変える</h2>
     <div class="hint">ヒアリングとセットで変えます。<b>ヒアリング内容がないと保存できません。</b>変えたことは、だれが・いつ・どのヒアリングで、が残ります。</div>
 
-    <div class="sec">💬 ヒアリング（必須）</div>
+    <div class="sec">💬 ヒアリング<span id="t_hreq">（必須）</span></div>
+    <div id="t_setupBox" class="hint" style="margin:-2px 0 6px"></div>
     <div class="f"><label><input type="radio" name="t_hmode" value="new" checked onchange="termsHMode()"> 新しく書く（キャストプロフの記録にも入ります）</label></div>
     <div class="f" id="t_hnew_wrap"><textarea id="t_htext" placeholder="例：10/20 面談。指名が増えてきたのでランクアップ希望。交通費は全額バックで合意。"></textarea></div>
     <div class="f" style="margin-top:6px"><label><input type="radio" name="t_hmode" value="pick" onchange="termsHMode()"> キャストプロフにあるヒアリングから選ぶ</label></div>
@@ -630,6 +631,7 @@ async function openTerms(){
   $("t_htext").value = "";
   document.querySelector('input[name=t_hmode][value=new]').checked = true;
   termsHMode();
+  termsSetupPaint();   // 📒 初期設定中（ヒアリングなしでも保存）2026/11/12
   const day = todayYmd();
   // ランクはえらぶ（そのグループで使っているランク＋バック表のランク）。ないときは「＋ 新しいランク」
   if(!backRanks){ try{ backRanks = [...new Set((q(await sb.from("kb_back").select("rank")) || []).map(x => x.rank))]; }catch(e){ backRanks = []; } }
@@ -900,12 +902,26 @@ function renderNewRules(){
   $("t_newRules").innerHTML = termsNewRules.map((r, i)=>`<div style="font-size:13px;background:#F0FBF5;border-radius:10px;padding:6px 10px;margin-bottom:4px">
     ＋ <b>${KIND_LABEL[r.kind]}</b>：${esc(r.note)} <a href="javascript:void(0)" onclick="termsNewRules.splice(${i},1);renderNewRules()" style="color:#c9556a;font-size:12px">取り消す</a></div>`).join("");
 }
+// 📒 初期設定中（2026/11/12 店長）：kb_settings の terms_setup_mode が true のあいだは、ヒアリングなしでもバック・条件を保存できる（SQL 239）
+let termsSetup = false;
+async function termsSetupPaint(){
+  try{ const r = await sb.from("kb_settings").select("value").eq("key", "terms_setup_mode").maybeSingle(); termsSetup = !!(r && r.data && r.data.value === true); }catch(e){ termsSetup = false; }
+  const box = $("t_setupBox"); if(!box) return;
+  $("t_hreq").textContent = termsSetup ? "（初期設定中は、なくても保存できます）" : "（必須）";
+  box.innerHTML = (CLAIM.staff_role === "manager" || operatorName() === "きゃ") && CAN_EDIT ? `<label style="display:flex;gap:6px;align-items:center;font-weight:800"><input type="checkbox" ${termsSetup ? "checked" : ""} onchange="termsSetupSet(this.checked)" style="width:auto"> 📒 初期設定中（ヒアリングなしでも保存できる・終わったら外す）</label>`
+    : termsSetup ? "📒 いまは初期設定中なので、ヒアリングがなくても保存できます" : "";
+}
+async function termsSetupSet(on){
+  try{ q(await sb.from("kb_settings").upsert({ key: "terms_setup_mode", value: !!on, note: "📒 初期設定中：バック・条件をヒアリングなしでも変えられる（終わったら false に）" })); toast(on ? "📒 初期設定中にしました（ヒアリングなしでも保存できます）" : "初期設定を終わりにしました（ヒアリングは必須です）"); }
+  catch(e){ toast("変えられませんでした：" + (e.message || e)); }
+  termsSetupPaint();
+}
 async function saveTerms(){
   const c = termsCast; if(!c) return;
   const pick = document.querySelector('input[name=t_hmode]:checked').value === "pick";
   const p = { cast_id: c.id, effective: $("t_eff").value, by: operatorName(), ranks: {}, add_rules: termsNewRules, end_rules: [] };
   if(pick){ p.hearing_log_id = $("t_hpick").value; if(!p.hearing_log_id){ toast("ヒアリングを選んでください"); return; } }
-  else { p.hearing_text = $("t_htext").value.trim(); if(p.hearing_text.length < 5){ toast("ヒアリング内容を書いてください（ないと変えられません）"); $("t_htext").focus(); return; } }
+  else { p.hearing_text = $("t_htext").value.trim(); if(p.hearing_text.length < 5){ if(termsSetup){ p.hearing_text = ""; p.setup = true; } else { toast("ヒアリング内容を書いてください（ないと変えられません）"); $("t_htext").focus(); return; } } }
   RANK_KEYS.forEach(([g])=>{ const el = $("t_r_" + g); if(el.value.trim() !== el.dataset.was) p.ranks[g] = el.value.trim(); });
   document.querySelectorAll(".t_end:checked").forEach(x=>p.end_rules.push(Number(x.value)));
   // ランクは同じで「いつから」だけ直したいとき（例：B が 11/3 からになっていて、11/1 の予約が前のランクで計算される）
@@ -920,7 +936,7 @@ async function saveTerms(){
   $("t_save").disabled = true;
   try{
     const r = q(await sb.rpc("kb_change_terms", { p }));
-    if(r && r.error){ toast(r.error); return; }
+    if(r && r.error){ alert("保存できませんでした：" + r.error); return; }   // 消えないように（2026/11/12）
     closeTerms(); toast("ヒアリングとセットで保存しました🌸");
     const [c2, rh, cr] = await Promise.all([
       sb.from("master_casts").select("*").eq("id", c.id).single(),

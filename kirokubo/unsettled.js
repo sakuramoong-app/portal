@@ -818,7 +818,7 @@ cardHtml = function(id, c){
   const nothing = !done && !(c.all || []).some(r => r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed") && !c.total && !c.reward && !c.option && !c.plus && !c.minus;
   const need = KB.CAN_EDIT && !done && !home && !off && !nothing;
   const cam = cd.camera_check || "", plNow = (done ? cd.settle_place : plSel[id]) || cd.settle_place || PLACES[0];   // 選んだ回収場所は、描きなおしても（カメラ・写真を押しても）そのまま
-  return `<div class="card svc ${done ? "done" : ""} ${cd.status === "お茶" ? "tea" : cd.status === "欠勤" ? "absent" : ""}" id="card-${id}">
+  return `<div class="card svc ${done ? "done" : ""} ${!done && home ? "home" : ""} ${cd.status === "お茶" ? "tea" : cd.status === "欠勤" ? "absent" : ""}" id="card-${id}">
     <h2>${typeof KBF !== "undefined" ? KBF.img(id, 40) : ""}${esc(castName(id))}${cd.status === "お茶" ? `<span class="st tea">🟩 お茶</span>` : cd.status === "欠勤" ? `<span class="st absent">🟥 欠勤</span>` : ""}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : home ? "🏠 直帰" : nothing ? "精算なし（キャンセル・トビだけ）" : "未精算"}</span>${done && (UNS || []).some(x => x.cast_id === id && x.biz_date === day && !x.done_on) ? `<span class="st" style="background:#FDE7E7;color:#c0392b;margin-left:4px">⚠️ 未精算あり</span>` : ""}
       ${done && cd.settled_at ? (() => { const s = cd.settle_snapshot || {}, later = s.paidOn && s.paidOn !== day;   // いつ・どこで・だれが（後日の合算・個別の精算も）2026/11/5
         return `<small class="hint2 sdwho">${later ? `<b>${s.only ? "📮 後日に個別精算" : "📮 後日に合算で精算"}</b>：` : ""}${esc(logWhen(cd.settled_at))}${cd.settle_place ? "・" + esc(cd.settle_place) : ""}${cd.settled_by ? "・" + KBF.staffTag(cd.settled_by) : ""}</small>`; })() : ""}</h2>
@@ -930,6 +930,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   /* お茶＝こい緑・欠勤＝こい赤（文字は白で見やすく）・精算済＝うすい緑＋「精算済」のはんこ（2026/11/11 店長。記録簿の本日のキャストと同じ色） */
   .card.svc.tea{background:#43A047;border-color:#2E7D32} .card.svc.tea > h2{color:#fff} .card.svc.absent{background:#E02424;border-color:#A81414} .card.svc.absent > h2{color:#fff}
   .card.svc.done{background:#D6EFD7 !important;border-color:#7FC583 !important;position:relative}
+  .card.svc.home{background:#E8F1FB !important;border-color:#8DB8F2 !important;position:relative}
+  .card.svc.home::after{content:"直帰";position:absolute;top:6px;right:16px;transform:rotate(12deg);border:3px solid #1f5fbf;color:#1f5fbf;font-weight:900;font-size:17px;letter-spacing:3px;padding:1px 10px;border-radius:10px;background:rgba(255,255,255,.6);pointer-events:none}   /* 🏠 直帰のはんこ（2026/11/12） */
   .card.svc.done::after, #list > .cblock.sdone::after{content:"精算済";position:absolute;top:6px;right:16px;transform:rotate(12deg);border:3px solid #D32F2F;color:#D32F2F;font-weight:900;font-size:17px;letter-spacing:3px;padding:1px 10px;border-radius:10px;background:rgba(255,255,255,.55);opacity:.9;pointer-events:none;z-index:2}
   .svr.need{border-radius:14px;padding:8px;animation:svrBlink 1.1s ease-in-out infinite;border:3px solid #FFD54A}
   @keyframes svrBlink{0%,100%{box-shadow:0 0 0 0 rgba(255,193,7,.0);background:#FFFDF3}50%{box-shadow:0 0 18px 4px rgba(255,193,7,.75);background:#FFF5C9}}
