@@ -628,6 +628,15 @@ async function loadCastNgPairs(){
 }
 { const __loadDayNg = loadDay; loadDay = async function(){ const r = await __loadDayNg.apply(this, arguments); const hadProfs = typeof profById !== "undefined" && !!profById; await loadCastNgPairs(); try{ await loadProfs(); }catch(e){} if(castNgPairs.size || !hadProfs) renderList(); return r; }; }   // ホテルのNG（キャストプロフ）も読む
 document.head.insertAdjacentHTML("beforeend", `<style>.rc-castng{display:inline-block;margin-left:4px;background:#C0392B;color:#fff;font-size:11.5px;font-weight:900;border-radius:99px;padding:1px 8px;animation:livePulse 1.4s ease-in-out infinite}</style>`);
+// ⚠️ 終了時刻が、コース・延長・デートから出す時刻とちがうとき（前のコースのまま保存されていた など）2026/11/12 店長：泊23-5 なのに 7:00 までになっていた
+function rcEndWarn(r){
+  if(!r || !r.start_at || !r.end_at || ["cancel", "tobi", "flowed"].includes(r.status)) return "";
+  const m = minutesOf(r.course || ""); if(!m) return "";
+  const want = new Date(r.start_at).getTime() + (m + ((Number(r.extension_count) || 0) + (Number(r.date_count) || 0)) * 30) * 60000;
+  if(Math.abs(want - new Date(r.end_at).getTime()) < 60000) return "";
+  return `<span class="rc-endwarn" title="コース（${esc(r.course)}）・延長・デートから出すと ${hm(new Date(want).toISOString())} までです。開いて「💾 登録する」を押すと直ります">⚠️ 終了は${hm(new Date(want).toISOString())}のはず</span>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>.rc-endwarn{display:inline-block;margin-left:4px;background:#FFF4E5;border:1.5px solid #FFB547;color:#a35a00;font-size:12px;font-weight:800;border-radius:99px;padding:1px 8px;white-space:nowrap}</style>`);
 function resCard(r, i){
   const c = r.kb_customers || {}, ed = KB.CAN_EDIT, cx = ["cancel", "tobi", "flowed"].includes(r.status);
   // キャストの枠の中の何番目の予約か：予約①〜⑥（色も6色。7件目からは色をくり返す）2026/11/4
@@ -655,7 +664,7 @@ function resCard(r, i){
     <div class="rc-top">
       ${noTxt ? `<span class="rc-no st ${r.status}">${noTxt}</span>` : ""}
       <span class="stbox">${stSel}${statusAtChip(r, ed)}</span>
-      <small class="rc-lbl">開始</small>${ed ? `<input type="time" class="rc-time" value="${hmIn(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>
+      <small class="rc-lbl">開始</small>${ed ? `<input type="time" class="rc-time" value="${hmIn(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>${rcEndWarn(r)}
       ${r.phone_draft ? `<span class="rc-draft" title="スマホで仮入力。PCで開いて確かめると取り入れます">📱仮入力</span>` : ""}${r.dummy_name ? `<span class="rc-store">🎭${esc(r.dummy_name)}</span>` : ""}
       ${typeof KBF !== "undefined" ? KBF.storeChip(r.store_key) : ""}<span class="rc-k">📍<b>${esc(r.area || "エリアなし")}</b></span>
       ${ed ? `<button type="button" class="rc-hotel" onclick="openHotelBox(${r.id})" title="ホテル名・部屋番号・地図（開かずに入れられる）">🏨 ${esc(r.address || "ホテル・部屋を入れる")}</button>${cx ? "" : rcHotelWarn(r)}` : r.address ? `<span class="rc-k">🏨 ${esc(r.address)}</span>` : ""}${r.address ? `<button type="button" class="rc-hcopy" title="ホテル名と部屋番号をコピー" onclick="rcCopyAddr(${r.id})">📋</button>` : ""}
