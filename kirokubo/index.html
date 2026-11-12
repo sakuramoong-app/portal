@@ -4431,9 +4431,9 @@ function introTplApplyRun(){
 const TPL_SNIPS = [
   ["🔗 リンク文字", [["url", "URL"], ["text", "見える文字"]], v => `<a href="${v.url}" target="_blank">${tplEsc(v.text)}</a>`],
   ["💗 リンク集（≫💗🔗リンク集🔗💗≪）", [["url", "リンク集のURL（lit.link など）"]], v => `<a href="${v.url}" target="_blank">≫💗🔗リンク集🔗💗≪</a>`],
-  ["🖼 画像（FreeJPG）", [["no", "FreeJPGの番号"]], v => `%MJPGFREE${tplNums(v.no)[0] || ""}-W%`],
-  ["🖼🔗 リンクつき画像", [["no", "FreeJPGの番号"], ["url", "押したときに開くURL"]], v => `<a href="${v.url}" target="_blank">%MJPGFREE${tplNums(v.no)[0] || ""}-W%</a>`],
-  ["🎥 動画（Free動画）", [["no", "Free動画の番号"]], v => `%MP4FREE${tplNums(v.no)[0] || ""}-W%`],
+  ["🖼 画像（FreeJPG）", [["no", "FreeJPGの番号（数字だけでOK。例：116）"]], v => `%MJPGFREE${tplNums(v.no)[0] || ""}-W%`],
+  ["🖼🔗 リンクつき画像", [["no", "FreeJPGの番号（数字だけでOK。例：116）"], ["url", "押したときに開くURL"]], v => `<a href="${v.url}" target="_blank">%MJPGFREE${tplNums(v.no)[0] || ""}-W%</a>`],
+  ["🎥 動画（Free動画）", [["no", "Free動画の番号（数字だけでOK。例：2）"]], v => `%MP4FREE${tplNums(v.no)[0] || ""}-W%`],
   ["🌸 ピンクの文字", [["text", "ピンクにする文字"]], v => `<font color="#ffb6c1">${tplEsc(v.text)}</font>`],
   ["➖ 区切り線", [], () => `----------------------------`],
 ];
