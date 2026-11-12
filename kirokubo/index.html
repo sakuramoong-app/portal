@@ -4220,9 +4220,9 @@ function ieInsertCode(id, code){
 function ieImgAt(id){ openFreeUp(no => ieInsertCode(id, `%MJPGFREE${no}-W%`), tplCur && tplCur.mk); }
 function ieVidAt(id){ openVideoUp(no => ieInsertCode(id, `%MP4FREE${no}-W%`), tplCur && tplCur.mk); }
 function ieLinkAt(id){
-  const u = prompt("リンクのURL（https://〜）", ""); if(u == null) return;
+  const u = prompt(SNIP_ASK.linkUrl, ""); if(u == null) return;
   if(!tplUrl(u)){ toast("https:// ではじまるURLを入れてください"); return; }
-  const t = prompt("見える文字", "こちら"); if(t == null) return;
+  const t = prompt(SNIP_ASK.linkText, "こちら"); if(t == null) return;
   ieInsertCode(id, `<a href="${tplUrl(u)}" target="_blank">${tplEsc(t || u)}</a>`);
 }
 // 🖼 画像のファイルを、ブロック・「＋」にドラッグ（または貼りつけ）→ そのままアップして入れる
@@ -4428,13 +4428,23 @@ function introTplApplyRun(){
   toast("入れました。下の「💾 プロフを保存」を押すと、公式HPにも入れる画面が出ます");
 }
 /* ---------- 🧩 よく使うHTML（紹介文を書くときに、カーソルのところに入れる）2026/11/9 ---------- */
+// 聞くときの説明（何を書くか・どこで見るか・例）2026/11/12 店長
+const SNIP_ASK = {
+  linkUrl: "リンク先のURLを書いてね（https:// ではじまるもの）\nURLは、開きたいページの上のアドレス欄からコピーできます。\n例：https://x.com/〇〇",
+  linkText: "画面に見える文字を書いてね（押すとリンク先が開く文字）\n例：最新作はこちら",
+  litUrl: "リンク集（lit.link など）のURLを書いてね（https:// ではじまるもの）\n例：https://lit.link/〇〇",
+  jpgNo: "入れたい画像の番号を書いてね（数字だけ。「Free」などはいりません）\n番号は「🖼 フリー画像をアップ」の一覧（アップずみの画像）や、公式HPの管理画面の「FreeJPG画像」で見られます。\n例：116",
+  imgUrl: "画像を押したときに開くURLを書いてね（https:// ではじまるもの）\n例：https://lit.link/〇〇",
+  mp4No: "入れたい動画の番号を書いてね（数字だけ。「Free」などはいりません）\n番号は、動画をアップしたときに出ます（公式HPの管理画面の「MP4ムービー」でも見られます）。\n例：2",
+  pink: "ピンクにしたい文字を書いてね\n例：ナースのコスプレもOK♡",
+};
 const TPL_SNIPS = [
-  ["🔗 リンク文字", [["url", "URL"], ["text", "見える文字"]], v => `<a href="${v.url}" target="_blank">${tplEsc(v.text)}</a>`],
-  ["💗 リンク集（≫💗🔗リンク集🔗💗≪）", [["url", "リンク集のURL（lit.link など）"]], v => `<a href="${v.url}" target="_blank">≫💗🔗リンク集🔗💗≪</a>`],
-  ["🖼 画像（FreeJPG）", [["no", "FreeJPGの番号（数字だけでOK。例：116）"]], v => `%MJPGFREE${tplNums(v.no)[0] || ""}-W%`],
-  ["🖼🔗 リンクつき画像", [["no", "FreeJPGの番号（数字だけでOK。例：116）"], ["url", "押したときに開くURL"]], v => `<a href="${v.url}" target="_blank">%MJPGFREE${tplNums(v.no)[0] || ""}-W%</a>`],
-  ["🎥 動画（Free動画）", [["no", "Free動画の番号（数字だけでOK。例：2）"]], v => `%MP4FREE${tplNums(v.no)[0] || ""}-W%`],
-  ["🌸 ピンクの文字", [["text", "ピンクにする文字"]], v => `<font color="#ffb6c1">${tplEsc(v.text)}</font>`],
+  ["🔗 リンク文字", [["url", SNIP_ASK.linkUrl], ["text", SNIP_ASK.linkText]], v => `<a href="${v.url}" target="_blank">${tplEsc(v.text)}</a>`],
+  ["💗 リンク集（≫💗🔗リンク集🔗💗≪）", [["url", SNIP_ASK.litUrl]], v => `<a href="${v.url}" target="_blank">≫💗🔗リンク集🔗💗≪</a>`],
+  ["🖼 画像（FreeJPG）", [["no", SNIP_ASK.jpgNo]], v => `%MJPGFREE${tplNums(v.no)[0] || ""}-W%`],
+  ["🖼🔗 リンクつき画像", [["no", SNIP_ASK.jpgNo], ["url", SNIP_ASK.imgUrl]], v => `<a href="${v.url}" target="_blank">%MJPGFREE${tplNums(v.no)[0] || ""}-W%</a>`],
+  ["🎥 動画（Free動画）", [["no", SNIP_ASK.mp4No]], v => `%MP4FREE${tplNums(v.no)[0] || ""}-W%`],
+  ["🌸 ピンクの文字", [["text", SNIP_ASK.pink]], v => `<font color="#ffb6c1">${tplEsc(v.text)}</font>`],
   ["➖ 区切り線", [], () => `----------------------------`],
 ];
 function tplSnipSelect(id){
