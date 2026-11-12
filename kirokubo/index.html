@@ -1946,7 +1946,7 @@ function openHpPush(sets, cast){
 function paintHpPush(){
   let bg = document.getElementById("hpBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "hpBg"; bg.style.cssText = "position:fixed;inset:0;z-index:310;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); }
-  const L = Object.assign({ name: "名前", comment: "本人から一言", mgrComment: "店長から一言", options: "オプション", deTown: "デリヘルタウン欄（動画・画像・ボタン）" }, ANS_PROFILE_LABELS);
+  const L = Object.assign({ c1Text: "本人から一言（⬜白い欄）", c1Html: "本人から一言（🟩緑の欄）", c2Text: "店長から一言（⬜白い欄）", c2Html: "店長から一言（🟩緑の欄）", name: "名前", comment: "本人から一言", mgrComment: "店長から一言", options: "オプション", deTown: "デリヘルタウン欄（動画・画像・ボタン）" }, ANS_PROFILE_LABELS);
   const short = s => { s = String(s || ""); return s.length > 120 ? s.slice(0, 120) + "…" : s; };
   const busyNow = hpPush.some(x => x.state === "checking" || x.state === "saving");
   const rowsHtml = hpPush.map((x, i) => {
@@ -2648,11 +2648,13 @@ function paintProf(){
         <select class="ed" id="pf_b_castType" ${ro}>${["", ...CAST_TYPES].map(t => `<option value="${t}" ${t === v ? "selected" : ""}>${t || "（なし）"}</option>`).join("")}</select></div>`; })()}
       <div class="hint" style="grid-column:1/-1;font-size:12px">🌐 公式HPのアイコンは自動：メイン＝キャストの種類／サブ＝状態（ありあり・ありなし・なしなし）→ Pサイズ（13cm〜20cm）→ 雰囲気（公式HPにあるアイコンの言葉だけ）の順に入ります</div></div></div></details>
     <details ${pfAcc("intro")}><summary class="pfHead">💬 紹介文</summary><div class="pfBody">
-      ${CAN_EDIT && hpNoOf(pf.c, sk).mk === "sakuramoon" ? `<div style="margin-bottom:8px"><button type="button" class="btn btn-primary btn-sm" onclick="tplOpen()">🎨 テンプレで作る（デリヘルタウン欄・本人から一言）</button>${tplPending[sk] ? ` <span class="hint" style="color:#B7791F">デリヘルタウン欄は、保存すると公式HPに入ります</span>` : ""}</div>`
-        : CAN_EDIT && !PROF_DUMMY.includes(sk) ? `<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">${hpNoOf(pf.c, sk).mk ? `<button type="button" class="btn btn-primary btn-sm" onclick="tplOpen()" title="画像・動画・リンク・説明文を足す（テンプレがなくても使える）">🎨 テンプレで作る（画像・動画など）</button>` : ""}<button type="button" class="btn btn-primary btn-sm" onclick="introTplApplyOpen()">🎀 このお店の飾りテンプレで作る（サクラムーンの文から）</button>
+      ${(() => { const ieOn = !PROF_DUMMY.includes(sk) && !!hpNoOf(pf.c, sk).mk;   // ✏️ 紹介文エディタ（2026/11/12）：公式HPの管理画面と同じ並びで、その場で全部直せる
+        return `${ieOn ? `<div id="ieBox"></div>` : ""}
+      ${CAN_EDIT && !PROF_DUMMY.includes(sk) && hpNoOf(pf.c, sk).mk !== "sakuramoon" ? `<div style="margin:8px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><button type="button" class="btn btn-ghost btn-sm" onclick="introTplApplyOpen()">🎀 このお店の飾りテンプレで作る（サクラムーンの文から）</button>
           <a href="javascript:void(0)" class="hint" onclick="openIntroTplEditor('${skKeyOf(sk)}')">🎀 飾りテンプレの登録・直す</a></div>` : ""}
-      <div class="hint" style="display:flex;align-items:center;gap:6px">本人から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_c')">📋 コピー</button>${CAN_EDIT ? tplSnipSelect('pf_c') : ""}</div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
-      <div class="hint" style="margin-top:8px;display:flex;align-items:center;gap:6px">店長から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_m')">📋 コピー</button>${CAN_EDIT ? tplSnipSelect('pf_m') : ""}</div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</div></details>
+      <details class="ieRaw" ${ieOn ? "" : "open"} style="margin-top:8px"><summary class="hint" style="cursor:pointer">${ieOn ? "📄 文字・HTMLのまま見る（くわしい人用・ここは見るだけ）" : "本人から一言・店長から一言"}</summary>
+      <div class="hint" style="display:flex;align-items:center;gap:6px">本人から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_c')">📋 コピー</button>${CAN_EDIT && !ieOn ? tplSnipSelect('pf_c') : ""}</div><textarea id="pf_c" style="width:100%;min-height:90px" oninput="reflPv('pf_c')" ${ieOn ? "readonly" : ro}>${esc(profGet(data, sk, "comment"))}</textarea>${pv("pf_c")}
+      <div class="hint" style="margin-top:8px;display:flex;align-items:center;gap:6px">店長から一言 <button type="button" class="pfCopy" title="コピー" onclick="pfCopy(this, 'pf_m')">📋 コピー</button>${CAN_EDIT && !ieOn ? tplSnipSelect('pf_m') : ""}</div><textarea id="pf_m" style="width:100%;min-height:110px" oninput="reflPv('pf_m')" ${ieOn ? "readonly" : ro}>${esc(profGet(data, sk, "mgrComment"))}</textarea>${pv("pf_m")}</details>`; })()}</div></details>
     <details ${pfAcc("opts")}><summary class="pfHead">✅ オプション可否◎○△×${CAN_EDIT ? `<button type="button" class="pfEditBtn" onclick="event.preventDefault();pfToggleEdit('opts')">${pfEdit.opts ? "✓ 見る形にもどす" : "✏️ 編集する"}</button>` : ""}</summary>
       <div class="pfBody ${pfEdit.opts ? "" : "pfView"}">
       <div class="vw pfOptView">${optKeys.map(k => { const m = o.options[k] || "", memo = (o.optMemo || {})[k] || ""; return `<div class="pfOptV"><span class="nm">${esc(PF_OPT_LABEL[k] || k)}${memo ? `<small>${esc(memo)}</small>` : ""}</span><b class="mk mk${{ "◎": 1, "○": 2, "△": 3, "×": 4 }[m] || 0}">${m || "—"}</b></div>`; }).join("")}</div>
@@ -3132,7 +3134,7 @@ function hpPushLater(){
 async function saveProf(later){
   if(!pf) return;
   pfCollect();
-  if(!pf.dirty.size && !pf.hotelDirty && !Object.keys(tplPending).length){ toast("変えたところがありません"); return; }
+  if(!pf.dirty.size && !pf.hotelDirty && !Object.keys(tplPending).length && !Object.keys(introPending).length){ toast("変えたところがありません"); return; }
   const { prof, data } = pf;
   const p = profPayload(prof, data);
   if(pf.hotelDirty) p.hotelPrefs = pfHotelPrefs();
@@ -3487,6 +3489,11 @@ const TPL_PRESETS = [
 const tplPending = {};   // { お店のタブ: デリヘルタウン欄のHTML }（保存のときに公式HPへ）
 function tplMerge(sets){
   Object.entries(tplPending).forEach(([sk, html]) => { sets[sk] = sets[sk] || {}; sets[sk].deTown = html; delete tplPending[sk]; });
+  // ✏️ 紹介文エディタで直したお店：白い欄・緑の欄を、それぞれそのまま入れる（まとめた comment・mgrComment は送らない）2026/11/12
+  Object.entries(typeof introPending !== "undefined" ? introPending : {}).forEach(([sk, x]) => {
+    sets[sk] = sets[sk] || {}; delete sets[sk].comment; delete sets[sk].mgrComment;
+    Object.assign(sets[sk], x); delete introPending[sk];
+  });
   return sets;
 }
 const tplEsc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -3694,7 +3701,8 @@ function tplParse(html, place, st){
     if(n.nodeType === 3){ textToBlocks(n.textContent); continue; }
     if(n.nodeType !== 1) continue;
     const tag = n.tagName.toLowerCase(), hs = n.outerHTML;
-    if(tag === "style" || tag === "script") continue;
+    if(tag === "script") continue;
+    if(tag === "style"){ if(/\.button\s*\{/.test(n.textContent)) continue; flush(); out.push({ type: "html", place, html: hs }); continue; }   // 自分で書いた飾り（style）は消さない（ボタンの形は自動で入るので消す）2026/11/12
     if(tag === "br"){ if(raw.length) raw.push("<br />"); continue; }
     if(tag === "div" && /clear:\s*both/.test(n.getAttribute("style") || "") && !n.textContent.trim()) continue;
     if(tag === "div" && /linear-gradient\(30deg/.test(n.getAttribute("style") || "")){
@@ -3831,10 +3839,15 @@ function tplBlockForm(b){
 function tplBlockCard(b){
   const s = tplStatus(b), opened = tplCur.open.has(b.id);
   const bl = tplCur.m.blocks, sib = bl.filter(x => x.place === b.place), k = sib.indexOf(b), pi = TPL_PLACES.findIndex(x => x[0] === b.place);
-  return `<div class="tpB ${s}" draggable="true" data-id="${b.id}" id="tpB_${b.id}">
-    <div class="tpBH"><span class="grip" title="つかんで上下にドラッグ">⠿</span><b>${TPL_TYPES[b.type].label}</b><span class="tpS ${s}" id="tpS_${b.id}">${TPL_ST_LABEL[s]}</span><span style="margin-left:auto"></span>
+  // ✏️ 紹介文エディタ（その場で直す）：文・HTMLのブロックは、見え方のところを押して書く。⠿ だけつかめる（文をなぞって選べるように）
+  const il = tplCur.inline, eh = il && b.type === "html";
+  const styleOnly = eh && /^\s*(<style\b[\s\S]*?<\/style>\s*)+$/i.test(String(b.html || ""));
+  const label = styleOnly ? "🎨 見た目の設定（style）" : eh ? "📝 文・飾り（押して書ける）" : TPL_TYPES[b.type].label;
+  return `<div class="tpB ${s}" draggable="${il ? "false" : "true"}" data-id="${b.id}" id="tpB_${b.id}">
+    <div class="tpBH"><span class="grip" title="つかんで上下にドラッグ" ${il ? `draggable="true"` : ""}>⠿</span><b>${label}</b><span class="tpS ${s}" id="tpS_${b.id}">${TPL_ST_LABEL[s]}</span><span style="margin-left:auto"></span>
+      ${eh && !styleOnly && CAN_EDIT ? `<span class="ieAt"><button type="button" class="btn btn-ghost btn-sm" onmousedown="event.preventDefault()" onclick="ieImgAt(${b.id})" title="文の中の、カーソルの場所に画像を入れる">🖼 ここに画像</button><button type="button" class="btn btn-ghost btn-sm" onmousedown="event.preventDefault()" onclick="ieVidAt(${b.id})" title="カーソルの場所に動画">🎥 ここに動画</button><button type="button" class="btn btn-ghost btn-sm" onmousedown="event.preventDefault()" onclick="ieLinkAt(${b.id})" title="カーソルの場所にリンク">🔗 ここにリンク</button></span>` : ""}
       ${(b.type === "html" || b.type === "text") && TPL_STORES[tplCur.mk] ? `<button type="button" class="btn btn-ghost btn-sm" onclick="tplToCard(${b.id})" title="この文を花びらカードの本文に移す">💗 カードにする</button>` : ""}
-      <button type="button" class="btn btn-ghost btn-sm" onclick="tplToggle(${b.id})">${opened ? "✓ とじる" : "✏️ 直す"}</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="tplToggle(${b.id})">${opened ? "✓ とじる" : eh ? "&lt;/&gt; HTMLで直す" : "✏️ 直す"}</button>
       <button type="button" class="btn btn-ghost btn-sm" ${k === 0 && pi === 0 ? "disabled" : ""} onclick="tplMove(${b.id},-1)" title="上へ（欄のいちばん上なら、上の欄へ）">↑</button>
       <button type="button" class="btn btn-ghost btn-sm" ${k === sib.length - 1 && pi === TPL_PLACES.length - 1 ? "disabled" : ""} onclick="tplMove(${b.id},1)" title="下へ（欄のいちばん下なら、下の欄へ）">↓</button>
       <button type="button" class="btn btn-ghost btn-sm" style="color:#C0392B" onclick="tplDel(${b.id})" title="このブロックを消す">✕</button></div>
@@ -3872,10 +3885,11 @@ function tplPaintList(){
 function tplShadow(host, html, st){
   const root = host.shadowRoot || host.attachShadow({ mode: "open" });
   if(!host.dataset.sh){ host.dataset.sh = "1"; root.addEventListener("click", e => { if(e.target.closest && e.target.closest("a")) e.preventDefault(); }); }
-  root.innerHTML = `<style>:host{display:block} img{max-width:100%} .empty{color:#bbb;font-size:12px;padding:8px;border:1px dashed #ddd;border-radius:6px}</style>${TPL_BTN_STYLE}<div style="font-family:sans-serif;font-size:14px;color:#444">${tplPreviewHtml(html, st)}</div>`;
+  root.innerHTML = `<style>:host{display:block} img{max-width:100%} ${tplCur && tplCur.inline ? "img{max-height:260px;width:auto;height:auto}" : ""} .empty{color:#bbb;font-size:12px;padding:8px;border:1px dashed #ddd;border-radius:6px}</style>${TPL_BTN_STYLE}<div style="font-family:sans-serif;font-size:14px;color:#444">${tplPreviewHtml(html, st)}</div>`;
 }
 function tplPaintBlockPv(b){
   const host = $("tpPv_" + b.id); if(!host) return;
+  if(tplCur.inline && b.type === "html"){ iePaintHtml(b); const s = tplStatus(b), badge = $("tpS_" + b.id), card = $("tpB_" + b.id); if(badge){ badge.className = "tpS " + s; badge.textContent = TPL_ST_LABEL[s]; } if(card) card.className = "tpB " + s; return; }
   const st = tplStoreOf(tplCur.mk), h = tplBlockHtml(b, tplCur.m, st);
   tplShadow(host, h.trim() ? h : `<div class="empty">${esc(TPL_TYPES[b.type].label)}（まだ空です。「✏️ 直す」で中身を入れる）</div>`, st);
   const s = tplStatus(b), badge = $("tpS_" + b.id), card = $("tpB_" + b.id);
@@ -3903,8 +3917,26 @@ function tplToCard(id){
 }
 function tplToggle(id){ tplCur.open.has(id) ? tplCur.open.delete(id) : tplCur.open.add(id); tplPaint(); }
 function tplSet(id, k, v){ const b = tplFind(id); if(!b) return; b[k] = v; clearTimeout(tplPvTimer); tplPvTimer = setTimeout(() => { tplPaintBlockPv(b); tplPaintOut(); }, 200); }
-function tplAdd(type, place){ const b = { id: ++tplUid, type, place: place || TPL_TYPES[type].place }; if(type === "banner"){ b.no = "27"; b.url = ""; } tplCur.m.blocks.push(b); tplCur.open.add(b.id); tplCur.adding = null; tplPaint(); tplScrollTo(b.id); }
-function tplPreset(i, place){ let last = null; TPL_PRESETS[i][1]().forEach(x => { const b = Object.assign({ id: ++tplUid }, x); if(place) b.place = place; tplCur.m.blocks.push(b); tplCur.open.add(b.id); last = b; }); tplCur.adding = null; tplPaint(); if(last) tplScrollTo(last.id); }
+function tplAdd(type, place){
+  const note = type === "note", ty = note ? "html" : type;   // 📝 文章：そのまま書けるブロック（中身はHTML）
+  const b = { id: ++tplUid, type: ty, place: place || TPL_TYPES[ty].place }; if(note) b.html = ""; if(ty === "banner"){ b.no = "27"; b.url = ""; }
+  tplInsertBlock(b);
+  if(!(tplCur.inline && ty === "html")) tplCur.open.add(b.id);
+  tplCur.adding = null; tplCur.addAt = null; tplPaint(); tplScrollTo(b.id);
+  if(tplCur.inline && ty === "html") setTimeout(() => { const h = $("tpPv_" + b.id); if(h) h.focus(); }, 60);
+}
+// 入れる場所：その場で直す画面では、押した「＋」のところ（ほかは欄のいちばん下）
+function tplInsertBlock(b){
+  const bl = tplCur.m.blocks;
+  if(tplCur.inline && tplCur.addAt != null){
+    const sib = bl.filter(x => x.place === b.place), t = sib[tplCur.addAt];
+    if(t) bl.splice(bl.indexOf(t), 0, b);
+    else { const last = bl.map(x => x.place).lastIndexOf(b.place); if(last >= 0) bl.splice(last + 1, 0, b); else { const od = ["town", "self", "mgr"], i = bl.findIndex(x => od.indexOf(x.place) > od.indexOf(b.place)); bl.splice(i < 0 ? bl.length : i, 0, b); } }
+    tplCur.addAt++;
+  } else bl.push(b);
+  tplCur.lastAdded = bl.indexOf(b);
+}
+function tplPreset(i, place){ let last = null; TPL_PRESETS[i][1]().forEach(x => { const b = Object.assign({ id: ++tplUid }, x); if(place) b.place = place; tplInsertBlock(b); tplCur.open.add(b.id); last = b; }); tplCur.adding = null; tplCur.addAt = null; tplPaint(); if(last) tplScrollTo(last.id); }
 function tplScrollTo(id){ setTimeout(() => { const e = $("tpB_" + id); if(e && e.scrollIntoView) e.scrollIntoView({ block: "center", behavior: "smooth" }); }, 30); }
 function tplDel(id){
   const b = tplFind(id); if(!b) return;
@@ -3946,6 +3978,7 @@ function tplPreviewHtml(html, st){
 }
 let tplPvTimer = 0;
 function tplPaintOut(){
+  if(tplCur && tplCur.inline){ ieSync(); return; }
   if(!tplCur || !$("tp_o1")) return;
   const st = tplStoreOf(tplCur.mk), m = tplCur.m;
   $("tp_o1").value = tplPlaceHtml(m, st, "town"); $("tp_o2").value = tplSelfHtml(m, st); $("tp_o3").value = tplMgrHtml($("pf_m") ? $("pf_m").value : "", m, st);
@@ -3954,6 +3987,7 @@ function tplPaintOut(){
   if($("tp_sum")) $("tp_sum").textContent = parts.length ? "変わるところ：" + parts.join("・") : "まだ何も変えていません";
 }
 function tplPaint(onlyPreview){
+  if(tplCur && tplCur.inline){ if(onlyPreview){ clearTimeout(tplPvTimer); tplPvTimer = setTimeout(() => { tplCur.m.blocks.forEach(tplPaintBlockPv); }, 200); return; } iePaintList(); ieSync(); return; }   // ✏️ その場で直す画面（動かした・消したら、すぐプロフの中身にも）
   if(!tplCur || !$("tp_o1")) return;
   if(onlyPreview){ clearTimeout(tplPvTimer); tplPvTimer = setTimeout(() => { tplCur.m.blocks.forEach(tplPaintBlockPv); tplPaintOut(); }, 200); return; }
   tplPaintList(); tplPaintOut();
@@ -4006,6 +4040,273 @@ function tplApply(){
   paintProf();
   toast("プロフに入れました。下の「💾 プロフを保存」を押すと、公式HPにも入れる画面が出ます");
 }
+/* ---------- ✏️ 紹介文エディタ（2026/11/12 店長）：「💬 紹介文」を開いたら、そのまま全部さわれる（小窓なし）----------
+   公式HPの管理画面と同じ並び：① デリヘルタウン欄 → ② コメント1（本人から一言）⬜白い欄・🟩緑の欄 → ③ コメント2（店長から一言）⬜白い欄・🟩緑の欄
+   ・開いたとき、公式HPのいまの中身（白も緑も）を読む
+   ・緑の欄・デリヘルタウン欄はブロック：つかんで上下に動かす／あいだの「＋」でそこに入れる／文はそのまま書いて直せる（HTMLを知らなくていい）
+     文の中のカーソルの場所に「🖼 画像・🎥 動画・🔗 リンク」を入れられる。画像はブロックや「＋」にドラッグ・貼りつけでそのままアップ
+   ・白い欄は文だけ（そのまま書く）
+   ・直したところだけ、保存のときに公式HPの同じ欄に入れる（c1Text・c1Html・c2Text・c2Html・deTown）
+   ・ページ全体のスクロールだけ（ブロックの中はスクロールしない）。写真は小さめに出して全体が見えるように */
+const introPending = {};   // { お店のタブ: { deTown, c1Text, c1Html, c2Text, c2Html } }（保存のときに公式HPへ）
+const IE_SEC = {
+  town: { n: "①", title: "デリヘルタウン欄", where: "公式HPのいちばん上（写真の右・紹介文より上）" },
+  self: { n: "②", title: "コメント1：本人から一言", where: "デリヘルタウン欄の下" },
+  mgr:  { n: "③", title: "コメント2：店長から一言", where: "本人から一言の下" },
+};
+const ieCombine = (t, h) => { t = String(t || "").trim(); h = String(h || "").trim(); if(!h) return t; return (t ? t.replace(/(<br\s*\/?>)?[ \t]*\r?\n/gi, "<br>\n") + "\n" : "") + h; };   // 公式HPの読みかた（白→緑）と同じ
+// 公式HPのコード → 書ける画面の中のしるし（画像はそのまま見える・動画は黒い札）
+function ieToEditable(html, st){
+  return String(html || "")
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/%MP4FREE(\d+)(-W)?%/g, (x, n) => `<span class="iecode iev" data-code="${x}" contenteditable="false">▶ 動画 ${n}番</span>`)
+    .replace(/%[MN]?JPGFREE(\d+)(-W)?%/g, (x, n) => `<img class="iecode" data-code="${x}" src="${st.site}/FreePIC/Free${n}.jpg" alt="画像${n}">`)
+    .replace(/%[MN]?GIFFREE(\d+)(-W)?%/g, (x, n) => `<img class="iecode" data-code="${x}" src="${st.site}/FreePIC/Free${n}.gif" alt="GIF${n}">`)
+    .replace(/%[MN]?DISPFREE(\d+)(-W)?%/g, (x, n) => `<img class="iecode iebtn" data-code="${x}" src="${st.site}/FreePIC/Free${n}" alt="ボタン${n}">`);
+}
+// 書ける画面 → 公式HPのHTML（しるしをコードにもどす）
+function ieFromEditable(host){
+  const c = host.cloneNode(true);
+  c.querySelectorAll("[data-code]").forEach(e => e.replaceWith(document.createTextNode(e.getAttribute("data-code"))));
+  return c.innerHTML.replace(/<br>/g, "<br />").trim();
+}
+// 開く：公式HPのいまの中身（読めなければプロフの中身）
+async function ieLoad(force){
+  if(!pf) return;
+  const box = $("ieBox"); if(!box) return;
+  const { c, data, sk } = pf, { mk, no } = hpNoOf(c, sk);
+  if(!mk){ box.innerHTML = `<div class="hint">このお店は公式HPの管理画面がないので、下の欄にそのまま書いてください</div>`; return; }
+  const st = tplStoreOf(mk);
+  if(!force && tplCur && tplCur.inline && tplCur.sk === sk && tplCur.cid === c.id){ iePaint(); return; }
+  box.innerHTML = `<div class="hint" style="padding:8px">⏳ 公式HPの、いまの紹介文（白い欄・緑の欄）を読んでいます…</div>`;
+  await introTplLoad(true);
+  let hp = null, note = "";
+  if(no){ const r = await hpFn({ action: "cast_fields", store: mk, no }); if(r && r.ok && r.fields) hp = r.fields; else note = "公式HPが読めなかったので、プロフの中身から出しています（白い欄・緑の欄は分けられません）" + (r && r.error ? "：" + r.error : ""); }
+  else note = "公式HPの在籍番号がないので、プロフの中身から出しています";
+  if(!pf || pf.sk !== sk || !$("ieBox")) return;
+  const raw = hp ? { town: hp.HpGalDeTown || "", c1: hp.comm1 || "", c1a: hp.comm1a || "", c2: hp.comm2 || "", c2a: hp.comm2a || "" }
+    : { town: tplPending[sk] || "", c1: "", c1a: profGet(data, sk, "comment") || "", c2: "", c2a: profGet(data, sk, "mgrComment") || "" };
+  const packed = tplUnpack(raw.c1a);
+  const town = tplParse(raw.town, "town", st);
+  const self = packed ? tplUpgrade(packed).blocks.filter(b => b.place === "self") : tplParse(raw.c1a, "self", st);
+  const mgr = tplParse(String(raw.c2a).replace(/<!--\/?tpl:mgr-->/g, ""), "mgr", st);
+  const gid = (packed && packed.girlId) || (String(raw.c1a).match(/girlId=(\d+)/i) || String(raw.c1a).match(/girlid[-=](\d+)/i) || [])[1] || "";
+  const m = { v: 3, girlId: gid, blocks: [...town, ...self, ...mgr] };
+  m.blocks.forEach(b => b.id = ++tplUid);
+  tplCur = { inline: true, sk, mk, cid: c.id, no, m, orig: new Map(m.blocks.map(b => [b.id, tplSnap(b)])), pos: tplPosOf(m.blocks), removed: [], open: new Set(), adding: null, addAt: null,
+    note, hp: !!hp, hpf: hp, raw, w: { self: String(raw.c1).replace(/\r\n/g, "\n"), mgr: String(raw.c2).replace(/\r\n/g, "\n") }, sel: null };
+  tplCur.w0 = Object.assign({}, tplCur.w);
+  iePaint();
+}
+// その欄を変えたか（変えていない欄は、公式HPのいまの中身をそのまま入れる＝勝手に形が変わらない）
+function ieAreaChanged(p){
+  const t = tplCur, now = t.m.blocks.filter(b => b.place === p);
+  if(t.removed.some(b => b.place === p)) return true;
+  const was = [...t.pos.entries()].filter(([, v]) => v.startsWith(p + ":")).length;
+  return now.length !== was || now.some(b => tplStatus(b) !== "same");
+}
+function ieSync(){
+  const t = tplCur; if(!t || !t.inline || !pf || pf.sk !== t.sk) return;
+  const st = tplStoreOf(t.mk), m = t.m; m.v = 3;
+  const out = {
+    deTown: ieAreaChanged("town") ? tplPlaceHtml(m, st, "town") : t.raw.town,
+    c1Text: t.w.self, c1Html: ieAreaChanged("self") ? tplSelfHtml(m, st) : t.raw.c1a,
+    c2Text: t.w.mgr, c2Html: ieAreaChanged("mgr") ? tplPlaceHtml(m, st, "mgr") : t.raw.c2a };
+  const changed = ieAreaChanged("town") || ieAreaChanged("self") || ieAreaChanged("mgr") || t.w.self !== t.w0.self || t.w.mgr !== t.w0.mgr;
+  if(!changed){ delete introPending[t.sk]; iePaintSum(); return; }
+  if(t.hp) introPending[t.sk] = out;   // 公式HPが読めたときだけ、5つの欄を別々に入れる
+  else if(ieAreaChanged("town")) tplPending[t.sk] = out.deTown;
+  if($("pf_c")){ $("pf_c").value = ieCombine(out.c1Text, out.c1Html); }
+  if($("pf_m")){ $("pf_m").value = ieCombine(out.c2Text, out.c2Html); }
+  pfCollect();
+  iePaintSum(); try{ kbGlowApply(); }catch(e){}   // ✨ 「💾 プロフを保存」を光らせる
+}
+function iePaintSum(){
+  const el = $("ie_sum"); if(!el || !tplCur) return;
+  const cnt = { new: 0, edit: 0, moved: 0 }; tplCur.m.blocks.forEach(b => { const s = tplStatus(b); if(cnt[s] != null) cnt[s]++; });
+  const wch = ["self", "mgr"].filter(p => tplCur.w[p] !== tplCur.w0[p]).length;
+  const parts = [cnt.new && `🆕 足す ${cnt.new}`, cnt.edit && `✏️ 直す ${cnt.edit}`, cnt.moved && `↕ 動かす ${cnt.moved}`, tplCur.removed.length && `🗑 消す ${tplCur.removed.length}`, wch && `⬜ 白い欄 ${wch}`].filter(Boolean);
+  el.innerHTML = parts.length ? `変わるところ：${parts.join("・")}　<b style="color:#C2185B">→ いちばん下の「💾 プロフを保存」で公式HPにも入ります</b>` : "まだ何も変えていません";
+}
+function ieSetW(p, v){ if(!tplCur) return; tplCur.w[p] = v; clearTimeout(ieT); ieT = setTimeout(ieSync, 300); }
+let ieT = 0;
+function ieGrow(el){ if(!el.offsetParent) return; el.style.height = "auto"; el.style.height = (el.scrollHeight + 4) + "px"; }   // 白い欄は中身の高さに（中でスクロールしない）
+function iePaint(){
+  const box = $("ieBox"), t = tplCur; if(!box || !t || !t.inline) return;
+  const st = tplStoreOf(t.mk), ed = CAN_EDIT;
+  box.innerHTML = `<div class="ieTop">
+      <span class="tpLegend"><span class="tpS same">✅ いま入っている</span><span class="tpS new">🆕 足す</span><span class="tpS edit">✏️ 直した</span><span class="tpS moved">↕ 動かした</span></span>
+      <span style="margin-left:auto"></span>
+      <label class="hint">表示の大きさ <select onchange="document.getElementById('ieBox').style.setProperty('--iez',this.value)">${[["0.6", "小"], ["0.8", "中"], ["1", "大"]].map(([v, l]) => `<option value="${v}" ${v === (box.style.getPropertyValue("--iez") || "0.8") ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="ieReload()">🔄 公式HPから読みなおす</button>
+      ${st.generic ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openIntroTplEditor('${skKeyOf(t.sk)}')">🎀 このお店の飾りテンプレを直す</button>` : `<button type="button" class="btn btn-ghost btn-sm" onclick="openIntroTplEditor('${t.mk}')">🎀 花びらカードのデザイン</button>`}</div>
+    ${t.note ? `<div class="hint" style="color:#B7791F">⚠ ${esc(t.note)}</div>` : `<div class="hint">✅ 公式HPのいまの中身を読みました（${esc(st.label)} ${esc(t.no)}番）。ブロックは ⠿ をつかんで上下に動かせます。文はそのまま押して書けます。</div>`}
+    ${st.generic ? "" : `<label class="hint" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px">ヘブンの女の子番号 <input value="${esc(t.m.girlId || "")}" placeholder="例：47694060" style="width:130px" ${ed ? "" : "disabled"} oninput="tplCur.m.girlId=this.value;tplPaint(true);ieSync()"> （口コミ・写メ日記・バナーに使う）</label>`}
+    <div id="tp_list"></div>
+    <div id="ie_sum" class="ieSum"></div>`;
+  if(!box.style.getPropertyValue("--iez")) box.style.setProperty("--iez", "0.8");
+  iePaintList();
+  iePaintSum();
+}
+function ieInsBar(p, i){
+  const t = tplCur, on = t.adding === p && t.addAt === i, st = tplStoreOf(t.mk);
+  if(!CAN_EDIT) return "";
+  if(!on) return `<div class="ieIns" data-p="${p}" data-i="${i}" onclick="tplCur.adding='${p}';tplCur.addAt=${i};iePaintList()" title="ここに入れる（画像はここにドラッグ・貼りつけでもアップできます）"><span>＋ ここに入れる</span></div>`;
+  const types = Object.entries(TPL_TYPES).filter(([k]) => k !== "text" && (!st.generic || TPL_GENERIC_TYPES.includes(k)));
+  return `<div class="tpAddBox ieAddBox" data-p="${p}" data-i="${i}"><div style="display:flex;align-items:center;gap:6px"><b style="font-size:13px;color:#8A6100">🆕 ここに入れる</b><span class="hint">（画像のファイルを、ここにドラッグしてもアップできます）</span><span style="margin-left:auto"></span><button type="button" class="btn btn-ghost btn-sm" onclick="tplCur.adding=null;tplCur.addAt=null;iePaintList()">やめる</button></div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px"><button type="button" class="btn btn-primary btn-sm" onclick="tplAdd('note','${p}')">📝 文章（そのまま書ける）</button>${types.map(([k, ty]) => `<button type="button" class="btn btn-ghost btn-sm" onclick="tplAdd('${k}','${p}')">${ty.label}</button>`).join("")}</div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${TPL_PRESETS.map(([l], k) => `<button type="button" class="btn btn-ghost btn-sm" onclick="tplPreset(${k},'${p}')">⭐ ${l}</button>`).join("")}</div></div>`;
+}
+function iePaintList(){
+  const el = $("tp_list"), t = tplCur; if(!el || !t || !t.inline) return;
+  const bl = t.m.blocks, ed = CAN_EDIT;
+  el.innerHTML = ["town", "self", "mgr"].map(p => {
+    const info = IE_SEC[p], list = bl.filter(b => b.place === p), del = t.removed.filter(b => b.place === p);
+    const white = p === "town" ? "" : `<div class="ieWhite"><div class="ieLbl">⬜ 白い欄（文だけ）<span>… 公式HPでは、下の🟩緑の欄より上に出ます</span></div>
+        <textarea class="ieW" data-p="${p}" rows="1" placeholder="（空でもOK。文だけの欄です）" ${ed ? "" : "readonly"} oninput="ieSetW('${p}',this.value);ieGrow(this)">${esc(t.w[p] || "")}</textarea></div>
+      <div class="ieLbl" style="color:#2e7d32">🟩 緑の欄（HTML・見たまま）</div>`;
+    return `<div class="tpSec" data-place="${p}"><div class="tpSecH"><b>${info.n} ${info.title}</b><span>… ${info.where}</span></div><div class="tpSecB">
+      ${white}
+      ${list.map((b, i) => ieInsBar(p, i) + tplBlockCard(b)).join("")}${ieInsBar(p, list.length)}
+      ${!list.length ? `<div class="hint" style="padding:4px 6px">（いまは何もありません）</div>` : ""}
+      ${del.map(b => `<div class="tpDel">🗑 消す：<b>${TPL_TYPES[b.type] ? TPL_TYPES[b.type].label : b.type}</b><span style="margin-left:auto"></span><button type="button" class="btn btn-ghost btn-sm" onclick="tplUndel(${b.id})">↩ もどす</button></div>`).join("")}
+    </div></div>`;
+  }).join("");
+  bl.forEach(b => tplPaintBlockPv(b));
+  el.querySelectorAll("textarea.ieW").forEach(ieGrow); requestAnimationFrame(() => el.querySelectorAll("textarea.ieW").forEach(ieGrow));
+  if(!el.dataset.dnd){ el.dataset.dnd = "1"; tplDnd(el); ieFileDrop(el); }
+}
+// 🧩 文・HTMLのブロックは、見たまま直せる（押して書く）。カーソルの場所をおぼえておく
+function iePaintHtml(b){
+  const host = $("tpPv_" + b.id); if(!host) return;
+  if(host.shadowRoot){ const n = host.cloneNode(false); n.removeAttribute("data-sh"); host.replaceWith(n); return iePaintHtml(b); }   // 前の見え方（shadow）のままなら作りなおす
+  if(document.activeElement === host) return;   // 書いている途中は描きなおさない
+  if(/^\s*(<style\b[\s\S]*?<\/style>\s*)+$/i.test(String(b.html || ""))){   // 見た目の設定（style）だけのブロック：画面には出ないので、説明だけ（中身はそのまま残す）
+    host.contentEditable = "false"; host.classList.remove("ieEdit"); host.innerHTML = `<div class="hint">🎨 見た目の設定（style）です。公式HPの画面には出ません（そのまま残します。直すときは「&lt;/&gt; HTMLで直す」）</div>`; return;
+  }
+  const st = tplStoreOf(tplCur.mk);
+  host.classList.add("ieEdit");
+  host.innerHTML = ieToEditable(b.html, st) || "";
+  host.setAttribute("data-ph", "ここに文を書く");
+  if(CAN_EDIT){ host.contentEditable = "true"; host.dataset.bid = b.id; }
+  if(!host.dataset.ie){
+    host.dataset.ie = "1";
+    host.addEventListener("input", () => { const x = tplFind(Number(host.dataset.bid)); if(!x) return; x.html = ieFromEditable(host); const s = tplStatus(x), badge = $("tpS_" + x.id), card = $("tpB_" + x.id); if(badge){ badge.className = "tpS " + s; badge.textContent = TPL_ST_LABEL[s]; } if(card) card.className = "tpB " + s; clearTimeout(ieT); ieT = setTimeout(ieSync, 300); });
+    host.addEventListener("click", e => { if(e.target.closest && e.target.closest("a")) e.preventDefault(); });
+    host.addEventListener("paste", e => {   // 貼りつけ：画像はアップ、文は文字だけ（よそのページの飾りがまざらないように）
+      const f = [...(e.clipboardData && e.clipboardData.files || [])].find(x => /^image\//.test(x.type));
+      if(f){ e.preventDefault(); ieUploadAt(f, Number(host.dataset.bid)); return; }
+      const tx = e.clipboardData && e.clipboardData.getData("text/plain"); if(tx == null) return;
+      e.preventDefault(); document.execCommand("insertText", false, tx);
+    });
+  }
+}
+document.addEventListener("selectionchange", () => {
+  if(!tplCur || !tplCur.inline) return;
+  const s = window.getSelection(); if(!s || !s.rangeCount) return;
+  const n = s.anchorNode, host = n && (n.nodeType === 1 ? n : n.parentElement) && (n.nodeType === 1 ? n : n.parentElement).closest(".ieEdit");
+  if(host) tplCur.sel = { id: Number(host.dataset.bid), range: s.getRangeAt(0).cloneRange() };
+});
+// カーソルの場所に入れる（なければ、そのブロックのいちばん下）
+function ieInsertCode(id, code){
+  const b = tplFind(id), host = $("tpPv_" + id); if(!b || !host) return;
+  const st = tplStoreOf(tplCur.mk), tmp = document.createElement("div"); tmp.innerHTML = ieToEditable(code, st) + "<br>";
+  const frag = document.createDocumentFragment(); [...tmp.childNodes].forEach(x => frag.appendChild(x));
+  const s = tplCur.sel && tplCur.sel.id === id && host.contains(tplCur.sel.range.startContainer) ? tplCur.sel.range : null;
+  if(s){ s.collapse(false); s.insertNode(frag); } else host.appendChild(frag);
+  b.html = ieFromEditable(host); tplCur.sel = null;
+  tplPaintBlockPv(b); ieSync();
+}
+function ieImgAt(id){ openFreeUp(no => ieInsertCode(id, `%MJPGFREE${no}-W%`), tplCur && tplCur.mk); }
+function ieVidAt(id){ openVideoUp(no => ieInsertCode(id, `%MP4FREE${no}-W%`), tplCur && tplCur.mk); }
+function ieLinkAt(id){
+  const u = prompt("リンクのURL（https://〜）", ""); if(u == null) return;
+  if(!tplUrl(u)){ toast("https:// ではじまるURLを入れてください"); return; }
+  const t = prompt("見える文字", "こちら"); if(t == null) return;
+  ieInsertCode(id, `<a href="${tplUrl(u)}" target="_blank">${tplEsc(t || u)}</a>`);
+}
+// 🖼 画像のファイルを、ブロック・「＋」にドラッグ（または貼りつけ）→ そのままアップして入れる
+async function ieUploadFile(file){
+  const f = await fuPrepare(file);
+  const r = await hpFn({ action: "free_jpg_upload", store: tplCur.mk, file: { b64: await fuB64(f), type: f.type, name: f.name || "" } });
+  if(r && r.no && (r.ok || /確かめられません/.test(r.error || ""))) return r.no;
+  throw new Error((r && r.error) || "アップできませんでした");
+}
+async function ieUploadAt(file, id, place, at){
+  if(!CAN_EDIT || !tplCur) return;
+  if(!/^image\//.test(file.type)){ toast("動画は「＋ ここに入れる」→「🎥 動画」からアップしてください"); return; }
+  if(!confirm(`${tplStoreOf(tplCur.mk).label} の公式HPのフリー画像に、この画像をアップして入れます。いいですか？`)) return;
+  toast("⏳ 画像をアップしています…（30秒くらい）");
+  try{
+    const no = await ieUploadFile(file);
+    if(id) ieInsertCode(id, `%MJPGFREE${no}-W%`);
+    else { tplCur.adding = place; tplCur.addAt = at; tplAdd("image", place); const b = tplCur.m.blocks[tplCur.lastAdded]; if(b){ b.no = String(no); tplPaint(); ieSync(); } }
+    toast(`✅ ${no}番にアップして入れました`);
+  }catch(e){ toast("⚠ " + (e.message || e)); }
+}
+function ieFileDrop(root){
+  root.addEventListener("dragover", e => { if(e.dataTransfer && [...e.dataTransfer.types].includes("Files")){ e.preventDefault(); const z = e.target.closest && e.target.closest(".ieIns,.ieAddBox,.ieEdit"); root.querySelectorAll(".iedrop").forEach(x => x !== z && x.classList.remove("iedrop")); if(z) z.classList.add("iedrop"); } });
+  root.addEventListener("dragleave", e => { const z = e.target.closest && e.target.closest(".iedrop"); if(z && !z.contains(e.relatedTarget)) z.classList.remove("iedrop"); });
+  root.addEventListener("drop", e => {
+    const f = e.dataTransfer && [...e.dataTransfer.files].find(x => /^(image|video)\//.test(x.type)); if(!f) return;
+    e.preventDefault(); e.stopPropagation(); root.querySelectorAll(".iedrop").forEach(x => x.classList.remove("iedrop"));
+    const z = e.target.closest && e.target.closest(".ieIns,.ieAddBox,.ieEdit");
+    if(z && z.classList.contains("ieEdit")) ieUploadAt(f, Number(z.dataset.bid));
+    else if(z) ieUploadAt(f, null, z.dataset.p, Number(z.dataset.i));
+    else { const sec = e.target.closest && e.target.closest(".tpSec"); if(sec) ieUploadAt(f, null, sec.dataset.place, tplCur.m.blocks.filter(b => b.place === sec.dataset.place).length); }
+  }, true);
+}
+async function ieReload(){
+  if(tplCur && tplCur.inline && (introPending[tplCur.sk] || ieAreaChanged("town") || ieAreaChanged("self") || ieAreaChanged("mgr")) && !confirm("直したところ（まだ保存していない分）は消えます。公式HPから読みなおしますか？")) return;
+  if(tplCur && tplCur.inline){ delete introPending[tplCur.sk]; delete tplPending[tplCur.sk]; }
+  tplCur = null; ieLoad(true);
+}
+// 紹介文を開いたら読む（閉じているあいだは読まない）
+function ieMount(){
+  const box = $("ieBox"); if(!box || !pf) return;
+  const det = box.closest("details"); if(det && !det.open) return;
+  ieLoad(false);
+}
+document.addEventListener("toggle", e => { if(e.target && e.target.tagName === "DETAILS" && e.target.open && e.target.querySelector && e.target.querySelector("#ieBox")) ieMount(); }, true);
+document.head.insertAdjacentHTML("beforeend", `<style>
+  #ieBox{--iez:0.8}
+  #ieBox .ieTop{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+  #ieBox .tpLegend{display:flex;gap:4px;flex-wrap:wrap}
+  #ieBox .tpS{font-size:11px;font-weight:800;border-radius:99px;padding:2px 8px;white-space:nowrap}
+  #ieBox .tpS.same{background:#E8F5E9;color:#2E7D32} #ieBox .tpS.new{background:#FFF3C4;color:#8A6100} #ieBox .tpS.edit{background:#E3F2FD;color:#1565C0} #ieBox .tpS.moved{background:#F3E5F5;color:#7B1FA2}
+  #ieBox .tpSec{border:2px solid #F8BBD0;border-radius:14px;margin-top:10px}
+  #ieBox .tpSec.over{border-color:#C2185B;box-shadow:0 0 0 3px #F8BBD0}
+  #ieBox .tpSecH{background:#FCE4EC;padding:8px 12px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;border-radius:12px 12px 0 0}
+  #ieBox .tpSecH b{font-size:15px;color:#AD1457} #ieBox .tpSecH span{font-size:12px;color:#8E6B74}
+  #ieBox .tpSecB{padding:8px}
+  #ieBox .tpB{border:2px solid #C8E6C9;border-radius:12px;margin:2px 0;background:#fff}
+  #ieBox .tpB.new{border:2.5px dashed #F2C94C;background:#FFFDF2} #ieBox .tpB.edit{border-color:#90CAF9} #ieBox .tpB.moved{border-color:#CE93D8}
+  #ieBox .tpB.drag{opacity:.35} #ieBox .tpB.before{box-shadow:0 -5px 0 #C2185B} #ieBox .tpB.after{box-shadow:0 5px 0 #C2185B}
+  #ieBox .tpBH{display:flex;gap:4px;align-items:center;flex-wrap:wrap;padding:4px 8px;border-bottom:1px solid #f3e3e8;cursor:grab}
+  #ieBox .tpBH .grip{color:#C2185B;font-weight:900;font-size:16px;cursor:grab} #ieBox .tpBH b{font-size:12.5px}
+  #ieBox .tpPv{padding:6px 10px;zoom:var(--iez)}   /* 中でスクロールしない（ページ全体だけ） */
+  #ieBox .tpPv img{max-width:100%;max-height:260px;width:auto;height:auto;vertical-align:middle}
+  #ieBox .tpPv img.iebtn{max-height:40px}
+  #ieBox .ieEdit{outline:none;min-height:1.6em;cursor:text;border-radius:8px}
+  #ieBox .ieEdit:focus{box-shadow:0 0 0 2px #90CAF9 inset;background:#FAFDFF}
+  #ieBox .ieEdit:empty:before{content:attr(data-ph);color:#bbb}
+  #ieBox .iev{display:inline-block;background:#222;color:#fff;border-radius:8px;padding:14px 24px;font-weight:800;margin:4px 0}
+  #ieBox .tpF{padding:6px 10px 10px;background:#FFF7FA;border-top:1px dashed #F8BBD0} #ieBox .tpF input,#ieBox .tpF textarea{width:100%}
+  #ieBox .tpDel{border:1.5px dashed #EF9A9A;border-radius:10px;padding:6px 10px;margin:6px 0;color:#C62828;background:#FFF5F5;display:flex;gap:6px;align-items:center}
+  #ieBox .tpAddBox{border:2.5px dashed #F2C94C;background:#FFFDF2;border-radius:12px;padding:8px;margin:4px 0}
+  #ieBox .ieIns{height:14px;margin:2px 0;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:8px;color:transparent;font-size:11.5px;font-weight:800;transition:all .12s}
+  #ieBox .ieIns:before{content:"";position:absolute;left:0;right:0}
+  #ieBox .ieIns:hover,#ieBox .ieIns.iedrop{height:26px;background:#FFF3C4;color:#8A6100;outline:2px dashed #F2C94C}
+  #ieBox .ieIns span{pointer-events:none}
+  #ieBox .iedrop{outline:3px dashed #C2185B !important;background:#FFF0F6 !important}
+  #ieBox .ieWhite{margin-bottom:6px}
+  #ieBox .ieLbl{font-size:12px;font-weight:800;color:#777;margin:2px 0} #ieBox .ieLbl span{font-weight:600;color:#9C8B8F}
+  #ieBox textarea.ieW{field-sizing:content;width:100%;box-sizing:border-box;resize:none;overflow:hidden;min-height:2.2em;font-family:inherit;font-size:14px;border:1.5px dashed #ccc;border-radius:8px;padding:6px 8px;background:#fff}
+  #ieBox .ieSum{position:sticky;bottom:0;background:#fff;border-top:2px solid #F8BBD0;padding:6px 8px;margin-top:8px;font-size:13px;font-weight:700;z-index:2}
+  #ieBox .ieAt{display:inline-flex;gap:4px;flex-wrap:wrap}
+</style>`);
+// プロフを描きなおしたら（お店のタブを変えた・保存した など）、紹介文が開いていればエディタも出しなおす
+{ const __paintProfIE = paintProf; paintProf = function(){ const r = __paintProfIE.apply(this, arguments); try{ ieMount(); }catch(e){} return r; }; }
 /* ---------- 🎀 お店ごとの「本人から一言」の飾りテンプレ（2026/11/9）----------
    ・prof_settings の introTemplates：{ お店のキー: { name, html, color, by, at } }（SQL 235）
    ・html の中の {{タイトル}} と {{本文}} に、タイトル・本文が入る。本文の「＊」の行は color の色
@@ -4297,7 +4598,7 @@ function kbAreaOf(el){
 }
 function kbGlowApply(){
   const on = (sel, v) => document.querySelectorAll(sel).forEach(b => b.classList.toggle("kbGlow", !!v));
-  const prof = !!(pf && (pf.dirty.size || Object.keys(tplPending).length)), hotel = !!(pf && pf.hotelDirty);
+  const prof = !!(pf && (pf.dirty.size || Object.keys(tplPending).length || (typeof introPending !== "undefined" && Object.keys(introPending).length))), hotel = !!(pf && pf.hotelDirty);
   on('#editBg .actions button[onclick="saveCast()"]', kbArea.has("cast"));
   on('#e_private button[onclick="savePrivate()"]', kbArea.has("private"));
   on('#e_prof button[onclick="saveProf()"]', prof);
