@@ -2938,6 +2938,7 @@ function paintHotelList(){
       <input id="hl_m_${esc(h.hotel_id)}" value="${esc(h.map_url || "")}" placeholder="地図のURL" ${ro}>
       <span style="white-space:nowrap">${CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="saveHotel('${esc(h.hotel_id)}')">💾</button><button class="btn btn-ghost btn-sm" onclick="delHotel('${esc(h.hotel_id)}')">🗑</button>` : ""}</span>
       <input id="hl_t_${esc(h.hotel_id)}" value="${esc(h.note || "")}" placeholder="メモ（部屋・注意など）" style="grid-column:1/-1;font-size:12.5px" ${ro}>
+      <label class="hlal" style="grid-column:1/-1;display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:800;color:#6b4fa0;white-space:nowrap">🔤 別の呼び方<input id="hl_al_${esc(h.hotel_id)}" value="${esc(hotelAliasList(h).join("、"))}" placeholder="「、」で区切る（例：ノックス、ノクス）→ 受付でこの呼び方を入れても正式名になります" ${ro}></label>
       <div class="h3prow" style="grid-column:1/-1"><label class="h3p ${hotel3p(h) ? "on" : ""}" title="3P（お客様2名・キャスト2名以上）ができるホテル。受付の3Pの案内に出ます"><input type="checkbox" id="hl_3p_${esc(h.hotel_id)}" ${hotel3p(h) ? "checked" : ""} ${ro}> 👥 3P可能</label>
         <input id="hl_3pm_${esc(h.hotel_id)}" class="h3pm" value="${esc(hotel3pMemo(h))}" placeholder="3Pのメモ（例：3Pは料金＋2,000円・部屋は○○のみ）→ 受付の3Pの案内に出ます" ${ro}></div></div>`).join("") || '<div class="hint">ホテルがありません</div>'}
     ${CAN_EDIT ? `<div style="background:#FFF5F8;border-radius:12px;padding:8px 10px;margin-top:10px">
@@ -2949,8 +2950,8 @@ function paintHotelList(){
   bg.querySelectorAll("input:not([style*='grid-column']):not([type=checkbox]):not(.h3pm),select").forEach(el => { el.style.cssText += ";width:100%;padding:6px 8px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;background:#FFF5F8"; });
   bg.querySelectorAll("input[style*='grid-column']").forEach(el => { el.style.cssText += ";padding:5px 8px;border:1px solid var(--line);border-radius:9px;font-family:inherit;background:#fff"; });
   // 直したら自動で保存（行ごと。💾 を押さなくてOK・窓の外を押して閉じても消えない）2026/11/9
-  if(CAN_EDIT) bg.querySelectorAll("[id^='hl_n_'],[id^='hl_s_'],[id^='hl_m_'],[id^='hl_t_'],[id^='hl_3p_'],[id^='hl_3pm_']").forEach(el => {
-    const id = el.id.replace(/^hl_(n|s|m|t|3p|3pm)_/, "");
+  if(CAN_EDIT) bg.querySelectorAll("[id^='hl_n_'],[id^='hl_s_'],[id^='hl_m_'],[id^='hl_t_'],[id^='hl_3p_'],[id^='hl_3pm_'],[id^='hl_al_']").forEach(el => {
+    const id = el.id.replace(/^hl_(n|s|m|t|3p|3pm|al)_/, "");
     el.addEventListener("change", () => { saveHotel(id, true); if(el.type === "checkbox") el.closest("label").classList.toggle("on", el.checked); });
   });
 }
@@ -2959,11 +2960,15 @@ const TAG_3P = "3P可";
 function hotel3p(h){ return Array.isArray(h && h.tags) && h.tags.includes(TAG_3P); }
 // 3Pのメモ（料金など）もタグに「3Pメモ:…」で入れる → 受付の3Pの案内に出る
 function hotel3pMemo(h){ const t = (Array.isArray(h && h.tags) ? h.tags : []).find(x => String(x).startsWith("3Pメモ:")); return t ? String(t).slice(5) : ""; }
+// 🔤 ホテルの別の呼び方：タグに「別名:ノクス」（受付の「別の呼び方として登録」と同じ）2026/11/13
+function hotelAliasList(h){ return (Array.isArray(h && h.tags) ? h.tags : []).filter(t => String(t).startsWith("別名:")).map(t => String(t).slice(3).trim()).filter(Boolean); }
 async function saveHotel(id, quiet){
   const v = k => $(k + id).value.trim();
-  const h0 = pfHotels.find(h => h.hotel_id === id) || {}, t0 = (Array.isArray(h0.tags) ? h0.tags : []).filter(t => t !== TAG_3P && !String(t).startsWith("3Pメモ:"));
+  const alEl = $("hl_al_" + id);
+  const h0 = pfHotels.find(h => h.hotel_id === id) || {}, t0 = (Array.isArray(h0.tags) ? h0.tags : []).filter(t => t !== TAG_3P && !String(t).startsWith("3Pメモ:") && !(alEl && String(t).startsWith("別名:")));
   const memo = $("hl_3pm_" + id) ? $("hl_3pm_" + id).value.trim().slice(0, 100) : "";
-  const tags = t0.concat($("hl_3p_" + id) && $("hl_3p_" + id).checked ? [TAG_3P] : [], memo ? ["3Pメモ:" + memo] : []);
+  const als = alEl ? [...new Set(alEl.value.split(/[、,，\/／\n]/).map(s => s.trim()).filter(Boolean))].slice(0, 20) : [];
+  const tags = t0.concat($("hl_3p_" + id) && $("hl_3p_" + id).checked ? [TAG_3P] : [], memo ? ["3Pメモ:" + memo] : [], als.map(a => "別名:" + a));
   const row = { hotel_name: v("hl_n_"), store_status: $("hl_s_" + id).value, map_url: v("hl_m_"), note: v("hl_t_"), tags };
   if(!row.hotel_name){ toast("ホテルの名前を入れてください"); return; }
   try{ q(await sb.from("prof_hotels").update(row).eq("hotel_id", id)); Object.assign(pfHotels.find(h => h.hotel_id === id) || {}, row); toast(quiet ? "💾 自動で保存しました（" + row.hotel_name + "）" : "保存しました"); }
