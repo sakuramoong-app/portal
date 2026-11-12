@@ -532,7 +532,8 @@ function settleParts(id){
   const res = c.all.filter(r => r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed").map((r, i) => {   // キャンセル・トビは出さない
     const off = r.status === "cancel" || r.status === "tobi" || r.status === "flowed";
     const bo = off ? [] : (r.options || []).filter(o => (o.back || 0) > 0);
-    const ops = bo.map(o => [`${o.label}${o.qty > 1 ? "×" + o.qty : ""}`, o.back * (o.qty || 1)]);
+    // オプションは、お客さんの料金もいっしょに（右の「＋」はキャストのバック）2026/11/12 店長
+    const ops = bo.map(o => [`${o.label}${o.qty > 1 ? "×" + o.qty : ""}${Number(o.price) ? "（料金 " + yen(Number(o.price) * (o.qty || 1)) + "）" : ""}`, o.back * (o.qty || 1)]);
     const opSum = bo.reduce((a, o) => a + o.back * (o.qty || 1), 0);
     const head = `${hm(r.start_at)} ${storeLabel(r.store_key)} ${r.course}${/^\d+$/.test(r.course) ? "分" : ""}${r.extension_count ? " 延長" + r.extension_count : ""}`;
     const courseBack = off ? 0 : r.back_override != null ? r.back_override : (r.course_back || 0) + (r.extra_back || 0);

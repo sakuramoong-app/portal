@@ -1337,16 +1337,20 @@ function calc(){
   if(pay === "split"){ const base = Math.min(total, Math.max(0, Number($("f_cardpart") ? $("f_cardpart").value : 0) || 0)); splitCard = Math.round(base * cardRate); total = total - base + splitCard; }
   else if(pay && pay !== "cash"){ total = Math.round(total * cardRate); }
   // バック：店舗のグループのランク（特別フリー・イベフリーは「イベ」のランク）＋コース＋（本指／フリー…）
-  let courseBack = 0, rank = "", key = "", backMissing = null, nomiBack = 0;
+  let courseBack = 0, rank = "", key = "", backMissing = null, nomiBack = 0, nhAdd = 0, nhFromTable = false, nhRank = "";
   if(cast){
     rank = (free === "special_free" || free === "event_free") ? ranksOn(cast).event : ranksOn(cast)[g];
     const suffix = free ? FREE_SUFFIX[free] : (visit === "honshi" ? "本指" : "");
     if(rank){
       let r2 = rank;
-      if(g === "cutie" && $("f_nh").checked && !/NH/.test(rank)) r2 = rank + "+NH指名";
+      // 💗 キューティのNH指名（2026/11/12 店長）：バックは「ふつうのランクのバック」＋ Aランク以上 2,000円・B・Cランク 1,000円（下の nhAdd）
+      const nhOn = g === "cutie" && !free && $("f_nh").checked, baseRank = String(rank).replace(/\s*\+\s*NH指名\s*$/, "");
+      if(nhOn) r2 = baseRank;
       key = course + suffix;
       courseBack = M.back[r2 + "|" + key];
-      if(courseBack == null && r2 !== rank) courseBack = M.back[rank + "|" + key];
+      if(courseBack == null && r2 !== rank){ courseBack = M.back[rank + "|" + key]; if(courseBack != null && nhOn) nhFromTable = true; }   // ふつうのランクの行がないときだけ、NH指名の行（NHの分こみ）
+      if(nhOn && courseBack != null && !nhFromTable) nhAdd = /^[SA]/.test(baseRank) ? 2000 : /^[BC]/.test(baseRank) ? 1000 : 0;
+      if(nhAdd) nhRank = baseRank;
       if(courseBack == null){
         // バック表にないランク×コース：受付で入れた金額を使う（保存すると、このランク×コースが埋まる＝次から自動）
         if(cbackFor !== (editing ? editing.id : 0)){ cbackFor = editing ? editing.id : 0; cbackOv = ""; }
@@ -1364,6 +1368,7 @@ function calc(){
     }else why.push("⚠️ このお店用のランクが台帳にありません → 報酬を手で入れてください");
   }
   let extra = ext*extSet.back + date*dateSet.back;
+  if(nhAdd){ extra += nhAdd; why.push(`NH指名（${nhRank}ランク）：バック＋${yen(nhAdd)}`); }
   if(ext) why.push(`延長 ${ext}回：バック ${yen(ext*extSet.back)}`);
   if(date) why.push(`デート ${date}回：バック ${yen(date*dateSet.back)}`);
   if(admission){ extra += admSet.back_add; why.push(`入会金あり：報酬＋${yen(admSet.back_add)}`); }

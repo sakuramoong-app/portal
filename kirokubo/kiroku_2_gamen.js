@@ -180,7 +180,7 @@ recalc = function(){
   const pay = { cash: "現金", card: "カード", card_paid: "カード済み" }[last.pay] || "";
   el.innerHTML = `<div class="l1">${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${$("f_start").value || "--:--"}〜${$("endView").textContent}　${esc(place)}</div>
     <div class="l2">${dummy ? `🎭 ${esc(dummy)}（実際：${esc(cname)}）` : esc(cname)}　${esc(course)}</div>
-    ${last.opts.length ? `<div class="l2" style="font-size:16px">OP：${esc(last.opts.map(o => o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・"))}</div>` : ""}
+    ${last.opts.length ? `<div class="l2 opl" style="font-size:16px">OP：${last.opts.map(o => `${esc(o.label + (o.qty > 1 ? "×" + o.qty : ""))} <b class="opy">${Number(o.price) * (o.qty || 1) ? yen(Number(o.price) * (o.qty || 1)) : "無料"}</b>`).join("・")}${last.optionTotal ? `　<span class="opsum">（オプション合計 <b>${yen(last.optionTotal)}</b>）</span>` : ""}</div>` : ""}
     ${last.pay === "split"
       // 💴＋💳 現金＋カード：現金で払う額と、カードで払う額（手数料こみ）を分けて読み上げる（2026/11/9 内勤さん）
       ? `<div class="l3">総額 <b>${yen(last.total)}</b>（現金＋カード）</div>
