@@ -1759,5 +1759,18 @@ async function checkStaffPayMissing(){
 }
 setTimeout(checkStaffPayMissing, 5000); setInterval(checkStaffPayMissing, 60000);   // 読みこみが終わるのを待って（1日1回だけ出す）
 
+/* ---------- 📌 キャスト・時間がまだの予約（仮予約など）：「全体を見たい」の表の上にも出す（2026/11/12 店長：スマホは表しかないので、電話番号と名前だけの仮予約が見えなかった） ---------- */
+function paintLoose(){
+  const grid = $("tlGrid"); if(!grid || !grid.parentNode) return;
+  let el = $("tlLoose"); if(!el){ el = document.createElement("div"); el.id = "tlLoose"; grid.parentNode.insertBefore(el, grid); }
+  const list = rows.filter(r => !["cancel", "tobi", "flowed"].includes(r.status) && (!r.cast_id || !r.start_at));
+  el.innerHTML = list.length ? `<div class="tlloose"><b>📌 キャスト・時間がまだの予約（${list.length}件）</b>
+    ${list.map(r => `<button type="button" class="tlk ${r.kari_at ? "kari" : ""}" onclick="openForm(${Number(r.id)})">${r.kari_at ? "📌 仮予約　" : ""}<b>${esc((r.kb_customers || {}).name || "名前なし")}</b>${r.start_at ? "　" + esc(hm(r.start_at)) + "〜" : ""}${r.cast_id ? "　" + esc(castName(r.cast_id)) : "　キャスト未定"}　<span>✏️ 開く</span></button>`).join("")}</div>` : "";
+}
+{ const __renderTLLoose = renderTL; renderTL = function(){ const r = __renderTLLoose.apply(this, arguments); try{ paintLoose(); }catch(e){} return r; }; }
+document.head.insertAdjacentHTML("beforeend", `<style>.tlloose{display:flex;flex-direction:column;gap:6px;background:#FFF7FB;border:2px solid #F8BBD0;border-radius:14px;padding:8px 10px;margin:6px 0 10px}
+  .tlloose > b{font-size:14px;color:#AD1457} .tlk{font-family:inherit;text-align:left;font-size:14.5px;border:2px solid #EAD7DD;background:#fff;border-radius:12px;padding:8px 10px;cursor:pointer}
+  .tlk span{color:#E5638C;font-weight:800;font-size:13px} .tlk.kari{border:3px solid transparent;background:linear-gradient(#fff,#fff) padding-box,linear-gradient(90deg,#ff004c,#ff8a00,#ffe600,#2bd94a,#00b3ff,#7a3cff,#ff00c8) border-box}</style>`);
+
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
 init();

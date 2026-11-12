@@ -402,12 +402,13 @@
     <h2 id="termsTitle">🔁 バック・条件を変える</h2>
     <div class="hint">ヒアリングとセットで変えます。<b>ヒアリング内容がないと保存できません。</b>変えたことは、だれが・いつ・どのヒアリングで、が残ります。</div>
 
-    <div class="sec">💬 ヒアリング<span id="t_hreq">（必須）</span></div>
+    <div class="sec">💬 ヒアリング<span id="t_hreq">（必須。前から決まっていたことは「📒 既存ルール」）</span></div>
     <div id="t_setupBox" class="hint" style="margin:-2px 0 6px"></div>
     <div class="f"><label><input type="radio" name="t_hmode" value="new" checked onchange="termsHMode()"> 新しく書く（キャストプロフの記録にも入ります）</label></div>
     <div class="f" id="t_hnew_wrap"><textarea id="t_htext" placeholder="例：10/20 面談。指名が増えてきたのでランクアップ希望。交通費は全額バックで合意。"></textarea></div>
     <div class="f" style="margin-top:6px"><label><input type="radio" name="t_hmode" value="pick" onchange="termsHMode()"> キャストプロフにあるヒアリングから選ぶ</label></div>
     <div class="f" id="t_hpick_wrap" style="display:none"><select id="t_hpick"></select></div>
+    <div class="f" style="margin-top:6px"><label><input type="radio" name="t_hmode" value="existing" onchange="termsHMode()"> 📒 既存ルール（前から決まっていたことを入れるだけ・ヒアリングなし）</label></div>
 
     <div class="sec">📅 いつから変わる？</div>
     <div class="f"><label>適用開始日（この日の予約から新しいバック・条件で計算）</label><input type="date" id="t_eff"></div>
@@ -631,7 +632,7 @@ async function openTerms(){
   $("t_htext").value = "";
   document.querySelector('input[name=t_hmode][value=new]').checked = true;
   termsHMode();
-  termsSetupPaint();   // 📒 初期設定中（ヒアリングなしでも保存）2026/11/12
+
   const day = todayYmd();
   // ランクはえらぶ（そのグループで使っているランク＋バック表のランク）。ないときは「＋ 新しいランク」
   if(!backRanks){ try{ backRanks = [...new Set((q(await sb.from("kb_back").select("rank")) || []).map(x => x.rank))]; }catch(e){ backRanks = []; } }
@@ -854,7 +855,8 @@ function rankPick(sel){
 }
 function termsHMode(){
   const pick = document.querySelector('input[name=t_hmode]:checked').value === "pick";
-  $("t_hnew_wrap").style.display = pick ? "none" : "";
+  const mode = document.querySelector('input[name=t_hmode]:checked').value;
+  $("t_hnew_wrap").style.display = mode === "new" ? "" : "none";   // 📒 既存ルールのときは書かない（2026/11/12）
   $("t_hpick_wrap").style.display = pick ? "" : "none";
 }
 function termsKindFields(){
@@ -920,8 +922,10 @@ async function saveTerms(){
   const c = termsCast; if(!c) return;
   const pick = document.querySelector('input[name=t_hmode]:checked').value === "pick";
   const p = { cast_id: c.id, effective: $("t_eff").value, by: operatorName(), ranks: {}, add_rules: termsNewRules, end_rules: [] };
-  if(pick){ p.hearing_log_id = $("t_hpick").value; if(!p.hearing_log_id){ toast("ヒアリングを選んでください"); return; } }
-  else { p.hearing_text = $("t_htext").value.trim(); if(p.hearing_text.length < 5){ if(termsSetup){ p.hearing_text = ""; p.setup = true; } else { toast("ヒアリング内容を書いてください（ないと変えられません）"); $("t_htext").focus(); return; } } }
+  const hmode = document.querySelector('input[name=t_hmode]:checked').value;
+  if(hmode === "existing"){ p.hearing_text = ""; p.setup = true; }   // 📒 既存ルール：ヒアリングなしで保存（SQL 240）2026/11/12
+  else if(pick){ p.hearing_log_id = $("t_hpick").value; if(!p.hearing_log_id){ toast("ヒアリングを選んでください"); return; } }
+  else { p.hearing_text = $("t_htext").value.trim(); if(p.hearing_text.length < 5){ toast("ヒアリング内容を書いてください（ないと変えられません。前から決まっていたことなら「📒 既存ルール」）"); $("t_htext").focus(); return; } }
   RANK_KEYS.forEach(([g])=>{ const el = $("t_r_" + g); if(el.value.trim() !== el.dataset.was) p.ranks[g] = el.value.trim(); });
   document.querySelectorAll(".t_end:checked").forEach(x=>p.end_rules.push(Number(x.value)));
   // ランクは同じで「いつから」だけ直したいとき（例：B が 11/3 からになっていて、11/1 の予約が前のランクで計算される）

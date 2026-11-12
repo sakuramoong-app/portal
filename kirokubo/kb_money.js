@@ -43,15 +43,19 @@
     });
     // 交通費バック（台帳の条件）
     let transportBack = 0; const why = [];
-    (rules || []).filter(x => x.kind === "transport_back").forEach(x => {
-      live.forEach(r => {
-        const t = r.transport || 0; if(!t) return;
+    //   条件がいくつあっても、1つの予約の交通費バックは「いちばん多い条件の額」だけ（足し算しない。交通費より多くならない）2026/11/12
+    const tbRules = (rules || []).filter(x => x.kind === "transport_back"), tbUsed = new Set();
+    live.forEach(r => {
+      const t = r.transport || 0; if(!t) return;
+      let best = 0, bestRule = null;
+      tbRules.forEach(x => {
         if(x.params && x.params.min_transport && t < Number(x.params.min_transport)) return;   // 交通費が○円以上のときだけ
         const v = x.params && x.params.amount != null ? Math.min(Number(x.params.amount) || 0, t) : Math.round(t * (Number(x.params && x.params.rate) || 0));
-        if(v){ transportBack += v; }
+        if(v > best){ best = v; bestRule = x; }
       });
-      if(transportBack) why.push("交通費バック：" + x.note);
+      if(best){ transportBack += Math.min(best, t); tbUsed.add(bestRule); }
     });
+    tbUsed.forEach(x => why.push("交通費バック：" + x.note));
     // 雑費（自動・免除の曜日・手で直したとき）
     const exempt = zappiExempt(rules, day);
     // 雑費は1日まとめて計算して、前の精算で払った分を引く（②だけで計算すると多くなったり少なくなったりするので）
