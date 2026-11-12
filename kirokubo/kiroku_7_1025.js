@@ -1743,6 +1743,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>.halias{background:#F2F7FF
    ・片方だけのまま保存した日があれば、次の営業日から、その内勤が記録簿を開いたときに声でお知らせ（直すまで毎日1回） ---------- */
 document.head.insertAdjacentHTML("beforeend", `<style>@keyframes spneed{0%,100%{box-shadow:0 0 0 0 rgba(255,107,157,0)}50%{box-shadow:0 0 0 4px rgba(255,107,157,.7)}} .sp-need{animation:spneed 1.1s ease-in-out infinite;border-color:#FF6B9D !important}</style>`);
 const SP_ME = () => ({ "きゃ": "kya", "すや": "suya", "らん": "ran", "かみ": "kami", "わか": "waka" })[KB.operatorName()] || "";
+const SP_MISS_FROM = "2026-11-12";   // この日から（「払った」チェックをなくした日。それより前の記録は「どこから」がない形なので見ない）
 const spMissing = w => (Number(w.day_paid) > 0) !== !!String(w.pay_source || "");   // 金額とどこからの、片方だけ
 async function checkStaffPayMissing(){
   if(!M.casts || KB.PRACTICE) return;
@@ -1750,7 +1751,7 @@ async function checkStaffPayMissing(){
   const bd = KB.bizDateOf(), key = bd + "|spmiss|" + me, fired = lsGet("kbFired");
   if(fired[key]) return;
   let list = [];
-  try{ list = (q(await sb.from("kb_staff_work").select("biz_date,day_paid,pay_source").eq("staff_id", me).lt("biz_date", bd).gte("biz_date", addDays(bd, -31))) || []).filter(spMissing); }catch(e){ return; }
+  try{ list = (q(await sb.from("kb_staff_work").select("biz_date,day_paid,pay_source").eq("staff_id", me).lt("biz_date", bd).gte("biz_date", [addDays(bd, -31), SP_MISS_FROM].sort().pop())) || []).filter(spMissing); }catch(e){ return; }
   fired[key] = 1; lsSet("kbFired", fired);
   if(!list.length) return;
   const md = d => Number(String(d).slice(5, 7)) + "月" + Number(String(d).slice(8)) + "日";
