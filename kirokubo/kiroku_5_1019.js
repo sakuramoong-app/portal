@@ -138,6 +138,7 @@ renderBoard = function(){
     if(st === "gone"){   // 今いない：いちばん最後の予約を1行で
       const lastB = x.bks.filter(b => !["cancel", "tobi", "flowed"].includes(b.r.status)).sort((a, b) => b.s - a.s)[0];
       sub = lastB ? `<div class="cc-sub">${esc(hm(lastB.r.start_at))} ${esc(lastB.r.area || "")} ${esc(lastB.r.course || "")}${/^\d+$/.test(lastB.r.course || "") ? "分" : ""} ${esc((lastB.r.kb_customers || {}).name || "")}　${esc(STATUS[lastB.r.status] || "")}</div>` : `<div class="cc-sub">予約なし</div>`;
+      { const al = ((cd1.attend_log) || []).slice(-1)[0]; if(al && al.reason) sub += `<div class="cc-why">📝 ${esc(al.kind)}：${esc(al.reason)}${al.time ? "（" + esc(al.time) + "）" : ""}</div>`; }   // 📝 勤怠の理由（その他など）を今いないの札に 2026/11/12
     }else sub = `${trip}${pill}${st === "ended" ? (() => { const en = endedOf(x); return en ? `<br><span class="endnote">⏹ ${esc(hm(en.r.end_at))}に終わり${en.r.status === "working" ? "（まだ「仕事中」のまま）" : ""}・札を動かして場所を決めてね</span>` : ""; })() : ""}${bl ? `<ul class="bkl">${bl}</ul>` : ""}`;
     return `<div class="chipc ${cls}${cd1.status === "中抜け" ? " brkc" : ""}" data-cid="${cid}" data-st="${st}"><div class="cc-top">${cid && typeof KBF !== "undefined" ? KBF.img(cid, 34) : ""}<b class="cc-nm">【${esc(castLabel(x))}】${esc(sh)}</b>${badges}</div>${sub}${movingHtml(x)}${seat}<span class="cc-go">›</span></div>`;
   };
@@ -1066,7 +1067,7 @@ function cancelSection(){
 }
 
 /* ---------- 📝 勤怠（欠勤・遅刻・早退・シフト時間変更）の理由 ---------- */
-const ATTEND_KINDS = ["欠勤", "遅刻", "早退", "時間変更"];
+const ATTEND_KINDS = ["欠勤", "遅刻", "早退", "時間変更", "その他"];   // その他（理由は「今いない」の札にも出す）2026/11/12
 // 📌 今日のこと（SQL 175）：内勤みんなに知らせるメモ（病院に行ってから来る・今日は逆AF不可 など）
 function infoNoteHtml(cid){
   const t = String((castDays[cid] || {}).info_note || "").trim();

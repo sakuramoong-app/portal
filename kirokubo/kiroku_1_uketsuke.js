@@ -879,6 +879,11 @@ function ruleApplies(x){
   const cond = x.cond || "always", v = x.cond_value || "";
   if(cond === "always") return true;
   if(cond === "new") return visit === "new";
+  if(cond === "repeat") return visit === "repeat";   // 店リピ・本指名のとき（いままで「いつも」になっていた）2026/11/12
+  if(cond === "honshi") return visit === "honshi";
+  if(cond === "trip") return /出張/.test(($("f_area") && $("f_area").value) || "");   // 🚗 エリアが出張
+  if(cond === "home") return ($("f_place") && $("f_place").value) === "home";   // 🏠 自宅
+  if(cond === "biz") return ($("f_place") && $("f_place").value) === "biz";   // 🏢 ビジホ
   if(["foreign", "josou", "female", "couple"].includes(cond)) return guestFlags.has(cond);
   if(cond === "store") return $("f_store").value === v;
   if(cond === "long") return formMinutes() >= Number(v || 0);

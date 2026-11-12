@@ -1773,5 +1773,9 @@ document.head.insertAdjacentHTML("beforeend", `<style>.tlloose{display:flex;flex
   .tlloose > b{font-size:14px;color:#AD1457} .tlk{font-family:inherit;text-align:left;font-size:14.5px;border:2px solid #EAD7DD;background:#fff;border-radius:12px;padding:8px 10px;cursor:pointer}
   .tlk span{color:#E5638C;font-weight:800;font-size:13px} .tlk.kari{border:3px solid transparent;background:linear-gradient(#fff,#fff) padding-box,linear-gradient(90deg,#ff004c,#ff8a00,#ffe600,#2bd94a,#00b3ff,#7a3cff,#ff00c8) border-box}</style>`);
 
+// 受付ルールの「出張のとき・自宅のとき・ビジホのとき」：エリア・ホテル自宅を変えたら、出しなおす（2026/11/12）
+["change"].forEach(ev => document.addEventListener(ev, e => { const id = e.target && e.target.id; if(!["f_areaSel", "f_area", "f_place"].includes(id)) return;
+  clearTimeout(window.__rccPlaceT); window.__rccPlaceT = setTimeout(() => { try{ const c = M.casts.find(x => x.id === $("f_cast").value); if(c) renderCastChecks(c); }catch(x){} }, 150); }, true));
+
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
 init();

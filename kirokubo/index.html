@@ -968,7 +968,8 @@ async function saveTerms(){
 const RULE_KIND = { announce: "📣 お客様に案内", confirm: "✅ 確認してから受ける", after: "⏳ 予約のあとにやること", know: "🤫 知っておくだけ" };
 const RULE_KIND_COLOR = { announce: "#FFF4E5", confirm: "#E8F4FF", after: "#EEF9EE", know: "#F3F0F5" };
 const RULE_COND = { always: "いつも", new: "新規のとき", repeat: "店リピのとき", honshi: "本指名のとき", foreign: "外国人のお客様", josou: "女装のお客様", female: "女性のお客様", couple: "カップル",
-                    option: "オプションを選んだとき", store: "この店のとき", long: "○分以上のコース" };
+                    option: "オプションを選んだとき", store: "この店のとき", long: "○分以上のコース",
+                    trip: "エリアが出張のとき", home: "ホテル・自宅が「自宅」のとき", biz: "ホテル・自宅が「ビジホ」のとき" };   // SQL 241（2026/11/12）
 function condLabel(x){
   if(x.cond === "option") return "「" + x.cond_value + "」を選んだとき";
   if(x.cond === "store") return ((stores.find(s=>s.key === x.cond_value) || {}).label || x.cond_value) + "のとき";
@@ -978,8 +979,10 @@ function condLabel(x){
 let ruleEditing = null;   // 直しているルールの id（新しいときは 0）
 function renderChecks(id){
   if(!id){ $("e_checks").innerHTML = `<div class="hint">キャストを保存してから入れられます。</div>`; return; }
-  const list = castChecks.filter(x=>x.cast_id === id);
-  $("e_checks").innerHTML = (list.length ? list.map(x=>`<div style="display:flex;gap:6px;align-items:flex-start;padding:6px 8px;margin-bottom:4px;border-radius:10px;background:${RULE_KIND_COLOR[x.kind || "announce"]}">
+  // 種類ごとに並べる（📣 案内 → ✅ 確認 → ⏳ あとでやること → 🤫 知っておくだけ）。種類の見出しもつける 2026/11/12 店長
+  const KORD = Object.keys(RULE_KIND), kOf = x => x.kind || "announce";
+  const list = castChecks.filter(x=>x.cast_id === id).map((x, i) => ({ x, i })).sort((a, b) => (KORD.indexOf(kOf(a.x)) - KORD.indexOf(kOf(b.x))) || a.i - b.i).map(o => o.x);
+  $("e_checks").innerHTML = (list.length ? list.map((x, i)=>(i === 0 || kOf(list[i - 1]) !== kOf(x) ? `<div style="font-weight:900;font-size:12.5px;margin:8px 0 4px;color:#5C4B4F">${RULE_KIND[kOf(x)]}</div>` : "") + `<div style="display:flex;gap:6px;align-items:flex-start;padding:6px 8px;margin-bottom:4px;border-radius:10px;background:${RULE_KIND_COLOR[x.kind || "announce"]}">
       <div style="flex:1;font-size:13.5px"><div style="font-size:11.5px;color:#7a6a70;font-weight:700">${RULE_KIND[x.kind || "announce"]}・${esc(condLabel(x))}</div>${esc(x.text)}</div>
       ${CAN_EDIT ? `<button class="btn btn-ghost btn-sm" onclick="openRule(${x.id})">✏️</button><button class="btn btn-ghost btn-sm" onclick="removeCheck(${x.id})">🗑</button>` : ""}
     </div>`).join("") : `<div class="hint">まだありません</div>`)
