@@ -2252,7 +2252,7 @@ function pfBulkOpen(){
     <details style="margin-top:6px"><summary style="cursor:pointer;font-weight:800;font-size:13px">✅ オプション可否${all("bkO")}</summary>
       <div style="padding-left:8px">${keys.map(k => chk("bkO", k, `${esc(PF_OPT_LABEL[k] || k)} <b>${esc(o[k] || "—")}</b>`, true)).join("")}</div></details>
     <div style="margin-top:8px;font-weight:800;font-size:13px">💬 本人から一言の写し方</div>
-    <div style="padding-left:8px;font-size:13px">${[["none", "写さない"], ["tpl", "🎀 お店ごとの飾りテンプレで入れる（タイトル・本文だけ。テンプレがないお店は文だけ）"], ["plain", "📝 文だけ（タイトル・本文。飾りなし）"], ["raw", "そのまま写す（飾り・ウィジェットごと。おすすめしません）"]].map(([v, l], i) => `<label style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer"><input type="radio" name="bkCm" value="${v}" ${i === 0 ? "checked" : ""} style="width:auto"> ${l}</label>`).join("")}
+    <div style="padding-left:8px;font-size:13px">${[["none", "写さない"], ["tpl", "🎀 お店ごとの飾りテンプレで入れる（タイトル・本文だけ。テンプレがないお店は文だけ）"], ["plain", "📝 文だけ（タイトル・本文。飾りなし）"], ["keepTpl", "✍️ 文は写す先のお店のまま（言いまわしを変えている子）・飾りだけ、そのお店の飾りテンプレにかえる"], ["keepSrc", "✍️ 文は写す先のお店のまま・飾りだけ、このお店と同じにする"], ["raw", "そのまま写す（飾り・ウィジェットごと。おすすめしません）"]].map(([v, l], i) => `<label style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer"><input type="radio" name="bkCm" value="${v}" ${i === 0 ? "checked" : ""} style="width:auto"> ${l}</label>`).join("")}
       <a href="javascript:void(0)" class="hint" onclick="openIntroTplEditor()">🎀 飾りテンプレの登録・直す</a></div>
     <div style="margin-top:4px">${chk("bkC", "mgrComment", "✍️ 店長から一言（そのまま写す）", false)}</div>
     <div style="font-size:12px;font-weight:800;color:#9C8B8F;margin-top:10px">写す先のお店</div>
@@ -2270,7 +2270,7 @@ async function pfBulkRun(){
   const { data, sk } = pf, src = profOpts(data, sk);
   data.storeProfiles = data.storeProfiles || {};
   // 💬 本人から一言：飾りテンプレ／文だけ／そのまま（2026/11/9）
-  const intro = introSrcOf(data, sk), tpls = cm === "tpl" ? await introTplLoad(true) : {}, how = {};
+  const intro = introSrcOf(data, sk), tpls = ["tpl", "keepTpl", "keepSrc"].includes(cm) ? await introTplLoad(true) : {}, how = {};
   ts.forEach(t => {
     const sp = data.storeProfiles[t] = data.storeProfiles[t] || { active: true };
     bf.forEach(f => { sp[f] = String(profGet(data, sk, f) || ""); });
@@ -2280,6 +2280,19 @@ async function pfBulkRun(){
       const tp = cm === "tpl" ? tpls[skKeyOf(t)] : null;
       sp.comment = tp && tp.html ? introTplRender(tp, intro.title, intro.body) : introPlain(intro.title, intro.body);
       how[t] = tp && tp.html ? "飾りテンプレ" : "文だけ";
+    }
+    // ✍️ 文は写す先のお店のまま（お店ごとに言いまわしを変えている子）・飾りだけかえる（2026/11/12 店長）
+    else if(cm === "keepTpl" || cm === "keepSrc"){
+      const own = introSrcOf(data, t);
+      if(!String(own.title || "").trim() && !String(own.body || "").trim()){ how[t] = "文がないので写さず"; }
+      else {
+        let html = "";
+        if(cm === "keepTpl"){ const tp = tpls[skKeyOf(t)]; html = tp && tp.html ? introTplRender(tp, own.title, own.body) : ""; }
+        else if(skKeyOf(sk) === "sakuramoon") html = tplCard({ title: own.title, body: own.body });   // サクラムーンの花びらカード
+        else { const tp = tpls[skKeyOf(sk)]; html = tp && tp.html ? introTplRender(tp, own.title, own.body) : ""; }
+        if(html){ sp.comment = html; how[t] = cm === "keepTpl" ? "文はそのまま・そのお店の飾り" : "文はそのまま・" + STORE_LABEL_OF(sk) + "の飾り"; }
+        else how[t] = "飾りテンプレがないので写さず";
+      }
     }
     if(ok.length){
       const cur = profOpts(data, t), opts = Object.assign({}, cur.options), memo = Object.assign({}, cur.optMemo);
@@ -3494,8 +3507,26 @@ function tplMerge(sets){
     sets[sk] = sets[sk] || {}; delete sets[sk].comment; delete sets[sk].mgrComment;
     Object.assign(sets[sk], x); delete introPending[sk];
   });
+  // 😊 絵文字：公式HPの管理画面は絵文字を入れられない（「□」「勺□」に化ける）→ HTMLの欄は「&#x1F60A;」の形にして入れる（見た目は絵文字のまま）2026/11/12
+  Object.values(sets).forEach(s => { ["deTown", "c1Html", "c2Html", "commentHtml", "comment", "mgrComment"].forEach(k => {
+    if(typeof s[k] !== "string") return;
+    if(["comment", "mgrComment"].includes(k) && !/<[a-z!]/i.test(s[k])) return;   // 文だけ（白い欄に入るもの）はそのまま
+    s[k] = hpEmojiSafe(s[k]);
+  }); });
   return sets;
 }
+// 公式HPに入らない文字（絵文字など）を「&#x…;」に。♡★♪ など公式HPで出せる記号はそのまま
+const HP_SAFE_SYM = "★☆♪♭♯♀♂☎☞☜♠♣♥♦♤♧♡◇◆□■△▲▽▼○◎●←→↑↓⇒⇔∀∃※〒〓";
+function hpEmojiSafe(s){
+  return String(s || "").replace(/[\u{1F000}-\u{1FFFF}\u{2190}-\u{2BFF}\u{1F1E6}-\u{1F1FF}]\u{FE0F}?|[\u{FE0F}\u{200D}]/gu, ch => {
+    const c = ch.replace(/\u{FE0F}/u, "");
+    if(!c || c === "‍") return c === "‍" ? "&#x200D;" : "";
+    const cp = c.codePointAt(0);
+    if(cp < 0x10000 && HP_SAFE_SYM.includes(c)) return c;
+    return "&#x" + cp.toString(16).toUpperCase() + ";";
+  });
+}
+const hasEmoji = s => /[\u{1F000}-\u{1FFFF}]|[\u{2190}-\u{2BFF}]\u{FE0F}/u.test(String(s || ""));
 const tplEsc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const tplNums = s => String(s || "").normalize("NFKC").split(/[^\d]+/).map(Number).filter(n => n > 0 && n <= 800);
 const tplUrl = s => { s = String(s || "").trim(); return /^https?:\/\/[^\s"'<>]+$/.test(s) ? s : ""; };
@@ -4128,7 +4159,8 @@ function iePaintSum(){
   const parts = [cnt.new && `🆕 足す ${cnt.new}`, cnt.edit && `✏️ 直す ${cnt.edit}`, cnt.moved && `↕ 動かす ${cnt.moved}`, tplCur.removed.length && `🗑 消す ${tplCur.removed.length}`, wch && `⬜ 白い欄 ${wch}`].filter(Boolean);
   el.innerHTML = parts.length ? `変わるところ：${parts.join("・")}　<b style="color:#C2185B">→ いちばん下の「💾 プロフを保存」で公式HPにも入ります</b>` : "まだ何も変えていません";
 }
-function ieSetW(p, v){ if(!tplCur) return; tplCur.w[p] = v; clearTimeout(ieT); ieT = setTimeout(ieSync, 300); }
+const IE_WHITE_EMOJI = "⚠ 白い欄に入れた絵文字は、公式HPで「□」に化けます。絵文字を使うときは、下の🟩緑の欄に書いてね（緑の欄の絵文字は、そのまま出ます）";
+function ieSetW(p, v){ if(!tplCur) return; tplCur.w[p] = v; { const wn = $("ieWarn_" + p); if(wn) wn.textContent = hasEmoji(v) ? IE_WHITE_EMOJI : ""; } clearTimeout(ieT); ieT = setTimeout(ieSync, 300); }
 let ieT = 0;
 function ieGrow(el){ if(!el.offsetParent) return; el.style.height = "auto"; el.style.height = (el.scrollHeight + 4) + "px"; }   // 白い欄は中身の高さに（中でスクロールしない）
 function iePaint(){
@@ -4163,7 +4195,7 @@ function iePaintList(){
   el.innerHTML = ["town", "self", "mgr"].map(p => {
     const info = IE_SEC[p], list = bl.filter(b => b.place === p), del = t.removed.filter(b => b.place === p);
     const white = p === "town" ? "" : `<div class="ieWhite"><div class="ieLbl">⬜ 白い欄（文だけ）<span>… 公式HPでは、下の🟩緑の欄より上に出ます</span></div>
-        <textarea class="ieW" data-p="${p}" rows="1" placeholder="（空でもOK。文だけの欄です）" ${ed ? "" : "readonly"} oninput="ieSetW('${p}',this.value);ieGrow(this)">${esc(t.w[p] || "")}</textarea></div>
+        <textarea class="ieW" data-p="${p}" rows="1" placeholder="（空でもOK。文だけの欄です）" ${ed ? "" : "readonly"} oninput="ieSetW('${p}',this.value);ieGrow(this)">${esc(t.w[p] || "")}</textarea><div class="ieWarn" id="ieWarn_${p}">${hasEmoji(t.w[p]) ? IE_WHITE_EMOJI : ""}</div></div>
       <div class="ieLbl" style="color:#2e7d32">🟩 緑の欄（HTML・見たまま）</div>`;
     return `<div class="tpSec" data-place="${p}"><div class="tpSecH"><b>${info.n} ${info.title}</b><span>… ${info.where}</span></div><div class="tpSecB">
       ${white}
@@ -4304,6 +4336,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   #ieBox textarea.ieW{field-sizing:content;width:100%;box-sizing:border-box;resize:none;overflow:hidden;min-height:2.2em;font-family:inherit;font-size:14px;border:1.5px dashed #ccc;border-radius:8px;padding:6px 8px;background:#fff}
   #ieBox .ieSum{position:sticky;bottom:0;background:#fff;border-top:2px solid #F8BBD0;padding:6px 8px;margin-top:8px;font-size:13px;font-weight:700;z-index:2}
   #ieBox .ieAt{display:inline-flex;gap:4px;flex-wrap:wrap}
+  #ieBox .ieWarn{font-size:12px;font-weight:800;color:#B7791F}
 </style>`);
 // プロフを描きなおしたら（お店のタブを変えた・保存した など）、紹介文が開いていればエディタも出しなおす
 { const __paintProfIE = paintProf; paintProf = function(){ const r = __paintProfIE.apply(this, arguments); try{ ieMount(); }catch(e){} return r; }; }
