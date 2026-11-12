@@ -372,9 +372,10 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 function refreshNeed(){
   if(!$("formBg").classList.contains("show")) return;
   document.querySelectorAll("#formBg .need").forEach(el => el.classList.remove("need"));
-  if(["cancel", "tobi", "flowed"].includes($("f_status").value)) return;   // キャンセル・トビのときは光らせない
+  const stv = $("f_status").value;
+  if(["cancel", "tobi"].includes(stv)) return;   // キャンセル・トビのときは光らせない（流れたは、電話番号と名前だけ光らせる 2026/11/12）
   let list = [];
-  try{ list = missingRequired(true); }catch(e){}
+  try{ list = stv === "flowed" ? tentativeMissing() : missingRequired(true); }catch(e){}
   list.forEach(([, id]) => { const el = $(id); if(el) el.classList.add("need"); });
   document.querySelectorAll('#castChecks .cchk[data-kind="announce"]').forEach(b => { if(!b.checked) b.closest("label").classList.add("need"); });
 }
@@ -1414,7 +1415,7 @@ function stepNavCur(){
 function stepNavPaint(){
   if(!$("stepNav")) return;
   const steps = [...document.querySelectorAll("#formBg .drawer > .step")];
-  let miss = []; try{ miss = ["cancel", "tobi", "flowed"].includes(($("f_status") || {}).value) ? [] : missingRequired(true); }catch(e){}
+  let miss = []; try{ const sv = ($("f_status") || {}).value; miss = sv === "flowed" ? tentativeMissing() : ["cancel", "tobi"].includes(sv) ? [] : missingRequired(true); }catch(e){}
   const missStep = new Set(miss.map(([, id]) => { const el = $(id); const s = el && el.closest(".step"); return s ? steps.indexOf(s) : -1; }));
   const hasReq = steps.map(s => !!s.querySelector(".req"));
   document.querySelectorAll("#stepNav .sn-it").forEach((b, i) => { b.classList.toggle("ok", hasReq[i] && !missStep.has(i)); b.classList.toggle("ng", missStep.has(i)); });

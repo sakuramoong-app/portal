@@ -168,7 +168,8 @@ function openForm(id){
   $("receptionNotes").innerHTML = (M.set.reception_notes || []).map(t=>`<div class="info">📌 ${esc(t)}</div>`).join("");
   // 新しい受付は、店舗・指名・種別・支払い方法を「まだ選んでいない」から（必須）
   $("f_store").innerHTML = `<option value="">（店舗を選ぶ）</option>` + M.stores.map(s=>`<option value="${s.key}">${esc(s.label)}</option>`).join("");
-  $("f_store").value = id ? (r.store_key || "sakuramoon") : "";
+  $("f_store").value = id ? (r.store_key || (r.kari_at || r.status === "flowed" ? "" : "sakuramoon")) : "";   // 仮予約・流れたで売上店舗なしなら空のまま（2026/11/12）
+  const kfill = r.kari_at && Array.isArray(r.kari_fill) ? r.kari_fill : [];   // 📌 仮予約で、空だったので仮の値を入れた欄
   nomiChosen = true;   // 新しい受付も「指名あり」を選んだところから（フリーのときだけ押しかえる）
   const grp = { active:"在籍", break:"お休み中", new:"入店前", interview:"面接中" };
   $("f_cast").innerHTML = `<option value="">（キャストを選ぶ）</option>` + Object.keys(grp).map(st=>{
@@ -197,10 +198,10 @@ function openForm(id){
   setRadio("f_afw", r.af_wish || ""); setRadio("f_rafw", r.rev_af_wish || ""); syncAfSel();
   $("optDetails").open = false;
   $("f_transport").value = r.transport || 0; $("f_discount").value = r.discount || 0; $("f_discnote").value = r.discount_note || "";
-  $("f_pay").value = id ? (r.payment === "card_paid" ? "card" : r.payment === "cash" && Number(r.card_total) > 0 ? "split" : (r.payment || "cash")) : "";
+  $("f_pay").value = kfill.includes("payment") ? "" : id ? (r.payment === "card_paid" ? "card" : r.payment === "cash" && Number(r.card_total) > 0 ? "split" : (r.payment || "cash")) : "";
   if($("f_cardpart")) $("f_cardpart").value = id && r.payment === "cash" && Number(r.card_total) > 0 ? Math.round(Number(r.card_total) / ((M.set.card || {}).rate || 1.15)) : "";
   $("f_confirm").value = r.confirm_call || ""; $("f_note").value = r.note || "";
-  visit = id ? (r.visit_kind || "new") : ""; mediaSel = (r.media || []).slice();
+  visit = kfill.includes("visit_kind") ? "" : id ? (r.visit_kind || "new") : ""; mediaSel = (r.media || []).slice();
   document.querySelectorAll("#formBg .miss").forEach(el=>el.classList.remove("miss"));
   const c = r.kb_customers || {};
   curCustomer = r.customer_id ? { id: r.customer_id, ...c } : null;
@@ -1183,10 +1184,13 @@ function paintReqBar(){
   let bar = $("reqBar");
   if(!bar){ const m = fb.querySelector(".drawer") || fb.querySelector(".modal"), h = $("formTitle"); if(!m) return; (h || m).insertAdjacentHTML(h ? "afterend" : "afterbegin", `<div id="reqBar" class="reqbar"></div>`); bar = $("reqBar"); }
   const cancelLike = ["cancel", "tobi", "flowed"].includes(($("f_status") || {}).value);
-  let list = []; try{ list = cancelLike ? [] : missingRequired(true); }catch(e){}
+  const flowed = ($("f_status") || {}).value === "flowed";
+  let list = []; try{ list = flowed ? tentativeMissing() : cancelLike ? [] : missingRequired(true); }catch(e){}
   bar.className = "reqbar " + (list.length ? "ng" : "ok");
-  bar.innerHTML = list.length ? `⚠️ 必須でまだ：${list.map(([n, id]) => `<button type="button" onclick="const el=$('${id}');if(el){el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.add('miss');}">${esc(n)}</button>`).join("")}`
+  bar.innerHTML = list.length ? `⚠️ 必須でまだ：${list.map(([n, id]) => `<button type="button" onclick="const el=$('${id}');if(el){el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.add('miss');}">${esc(n)}</button>`).join("")}${flowed ? "" : `<div style="font-weight:700;font-size:12px;margin-top:2px">まだ決まっていない・確かめることがあるときは「📌 仮予約で登録」（電話番号と名前だけでOK）</div>`}`
     : "✅ 必須はぜんぶ入っています";
+  // 💾 登録する：必須がまだなら、押せない見た目に（押すと、足りない項目と「📌 仮予約で登録」の案内が出る）2026/11/12
+  document.querySelectorAll('#formBg button[onclick="saveRes()"]').forEach(b => { b.classList.toggle("btn-off", !!list.length); b.title = list.length ? "必須がまだあります（まだ決まっていないときは「📌 仮予約で登録」）" : ""; });
   fb.style.setProperty("--reqh", bar.offsetHeight + "px");   // タイムラインは、この帯の下にくっつく
 }
 /* 📌 仮予約（2026/11/11 店長。「確認中にする」のチェックはやめて、こちらに）
@@ -1195,13 +1199,15 @@ function paintReqBar(){
    ・全部入れて、ふつうに「登録」したら仮予約の印は消える（お知らせも止まる） */
 let KARI = false;
 function isTentative(){ return KARI; }
-function tentativeMissing(){ return [[!$("f_store").value, "売上店舗", "f_store"]].filter(x => x[0]).map(x => [x[1], x[2]]); }
+// 仮予約・流れた予約で要るもの：電話番号と名前だけ（2026/11/12 店長。ほかは空でもいい）
+function tentativeMissing(){ return [[!digits($("f_phone").value), "電話番号", "f_phone"], [!$("f_name").value.trim(), "お客さんの名前", "f_name"]].filter(x => x[0]).map(x => [x[1], x[2]]); }
+let HAS_KARI_FILL = false;
+Promise.resolve(sb.from("kb_reservations").select("kari_fill").limit(1)).then(res => { HAS_KARI_FILL = !!res && !res.error; }).catch(() => {});
 let HAS_KARI = false;
 Promise.resolve(sb.from("kb_reservations").select("kari_at").limit(1)).then(res => { HAS_KARI = !!res && !res.error; }).catch(() => {});
 async function saveKari(){
   if(!KB.CAN_EDIT) return;
   if(!HAS_KARI){ toast("📌 仮予約には SQL 237 の実行が必要です"); return; }
-  if(!$("f_store").value){ toast("📌 仮予約でも、売上店舗だけは選んでください"); $("f_store").scrollIntoView({ block: "center" }); return; }
   KARI = true;
   try{ await saveRes(); } finally { KARI = false; }
 }
@@ -1210,6 +1216,7 @@ async function saveKari(){
   document.addEventListener("click", e => { if(e.target.closest && e.target.closest("#formBg")){ clearTimeout(reqT); reqT = setTimeout(paintReqBar, 400); } }, true); }
 document.head.insertAdjacentHTML("beforeend", `<style>.reqbar{position:sticky;top:0;z-index:30;margin:-4px 0 8px;padding:6px 10px;border-radius:12px;font-size:13px;font-weight:800;box-shadow:0 4px 10px -6px rgba(0,0,0,.3)}
   .reqbar.ng{background:#FFE8EC;border:2px solid #F09AAA;color:#B0213F} .reqbar.ok{background:#E5F6EC;border:2px solid #9AD3A8;color:#2e8b57}
+  #formBg .btn-off{opacity:.45;filter:grayscale(.7);box-shadow:none !important}
   .reqbar button{font-family:inherit;font-size:12.5px;font-weight:800;background:#fff;border:1.5px solid #F09AAA;color:#B0213F;border-radius:99px;padding:1px 8px;margin:2px 3px;cursor:pointer}</style>`);
 function markMissing(list){
   document.querySelectorAll("#formBg .miss").forEach(el=>el.classList.remove("miss"));
@@ -1608,18 +1615,20 @@ function startAt(){
 }
 async function saveRes(){
   if(!KB.CAN_EDIT){ toast("作成中のため、直せるのは店長だけです"); return; }
-  if(!KARI && !$("f_cast").value){ toast(isDummyStore($("f_store").value) ? "実際に行くキャストを選んでください" : "キャストを選んでください"); return; }
+  const LITE = KARI || ($("f_status") && $("f_status").value === "flowed");   // 📌 仮予約・流れた：電話番号と名前だけで登録できる（2026/11/12）
+  if(!LITE && !$("f_cast").value){ toast(isDummyStore($("f_store").value) ? "実際に行くキャストを選んでください" : "キャストを選んでください"); return; }
   // 専用在籍指名で子を選んでいるのに、名前の欄が空のとき（念のため）：選んだ子の専用の名前を入れなおす
   if(isDummyStore($("f_store").value) && !$("f_dummy").value && typeof dmMode !== "undefined" && dmMode === "named" && $("f_named") && $("f_named").value){ try{ onNamedPick(true); }catch(e){} }
-  if(!KARI && isDummyStore($("f_store").value) && !$("f_dummy").value){ toast(typeof dmMode !== "undefined" && dmMode === "named" ? "「ダミー or 本物の一覧」から指名された子（⭐ 本物）を選んでください" : "「ダミー or 本物の一覧」から選んでください（ダミー名がなければ ⚙️ から足せます）"); return; }
+  if(!LITE && isDummyStore($("f_store").value) && !$("f_dummy").value){ toast(typeof dmMode !== "undefined" && dmMode === "named" ? "「ダミー or 本物の一覧」から指名された子（⭐ 本物）を選んでください" : "「ダミー or 本物の一覧」から選んでください（ダミー名がなければ ⚙️ から足せます）"); return; }
   // 受付ルール：📣は全部チェック／✅はチェックするまで「〜待ち」でしか保存できない／⌛受けない長さは保存できない（キャンセル・トビは除く）
   if(!KARI && !$("f_status").value){ toast("⚠️ 状態を選んでください"); $("f_status").scrollIntoView({ block: "center" }); return; }
   const cancelLike = ["cancel", "tobi", "flowed"].includes($("f_status").value);
   // 必須の項目（キャンセル・トビにするときは、なくても保存できる）
   //   🟡 確認中（返事待ちの3つ）は、売上店舗・開始時刻・コースだけあれば登録できる（2026/11/11）
   const tentSave = !cancelLike && KARI;   // 📌 仮予約は、必須・確認をとばす
-  const miss = cancelLike ? [] : tentSave ? tentativeMissing() : missingRequired();
-  if(miss.length){ toast("⚠️ まだ入っていない必須の項目：" + miss.map(x=>x[0]).join("・")); markMissing(miss); return; }
+  //   ⚠️ 流れた：電話番号と名前は要る（受付と顧客台帳に残すため）。キャンセル・トビは今までどおり
+  const miss = LITE ? tentativeMissing() : cancelLike ? [] : missingRequired();
+  if(miss.length){ toast("⚠️ まだ入っていない必須の項目：" + miss.map(x=>x[0]).join("・") + (LITE ? "" : "　（まだ決まっていない・確かめることがあるときは「📌 仮予約で登録」をもう一度押してください）")); markMissing(miss); return; }
   const waiting = String($("f_status").value).startsWith("wait_");
   const ck = checksForSave();
   // 出禁・店NGのお客さんは受けない（NGが解除になったら「店NG」を「NGではない」に直してから）
@@ -1635,7 +1644,7 @@ async function saveRes(){
   if(!cancelLike && !tentSave && ck.missConfirm && !waiting){ toast("✅ キャストに確認してから受けるものがあります。確認したらチェック、まだなら状態を「キャスト返事待ち」に"); $("castChecks").scrollIntoView({ block: "center" }); return; }
   const checks = ck.list;
   if(!cancelLike && !tentSave && !$("f_free").value && (!radioVal("f_afw") || !radioVal("f_rafw"))){ toast("🔸 AF・逆AF のご希望を聞いて、選んでください"); $("optDetails").scrollIntoView({ block: "center" }); return; }
-  if(!tentSave && !$("f_course").value){ toast("コースを選んでください"); return; }
+  if(!LITE && !$("f_course").value){ toast("コースを選んでください"); return; }
   if(!(await KB.staffSession())){ toast("ログインの期限が切れました。ポータルから開き直してください"); return; }
   const c = calc(), by = KB.operatorName();
   try{
@@ -1711,11 +1720,15 @@ async function saveRes(){
       if(changed.length) toast("🔒 精算済（またはエクセルから取りこんだ）予約なので、金額は前のまま保存しました");
     }
     // 📌 仮予約：データベースの決まりで空にできない欄は、仮の値で入れる（支払い方法 → 現金・種別 → 新規）。あとで本登録するときに選びなおす 2026/11/12
-    if(KARI){
-      if(!["cash", "card", "card_paid"].includes(row.payment)) row.payment = "cash";
-      if(!["new", "repeat", "honshi"].includes(row.visit_kind)) row.visit_kind = "new";
+    //   空にした欄は kari_fill に残して、開きなおしたら「まだ選んでいない」にもどす（光ったまま）
+    if(LITE){
+      const fill = [];
+      if(!["cash", "card", "card_paid"].includes(row.payment)){ row.payment = "cash"; fill.push("payment"); }
+      if(!["new", "repeat", "honshi"].includes(row.visit_kind)){ row.visit_kind = "new"; fill.push("visit_kind"); }
       if("place_kind" in row && !["", "love", "biz", "home"].includes(row.place_kind || "")) row.place_kind = "";
-    }
+      if(!row.store_key) row.store_key = null;   // 売上店舗なし（SQL 238）
+      if(HAS_KARI_FILL) row.kari_fill = KARI ? fill : [];
+    } else if(HAS_KARI_FILL) row.kari_fill = [];
     if(editing) q(await sb.from("kb_reservations").update(row).eq("id", editing.id));
     else { row.created_by = by; const extra = partyExtraRows(row); q(await sb.from("kb_reservations").insert([row, ...extra])); if(extra.length) toast(`👥 ${extra.length + 1}人のキャストの予約を作りました`); }
     { const bd = $("f_day") && $("f_day").value; closeForm();
