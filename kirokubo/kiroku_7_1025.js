@@ -1777,5 +1777,154 @@ document.head.insertAdjacentHTML("beforeend", `<style>.tlloose{display:flex;flex
 ["change"].forEach(ev => document.addEventListener(ev, e => { const id = e.target && e.target.id; if(!["f_areaSel", "f_area", "f_place"].includes(id)) return;
   clearTimeout(window.__rccPlaceT); window.__rccPlaceT = setTimeout(() => { try{ const c = M.casts.find(x => x.id === $("f_cast").value); if(c) renderCastChecks(c); }catch(x){} }, 150); }, true));
 
+/* ---------- 📅 受付のタイムライン（2026/11/13 店長：見やすく作りなおし）
+   ・上（いつも見える）：選んだ子の写真・名前・今の状態・出勤／予約の件数・予約の時間・空きの時間／時間の帯（予約・この予約・空き・移動準備・いまの線）
+   ・下：予定一覧（前後の予約との間も。前の「前後の予約」の箱はここにまとめた）／案内できるコース（目安。押すとそのコース）
+   ・キャストを選んだときの大きい写真はやめて、タイムラインの左上に ---------- */
+const tl2Fmt = h => { h = Math.round(Number(h) * 60) / 60; const hh = Math.floor(h + 1e-9), mm = Math.round((h - hh) * 60); return (hh >= 24 ? "翌" + (hh - 24) : hh) + ":" + String(mm).padStart(2, "0"); };
+const TL2_WAIT = new Set(["wait_cast_reply", "wait_guest_reply", "wait_foreign_call", "checking"]);
+drawTimeline = function(){
+  const el = $("castTimeline"); if(!el) return;
+  let det = $("tl2Detail"); if(!det){ det = document.createElement("div"); det.id = "tl2Detail"; el.insertAdjacentElement("afterend", det); }
+  const c = M.casts.find(x => x.id === $("f_cast").value);
+  if(!c){ el.innerHTML = ""; det.innerHTML = ""; $("footWarn").textContent = ""; return; }
+  const bd = $("f_day") && $("f_day").value && $("f_day").value !== day ? $("f_day").value : "";
+  const od = bd ? otherDay[bd] : null; if(bd && !od) loadOtherDay(bd);
+  const sh = bd ? (od && od.sh) : shiftCache[day];
+  if(!sh && !bd){ loadShifts(day).then(() => drawTimeline()).catch(() => {}); }
+  const shift = sh ? (sh[c.shift_name] || sh[c.official_name]) : null;
+  const gap = (Number(c.interval_min) || 0) / 60;
+  const others = (bd ? (od ? od.rows : []) : rows).filter(r => r.cast_id === c.id && (!editing || r.id !== editing.id) && !["cancel", "tobi", "flowed"].includes(r.status) && r.start_at && r.end_at)
+    .map(r => { const s = hourOf(r.start_at); let e = hourOf(r.end_at); if(e < s) e += 24; return { r, s, e }; }).sort((x, y) => x.s - y.s);
+  let cur = null; const st = $("f_start").value;
+  if(st && last){ const [h, m] = st.split(":").map(Number); let s = h + m / 60; if(s < 8) s += 24; cur = { s, e: s + (minutesOf(last.course) + last.ext * 30 + last.date * 30) / 60 }; }
+  const clash = cur && others.some(o => o.s - gap < cur.e && cur.s < o.e + gap);
+  const outShift = cur && shift && (cur.s < shift.start || cur.e > shift.end);
+  $("footWarn").textContent = clash ? (gap ? "⚠️ 予約が重なっています（予約の間 " + c.interval_min + "分あけ）" : "⚠️ 予約が重なっています") : (outShift ? "⚠️ 出勤時間の外です" : "");
+  // 帯の範囲：出勤の時間（はみ出す予約があれば、そこまでのばす）
+  let a = shift ? shift.start : 11, b = shift ? shift.end : 29;
+  others.concat(cur ? [cur] : []).forEach(o => { a = Math.min(a, o.s - gap); b = Math.max(b, o.e + gap); });
+  a = Math.max(6, Math.floor(a)); b = Math.min(36, Math.ceil(b)); if(b - a < 3) b = a + 3;
+  const P = h => Math.max(0, Math.min(100, (h - a) / (b - a) * 100));
+  const nowH = !bd && day === KB.bizDateOf() ? nowHour() : null;
+  // 空き：出勤の中で、予約（＋あける時間）がないところ（今日は今から）
+  const busy = others.map(o => [o.s - gap, o.e + gap]).concat(cur ? [[cur.s - gap, cur.e + gap]] : []).sort((x, y) => x[0] - y[0]);
+  const free = [];
+  if(shift){ let t = nowH != null ? Math.max(shift.start, nowH) : shift.start;
+    busy.forEach(([x, y]) => { if(x > t) free.push([t, Math.min(x, shift.end)]); t = Math.max(t, y); });
+    if(t < shift.end) free.push([t, shift.end]); }
+  const freeOk = free.filter(f => f[1] - f[0] >= 0.5);
+  const resH = Math.round(others.reduce((s, o) => s + (o.e - o.s), 0) * 10) / 10, freeH = Math.round(freeOk.reduce((s, f) => s + (f[1] - f[0]), 0) * 10) / 10;
+  // 今の状態
+  const cd = (!bd && castDays[c.id]) || {};
+  const working = nowH != null && others.find(o => o.s <= nowH && nowH < o.e);
+  const stChip = cd.status === "欠勤" ? ["欠勤", "ng"] : cd.settled ? ["精算済", "off"] : cd.status === "お茶" ? ["☕ お茶", "tea"]
+    : working ? ["💼 仕事中", "work"] : nowH != null && shift ? (nowH < shift.start ? ["出勤前", "pre"] : nowH < shift.end ? ["🟢 出勤中", "on"] : ["退勤", "off"]) : shift ? ["出勤予定", "pre"] : ["シフトなし", "off"];
+  const span = b - a, step = span > 14 ? 3 : span > 8 ? 2 : 1, ticks = [];
+  for(let h = a; h <= b; h += step) ticks.push(h);
+  const stLabel = r => STATUS[r.status] || r.status || "";
+  const isWait = r => TL2_WAIT.has(r.status) || !!r.kari_at;
+  const chip = k => typeof KBF !== "undefined" && k ? KBF.storeChip(k) : "";
+  const blocks = [];
+  if(gap) others.forEach(o => blocks.push(`<div class="b mv" style="left:${P(o.s - gap)}%;width:${P(o.s) - P(o.s - gap)}%" title="移動・準備"></div><div class="b mv" style="left:${P(o.e)}%;width:${P(o.e + gap) - P(o.e)}%" title="移動・準備"></div>`));
+  freeOk.forEach(f => blocks.push(`<div class="b free" style="left:${P(f[0])}%;width:${P(f[1]) - P(f[0])}%"><span><b>空き</b><i>${tl2Fmt(f[0])}〜${tl2Fmt(f[1])}</i><i>最大${Math.round((f[1] - f[0]) * 60)}分</i></span></div>`));
+  others.forEach(o => blocks.push(`<div class="b res ${isWait(o.r) ? "wait" : "ok"}${o.r.status === "done" ? " dn" : ""}" style="left:${P(o.s)}%;width:${Math.max(1.5, P(o.e) - P(o.s))}%" title="${esc(hm(o.r.start_at) + "〜" + hm(o.r.end_at) + " " + (o.r.area || "") + " " + stLabel(o.r))}">
+    <span><b>📍${esc(o.r.area || "場所未定")}</b><i>${esc(hm(o.r.start_at))}-${esc(hm(o.r.end_at))}</i><i>${chip(o.r.store_key)}<em>${esc(stLabel(o.r))}</em></i></span></div>`));
+  if(cur) blocks.push(`<div class="b cur${clash ? " clash" : ""}" style="left:${P(cur.s)}%;width:${Math.max(1.5, P(cur.e) - P(cur.s))}%"><span><b>▶ この予約</b><i>${esc(st)}〜${esc($("endView").textContent)}</i>${clash ? "<em>重なっています</em>" : ""}</span></div>`);
+  const nowLine = nowH != null && nowH >= a && nowH <= b ? `<div class="tlnow" style="left:${P(nowH)}%"><span>現在 ${tl2Fmt(nowH)}</span></div>` : "";
+  el.innerHTML = `<div class="tl2">
+    <div class="tl2h">${typeof KBF !== "undefined" ? KBF.img(c, 52, $("f_store").value) : ""}
+      <div class="tl2n"><div><b>${esc(c.official_name || c.temp_name)}</b><span class="tl2st ${stChip[1]}">${stChip[0]}</span>${cd.full_at ? `<span class="tlfull">🈵 満了</span>` : ""}</div>
+        <small>${bd ? "📅 " + Number(bd.slice(5, 7)) + "/" + Number(bd.slice(8)) + "　" : ""}${shift ? `出勤 ${tl2Fmt(shift.start)}〜${tl2Fmt(shift.end)}（${Math.round((shift.end - shift.start) * 10) / 10}時間）${shift.confirmed ? "" : "・未確定"}` : sh ? "シフトが見つかりません" : "シフトを読み込み中…"}</small></div>
+      <div class="tl2s"><span>予約 <b>${others.length}</b>件</span><span>予約 <b>${resH}</b>時間</span><span>空き <b>${freeH}</b>時間</span></div></div>
+    <div class="tl2ax">${ticks.map(h => `<span style="left:${P(h)}%">${h >= 24 ? "翌" + (h - 24) : h}時</span>`).join("")}</div>
+    <div class="tl2bar">${shift ? `<div class="shift" style="left:${P(shift.start)}%;width:${P(shift.end) - P(shift.start)}%"></div>` : ""}${blocks.join("")}${nowLine}</div></div>`;
+  // 下：予定一覧（前後の予約との間も）
+  const items = others.map(o => ({ s: o.s, e: o.e, o })).concat(cur ? [{ s: cur.s, e: cur.e, cur: true }] : []);
+  freeOk.forEach(f => items.push({ s: f[0], e: f[1], free: true }));
+  items.sort((x, y) => x.s - y.s || (x.free ? 1 : -1));
+  let list = "", prev = null;
+  items.forEach(it => {
+    if(!it.free && prev){ const g = Math.round((it.s - prev.e) * 60), bad = g < 0 || (gap && g < c.interval_min);
+      list += `<div class="tl2gap${bad ? " bad" : ""}">${g < 0 ? `🚫 ${-g}分 重なっています` : `↕ 前の予約との間 ${g}分${gap ? `（${c.interval_min}分あける）` : ""}${bad ? "　⚠️ 足りません" : ""}`}</div>`; }
+    if(it.free) list += `<div class="tljob free"><b>${tl2Fmt(it.s)}〜${tl2Fmt(it.e)}</b> 空き（最大${Math.round((it.e - it.s) * 60)}分）</div>`;
+    else if(it.cur) list += `<div class="tljob cur"><b>${esc(st)}〜${esc($("endView").textContent)}</b> ▶ この予約　📍${esc([$("f_area").value, $("f_address").value].filter(Boolean).join(" ") || "場所未定")}</div>`;
+    else { const r = it.o.r;
+      list += `<div class="tljob ${isWait(r) ? "wait" : "ok"}${nowH != null && it.s <= nowH && nowH < it.e ? " now" : ""}"><b>${esc(hm(r.start_at))}〜${esc(hm(r.end_at))}</b><small>（${Math.round((it.e - it.s) * 60)}分）</small> <span>📍 ${esc([r.area, r.address].filter(Boolean).join(" ") || "場所未定")}</span> ${chip(r.store_key)} <span class="st ${esc(r.status)}">${esc(stLabel(r))}</span></div>`; }
+    if(!it.free) prev = it;
+  });
+  // 案内できるコース（目安）：この予約の開始（なければ今・出勤の始まり）から
+  let base = cur ? cur.s : !shift ? null : nowH != null && nowH > shift.start ? Math.ceil(nowH * 12) / 12 : shift.start;
+  // いま仕事中なら、その仕事が終わって（あける時間のあと）から
+  if(!cur && base != null) others.forEach(o => { if(o.s - gap <= base && base < o.e + gap) base = Math.ceil((o.e + gap) * 12) / 12; });
+  const store = $("f_store").value || "";
+  const cs = [...new Set((M.prices || []).filter(p => (!store || p.store_key === store) && /^\d+$/.test(String(p.course))).map(p => Number(p.course)))].filter(m => m >= 60).sort((x, y) => x - y).slice(0, 6);
+  const cards = base == null ? "" : cs.map(m => {
+    const e = base + m / 60, hit = others.find(o => o.s - gap < e && base < o.e + gap);
+    const why = hit ? `${esc(hm(hit.r.start_at))}の予約` : shift && e > shift.end + 0.01 ? `退勤${tl2Fmt(shift.end)}をこえる` : "";
+    return why ? `<div class="tl2c ng"><b>${m}分</b><small>× 不可（${why}）</small></div>`
+      : `<button type="button" class="tl2c" onclick="tl2Pick(${m},${base})"><b>${m}分</b><small>〜${tl2Fmt(e)}</small></button>`;
+  }).join("");
+  det.innerHTML = `<div class="tl2d">
+    <div class="tl2box"><div class="tl2t">📋 予定一覧（時間順）</div><div class="tljobs">${list || `<div class="tljob none">この日はまだ仕事が入っていません</div>`}</div></div>
+    <div class="tl2box"><div class="tl2t">⚡ ${cur ? `${esc(st)}から入れられるコース（目安）` : nowH != null ? "今すぐ案内できるコース（目安）" : "出勤から案内できるコース（目安）"}</div>
+      ${base == null ? `<div class="hint">シフトがないので出せません</div>` : `<div class="tl2cs">${cards || `<div class="hint">このお店のコースが見つかりません</div>`}</div>
+      <div class="hint" style="margin-top:4px">押すと、そのコース${cur ? "" : "と開始時刻"}を入れます</div>`}</div></div>
+    <div class="tl2lg"><span><i class="ok"></i>予約</span><span><i class="wait"></i>返事待ち・仮予約</span><span><i class="cur"></i>この予約</span><span><i class="free"></i>空き</span>${gap ? `<span><i class="mv"></i>移動・準備（${c.interval_min}分）</span>` : ""}<span><i class="now"></i>現在時刻</span></div>`;
+};
+// コースを押したら、そのコース（開始時刻がまだなら、その時刻も）
+function tl2Pick(m, base){
+  const sel = $("f_course"); if(!sel || ![...sel.options].some(o => o.value === String(m))) return;
+  sel.value = String(m);
+  if(!$("f_start").value && base != null){ let h = Math.floor(base), mm = Math.round((base - h) * 60); if(mm === 60){ h++; mm = 0; } $("f_start").value = String(h % 24).padStart(2, "0") + ":" + String(mm).padStart(2, "0"); }
+  sel.dispatchEvent(new Event("change")); recalc();
+  toast(`⏳ ${m}分コースにしました`);
+}
+// キャストを選んだときの大きい写真（#castFace）はやめる：写真はタイムラインの左上に
+{ const __onCastTl2 = onCast; onCast = function(){ const r = __onCastTl2.apply(this, arguments); const f = $("castFace"); if(f) f.innerHTML = ""; return r; }; }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  #castFace,#neighborBox{display:none}
+  /* キャストを選んだら、ほかの子はグレーに（選んだ子だけ目立つ）2026/11/13 */
+  #castGrid:has(.cg-c.on) .cg-c:not(.on){filter:grayscale(1);opacity:.4;transition:filter .15s,opacity .15s}
+  #castGrid:has(.cg-c.on) .cg-c:not(.on):hover{filter:none;opacity:1}
+  #castTimeline .tl2{background:#1E1B3A;color:#EDEBFA;border-radius:16px;padding:10px 12px 12px;box-shadow:0 6px 16px rgba(30,27,58,.28)}
+  .tl2h{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .tl2h img,.tl2h .kbface{margin:0;flex:none}
+  .tl2n{flex:1;min-width:150px} .tl2n b{font-size:18px} .tl2n small{display:block;color:#C9C5EE;font-size:12.5px;margin-top:2px}
+  .tl2st{display:inline-block;margin-left:8px;font-size:12px;font-weight:800;border-radius:99px;padding:1px 10px;background:#2E2A55;color:#C9C5EE;border:1.5px solid #5B54A8;vertical-align:3px}
+  .tl2st.on{background:#123B2A;color:#7EE2A8;border-color:#2F9E6E} .tl2st.work{background:#3B2A10;color:#FFC163;border-color:#E09A2B} .tl2st.ng{background:#4A1620;color:#FF9AAE;border-color:#E02424} .tl2st.tea{background:#163B1C;color:#8FE09A;border-color:#43A047}
+  .tl2s{display:flex;gap:6px;flex-wrap:wrap} .tl2s span{background:#2A2650;border:1.5px solid #4A448F;border-radius:12px;padding:3px 10px;font-size:12.5px;white-space:nowrap} .tl2s b{font-size:17px;color:#9CF0C4;margin:0 2px}
+  .tl2ax{position:relative;height:16px;margin:10px 4px 2px;font-size:11px;color:#B7B2E4} .tl2ax span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+  .tl2ax span:first-child{transform:none} .tl2ax span:last-child{transform:translateX(-100%)}
+  .tl2bar{position:relative;height:66px;background:#2A2650;border-radius:12px;overflow:hidden}
+  .tl2bar .shift{position:absolute;top:0;bottom:0;background:#38337A}
+  .tl2bar .b{position:absolute;top:5px;bottom:5px;border-radius:9px;overflow:hidden;display:flex;align-items:center;padding:0 6px;font-size:11.5px;line-height:1.25}
+  .tl2bar .b span{display:flex;flex-direction:column;min-width:0;white-space:nowrap} .tl2bar .b span > *{overflow:hidden;text-overflow:ellipsis}
+  .tl2bar .b i,.tl2bar .b em{font-style:normal} .tl2bar .b em{font-weight:800;font-size:10.5px;margin-left:3px}
+  .tl2bar .b .kbstore{font-size:10px;padding:0 6px}
+  .tl2bar .res.ok{background:#BDEFC8;color:#173D22;border:2px solid #7FD796} .tl2bar .res.wait{background:#FFE08A;color:#4D3A00;border:2px solid #F2B705} .tl2bar .res.dn{opacity:.6}
+  .tl2bar .cur{background:#FF9F43;color:#2A1600;border:2px solid #fff;z-index:2} .tl2bar .cur.clash{background:#EF4444;color:#fff}
+  .tl2bar .free{border:1.5px dashed #6E67C9;color:#C9C5EE;justify-content:center;text-align:center} .tl2bar .free span{align-items:center}
+  .tl2bar .mv{background:repeating-linear-gradient(135deg,#5A54A8 0 5px,#2A2650 5px 10px);border-radius:5px;padding:0}
+  .tl2bar .tlnow{position:absolute;top:0;bottom:0;width:3px;margin-left:-1px;background:#FF4D8D;box-shadow:0 0 8px 2px rgba(255,77,141,.8);animation:none;z-index:3}
+  .tl2bar .tlnow span{position:absolute;top:2px;left:5px;background:#FF4D8D;color:#fff;font-size:10.5px;font-weight:900;border-radius:99px;padding:0 6px;white-space:nowrap}
+  #tl2Detail .tl2d{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:10px;margin:8px 0 6px}
+  @media (max-width:700px){ #tl2Detail .tl2d{grid-template-columns:1fr} .tl2bar{height:60px} .tl2bar .b{font-size:10.5px;padding:0 4px} .tl2n b{font-size:16px} }
+  #tl2Detail .tl2box{background:#F6F4FF;border:1.5px solid #D9D3F5;border-radius:14px;padding:8px 10px;min-width:0}
+  #tl2Detail .tl2t{font-weight:900;font-size:13.5px;color:#3B3480;margin-bottom:6px}
+  #tl2Detail .tljobs{display:flex;flex-direction:column;gap:3px;margin:0;max-height:none;overflow:visible}
+  #tl2Detail .tljob{font-size:13px;color:#2A2650;background:#fff;border:1.5px solid #E2DDF7;border-left:6px solid #7FD796;border-radius:10px;padding:4px 8px;display:flex;gap:4px 6px;align-items:center;flex-wrap:wrap;outline:none}
+  #tl2Detail .tljob.wait{border-left-color:#F2B705} #tl2Detail .tljob.cur{border-left-color:#FF9F43;background:#FFF5EA} #tl2Detail .tljob.free{border-left-color:#8E87E0;border-style:dashed;border-left-style:solid;color:#4B4590;background:#FBFAFF}
+  #tl2Detail .tljob.now{box-shadow:0 0 0 2px #FF4D8D} #tl2Detail .tljob.none{border-left-color:#ccc;color:#888}
+  #tl2Detail .tl2gap{font-size:12px;font-weight:800;color:#5B54A8;padding-left:14px} #tl2Detail .tl2gap.bad{color:#C0392B}
+  #tl2Detail .tl2cs{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px}
+  @media (max-width:700px){ #tl2Detail .tl2cs{grid-template-columns:1fr 1fr} }
+  #tl2Detail .tl2c{font-family:inherit;border:2px solid #7B72E0;background:#EEEBFF;color:#2E2770;border-radius:12px;padding:5px 4px;text-align:center;cursor:pointer;display:flex;flex-direction:column;align-items:center}
+  #tl2Detail .tl2c b{font-size:17px} #tl2Detail .tl2c small{font-size:12px;font-weight:700} #tl2Detail button.tl2c:hover{background:#E0DBFF}
+  #tl2Detail .tl2c.ng{border-color:#D6D3E6;background:#F3F2F7;color:#9A97AE;cursor:default}
+  #tl2Detail .tl2lg{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:#6B6690;margin-bottom:6px} #tl2Detail .tl2lg i{display:inline-block;width:18px;height:10px;border-radius:3px;margin-right:4px;vertical-align:middle}
+  .tl2lg i.ok{background:#BDEFC8} .tl2lg i.wait{background:#FFE08A} .tl2lg i.cur{background:#FF9F43} .tl2lg i.free{border:1.5px dashed #6E67C9} .tl2lg i.mv{background:repeating-linear-gradient(135deg,#5A54A8 0 4px,#C9C5EE 4px 8px)} #tl2Detail .tl2lg i.now{background:#FF4D8D;width:4px}
+</style>`);
+
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
 init();
