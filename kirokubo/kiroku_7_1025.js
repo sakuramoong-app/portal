@@ -1518,9 +1518,9 @@ function pickCastGrid(id){
 { const __fillCastSelG = fillCastSel; fillCastSel = function(){ const r = __fillCastSelG.apply(this, arguments); paintCastGrid(); return r; }; }
 { const __onCastG = onCast; onCast = function(){ const r = __onCastG.apply(this, arguments); document.querySelectorAll("#castGrid .cg-c").forEach(b => b.classList.toggle("on", (b.getAttribute("onclick") || "").includes("'" + $("f_cast").value + "'"))); return r; }; }
 document.head.insertAdjacentHTML("beforeend", `<style>
-  #castGrid{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;max-height:380px;overflow:auto;padding:2px;width:100%;box-sizing:border-box}   /* 横いっぱい（1行に6〜7人）2026/11/12 */
+  #castGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:6px;margin-top:6px;max-height:380px;overflow:auto;padding:2px;width:100%;box-sizing:border-box}   /* 右の余白が出ないように、1人ずつの幅を広げてならべる（2026/11/12） */   /* 横いっぱい（1行に6〜7人）2026/11/12 */
   #castGrid .cg-jobs{display:flex;flex-wrap:wrap;justify-content:center;gap:2px;font-size:10.5px;font-weight:800;line-height:1.3} #castGrid .cg-jobs i{font-style:normal;background:#EEF4FF;color:#2b5aa8;border-radius:6px;padding:0 3px} #castGrid .cg-jobs i.cg-none{background:#F1F8F1;color:#2e8b57} #castGrid .cg-full{background:#E02424;color:#fff;border-radius:6px;padding:0 4px}
-  #castGrid .cg-c{font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:2px;width:92px;padding:5px 3px 6px;border:2px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
+  #castGrid .cg-c{font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:2px;width:auto;padding:5px 3px 6px;border:2px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
   #castGrid .cg-c .kbface{margin:0}
   #castGrid .cg-c:hover{border-color:#F2A7C3}
   #castGrid .cg-c.on{border-color:#E5638C;background:#FFE8EF;box-shadow:0 0 0 3px #F8BBD0}
