@@ -2115,14 +2115,15 @@ function cc2Build(){
     <div class="cc2g">
       <div class="cc2col">
         <div class="cc2box memo"><div class="cc2t">📝 お客様メモ</div>${String(c.note || "").trim() ? `<div class="cc2note">${esc(String(c.note).trim()).replace(/\n/g, "<br>")}</div>` : `<div class="cc2none">メモなし</div>`}</div>
-        <div class="cc2box"><div class="cc2t">👑 指名の傾向</div>
-          ${noms.length ? `<div class="cc2noms">${noms.slice(0, 5).map((n, i) => `<span class="${i < 3 ? "top" : ""}">${medal[i] || ""}<b>${esc(n[0])}</b>${n[1]}回</span>`).join("")}</div>` : `<div class="cc2none">指名なし</div>`}
+        <div class="cc2box"><div class="cc2t">💃 行ったことのあるキャスト <small>（実際に行った子・回数の多い順）</small></div>
+          ${cc2WentHtml()}
           <div class="cc2sub">${free ? `フリー ${free}回　` : ""}${stores.length ? `よく使うお店：${stores.map(s => esc(s[0]) + "（" + s[1] + "）").join("・")}　` : ""}${courses.length ? `コース：${courses.map(s => esc(s[0]) + "（" + s[1] + "）").join("・")}` : ""}</div></div>
       </div>
       <div class="cc2box"><div class="cc2t">📋 利用履歴とメモ <small>（新しい順）</small></div><div id="cc2Hist"></div></div>
     </div>`;
   box.insertAdjacentElement("afterbegin", card);
   cc2More = false; cc2PaintHist(); cc2LoadMemo(c, seen.slice(0, 15));
+  try{ paintCastGrid(); }catch(e){}   // 写真の一覧に「行った」の印
   return card;
 }
 // もとの部品を、決まった場所へ移す（あとから足される部品も：トビ・キャストNG・交通費・タグ・副番号）
@@ -2174,6 +2175,69 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .cc2st{font-size:11.5px;font-weight:900;border-radius:99px;padding:1px 9px;border:1.5px solid} .cc2st.ok{color:#1E7B46;border-color:#7FD796;background:#EFFBF2} .cc2st.x{color:#B0213F;border-color:#F1A9AF;background:#FFF0F2}
   .cc2st.t{color:#fff;border-color:#C62828;background:#C62828} .cc2st.f{color:#6B6690;border-color:#D6D3E6;background:#F3F2F7} .cc2st.r{color:#2b5aa8;border-color:#9DBCEB;background:#EEF4FF}
   .cc2more{margin-top:5px;font-family:inherit;border:1.5px solid #DCD6FA;background:#F3F1FF;color:#3B3480;font-weight:800;border-radius:10px;padding:4px 10px;cursor:pointer;font-size:12.5px}
+</style>`);
+
+/* ---------- 💃 行ったことのあるキャスト（2026/11/13 店長：エイティーン・極門などダミー店のときに、実際に行った子がわかるように）
+   ・お客様情報：実際に行った子（ダミー店はダミー名ではなく、行った本人）を回数の多い順。指名／フリー・最後に行った日・どのダミー名で行ったか
+   ・キャストを選ぶ写真の一覧：行ったことのある子に「🔁 ○回」の印（キャンセル・トビ・流れた・これからの予約は数えない） ---------- */
+function cc2CastIdOf(p){
+  if(p.cast_id) return p.cast_id;
+  const raw = String(p.cast_raw || "").trim(); if(!raw) return "";
+  const c = M.casts.find(x => [x.official_name, x.temp_name, x.shift_name].some(n => n && String(n).trim() === raw));
+  return c ? c.id : "";
+}
+function cc2Went(){
+  const m = new Map();
+  if(!curCustomer || !Array.isArray(custSeen)) return m;
+  const today = KB.bizDateOf();
+  custSeen.filter(p => cc2Live(p) && (p.excel || p.status === "done" || String(p.biz_date) < today)).forEach(p => {
+    const id = cc2CastIdOf(p), key = id || "raw:" + String(p.cast_raw || "").trim();
+    if(key === "raw:") return;
+    const w = m.get(key) || { id, name: id ? castName(id) : String(p.cast_raw).trim(), n: 0, nom: 0, free: 0, last: "", dummies: new Set(), stores: new Set() };
+    w.n++; if(isFreeVisit(p)) w.free++; else w.nom++;
+    if(!w.last || String(p.biz_date) > w.last) w.last = p.biz_date || "";
+    if(p.dummy_name) w.dummies.add(p.dummy_name);
+    const st = p.store_key ? storeLabel(p.store_key) : p.store_raw; if(st) w.stores.add(st);
+    m.set(key, w);
+  });
+  return m;
+}
+function cc2WentHtml(){
+  const l = [...cc2Went().values()].sort((a, b) => b.n - a.n || String(b.last).localeCompare(String(a.last)));
+  if(!l.length) return `<div class="cc2none">まだ行った子はいません</div>`;
+  const store = $("f_store") ? $("f_store").value : "";
+  return `<div class="cc2went">${l.map(w => { const c = w.id ? M.casts.find(x => x.id === w.id) : null;
+    return `<div class="cc2w">${c && typeof KBF !== "undefined" ? KBF.img(c, 30, store) : `<span class="cc2wn">?</span>`}
+      <div class="cc2wi"><div><b>${esc(w.name)}</b> <span class="cc2wc">${w.n}回</span>${w.nom ? `<span class="cc2wt nom">指名${w.nom}</span>` : ""}${w.free ? `<span class="cc2wt fr">フリー${w.free}</span>` : ""}</div>
+        <small>最後 ${cc2Date(w.last)}　${[...w.stores].map(esc).join("・")}${w.dummies.size ? `　🎭 ${[...w.dummies].map(esc).join("・")} として` : ""}</small></div></div>`; }).join("")}</div>`;
+}
+{ const __paintCastGridWent = paintCastGrid; paintCastGrid = function(){
+  const r = __paintCastGridWent.apply(this, arguments);
+  const box = $("castGrid"); if(!box) return r;
+  const went = cc2Went();
+  box.querySelectorAll(".cg-c").forEach(b => {
+    b.querySelectorAll(".cg-went").forEach(x => x.remove()); b.classList.remove("went");
+    const m = (b.getAttribute("onclick") || "").match(/'([^']+)'/), w = m && went.get(m[1]);
+    if(w){ b.classList.add("went"); b.insertAdjacentHTML("afterbegin", `<span class="cg-went" title="このお客さんに行ったことがある（${w.n}回・最後 ${esc(cc2Date(w.last))}）">🔁 行った ${w.n}回</span>`); }
+  });
+  return r; }; }
+{ const __lookupCustomerWent = lookupCustomer; lookupCustomer = async function(){ const r = await __lookupCustomerWent.apply(this, arguments); try{ paintCastGrid(); }catch(e){} return r; }; }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .cc2went{display:flex;flex-direction:column;gap:4px;max-height:260px;overflow:auto}
+  .cc2w{display:flex;gap:8px;align-items:center;border:1.5px solid #E2DDF7;border-radius:10px;padding:4px 8px;background:#FBFAFF}
+  .cc2w img,.cc2w .kbface{margin:0;flex:none} .cc2wn{width:30px;height:40px;border-radius:6px;background:#EEE;display:flex;align-items:center;justify-content:center;color:#999;flex:none}
+  .cc2wi{min-width:0} .cc2wi b{font-size:14.5px} .cc2wi small{display:block;font-size:11.5px;color:var(--sub);font-weight:700}
+  .cc2wc{font-weight:900;color:#fff;background:#E5638C;border-radius:99px;padding:0 8px;font-size:12px}
+  .cc2wt{font-size:11px;font-weight:800;border-radius:99px;padding:0 7px;margin-left:4px;border:1.5px solid} .cc2wt.nom{color:#B0306A;border-color:#F2A7C3;background:#FFF0F6} .cc2wt.fr{color:#6B6690;border-color:#D6D3E6;background:#F3F2F7}
+  #castGrid .cg-c{position:relative}
+  #castGrid .cg-c.went{border-color:#E5638C}
+  #castGrid .cg-went{position:absolute;top:3px;left:3px;right:3px;z-index:1;background:#E5638C;color:#fff;font-size:10.5px;font-weight:900;border-radius:8px;padding:1px 4px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  /* 🚨 重要の枠：読む気になる見た目（赤い見出しの帯・濃く大きい文字）2026/11/13 */
+  .cc2imp{border:3px solid #D32F2F;background:#fff;box-shadow:0 0 0 4px rgba(229,72,77,.18);padding:0 10px 10px;overflow:hidden}
+  .cc2imp > .cc2t{background:#D32F2F;color:#fff !important;font-size:17px;letter-spacing:.5px;padding:7px 12px;margin:0 -10px 2px}
+  .cc2imp .warn,.cc2imp .ngask{color:#5A0A10 !important;font-size:15px !important;font-weight:700 !important;line-height:1.6;background:#FFF1F2 !important;border:none !important;border-left:7px solid #D32F2F !important;border-radius:8px;padding:8px 12px !important}
+  .cc2imp .warn b,.cc2imp .ngask b{color:#B71C1C;font-weight:900}
+  .cc2imp .tobibox{border-width:2.5px}
 </style>`);
 
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
