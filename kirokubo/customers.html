@@ -623,7 +623,7 @@ function paintNgReview(){
   const done = ngRev.filter(x => x.done).length, list = ngRev.filter(x => !ngRevHideDone || !x.done || x.was);
   const ed = KB.CAN_EDIT;
   bg.innerHTML = `<div class="ngr">
-    <div class="ngrh"><b>🔎 店NGの見比べ</b><span class="ngrp">確認ずみ <b>${done}</b> ／ ${ngRev.length}人<i style="width:${ngRev.length ? Math.round(done / ngRev.length * 100) : 0}%"></i></span>
+    <div class="ngrh"><b>🔎 店NGの見比べ</b><button class="btn btn-ghost btn-sm" onclick="openCastNgReview()">🙅 キャストNGへ</button><span class="ngrp">確認ずみ <b>${done}</b> ／ ${ngRev.length}人<i style="width:${ngRev.length ? Math.round(done / ngRev.length * 100) : 0}%"></i></span>
       <label style="font-size:12.5px;font-weight:700"><input type="checkbox" ${ngRevHideDone ? "checked" : ""} onchange="ngRevHideDone=this.checked;paintNgReview()"> 確認ずみを隠す</label>
       <button class="btn btn-ghost btn-sm" onclick="$('ngRevBg').remove()">閉じる</button></div>
     <div class="hint" style="margin:0 0 8px">最後に来た日が新しい人（また来そうな人）から順です。<b>📋 A123</b> を押すと行番号をコピー → エクセルで <b>Ctrl+G</b> → 貼って Enter で、その行に飛びます。</div>
@@ -666,6 +666,97 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .ngrcp{font-family:inherit;font-weight:900;border:1.5px solid #7FB2E5;background:#EEF6FF;color:#1f5d99;border-radius:8px;padding:1px 8px;cursor:pointer;margin-right:4px} .ngrcp.no{border-color:#ddd;background:#f6f6f6;color:#999;cursor:default}
   .ngrb{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px} .ngrres{font-weight:900;color:#2e8b57}
 </style>`);
+</script>
+<script>
+/* ---------- 🙅 キャストNGの見比べ（2026/11/13 店長）：店NGの見比べと同じやり方で、キャストNGを1件ずつ
+   ・また来そうなお客さん（最後に来た日が新しい人）から順に。確認ずみ（ask_done）は下
+   ・もとのエクセルの行（その子の「🙅」の印がついた回・備考にその子の名前がある回）。📋 A123 で行番号をコピー
+   ・「✅ NGで正しい」→ 確認ずみの印だけ（ask_done）／「❌ NGではない」→ そのキャストNGを外す（顧客台帳の「外す」と同じ。エクセルの回の🙅の印も外す）
+   ・押しまちがいは「↩ 戻す」（外したものを元どおりに入れなおす） ---------- */
+let cngRev = null, cngRevHideDone = true;
+async function openCastNgReview(){
+  let bg = $("ngRevBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "ngRevBg"; bg.className = "ngrbg"; document.body.appendChild(bg);
+    bg.addEventListener("click", e => { if(e.target === bg) bg.remove(); }); }
+  bg.innerHTML = `<div class="ngr"><div class="ngrh"><b>🙅 キャストNGの見比べ</b><button class="btn btn-ghost btn-sm" onclick="$('ngRevBg').remove()">閉じる</button></div><div class="empty">読み込んでいます…</div></div>`;
+  try{
+    const ns = q(await sb.from("kb_cust_cast_ng").select("*").limit(10000)) || [];
+    const ids = [...new Set(ns.map(n => n.customer_id))], cust = {}, hist = {}, last = {};
+    for(let i = 0; i < ids.length; i += 200){
+      const part = ids.slice(i, i + 200);
+      const [c, h, r] = await Promise.all([
+        sb.from("kb_customers").select("id,name,phone").in("id", part),
+        sb.from("kb_cust_history").select("id,customer_id,biz_date,src_row,memo,status,cast_id,cast_raw,cast_ng").in("customer_id", part).limit(20000),
+        sb.from("kb_reservations").select("customer_id,biz_date").in("customer_id", part).eq("deleted", false).limit(20000)]);
+      (c.data || []).forEach(x => { cust[x.id] = x; });
+      (h.data || []).forEach(x => { (hist[x.customer_id] = hist[x.customer_id] || []).push(x); if(x.biz_date && (!last[x.customer_id] || x.biz_date > last[x.customer_id])) last[x.customer_id] = x.biz_date; });
+      (r.data || []).forEach(x => { if(x.biz_date && (!last[x.customer_id] || x.biz_date > last[x.customer_id])) last[x.customer_id] = x.biz_date; });
+    }
+    cngRev = ns.map(n => {
+      const nm = n.cast_id ? castLabel(n.cast_id) : n.cast_name, short = String(n.cast_name || nm || "").trim();
+      const hs = (hist[n.customer_id] || []).slice().sort((a, b) => String(b.biz_date || "").localeCompare(String(a.biz_date || "")));
+      const same = x => (n.cast_id && x.cast_id === n.cast_id) || (short && String(x.cast_raw || "").includes(short));
+      let src = hs.filter(x => x.cast_ng && same(x));
+      if(!src.length) src = hs.filter(x => short && String(x.memo || "").includes(short) && NGR_WORDS.test(x.memo || ""));
+      if(!src.length) src = hs.filter(same);
+      return { n, c: cust[n.customer_id] || { id: n.customer_id }, nm: nm || short || "（名前なし）", last: last[n.customer_id] || "", src: src.slice(0, 4), done: !!n.ask_done, was: null };
+    }).sort((a, b) => (a.done - b.done) || String(b.last).localeCompare(String(a.last)));
+  }catch(e){ bg.querySelector(".ngr").innerHTML = `<div class="warn">読めませんでした：${esc(e.message || e)}</div>`; return; }
+  paintCastNgReview();
+}
+function paintCastNgReview(){
+  const bg = $("ngRevBg"); if(!bg || !cngRev) return;
+  const done = cngRev.filter(x => x.done).length, list = cngRev.filter(x => !cngRevHideDone || !x.done || x.was), ed = KB.CAN_EDIT;
+  bg.innerHTML = `<div class="ngr">
+    <div class="ngrh"><b>🙅 キャストNGの見比べ</b><button class="btn btn-ghost btn-sm" onclick="openNgReview()">⚠️ 店NGへ</button>
+      <span class="ngrp">確認ずみ <b>${done}</b> ／ ${cngRev.length}件<i style="width:${cngRev.length ? Math.round(done / cngRev.length * 100) : 0}%"></i></span>
+      <label style="font-size:12.5px;font-weight:700"><input type="checkbox" ${cngRevHideDone ? "checked" : ""} onchange="cngRevHideDone=this.checked;paintCastNgReview()"> 確認ずみを隠す</label>
+      <button class="btn btn-ghost btn-sm" onclick="$('ngRevBg').remove()">閉じる</button></div>
+    <div class="hint" style="margin:0 0 8px">最後に来た日が新しいお客さんから順です。<b>📋 A123</b> を押すと行番号をコピー → エクセルで <b>Ctrl+G</b> → 貼って Enter で、その行に飛びます。</div>
+    ${list.map(x => { const n = x.n, c = x.c;
+      return `<div class="ngrc ${x.done ? "done" : ""}">
+        <div class="ngrt"><b>🙅 ${esc(x.nm)}</b><span>のNG</span>　<b>${esc(c.name || "（名前なし）")}</b><small>📞 ${esc(fmtPhone(c.phone))}　最後に来た日 ${x.last ? md(x.last) : "なし"}</small>
+          ${n.ask ? `<span class="badge" style="background:#FFF3C4;color:#7a5600">🤔 だれのNGか・条件があいまい</span>` : ""}
+          <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="$('ngRevBg').remove();openCustomer(${c.id})">開く</button></div>
+        <div class="ngrr">${esc(n.reason || "理由なし")}${n.source === "excel" ? ` <small style="color:var(--sub)">（エクセルから）</small>` : n.by_name ? ` <small style="color:var(--sub)">（${esc(n.by_name)}が入れた）</small>` : ""}</div>
+        ${x.src.length ? x.src.map(h => `<div class="ngrs">${h.src_row ? `<button class="ngrcp" onclick="ngRevCopy(${h.src_row})" title="エクセルで Ctrl+G に貼るとこの行に飛ぶ">📋 A${h.src_row}</button>` : `<span class="ngrcp no">行なし</span>`}
+            <b>${h.biz_date ? md(h.biz_date) : "日付なし"}</b> ${esc(h.cast_raw || "")}${h.status === "tobi" ? ` <b style="color:#C62828">【トビ】</b>` : h.status === "cancel" ? ` <b style="color:#C62828">【キャンセル】</b>` : ""}${h.cast_ng ? " 🙅" : ""}
+            ${h.memo ? `<div class="ngrm">${esc(h.memo)}</div>` : ""}</div>`).join("") : `<div class="ngrs" style="color:#9A97AE">エクセルの行が見つかりません（理由の文だけ）</div>`}
+        <div class="ngrb">${x.was ? `<span class="ngrres">${x.was.kind === "ok" ? "✅ NGで正しい にしました" : "❌ NGではない にしました（キャストNGを外しました）"}</span><button class="btn btn-ghost btn-sm" onclick="cngRevUndo(${n.id})">↩ 戻す</button>`
+          : x.done ? `<span class="ngrres">確認ずみ</span>`
+          : ed ? `<button class="btn btn-danger btn-sm" onclick="cngRevSet(${n.id},true)">✅ NGで正しい</button><button class="btn btn-ghost btn-sm" onclick="cngRevSet(${n.id},false)">❌ NGではない</button>` : ""}</div></div>`; }).join("") || `<div class="empty">ぜんぶ確認ずみです 🎉</div>`}</div>`;
+}
+async function cngRevSet(id, isNg){
+  const x = cngRev.find(y => y.n.id === id); if(!x) return;
+  try{
+    if(isNg){
+      q(await sb.from("kb_cust_cast_ng").update({ ask: false, ask_done: true }).eq("id", id));
+      x.was = { kind: "ok", ask: x.n.ask, ask_done: x.n.ask_done }; x.n.ask = false; x.n.ask_done = true;
+    } else {
+      if(!confirm(`「${x.c.name || "名前なし"}」の「${x.nm}」NGを外しますか？（あとで「↩ 戻す」もできます）`)) return;
+      const marks = x.src.filter(h => h.cast_ng && h.id).map(h => h.id);
+      q(await sb.from("kb_cust_cast_ng").delete().eq("id", id));
+      for(const hid of marks) await sb.from("kb_cust_history").update({ cast_ng: false }).eq("id", hid);
+      x.src.forEach(h => { if(marks.includes(h.id)) h.cast_ng = false; });
+      x.was = { kind: "off", row: Object.assign({}, x.n), marks };
+    }
+    x.done = true; paintCastNgReview();
+  }catch(e){ toast("できませんでした：" + (e.message || e)); }
+}
+async function cngRevUndo(id){
+  const x = cngRev.find(y => y.n.id === id); if(!x || !x.was) return;
+  try{
+    if(x.was.kind === "ok"){ q(await sb.from("kb_cust_cast_ng").update({ ask: x.was.ask, ask_done: x.was.ask_done }).eq("id", id)); x.n.ask = x.was.ask; x.n.ask_done = x.was.ask_done; }
+    else {
+      const row = Object.assign({}, x.was.row); delete row.id;
+      const ins = q(await sb.from("kb_cust_cast_ng").insert(row).select("id").maybeSingle());
+      if(ins && ins.id) x.n.id = ins.id;
+      for(const hid of x.was.marks) await sb.from("kb_cust_history").update({ cast_ng: true }).eq("id", hid);
+      x.src.forEach(h => { if(x.was.marks.includes(h.id)) h.cast_ng = true; });
+    }
+    x.done = !!x.n.ask_done; x.was = null; paintCastNgReview(); toast("↩ 戻しました");
+  }catch(e){ toast("できませんでした：" + (e.message || e)); }
+}
 </script>
 </body>
 </html>
