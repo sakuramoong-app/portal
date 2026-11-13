@@ -1278,9 +1278,11 @@ async function openPrivate(){
     $("e_private").innerHTML = `
       <div class="grid">
         <div class="f"><label>📱 電話番号</label><input id="p_phone" type="tel" maxlength="40" value="${esc(p.phone || "")}" placeholder="090-0000-0000"></div>
-        <div class="f"><label>🎂 誕生日</label><input id="p_birthday" type="date" value="${esc(p.birthday || "")}"></div>
-        <div class="f"><label>🚉 最寄り駅</label><input id="p_station" maxlength="60" value="${esc(p.station || "")}" placeholder="例：大塚"></div>
+        <div class="f"><label>🎂 誕生日</label><input id="p_birthday" inputmode="numeric" maxlength="20" value="${esc(String(p.birthday || "").replace(/-/g, "/"))}" placeholder="例：1998/3/5（手で入れる）"></div>
+        <div class="f"><label>🚉 最寄り駅</label><input id="p_station" maxlength="60" value="${esc(p.station || ($("e_station") ? $("e_station").value : ""))}" placeholder="例：大塚" oninput="privToArea()"></div>
       </div>
+      <div class="areaGrid" style="margin-top:6px">${AREA_SHOPS.map(([id, n]) => `<div><small>${n}まで（分）</small><input type="number" id="p_${id.slice(2)}" min="0" max="300" step="5" placeholder="分" value="${esc($(id) ? $(id).value : "")}" oninput="privToArea()"></div>`).join("")}</div>
+      <div class="hint" style="margin-top:2px">🚃 最寄り駅・各店までの時間は「🗂 移動・コース・系統・メモ」にも自動で入ります</div>
       <div class="f" style="margin-top:10px"><label>🏠 住所</label><input id="p_address" maxlength="200" value="${esc(p.address || "")}"></div>
       <div class="f" style="margin-top:10px"><label>📝 連絡のときの注意</label><input id="p_memo" maxlength="300" value="${esc(p.memo || "")}" placeholder="例：電話は出勤1時間前から出られる"></div>
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
@@ -1292,12 +1294,33 @@ async function openPrivate(){
         ${logs.length ? "記録：" + logs.map(l=>`${when(l.at)} ${esc(l.by_name || "?")} が${l.action === "edit" ? (l.fields || []).map(f=>FL[f] || f).join("・") + "を直した" : ((l.fields || []).includes("phone") ? "電話番号を見た" : "見た")}`).join(" ／ ") : ""}</div>`;
   }catch(e){ toast("連絡先を開けませんでした：" + (e.message || e)); }
 }
+// 🎂 誕生日は手で入れる（2026/11/14 店長）：「1998/3/5」「1998-03-05」「19980305」「1998年3月5日」→ 1998-03-05。空なら null。読めなければ false
+function parseBirthday(s){
+  s = String(s || "").normalize("NFKC").trim(); if(!s) return null;
+  let m = s.match(/^(\d{4})\D+(\d{1,2})\D+(\d{1,2})\D*$/) || s.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if(!m) return false;
+  const y = +m[1], mo = +m[2], d = +m[3], dt = new Date(Date.UTC(y, mo - 1, d));
+  if(y < 1940 || y > new Date().getFullYear() || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return false;
+  return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+// 📞 連絡先の最寄り駅・各店までの時間 →「🗂 移動・コース・系統・メモ」の欄に入れる
+function privToArea(){
+  if(!$("e_station") || !$("p_station")) return;
+  $("e_station").value = $("p_station").value.trim();
+  AREA_SHOPS.forEach(([id]) => { const p = $("p_" + id.slice(2)); if(p && $(id)) $(id).value = p.value; });
+}
 async function savePrivate(){
   const id = editingId; if(!id) return;
   try{
     if(!(await staffSession())){ toast("ログインの期限が切れました。ポータルから開き直してください"); return; }
+    const bd = parseBirthday($("p_birthday").value);
+    if(bd === false){ toast("誕生日は「1998/3/5」のように、年・月・日で入れてください"); $("p_birthday").focus(); return; }
     q(await sb.rpc("cast_private_save", { p_cast_id: id, p_phone: $("p_phone").value.trim(), p_address: $("p_address").value.trim(),
-      p_station: $("p_station").value.trim(), p_birthday: $("p_birthday").value || null, p_memo: $("p_memo").value.trim(), p_by: operatorName() }));
+      p_station: $("p_station").value.trim(), p_birthday: bd, p_memo: $("p_memo").value.trim(), p_by: operatorName() }));
+    // 🚃 最寄り駅・各店までの時間は「🗂 移動・コース・系統・メモ」（area_note）にも入れる（2026/11/14 店長）
+    privToArea();
+    if($("e_station")){ const an = getArea(), c0 = casts.find(x => x.id === id);
+      if(!c0 || (c0.area_note || "") !== an){ q(await sb.from("master_casts").update({ area_note: an }).eq("id", id)); if(c0) c0.area_note = an; } }
     toast("連絡先を保存しました🌸"); kbSavedArea("private"); openPrivate();
   }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
@@ -4611,6 +4634,7 @@ function getArea(){
 }
 // 🧾 入店の手続き・内勤が知っておくこと（master_casts.onboarding：{ explain:{at,by}, ..., ic:"あり", tabako:"紙" }）
 const ONB_STEPS = [["explain", "面接で口頭の説明をした"], ["contract", "業務委託の書類"], ["idcopy", "公的証明書のコピー"], ["inkan", "印鑑"]];
+const ONB_MEDS = ["カマグラ", "シルデナ", "その他"];   // 💊 よく使う薬（2026/11/14）
 const ONB_IC = ["", "あり", "なし"], ONB_TABAKO = ["", "吸わない", "紙タバコ", "電子タバコ", "紙と電子の両方"];
 const KIT_LABEL = { shop: "事務所で買う（500円）", own: "自分で用意する" };
 function renderOnb(c){
@@ -4625,6 +4649,10 @@ function renderOnb(c){
       <div class="f"><label>💳 仕事用のICカード</label>${sel("onb_ic", ONB_IC, o.ic, "（まだ聞いていない）")}</div>
       <div class="f"><label>🚬 タバコ</label>${sel("onb_tabako", ONB_TABAKO, o.tabako, "（まだ聞いていない）")}<small id="onb_tabakoProf" style="display:block;color:#9C8B8F;margin-top:3px"></small></div>
     </div>
+    <div class="f" style="margin-top:10px"><label>💊 よく使う薬（いくつでも）</label>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:14px">${ONB_MEDS.map(m => `<label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="onb_med" value="${m}" ${(o.meds || []).includes(m) ? "checked" : ""} style="width:auto;transform:scale(1.2)"> ${m}</label>`).join("")}
+        <input id="onb_medOther" maxlength="60" value="${esc(o.meds_other || "")}" placeholder="その他の薬（名前）" style="flex:1;min-width:160px"></div></div>
+    <div class="f" style="margin-top:10px"><label>📝 備考（自由に書ける）</label><textarea id="onb_memo" maxlength="1000" style="min-height:60px" placeholder="内勤が知っておくこと（キャストには見えません）">${esc(o.memo || "")}</textarea></div>
     ${o.excel ? `<div style="margin-top:8px;background:#F3FAF4;border-radius:10px;padding:6px 10px;font-size:12.5px;line-height:1.7;color:#4a6b50">📗 <b>エクセル（バック一覧）に書いてあったこと</b>
       ${[["pouch", "仕事ポーチ"], ["docs", "説明・業務委託・印鑑"], ["ic", "IC"], ["tabako", "タバコ"]].filter(([k]) => o.excel[k]).map(([k, l]) => `<div><small style="color:#8aa08e">${l}：</small>${esc(o.excel[k])}</div>`).join("")}</div>` : ""}`;
   if(c && (c.room_ids || []).length){
@@ -4641,6 +4669,8 @@ function getOnb(c){
   const o = Object.assign({}, (c && c.onboarding) || {}), by = operatorName(), at = new Date().toISOString();
   ONB_STEPS.forEach(([k]) => { const on = $("onb_" + k).checked; if(on && !o[k]) o[k] = { at, by }; if(!on) delete o[k]; });
   o.ic = $("onb_ic").value; o.tabako = $("onb_tabako").value;
+  // 💊 よく使う薬・📝 備考（2026/11/14 店長）
+  if($("onb_memo")){ o.meds = [...document.querySelectorAll(".onb_med:checked")].map(x => x.value); o.meds_other = $("onb_medOther").value.trim(); o.memo = $("onb_memo").value.trim(); }
   return o;
 }
 /* ---------- 編集 ---------- */
