@@ -486,9 +486,19 @@ function isDummyPerson(c){
 // 実際に行ける子（ダミーで行く）：ダミーの人と、専用の名前を持つ子（その名前でしか行かない）はのぞく
 const dmGoer = (c, store) => !isDummyPerson(c) && !ownName(c, store);
 // これまで（記録簿＋台帳エクセル）を、実際の子・ダミー名がわかる形に（エクセルの「あや（茜」「櫻井美咲」も読む）
+/* 台帳エクセルのキャストの書き方（「美咲」）→ キャスト（櫻井美咲）。2026/11/13 店長：美咲の本指名が店リピになっていた
+   ① 名前・別名がぴったり → ② 正式な名前の最後が同じ（「美咲」→「櫻井美咲」・「あん」→「夏目あん」）で1人だけ → ③ 書き方の最後が名前（「新人美咲」→「美咲」）で1人だけ */
+function castByRaw(n){
+  n = String(n || "").normalize("NFKC").replace(/[\s　]/g, ""); if(!n) return null;
+  const nm = c => [c.official_name, c.temp_name, c.shift_name, ...(Array.isArray(c.aliases) ? c.aliases : [])].filter(Boolean).map(x => String(x).normalize("NFKC").replace(/[\s　]/g, ""));
+  const ex = M.casts.filter(c => nm(c).includes(n)); if(ex.length) return ex[0];
+  const tail = M.casts.filter(c => nm(c).some(x => x.length > n.length && n.length >= 2 && x.endsWith(n))); if(tail.length === 1) return tail[0];
+  const head = M.casts.filter(c => nm(c).some(x => x.length >= 2 && n.endsWith(x))); if(head.length === 1) return head[0];
+  return null;
+}
 function seenNorm(){
   const src = Array.isArray(custSeen) ? custSeen : (Array.isArray(custPast) ? custPast : []);
-  const byName = n => { n = String(n || "").trim(); if(!n) return null; return M.casts.find(c => [c.official_name, c.temp_name, c.shift_name].filter(Boolean).some(x => x === n || n.endsWith(x) && x.length >= 2)); };
+  const byName = castByRaw;
   return src.map(p => {
     if(!p.excel) return p;
     const raw = String(p.cast_raw || ""), m = raw.match(/^(.+?)[（(]([^）)]+)[）)]?$/);
@@ -2205,7 +2215,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 function cc2CastIdOf(p){
   if(p.cast_id) return p.cast_id;
   const raw = String(p.cast_raw || "").trim(); if(!raw) return "";
-  const c = M.casts.find(x => [x.official_name, x.temp_name, x.shift_name].some(n => n && String(n).trim() === raw));
+  const c = castByRaw(raw.replace(/[（(].*$/, ""));   // 「美咲」→ 櫻井美咲（2026/11/13）
   return c ? c.id : "";
 }
 function cc2Went(){
