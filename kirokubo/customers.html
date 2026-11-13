@@ -170,7 +170,33 @@ async function placeSearch(){
     : `<div class="empty">見つかりません</div>`;
 }
 const mode = a => { const c = {}; a.forEach(v => c[v] = (c[v] || 0) + 1); return Number(Object.keys(c).sort((x, y) => c[y] - c[x])[0]); };
-function setFilter(f){ filter = f; document.querySelectorAll(".flt .chip").forEach(b=>b.classList.toggle("on", b.dataset.f === f)); paintList(); }
+function setFilter(f){ filter = f; document.querySelectorAll(".flt .chip").forEach(b=>b.classList.toggle("on", b.dataset.f === f));
+  // 2026/11/13 店長：店NG・キャストNGありは、最近の60人の中だけでなく、台帳の全員から出す（検索の文字が空のとき）
+  if((f === "ng" || f === "cng") && !$("q").value.trim()){ loadNgAll(f); return; }
+  if(f === "all" && results.some(r => r.ngAll)) { search(); return; }
+  paintList(); }
+async function loadNgAll(f){
+  $("listHint").textContent = "読み込んでいます…";
+  try{
+    let l = [];
+    if(f === "ng"){
+      l = q(await sb.from("kb_customers").select("id,name,phone,ng,ng_ask,ng_reason").eq("ng", true).order("updated_at", { ascending: false }).limit(2000)) || [];
+    } else {
+      const ns = q(await sb.from("kb_cust_cast_ng").select("customer_id").limit(10000)) || [];
+      const cnt = {}; ns.forEach(x => { if(x.customer_id) cnt[x.customer_id] = (cnt[x.customer_id] || 0) + 1; });
+      const ids = Object.keys(cnt).map(Number);
+      for(let i = 0; i < ids.length; i += 200){
+        const part = q(await sb.from("kb_customers").select("id,name,phone,ng,ng_ask,ng_reason").in("id", ids.slice(i, i + 200))) || [];
+        l = l.concat(part.map(x => Object.assign(x, { cast_ng: cnt[x.id] || 0 })));
+      }
+      l.sort((a, b) => (b.cast_ng || 0) - (a.cast_ng || 0));
+    }
+    if(filter !== f) return;
+    results = l.map(x => Object.assign({ ngAll: true }, x));
+    $("listHint").textContent = f === "ng" ? `⚠️ 店NGのお客さん ${l.length}人（台帳の全員から）${l.some(x => x.ng_ask) ? `・🤔 決めてほしい人 ${l.filter(x => x.ng_ask).length}人` : ""}` : `🙅 キャストNGがあるお客さん ${l.length}人（台帳の全員から）`;
+  }catch(e){ results = []; $("listHint").textContent = "読めませんでした：" + (e.message || e); }
+  paintList();
+}
 async function search(){
   const t = $("q").value.trim();
   if($("tagSel") && t) $("tagSel").value = "";
@@ -196,7 +222,7 @@ function paintList(){
 }
 function liHtml(r){ return `<div class="li ${cur && cur.id === r.id ? "on" : ""}" onclick="openCustomer(${r.id})">
       <div class="nm">${esc(r.name || "（名前なし）")}${r.ng ? '<span class="badge b-ng">⚠️ 店NG</span>' : ""}${r.cast_ng ? `<span class="badge b-cng">🙅 キャストNG ${r.cast_ng}</span>` : ""}</div>
-      <div class="sub">📞 ${esc(fmtPhone(r.phone))}　${r.tagOnly ? "🏷 " + esc((r.tags || []).join("・")) : r.visits ? `${r.visits}回・最後 ${md(r.last_date)}・合計 ${yen(r.total)}` : "まだ利用なし"}</div></div>`;
+      <div class="sub">📞 ${esc(fmtPhone(r.phone))}　${r.ngAll ? (r.ng_ask ? "🤔 決めてほしい：" : "") + esc(String(r.ng_reason || "").slice(0, 40)) : r.tagOnly ? "🏷 " + esc((r.tags || []).join("・")) : r.visits ? `${r.visits}回・最後 ${md(r.last_date)}・合計 ${yen(r.total)}` : "まだ利用なし"}</div></div>`;
 }
 
 /* ---------- 1人ずつ ---------- */
