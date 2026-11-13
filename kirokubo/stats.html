@@ -237,7 +237,7 @@ async function loadLive(){
   const start = liveYm + "-01";
   try{
     const [res, cds, shifts, casts, rules, media, stores] = await Promise.all([
-      fetchAll("kb_reservations", "id,biz_date,cast_id,store_key,area,start_at,status,visit_kind,media,total,course_back,option_back,extra_back,back_override,payment,card_total,course", "id", x=>x.gte("biz_date", start).eq("deleted", false)),
+      fetchAll("kb_reservations", "id,biz_date,cast_id,store_key,area,start_at,status,visit_kind,media,total,course_back,option_back,extra_back,back_override,payment,card_total,course,created_by", "id", x=>x.gte("biz_date", start).eq("deleted", false)),
       fetchAll("kb_cast_days", "*", "biz_date", x=>x.gte("biz_date", start)),
       fetchAll("shift_weeks", "cast_name,wk,data", "wk", x=>x.gte("wk", weekKeyOfYmd(start))),
       fetchAll("master_casts", "id,official_name,temp_name,shift_name", "id"),
@@ -286,7 +286,7 @@ async function loadLive(){
       rs.forEach(r=>{
         const back = r.back_override != null ? n0(r.back_override) : n0(r.course_back) + n0(r.extra_back) + n0(r.option_back);
         const j = new Date(new Date(r.start_at).getTime() + 9 * 3600 * 1000).getUTCHours();
-        L.res.push({ d, ym: ymOf(d), cast, store: storeLabel(r.store_key), area: r.area || "（なし）", band: r.start_at && (j >= 22 || j < 6) ? "深夜" : "昼",
+        L.res.push({ d, ym: ymOf(d), cast, store: storeLabel(r.store_key), area: r.area || "（なし）", band: r.start_at && (j >= 22 || j < 6) ? "深夜" : "昼", team: KBM.teamOf(r.created_by),
           visit: r.visit_kind, media: (r.media || []).map(mediaLabel), total: n0(r.total), prov: n0(r.total) - back, drop: n0(r.total) - back + zappi / rs.length,
           back, card: (r.payment === "card" || r.payment === "card_paid") ? n0(r.total) : n0(r.card_total), course: r.course || "" });   // back・card・course：📥 お金のデータ用（2026/11/7）
       });
@@ -334,9 +334,11 @@ function castDays(cast, months){
 }
 // キャスト×エリア／キャスト×昼深夜（月）
 function groupRows(kind, months){
-  const set = new Set(months), src = kind === "area" ? H.area : H.band, out = [];
+  const set = new Set(months), src = kind === "area" ? H.area : H.band, out = [];   // team も H.band（エクセルの月）
   src.forEach(x=>{ const ym = ymOf(x.ym); if(set.has(ym) && !isLive(ym)) out.push({ ym, cast: x.cast_name, key: kind === "area" ? x.area : x.band, cnt: n0(x.cnt), drop: n0(x.drop_yen) }); });
-  L.res.forEach(r=>{ if(set.has(r.ym) && isLive(r.ym)) out.push({ ym: r.ym, cast: r.cast, key: kind === "area" ? r.area : r.band, cnt: 1, drop: r.drop }); });
+  // 🌞🌙（kind＝team・2026/11/14）：記録簿の月は受けた人で。エクセルの月は受けた人がわからないので、昼＝🌞・深夜＝🌙 として見る
+  if(kind === "team"){ out.forEach(x => { x.key = x.key === "深夜" ? "night" : "day"; x.old = true; }); }
+  L.res.forEach(r=>{ if(set.has(r.ym) && isLive(r.ym)) out.push({ ym: r.ym, cast: r.cast, key: kind === "area" ? r.area : kind === "team" ? r.team : r.band, cnt: 1, drop: r.drop }); });
   return out;
 }
 // 媒体×エリア（月）。新しい記録簿は、媒体がいくつかあるときは店落ちを同じだけ分ける
@@ -561,7 +563,7 @@ function renderSales(){
         店落ち＝暫定的な残額（総額 − 報酬）＋ 雑費。<br>過去の数字は2018年12月から（売上管理.xlsx の年間比較＝各日の記録簿の「暫定的な残額の合計＋雑費合計」。内勤の日払いも引いたあと）</div></div>
     <div class="box"><h3>📅 年間比較（月ごとの店落ち）</h3><div class="tw" id="yearTable"></div></div>
     <div class="grid2x">
-      <div class="box"><h3>🌙 22時を境に（昼／深夜）<small>開始が22:00〜は深夜</small></h3><div class="chartwrap"><canvas id="ch_band"></canvas></div><div class="tw" id="bandTable" style="margin-top:8px"></div></div>
+      <div class="box"><h3>🌞／🌙 受けた内勤で<small>🌞 きゃ・らん・すや／🌙 わか・かみ</small></h3><div class="chartwrap"><canvas id="ch_band"></canvas></div><div class="tw" id="bandTable" style="margin-top:8px"></div></div>
       <div class="box"><h3>🙋 新規・店リピ・本指名</h3><div class="chartwrap"><canvas id="ch_visit"></canvas></div><div class="tw" id="visitTable" style="margin-top:8px"></div></div>
     </div>`;
   // 推移のグラフ
@@ -587,16 +589,18 @@ function renderSales(){
   h += `<tr class="sum"><td class="l">合計</td>` + years.map(y=>{ let v = 0, vb = 0, p = 0; for(let m = 1; m <= 12; m++){ const a = cell(y, m), b = cell(y - 1, m); if(a != null){ v += a; if(b){ vb += a; p += b; } } }
     const r = p ? vb / p - 1 : null; return `<td>${yen0(v)}</td><td class="${r == null ? "" : r >= 0 ? "up" : "down"}">${r == null ? "" : (r >= 0 ? "+" : "") + Math.round(r * 1000) / 10 + "%"}</td>`; }).join("") + `</tr></table>`;
   $("yearTable").innerHTML = h + `<div class="hint">前年比は、前の年の同じ月とくらべた増減。合計の前年比は、両方の年に数字がある月だけでくらべています</div>`;
-  // 昼／深夜
-  const band = groupRows("band", months);
+  // 🌞／🌙（2026/11/14 店長）：🌞＝きゃ・らん・すや が受けた／🌙＝わか・かみ が受けた（記録簿の月）。エクセルの月は受けた人がわからないので、22時より前＝🌞・22時から＝🌙
+  const band = groupRows("team", months);
   const bm = months.filter(ym=>band.some(b=>b.ym === ym));
   const bv = (ym, k, f)=>band.filter(b=>b.ym === ym && b.key === k).reduce((a, b)=>a + b[f], 0);
-  chart("ch_band", { type: "bar", data: { labels: bm.map(ymLabel), datasets: [
-    { label: "昼 店落ち", data: bm.map(ym=>Math.round(bv(ym, "昼", "drop"))), backgroundColor: "rgba(242,201,76,.8)", stack: "s" },
-    { label: "深夜 店落ち", data: bm.map(ym=>Math.round(bv(ym, "深夜", "drop"))), backgroundColor: "rgba(91,80,160,.8)", stack: "s" } ] }, options: { scales: { y: Object.assign({ stacked: true }, yenAxis), x: { stacked: true } } } });
-  $("bandTable").innerHTML = bm.length ? `<table class="t"><tr><th class="l">月</th><th>昼 本数</th><th>深夜 本数</th><th>昼 単価</th><th>深夜 単価</th><th>深夜の割合</th></tr>` + bm.map(ym=>{
-    const dc = bv(ym, "昼", "cnt"), nc = bv(ym, "深夜", "cnt"), dd = bv(ym, "昼", "drop"), nd = bv(ym, "深夜", "drop");
-    return `<tr><td class="l">${ymLabel(ym)}</td><td>${dc}</td><td>${nc}</td><td>${dc ? yen0(dd / dc) : ""}</td><td>${nc ? yen0(nd / nc) : ""}</td><td>${pct(nd, dd + nd)}</td></tr>`; }).join("") + `</table><div class="hint">単価＝店落ち÷本数。深夜の割合は店落ちで</div>` : `<div class="hint">この期間の昼／深夜の数字はありません（過去の数字は2026年1月から）</div>`;
+  const oldYm = ym => band.some(b => b.ym === ym && b.old);
+  chart("ch_band", { type: "bar", data: { labels: bm.map(ym => ymLabel(ym) + (oldYm(ym) ? "*" : "")), datasets: [
+    { label: "🌞 店落ち", data: bm.map(ym=>Math.round(bv(ym, "day", "drop"))), backgroundColor: "rgba(242,201,76,.8)", stack: "s" },
+    { label: "🌙 店落ち", data: bm.map(ym=>Math.round(bv(ym, "night", "drop"))), backgroundColor: "rgba(91,80,160,.8)", stack: "s" },
+    ...(bm.some(ym => bv(ym, "other", "cnt")) ? [{ label: "❔ ほかの人", data: bm.map(ym=>Math.round(bv(ym, "other", "drop"))), backgroundColor: "rgba(160,160,170,.7)", stack: "s" }] : []) ] }, options: { scales: { y: Object.assign({ stacked: true }, yenAxis), x: { stacked: true } } } });
+  $("bandTable").innerHTML = bm.length ? `<table class="t"><tr><th class="l">月</th><th>🌞 本数</th><th>🌙 本数</th><th>🌞 単価</th><th>🌙 単価</th><th>🌙の割合</th></tr>` + bm.map(ym=>{
+    const dc = bv(ym, "day", "cnt"), nc = bv(ym, "night", "cnt"), dd = bv(ym, "day", "drop"), nd = bv(ym, "night", "drop"), od = bv(ym, "other", "drop");
+    return `<tr><td class="l">${ymLabel(ym)}${oldYm(ym) ? "*" : ""}</td><td>${dc}</td><td>${nc}</td><td>${dc ? yen0(dd / dc) : ""}</td><td>${nc ? yen0(nd / nc) : ""}</td><td>${pct(nd, dd + nd + od)}</td></tr>`; }).join("") + `</table><div class="hint">🌞＝きゃ・らん・すや が受けた予約／🌙＝わか・かみ が受けた予約。単価＝店落ち÷本数。🌙の割合は店落ちで<br>* のついた月はエクセルの数字で、受けた人がわからないので、22時より前＝🌞・22時から＝🌙 にしています</div>` : `<div class="hint">この期間の🌞／🌙の数字はありません（過去の数字は2026年1月から）</div>`;
   // 新規・店リピ・本指名
   const vm = months.filter(ym=>cm.some(x=>x.ym === ym));
   const vv = (ym, f)=>cm.filter(x=>x.ym === ym).reduce((a, x)=>a + n0(x[f]), 0);
