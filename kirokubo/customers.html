@@ -665,6 +665,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .ngrs{border-top:1px dashed #F1C9CF;padding:4px 0} .ngrm{white-space:pre-wrap;background:#FFF8F0;border-radius:8px;padding:4px 8px;margin-top:2px}
   .ngrcp{font-family:inherit;font-weight:900;border:1.5px solid #7FB2E5;background:#EEF6FF;color:#1f5d99;border-radius:8px;padding:1px 8px;cursor:pointer;margin-right:4px} .ngrcp.no{border-color:#ddd;background:#f6f6f6;color:#999;cursor:default}
   .ngrb{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px} .ngrres{font-weight:900;color:#2e8b57}
+  .ngrf{display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:#F3F1FF;border-radius:12px;padding:6px 10px;margin-bottom:6px} .ngrf select{font-family:inherit;font-weight:800;border:1.5px solid #DCD6FA;border-radius:9px;padding:4px 8px;background:#fff} .ngrf small{color:var(--sub);font-weight:700}
 </style>`);
 </script>
 <script>
@@ -674,6 +675,16 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    ・「✅ NGで正しい」→ 確認ずみの印だけ（ask_done）／「❌ NGではない」→ そのキャストNGを外す（顧客台帳の「外す」と同じ。エクセルの回の🙅の印も外す）
    ・押しまちがいは「↩ 戻す」（外したものを元どおりに入れなおす） ---------- */
 let cngRev = null, cngRevHideDone = true;
+// 🎯 しぼりこみ（2026/11/14 店長：665件は多すぎる）：期間（お客さんが最後に来た日）・在籍中の子だけ・キャストで
+let cngDays = 365, cngWho = "now", cngCast = "";
+function cngIsNow(x){ const c = x.n.cast_id && M.casts.find(y => y.id === x.n.cast_id); return !!c && c.status !== "left"; }
+function cngIn(x, skipCast){
+  if(cngDays && (!x.last || x.last < new Date(Date.now() - cngDays * 86400000 + 9 * 3600000).toISOString().slice(0, 10))) return false;
+  if(cngWho === "now" && !cngIsNow(x)) return false;
+  if(cngWho === "none" && x.n.cast_id) return false;
+  if(!skipCast && cngCast && x.nm !== cngCast) return false;
+  return true;
+}
 async function openCastNgReview(){
   let bg = $("ngRevBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "ngRevBg"; bg.className = "ngrbg"; document.body.appendChild(bg);
@@ -706,12 +717,19 @@ async function openCastNgReview(){
 }
 function paintCastNgReview(){
   const bg = $("ngRevBg"); if(!bg || !cngRev) return;
-  const done = cngRev.filter(x => x.done).length, list = cngRev.filter(x => !cngRevHideDone || !x.done || x.was), ed = KB.CAN_EDIT;
+  const pool = cngRev.filter(x => cngIn(x)), done = pool.filter(x => x.done).length, list = pool.filter(x => !cngRevHideDone || !x.done || x.was), ed = KB.CAN_EDIT;
+  const byCast = {}; cngRev.filter(x => cngIn(x, true)).forEach(x => { byCast[x.nm] = (byCast[x.nm] || 0) + 1; });
+  const castOpts = Object.entries(byCast).sort((a, b) => b[1] - a[1]);
   bg.innerHTML = `<div class="ngr">
     <div class="ngrh"><b>🙅 キャストNGの見比べ</b><button class="btn btn-ghost btn-sm" onclick="openNgReview()">⚠️ 店NGへ</button>
-      <span class="ngrp">確認ずみ <b>${done}</b> ／ ${cngRev.length}件<i style="width:${cngRev.length ? Math.round(done / cngRev.length * 100) : 0}%"></i></span>
+      <span class="ngrp">確認ずみ <b>${done}</b> ／ ${pool.length}件<i style="width:${pool.length ? Math.round(done / pool.length * 100) : 0}%"></i></span>
       <label style="font-size:12.5px;font-weight:700"><input type="checkbox" ${cngRevHideDone ? "checked" : ""} onchange="cngRevHideDone=this.checked;paintCastNgReview()"> 確認ずみを隠す</label>
       <button class="btn btn-ghost btn-sm" onclick="$('ngRevBg').remove()">閉じる</button></div>
+    <div class="ngrf">🎯
+      <select onchange="cngDays=+this.value;cngCast='';paintCastNgReview()"><option value="365" ${cngDays === 365 ? "selected" : ""}>1年以内に来たお客さん</option><option value="1095" ${cngDays === 1095 ? "selected" : ""}>3年以内に来たお客さん</option><option value="0" ${!cngDays ? "selected" : ""}>ぜんぶ（いつでも）</option></select>
+      <select onchange="cngWho=this.value;cngCast='';paintCastNgReview()"><option value="now" ${cngWho === "now" ? "selected" : ""}>在籍中の子のNGだけ</option><option value="all" ${cngWho === "all" ? "selected" : ""}>ぜんぶの子</option><option value="none" ${cngWho === "none" ? "selected" : ""}>キャストにつながらない名前だけ</option></select>
+      <select onchange="cngCast=this.value;paintCastNgReview()"><option value="">キャスト：ぜんぶ</option>${castOpts.map(([k, v]) => `<option value="${esc(k)}" ${cngCast === k ? "selected" : ""}>${esc(k)}（${v}）</option>`).join("")}</select>
+      <small>全部で ${cngRev.length}件のうち、この条件 ${pool.length}件</small></div>
     <div class="hint" style="margin:0 0 8px">最後に来た日が新しいお客さんから順です。<b>📋 A123</b> を押すと行番号をコピー → エクセルで <b>Ctrl+G</b> → 貼って Enter で、その行に飛びます。</div>
     ${list.map(x => { const n = x.n, c = x.c;
       return `<div class="ngrc ${x.done ? "done" : ""}">
