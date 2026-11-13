@@ -2587,7 +2587,8 @@ function pfPhotoHtml(){
     ${CAN_EDIT ? `<div class="phTools">
       <span style="font-size:12px;color:#9C8B8F">チェックした枠を</span>
       ${srcs.length ? `<select id="phSrc">${srcs.map(x => `<option value="${esc(x.s)}">${esc(STORE_LABEL_OF(x.s))}（${x.no}番）</option>`).join("")}</select>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoRun('copy')">📷 の同じ枠からコピー</button>` : ""}
+        <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoRun('copy')">📷 の同じ枠からコピー</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoPushOpen()" title="このお店の写真を、ほかのお店の同じ枠へ（画像だけ）">📤 ほかのお店へ写す</button>` : ""}
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoRun('ng')">🖼 撮影準備中にする</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoOrder=[1,2,3,4,5,6,7,8];pfPhotoOrderSk=pf.sk;pfCollect();paintProf()">↕ 並べかえ</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoBust=Date.now();pfCollect();paintProf()">🔄 読みなおす</button></div>
@@ -2646,6 +2647,47 @@ async function pfFormPhDel(i){
   const { error } = await sb.storage.from("cast-form-photos").remove([x.path]);
   if(error){ toast("消せませんでした：" + error.message); return; }
   toast("🗑 消しました"); pfFormPhLoad();
+}
+/* 📤 画像だけ他店舗へ（2026/11/14 店長）：いま見ているお店の写真（チェックした枠。なければ全部の枠）を、選んだほかのお店の同じ枠へ
+   公式HPのロボット（cast_photo_copy）を、写す先のお店ごとに呼ぶ。プロフの文などは写さない */
+function pfPhotoPushOpen(){
+  if(pfPhotoBusy || !pf) return;
+  const sel = [...document.querySelectorAll(".phSel:checked")].map(b => Number(b.value));
+  const slots = sel.length ? sel : [0, 1, 2, 3, 4, 5, 6, 7, 8];
+  const tg = pf.stores.filter(s => s !== pf.sk).map(s => ({ s, ...hpNoOf(pf.c, s) })).filter(x => x.no && HP_SITE_OF[x.mk]);
+  if(!tg.length){ toast("写せるほかのお店がありません（在籍番号が入っているお店だけ）"); return; }
+  const bg = document.createElement("div"); bg.id = "phPushBg";
+  bg.style.cssText = "position:fixed;inset:0;z-index:320;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px";
+  bg.addEventListener("click", e => { if(e.target === bg) bg.remove(); });
+  bg.innerHTML = `<div style="background:#fff;border-radius:20px;padding:18px;width:420px;max-width:100%;max-height:90vh;overflow:auto;font-size:14px">
+    <div style="font-size:16px;font-weight:800">📤 ${esc(STORE_LABEL_OF(pf.sk))} の写真を、ほかのお店へ</div>
+    <div class="hint" style="margin:4px 0 8px">写す枠：<b>${sel.length ? esc(slots.map(k => PF_SLOT_LABEL[k]).join("・")) : "全部（一覧用〜⑧）"}</b>（写真の枠にチェックすると、その枠だけ）。写す先の今の写真は上書きされます。画像だけで、文は写しません。</div>
+    ${tg.map(x => `<label style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer"><input type="checkbox" class="phPushT" value="${esc(x.s)}" checked style="width:auto;transform:scale(1.2)"> ${esc(STORE_LABEL_OF(x.s))}（${x.no}番）</label>`).join("")}
+    <div id="phPushMsg" class="hint" style="margin-top:6px"></div>
+    <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-ghost" onclick="$('phPushBg').remove()">やめる</button>
+      <button class="btn btn-primary" style="margin-left:auto" onclick="pfPhotoPush([${slots.join(",")}])">📤 写す</button></div></div>`;
+  document.body.appendChild(bg);
+}
+async function pfPhotoPush(slots){
+  if(pfPhotoBusy || !pf) return;
+  const ts = [...document.querySelectorAll(".phPushT:checked")].map(b => b.value);
+  if(!ts.length){ toast("写す先のお店にチェックしてください"); return; }
+  const me = hpNoOf(pf.c, pf.sk); if(!me.no || !HP_SITE_OF[me.mk]){ toast("このお店の在籍番号が入っていません"); return; }
+  const from = { site: HP_SITE_OF[me.mk], no: me.no }, out = [];
+  pfPhotoBusy = true;
+  try{
+    for(const s of ts){
+      const x = hpNoOf(pf.c, s);
+      if($("phPushMsg")) $("phPushMsg").textContent = `${STORE_LABEL_OF(s)} に入れています…（1枠10秒ほど）`;
+      try{
+        const r = await hpFn({ action: "cast_photo_copy", store: x.mk, no: x.no, from, slots, ng: [] });
+        const res = r.results || [], ok = res.filter(y => y.ok).length;
+        out.push(`${STORE_LABEL_OF(s)}：${ok ? "✅ " + ok + "枚" : "❌ " + (r.error || (res.find(y => !y.ok) || {}).error || "できませんでした")}${ok && ok < res.length ? "（" + (res.length - ok) + "枚できなかった）" : ""}`);
+      }catch(e){ out.push(`${STORE_LABEL_OF(s)}：❌ ${e.message || e}`); }
+    }
+  } finally { pfPhotoBusy = false; }
+  if($("phPushMsg")) $("phPushMsg").innerHTML = out.map(esc).join("<br>");
+  toast("📤 写し終わりました");
 }
 async function pfPhotoRun(mode){
   if(pfPhotoBusy) return;
