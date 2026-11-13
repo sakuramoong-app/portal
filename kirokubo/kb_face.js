@@ -145,7 +145,7 @@
     .kbstore{display:inline-block;color:#fff;font-weight:900;font-size:12px;border-radius:99px;padding:2px 10px;white-space:nowrap;vertical-align:middle;box-shadow:0 1px 2px rgba(0,0,0,.15)}
     .kbsdot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;margin-right:4px;box-shadow:0 0 0 1.5px #fff}
     .opic{display:inline-block;font-size:17px;margin-right:4px;vertical-align:-2px}
-    .kbstaff{display:inline-flex;align-items:center;gap:3px;font-weight:800;white-space:nowrap;vertical-align:middle}
+    .kbstaff{display:inline-flex;align-items:center;gap:3px;font-weight:800;white-space:nowrap;vertical-align:middle;color:#222 !important}   /* 名前は黒で固定（背景と同じ色になって読めなかった 2026/11/14）*/
     .kbstaff i{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;font-style:normal;font-size:12px;color:#fff;box-shadow:0 0 0 1.5px #fff,0 1px 3px rgba(0,0,0,.2);overflow:hidden;flex:none}
     .kbstaff i img{width:100%;height:100%;object-fit:cover}
     .kbstaff.big{font-size:18px;gap:8px} .kbstaff.big i{width:44px;height:44px;font-size:24px}
