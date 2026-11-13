@@ -11,7 +11,7 @@
 <script src="kb_live.js?v=4"></script><!-- いっしょに使う（保存の合図・入力中）。kb_common より前 -->
 <script src="kb_common.js?v=25"></script>
 <script src="kb_face.js?v=9"></script><!-- 🖼 キャストの写真アイコン -->
-<script src="kb_money.js?v=2"></script><!-- 💴 お金の計算はここ1か所 -->
+<script src="kb_money.js?v=3"></script><!-- 💴 お金の計算はここ1か所 -->
 <style>
   .daybar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
   .daybar input[type=date]{font-family:inherit;font-size:14px;padding:8px 12px;border:1.5px solid var(--line);border-radius:99px;background:#fff;color:var(--ink);}
@@ -166,13 +166,18 @@ function render(){
     mine.forEach(r => { split[night(r) ? 1 : 0] += (r.total || 0) - (Number(backOf(r)) || 0); });
     split[mine[0] && night(mine[0]) ? 1 : 0] += c.zappi || 0;
   });
+  // 🌞 きゃ・らん・すや が受けた／🌙 わか・かみ が受けた（2026/11/14 店長。22時で分けるのはやめた。合計は同じ）
+  const team = KBM.dropByTeam(cs.flatMap(x => x.c.live), id => ((cs.find(x => x.id === id) || {}).c || {}).zappi || 0, backOf);
+  cs.forEach(() => {
+  });
   $("sum").innerHTML = `<div class="s">精算済み<b>${sum.done} / ${cs.length}人</b></div>
     <div class="s ${showMoney ? "" : "hide"}">総額<b>${yen(sum.total)}</b></div>
     <div class="s ${showMoney ? "" : "hide"}">キャスト手取り<b>${yen(sum.take)}</b></div>
     <div class="s ${showMoney ? "" : "hide"}">投函額（−はお店から渡す）<b>${yen(sum.drop)}</b></div>
     <div class="s ${showMoney ? "" : "hide"}" title="記録簿の「今日の店落ち」は、ここから内勤の日払いを引いた数字です">店落ち（暫定＋雑費・内勤日払いを引く前）<b>${yen(sum.shop)}</b></div>
-    <div class="s ${showMoney ? "" : "hide"}">☀️ 22時まで（暫定＋雑費）<b>${yen(split[0])}</b></div>
-    <div class="s ${showMoney ? "" : "hide"}">🌙 22時から（暫定＋雑費）<b>${yen(split[1])}</b></div>
+    <div class="s ${showMoney ? "" : "hide"}">🌞<b>${yen(team.day)}</b></div>
+    <div class="s ${showMoney ? "" : "hide"}">🌙<b>${yen(team.night)}</b></div>${team.other ? `
+    <div class="s ${showMoney ? "" : "hide"}">❔ ほかの人が受けた<b>${yen(team.other)}</b></div>` : ""}
     <button class="btn btn-ghost btn-sm" onclick="showMoney=!showMoney;render()">${showMoney ? "🙈 金額をかくす" : "👁 金額を見る"}</button>
     <div class="dayfig ${showMoney ? "" : "hide"}"><div class="h">📊 この日の数字（キャスト分・社長用）</div>
       ${[["総額", sum.total], ["キャスト報酬", sum.pay], ["暫定的な残額", sum.prov], ["【税務用】源泉徴収", sum.wh], ["実質的な店落ち", sum.real]].map(x=>`<div class="s">${x[0]}<b>${yen(x[1])}</b></div>`).join("")}</div>`;

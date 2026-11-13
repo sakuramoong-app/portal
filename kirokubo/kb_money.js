@@ -85,5 +85,19 @@
     const diff = deposited != null ? deposited - drop : null;   // マイナス＝未精算／プラス＝お釣り
     return { partNo: prevParts.length + 1, prevParts, allLive, transferPaid, trIds, all, live, cd, reward, option, transportBack, why, exempt, zappiAuto: zappiA, zappi, plusItems, minusItems, plus, minus, takeHome, total, cardPaid, cardUnconfirmed, drop, withholding, provisional, shopDrop, realDrop, deposited, diff };
   }
-  window.KBM = { isLive, backOf, zappiAuto, gensen, rulesOn, zappiExempt, calcCast };
+  /* 🌞🌙 店落ちを「受けた内勤」で分ける（2026/11/14 店長）：🌞＝きゃ・らん・すや が受けた予約／🌙＝わか・かみ が受けた予約
+     ・予約の created_by（受付した人）で分ける。合計は今までの店落ち（暫定＋雑費）と同じ（どちらでもない人の分は other）
+     ・雑費は、その子のその日最初の予約を受けた人の方に入れる（22時で分けていたときと同じ考え方） */
+  const TEAM_ALIAS = { "蘭子": "らん", "上川": "かみ", "若林": "わか", "店長": "きゃ" };
+  const teamOf = name => { const b = String(name || "").trim().replace(/[（(].*$/, "").trim(), k = TEAM_ALIAS[b] || b; return ["きゃ", "らん", "すや"].includes(k) ? "day" : ["わか", "かみ"].includes(k) ? "night" : "other"; };
+  function dropByTeam(rs, zappiOf, backFn){
+    const live = (rs || []).filter(isLive), out = { day: 0, night: 0, other: 0 }, bk = backFn || backOf;
+    [...new Set(live.map(r => r.cast_id).filter(Boolean))].forEach(id => {
+      const mine = live.filter(r => r.cast_id === id).sort((a, b) => String(a.start_at || "").localeCompare(String(b.start_at || "")));
+      mine.forEach(r => { out[teamOf(r.created_by)] += (r.total || 0) - (Number(bk(r)) || 0); });
+      try{ if(mine[0]) out[teamOf(mine[0].created_by)] += zappiOf(id) || 0; }catch(e){}
+    });
+    return out;
+  }
+  window.KBM = { isLive, backOf, zappiAuto, gensen, rulesOn, zappiExempt, calcCast, dropByTeam, teamOf };
 })();

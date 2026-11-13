@@ -216,7 +216,8 @@ function renderToday(){
   //   内勤さんの画面は、日払いの一覧は自分の分だけ。でも店落ちは全員分で引く（staffPay.all）2026/11/10
   const spRows = (typeof staffPay !== "undefined" && (staffPay.all || staffPay.rows)) || [];
   const staffPaid = staffPaidSum(spRows);
-  el.innerHTML = t("今日の店落ち", yen(part[0] + part[1] - staffPaid) + `<div style="font-size:11.5px;font-weight:700;color:var(--sub);margin-top:2px">暫定＋雑費 ${yen(part[0] + part[1])} − 内勤の日払い${KB.IS_BOSS ? " " + yen(staffPaid) : "（全員分）"}</div>`) + t("☀️ 22時までの店落ち", yen(part[0])) + t("🌙 22時からの店落ち", yen(part[1])) + t("カード合計", yen(card)) + t("予約件数", live.length + "件")
+  el.innerHTML = t("今日の店落ち", yen(part[0] + part[1] - staffPaid) + `<div style="font-size:11.5px;font-weight:700;color:var(--sub);margin-top:2px">暫定＋雑費 ${yen(part[0] + part[1])} − 内勤の日払い${KB.IS_BOSS ? " " + yen(staffPaid) : "（全員分）"}</div>`) + (() => { const tm = KBM.dropByTeam(rows, id => calcCast(id).zappi || 0, backOf);   // 🌞 きゃ・らん・すや が受けた／🌙 わか・かみ が受けた（2026/11/14 店長。22時で分けるのはやめた）
+      return t("🌞", yen(tm.day)) + t("🌙", yen(tm.night)) + (tm.other ? t("❔ ほかの人が受けた", yen(tm.other)) : ""); })() + t("カード合計", yen(card)) + t("予約件数", live.length + "件")
     + t("予約のあるキャスト", ids.length + "名") + t("お茶", st.filter(s=>s === "お茶").length + "名") + t("欠勤", st.filter(s=>s === "欠勤").length + "名")
     + t("キャンセル・トビ", rows.filter(r=>r.status === "cancel").length + "件・" + rows.filter(r=>r.status === "tobi").length + "件");
   // 📋 売上の報告（社長に送る文）：ふつうは前の日の店落ち（暫定＋雑費 − 内勤の日払い）を、次の日に送る（2026/11/7 店長）
