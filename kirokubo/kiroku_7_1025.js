@@ -1308,7 +1308,7 @@ async function fsPaint(){
   let shifts, rs;
   try{
     [shifts] = await Promise.all([loadShifts(bd), fsPlay.size ? loadProfs() : Promise.resolve(null)]);
-    rs = bd === day ? rows : (q(await sb.from("kb_reservations").select("id,cast_id,start_at,end_at,status,biz_date").eq("biz_date", bd).eq("deleted", false)) || []);
+    rs = bd === day ? rows : (q(await sb.from("kb_reservations").select("id,cast_id,start_at,end_at,status,biz_date,area").eq("biz_date", bd).eq("deleted", false)) || []);
   }catch(e){ out.innerHTML = `<div class="warn">探せませんでした：${esc(e.message || e)}</div>`; return; }
   if(seq !== fsSeq) return;
   // その日に出勤するキャスト（受付ずみのシフト）
@@ -1349,12 +1349,33 @@ async function fsPaint(){
   const onlyOk = $("fs_ok").checked, okL = L.filter(r => r.ok), ngL = L.filter(r => !r.ok);
   okL.sort((a, b) => a.x.sh.start - b.x.sh.start);
   const cur = $("f_cast").value;
-  const row = r => `<div class="fsrow ${r.ok ? "ok" : "ng"} ${r.x.c.id === cur ? "cur" : ""}"><b>${r.ok ? "✅" : "✖"} ${esc(castName(r.x.c.id))}</b>
-      <small>${fmtHour(r.x.sh.start)}〜${fmtHour(r.x.sh.end)}　${r.ok ? (s != null ? `${fmtHour(s)}から行ける` : `空き：${r.fr.map(([a, b]) => fmtHour(a) + "〜" + fmtHour(b)).join("・")}`) : esc(r.why)}${r.marks ? "　" + esc(r.marks) : ""}</small>
-      ${r.ok ? (r.x.c.id === cur ? `<span class="fscur">✔ この子にしています</span>` : `<button type="button" class="btn btn-primary btn-sm" onclick="fsPick('${r.x.c.id}')">この子にする</button>`) : ""}</div>`;
+  // 🖼 写真のカードで：前後の予約（場所・時刻・あいだ）と、今どこにいるか（2026/11/13 店長）
+  const nowH = bd === day && day === KB.bizDateOf() ? nowHour() : null;
+  const ref = s != null ? s : nowH;   // 前・次は「探す時刻」から（なければ今から）
+  const went = typeof cc2Went === "function" ? cc2Went() : new Map(), store = $("f_store") ? $("f_store").value : "";
+  const jobsOf = c => rs.filter(r => r.cast_id === c.id && (!editing || r.id !== editing.id) && !["cancel", "tobi", "flowed"].includes(r.status) && r.start_at && r.end_at)
+    .map(r => { const a = hourOf(r.start_at); let b = hourOf(r.end_at); if(b < a) b += 24; return { r, a, b, where: String(r.area || "").replace(/^出張（(.*)）$/, "$1") || "場所未定" }; }).sort((p, q2) => p.a - q2.a);
+  const row = r => {
+    const c = r.x.c, js = jobsOf(c), need = Number(c.interval_min) || 0;
+    const end = ref != null ? ref + (s != null ? len : 0) : null;
+    const prev = ref != null ? js.filter(j => j.b <= ref + 0.001).pop() : null, next = end != null ? js.find(j => j.a >= end - 0.001) : null;
+    const gapTxt = m => `（間${m}分${need && m < need ? "・⚠️足りない" : ""}）`;
+    let here = "";
+    if(nowH != null){ const w = js.find(j => j.a <= nowH && nowH < j.b), last = js.filter(j => j.b <= nowH).pop(), cd = castDays[c.id] || {};
+      here = w ? `💼 ${esc(w.where)}で${w.r.status === "moving" ? "移動中" : "仕事中"}（〜${hm(w.r.end_at)}）` : nowH < r.x.sh.start ? "🕒 出勤前" : last ? `📍 さっき ${esc(last.where)}（${hm(last.r.end_at)}まで）` : cd.status === "お茶" ? "☕ お茶" : "🏠 待機"; }
+    const w2 = went.get(c.id);
+    return `<div class="fsrow fscard ${r.ok ? "ok" : "ng"} ${c.id === cur ? "cur" : ""}">
+      ${w2 ? `<span class="cg-went">🔁 行った ${w2.n}回</span>` : ""}
+      <div class="fsc-top">${typeof KBF !== "undefined" ? KBF.img(c, 52, store) : ""}<div class="fsc-n"><b>${esc(castName(c.id))}</b><small>出勤 ${fmtHour(r.x.sh.start)}〜${fmtHour(r.x.sh.end)}</small>
+        <span class="fsc-st ${r.ok ? "ok" : "ng"}">${r.ok ? (s != null ? `✅ ${fmtHour(s)}から行ける` : `✅ 空き ${r.fr.map(([a, b]) => fmtHour(a) + "〜" + fmtHour(b)).join("・")}`) : "✖ " + esc(r.why)}</span></div></div>
+      ${here ? `<div class="fsc-l now">${here}</div>` : ""}
+      ${ref != null ? `<div class="fsc-l">⬅ 前：${prev ? `<b>${esc(prev.where)}</b> 〜${hm(prev.r.end_at)}${s != null ? gapTxt(Math.round((s - prev.b) * 60)) : ""}` : `<span class="no">なし</span>`}</div>
+      <div class="fsc-l">➡ 次：${next ? `<b>${esc(next.where)}</b> ${hm(next.r.start_at)}〜${s != null ? gapTxt(Math.round((next.a - end) * 60)) : ""}` : `<span class="no">なし</span>`}</div>` : ""}
+      ${r.marks ? `<div class="fsc-l">${esc(r.marks)}</div>` : ""}
+      ${r.ok ? (c.id === cur ? `<span class="fscur">✔ この子にしています</span>` : `<button type="button" class="btn btn-primary btn-sm" onclick="fsPick('${c.id}')">この子にする</button>`) : ""}</div>`; };
   out.innerHTML = `<div class="fshead">${bd !== day ? `📅 ${esc(bd.slice(5).replace("-", "/"))} の` : ""}${s != null ? `${fmtHour(s)}〜${fmtHour(s + len)} に` : ""}対応できるキャスト <b>${okL.length}人</b></div>`
-    + (okL.map(row).join("") || `<div class="warn" style="margin-top:4px">条件に合うキャストがいません</div>`)
-    + (ngL.length ? (onlyOk ? `<details style="margin-top:6px;font-size:12.5px;color:var(--sub)"><summary>対応できないキャスト（${ngL.length}）</summary>${ngL.map(row).join("")}</details>` : ngL.map(row).join("")) : "")
+    + (okL.length ? `<div class="fsgrid">${okL.map(row).join("")}</div>` : `<div class="warn" style="margin-top:4px">条件に合うキャストがいません</div>`)
+    + (ngL.length ? (onlyOk ? `<details style="margin-top:6px;font-size:12.5px;color:var(--sub)"><summary>対応できないキャスト（${ngL.length}）</summary><div class="fsgrid">${ngL.map(row).join("")}</div></details>` : `<div class="fsgrid">${ngL.map(row).join("")}</div>`) : "")
     + (fsCasts.size && !okL.length ? `<div style="margin-top:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="fsOtherDays()">🗓 選んだ子の、ほかの出勤日を見る</button><div id="fsDays"></div></div>` : "");
 }
 function fsPick(cid){
@@ -1397,6 +1418,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .fsrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;border:1.5px solid #DCE8F6;border-radius:12px;padding:6px 10px;margin:4px 0}
   .fsrow small{flex:1;color:#6b5a5f;font-weight:700} .fsrow.ng{opacity:.6} .fsrow.cur{border-color:#3FA96A;background:#F2FBF5}
   .fscur{font-size:12.5px;font-weight:900;color:#2e8b57}
+/* 🖼 探すの結果：写真のカード（前後の予約・今どこ）2026/11/13 */  .fsgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin-top:4px}  .fsrow.fscard{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:3px;margin:0;padding:8px 10px;border-width:2px}  .fsrow.fscard.ok{border-color:#9FD9B4} .fsrow.fscard.cur{border-color:#3FA96A;background:#F2FBF5;box-shadow:0 0 0 3px #CDEFD9}  .fsrow.fscard.ng{opacity:.55;filter:grayscale(.6)}  .fscard .cg-went{position:absolute;top:6px;right:6px;background:#E5638C;color:#fff;font-size:10.5px;font-weight:900;border-radius:8px;padding:1px 6px}  .fsc-top{display:flex;gap:8px;align-items:center} .fsc-top .kbface{margin:0;flex:none}  .fsc-n{display:flex;flex-direction:column;min-width:0} .fsc-n b{font-size:15.5px} .fsc-n small{flex:none;font-size:11.5px}  .fsc-st{font-size:12px;font-weight:900;margin-top:2px} .fsc-st.ok{color:#1E7B46} .fsc-st.ng{color:#B0213F}  .fsc-l{font-size:12.5px;color:#4a3f45;background:#F7F8FC;border-radius:8px;padding:2px 8px} .fsc-l .no{color:#9A97AE} .fsc-l.now{background:#EEF4FF;color:#2b5aa8;font-weight:800}  .fscard > .btn,.fscard > .fscur{align-self:stretch;text-align:center;margin-top:3px}
 </style>`);
 /* ---------- 🎨 受付の見た目（2026/11/7 店長：見やすく）
    中身（項目・id・自動の計算・検索・保存）は1つも変えない。見た目（色・丸み・余白）と、パソコンの左の目次・入力の進捗を足すだけ
