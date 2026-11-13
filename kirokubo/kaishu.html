@@ -209,6 +209,9 @@ async function readRange(from, to){
   try{
     R.col = q(await sb.from("kb_collections").select("*").gte("biz_date", from).lt("biz_date", to)) || [];
     R.ho = q(await sb.from("kb_handovers").select("*").gte("biz_date", from).lt("biz_date", to)) || [];
+    // 🔁 精算ミスを日をまたいで相殺（2026/11/14）：「いっしょに精算」した元の日の回収明細（その日の精算ミスの ✅ を見る）
+    const ud = [...new Set(R.cds.flatMap(c => (c.settled && c.settle_snapshot && Array.isArray(c.settle_snapshot.uns) ? c.settle_snapshot.uns : []).map(x => x.date)).filter(d => d && (d < from || d >= to)))];
+    R.colX = ud.length ? (q(await sb.from("kb_collections").select("biz_date,cast_id,done_items").in("biz_date", ud)) || []) : [];
   }catch(e){ R.no171 = true; }
   return R;
 }
@@ -278,7 +281,7 @@ function rowsFor(day, R){
     // 精算場所が「回収」（内勤がその場でお金を受け取った）なら、チェックしなくても ✔ 当日回収（精算した内勤・時刻を出す）
     //   あとの日に精算して受け取った（kind＝later）なら ✔ 後日内勤回収（2026/11/6）
     const auto = !cl.state && (kind === "done" || kind === "later") && cd.settle_place === "回収";
-    return { id, cd, s, cl, day, paidOn, shop, card, tr, amt: shop - card - tr, exact, kind, place: cd.settle_place || "", state: cl.state || (auto ? (kind === "later" ? "later" : "day") : ""), auto, done: !!cl.done, nRes: mine.length };
+    return { id, cd, s, cl, day, paidOn, shop, card, tr, amt: shop - card - tr, exact, kind, place: cd.settle_place || "", state: cl.state || (auto ? (kind === "later" ? "later" : "day") : ""), auto, done: !!cl.done, nRes: mine.length, R };
   })
   // 売上0の子（予約なし・店落ちもカードも振込も投函も0：お茶・休みなど）は回収明細に出さない（合計は0円なので変わらない）2026/11/7
   .filter(r => r.nRes || r.shop || r.card || r.tr || Number(r.cd.deposited || 0))
@@ -292,7 +295,7 @@ function extraList(r){
   if(tb) a.push({ key: "tb", html: `🚃 交通費・プラス ${num(tb)}（キャッシュフローから）` });
   if(Number(s.minus || 0)) a.push({ key: "minus", html: `➖ マイナス ${num(s.minus)}` });
   if(s.diff) a.push({ key: "diff", warn: true, html: `<span style="color:#c0392b">⚠️ 精算ミス：投函が${s.diff < 0 ? "足りない " + num(-s.diff) + "（未精算へ）" : "多い " + num(s.diff) + "（お釣りへ）"} ${jump(r.day, id)}</span>` });
-  (s.uns || []).forEach(x => a.push({ key: "uns:" + x.date, html: `<span style="color:#5b3fa6">↔ ${md(x.date)} の${x.kind === "day" ? "精算" + (x.amount != null && Number(x.amount) ? " " + num(x.amount) : "") : x.amount >= 0 ? "未精算 " + num(x.amount) : "お釣り " + num(-x.amount)} をいっしょに精算 ${jump(x.date, id)}</span>` }));
+  (s.uns || []).forEach(x => a.push({ key: "uns:" + x.date, html: `<span style="color:#5b3fa6">↔ ${md(x.date)} の${x.kind === "day" ? "精算" + (x.amount != null && Number(x.amount) ? " " + num(x.amount) : "") : x.amount >= 0 ? "未精算 " + num(x.amount) : "お釣り " + num(-x.amount)} をいっしょに精算 ${jump(x.date, id)}</span>${x.kind !== "day" && diffDoneOn(r.R, x.date, id) ? ` <small style="color:#2e8b57">（${md(x.date)} の精算ミスの ✅ で相殺ずみ）</small>` : ""}` }));
   if(r.kind === "later") a.push({ key: "", html: `<span style="color:#5b3fa6">→ ${md(r.paidOn)}${!r.s.paidOn ? " " + when(r.cd.settled_at).split(" ")[1] + " に精算" : r.s.only ? (r.s.at ? " " + when(r.s.at).split(" ")[1] : "") + " に個別精算" : " にまとめて精算"} ${jump(r.s.paidOn || r.day, id)}</span>` });
   // 📒 まだ精算していない未精算・お釣り（この子のぶん・ほかの日も）
   (D && D.unsOpen ? D.unsOpen.filter(u => u.cast_id === id) : []).forEach(u => a.push({ key: "", html: `<span style="color:#c0392b">📒 ${md(u.biz_date)} の${Number(u.amount) >= 0 ? "未精算 " + num(u.amount) : "お釣り " + num(-Number(u.amount))}（まだ） ${jump(u.biz_date, id)}</span>` }));
@@ -662,17 +665,30 @@ async function setState(cid, st){
    ・数えた額がそろっているはずの額と同じなら、自動で 💯 完璧回収（押し忘れがないように、ボタンはなし）
    ・kb_collections.collected（数えた額）・done（完璧回収。数えた額を保存したときに自動で入る）（SQL 171） ---------- */
 // 当日回収（✔黒）・店長が回収（✔赤）を押したら、精算画面の「実際に投函した額」から自動で入れる（額がちがったら手で入れなおす）（交通費・プラスはキャッシュフローから足すので、精算ミスの分だけずれる）
-const countAuto = r => (r.state === "day" || r.state === "later" || r.state === "me") && r.s ? r.amt + Number(r.s.diff || 0) : null;   // 精算済なら（カードで投函がなくても）自動
+// 🔁 ほかの日の未精算・お釣りを「いっしょに精算」した分（その日の投函に入っている）2026/11/14
+const unsList = r => (r.s && Array.isArray(r.s.uns) ? r.s.uns : []).filter(x => x.kind !== "day" && Number(x.amount));
+const countAuto = r => (r.state === "day" || r.state === "later" || r.state === "me") && r.s ? r.amt + Number(r.s.diff || 0) + unsList(r).reduce((a, x) => a + Number(x.amount), 0) : null;   // 精算済なら（カードで投函がなくても）自動。ほかの日の分をいっしょに精算したら、その分も封筒に入っている
 const countVal = r => r.cl.collected != null ? Number(r.cl.collected) : countAuto(r);
+/* 🔁 精算ミスの ✅（2026/11/14 店長）：A日の精算ミス（未精算・お釣り）を、B日にいっしょに精算したとき
+   A日の「⚠️ 精算ミス」に ✅ → 「B日に回収したA日のお金を、A日に入金した」ことにする（A日 ＋、B日 −。合わせて ±0）
+   ・回収明細の「封筒の中」の差額だけ。精算・未精算・お釣りの記録や、袋の中身の額は変えない
+   ・B日の「↔ A日の未精算をいっしょに精算」に ✅ しても同じ */
+const diffDoneOn = (R, d, cid) => { const c = ((R && R.col) || []).concat((R && R.colX) || []).find(x => x.biz_date === d && x.cast_id === cid); return !!c && Array.isArray(c.done_items) && c.done_items.includes("diff"); };
+function movedAdj(r){
+  let a = 0; const own = doneItems(r);
+  if(Number((r.s || {}).diff || 0) && own.includes("diff")) a -= Number(r.s.diff);
+  unsList(r).forEach(x => { if(diffDoneOn(r.R, x.date, r.id) || own.includes("uns:" + x.date)) a -= Number(x.amount); });
+  return a;
+}
 // 領収書だけ投函（あとで回収が必要）
 const hasReceipt = r => (Array.isArray(r.cd.settle_log) ? r.cd.settle_log : []).some(l => l.kind === "receipt");
 // 💯 完璧回収：封筒の中がそろっているはずの額と同じ・精算ミスなし・領収書の回収待ちなし（あとで変われば自動ではずれる）
-const countPerfect = r => { const v = countVal(r); return v != null && v === r.amt && !Number((r.s || {}).diff || 0) && !hasReceipt(r); };
+const countPerfect = r => { const v = countVal(r); return v != null && v + movedAdj(r) === r.amt && !Number((r.s || {}).diff || 0) && !hasReceipt(r); };
 function countCell(r, ed){
-  const man = r.cl.collected != null, v = countVal(r), auto = !man && v != null, diff = v == null ? null : v - r.amt, ok = countPerfect(r);
-  const why = v == null ? "はず " + num(r.amt) : ok ? "完璧回収" : diff ? "差額 " + (diff > 0 ? "＋" : "−") + num(Math.abs(diff)) : (r.s || {}).diff ? "精算ミスあり" : hasReceipt(r) ? "領収書の回収待ち" : "";
-  return `<td class="amt cntc ${ok ? "ok" : v != null ? "ng" : ""}">${ed ? `<input type="number" class="cnt ${auto ? "auto" : ""}" value="${v != null ? v : ""}" onchange="setCollected('${r.id}',this.value,${r.amt})">` : (v != null ? `<b>${num(v)}</b>` : "")}${ok ? `<span class="hyaku">💯</span>` : ""}
-      <div class="dif">${why}${auto ? `<br><small>自動（精算で投函した額）</small>` : ""}</div></td>`;
+  const man = r.cl.collected != null, v = countVal(r), auto = !man && v != null, mv = movedAdj(r), diff = v == null ? null : v + mv - r.amt, ok = countPerfect(r);
+  const why = v == null ? "はず " + num(r.amt) : ok ? "完璧回収" : diff ? "差額 " + (diff > 0 ? "＋" : "−") + num(Math.abs(diff)) : (r.s || {}).diff ? ((doneItems(r).includes("diff")) ? "精算ミスあり（✅ ずみ）" : "精算ミスあり") : hasReceipt(r) ? "領収書の回収待ち" : "";
+  return `<td class="amt cntc ${ok ? "ok" : v != null ? "ng" : ""}">${ed ? `<input type="number" class="cnt ${auto ? "auto" : ""}" value="${v != null ? v : ""}" onchange="setCollected('${r.id}',this.value,${r.amt - mv})">` : (v != null ? `<b>${num(v)}</b>` : "")}${ok ? `<span class="hyaku">💯</span>` : ""}
+      <div class="dif">${why}${mv ? `<br><small>🔁 精算ミスの分 ${mv > 0 ? "＋" : "−"}${num(Math.abs(mv))} をほかの日と相殺</small>` : ""}${auto ? `<br><small>自動（精算で投函した額）</small>` : ""}</div></td>`;
 }
 function setCollected(cid, v, amt){
   const n = v === "" ? null : Math.round(Number(v) || 0);   // 空にすると、自動（当日回収なら精算の投函額）にもどる
