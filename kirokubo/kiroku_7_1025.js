@@ -1374,7 +1374,7 @@ async function fsPaint(){
     if(nowH != null){ const w = js.find(j => j.a <= nowH && nowH < j.b), last = js.filter(j => j.b <= nowH).pop(), cd = castDays[c.id] || {};
       here = w ? `💼 ${esc(w.where)}で${w.r.status === "moving" ? "移動中" : "仕事中"}（〜${hm(w.r.end_at)}）` : nowH < r.x.sh.start ? "🕒 出勤前" : last ? `📍 さっき ${esc(last.where)}（${hm(last.r.end_at)}まで）` : cd.status === "お茶" ? "☕ お茶" : "🏠 待機"; }
     const w2 = went.get(c.id);
-    return `<div class="fsrow fscard ${r.ok ? "ok" : "ng"} ${c.id === cur ? "cur" : ""}">
+    return `<div class="fsrow fscard ${r.ok ? "ok" : "ng"} ${c.id === cur ? "cur" : ""}" data-cid="${esc(c.id)}">
       ${w2 ? `<span class="cg-went">🔁 行った ${w2.n}回</span>` : ""}
       <div class="fsc-top">${typeof KBF !== "undefined" ? KBF.img(c, 52, store) : ""}<div class="fsc-n"><b>${esc(castName(c.id))}</b><small>出勤 ${fmtHour(r.x.sh.start)}〜${fmtHour(r.x.sh.end)}</small>
         <span class="fsc-st ${r.ok ? "ok" : "ng"}">${r.ok ? (s != null ? `✅ ${fmtHour(s)}から行ける` : `✅ 空き ${r.fr.map(([a, b]) => fmtHour(a) + "〜" + fmtHour(b)).join("・")}`) : "✖ " + esc(r.why)}</span></div></div>
@@ -2314,6 +2314,99 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .rmchip.room_later.on{background:#2E6BB0;border-color:#2E6BB0;color:#fff}
   .rc-room{display:inline-block;font-size:11.5px;font-weight:900;border-radius:99px;padding:1px 8px;margin-right:4px}
   .rc-room.room_in{background:#E5484D;color:#fff;animation:tlnow 1.4s ease-in-out infinite} .rc-room.room_later{background:#EEF4FF;color:#2E6BB0;border:1.5px solid #9DBCEB}
+</style>`);
+
+/* ---------- 🤔 探す：お客様の希望から（アキネーター式。2026/11/14 店長）
+   ・まず「お客様が聞きたいこと」を1つ選ぶ → その項目だけが、カードに出る・並ぶ・絞れる（プロフに書いてある子だけ）
+   ・🍆 Pの状態（ずるむけ・仮性・玉あり／なし）／📐 Pサイズ／📏 身長（5cmごと）／🍒 胸／🎂 年齢／💇 髪／🚬 たばこ／🎯 希望プレイ
+   ・時間（何時から・何分）・日付（未来の日）・行ける子だけ は今までどおり ---------- */
+const FS_ASK = [
+  ["p", "🍆 Pの状態", [["zuru", "ずるむけ"], ["kasei", "仮性"], ["tama", "玉あり"], ["notama", "玉なし"]]],
+  ["psize", "📐 Pサイズ", [["desc", "大きい順"], ["asc", "小さい順"]]],
+  ["height", "📏 身長", [["asc", "低い順"], ["desc", "高い順"]]],
+  ["cup", "🍒 胸", [["desc", "大きい順"], ["asc", "小さい順"]]],
+  ["age", "🎂 年齢", [["asc", "若い順"], ["desc", "大人の順"]]],
+  ["hair", "💇 髪", [["ji", "地毛"], ["wig", "ウィッグ"]]],
+  ["tabako", "🚬 たばこ", [["no", "吸わない"], ["yes", "吸う"]]],
+  ["play", "🎯 希望プレイ", []],
+];
+let fsAskQ = "", fsAskS = "";
+function fsAskPaint(){
+  const el = $("fsAsk"); if(!el) return;
+  const q0 = FS_ASK.find(x => x[0] === fsAskQ);
+  el.innerHTML = `<div class="fsask"><b>🤔 お客様が聞きたいことは？</b>
+    <div class="chips">${FS_ASK.map(([k, l]) => `<button type="button" class="chip ${fsAskQ === k ? "on" : ""}" onclick="fsAskPick('${k}')">${l}</button>`).join("")}</div>
+    ${q0 && q0[2].length ? `<div class="chips fsasks">${q0[2].map(([k, l]) => `<button type="button" class="chip ${fsAskS === k ? "on" : ""}" onclick="fsAskSub('${k}')">${l}</button>`).join("")}</div>` : ""}</div>`;
+}
+function fsAskPick(k){
+  fsAskQ = fsAskQ === k ? "" : k; const q0 = FS_ASK.find(x => x[0] === fsAskQ);
+  fsAskS = q0 && q0[2].length && ["psize", "height", "cup", "age"].includes(k) ? q0[2][0][0] : "";
+  if(k === "play"){ const d = $("fs_playChips") && $("fs_playChips").closest("details"); if(d) d.open = fsAskQ === "play"; }
+  fsAskPaint(); fsPaint();
+}
+function fsAskSub(k){ fsAskS = fsAskS === k && !["psize", "height", "cup", "age"].includes(fsAskQ) ? "" : k; fsAskPaint(); fsAskApply(); }
+const CUP_N = c => c ? "ABCDEFGHIJK".indexOf(String(c).toUpperCase()) + 1 : 0;
+// その子のプロフから、聞かれたことの答え（v＝並べる数・t＝カードに出す文・tags＝絞りこみ用）
+function fsAskInfo(c, q){
+  const d = c && c.prof_id && profById ? profById[c.prof_id] : null; if(!d) return null;
+  const s = specOfProf(d);
+  if(q === "p"){
+    const txt = [s.psizeText, d.state ? "竿/玉：" + d.state : ""].filter(Boolean).join("　"); if(!txt) return null;
+    const p = String(s.psizeText || ""), st = String(d.state || "").replace(/\s/g, ""), tags = [];
+    if(/ずる|ズル|剥|むけ|ムケ/.test(p) && !/仮性/.test(p)) tags.push("zuru");
+    if(/仮性/.test(p)) tags.push("kasei");
+    if(/^あり\/あり/.test(st)) tags.push("tama"); else if(/\/なし/.test(st)) tags.push("notama");
+    return { t: "🍆 " + txt, tags };
+  }
+  if(q === "psize") return s.psize ? { v: s.psize, t: "📐 " + (s.psizeText || s.psize + "cm") } : null;
+  if(q === "height") return s.height ? { v: s.height, t: "📏 " + s.height + "cm" } : null;
+  if(q === "cup") return s.cup ? { v: CUP_N(s.cup), t: "🍒 " + s.cup + "カップ" + (s.size ? "（" + s.size + "）" : "") } : null;
+  if(q === "age") return Number(d.age) ? { v: Number(d.age), t: "🎂 " + d.age + "歳" } : null;
+  if(q === "hair") return d.hair ? { t: "💇 " + d.hair, tags: [/ウィッグ|両方/.test(d.hair) ? "wig" : "", /地毛|両方/.test(d.hair) ? "ji" : ""].filter(Boolean) } : null;
+  if(q === "tabako") return d.tabako ? { t: "🚬 " + d.tabako, tags: [/吸わ|なし|ノン|×/.test(d.tabako) ? "no" : "yes"] } : null;
+  return null;
+}
+function fsAskApply(){
+  const out = $("fsOut"); if(!out || !fsAskQ || fsAskQ === "play"){ if(out) out.querySelectorAll(".fsask-l,.fsgh,.fsask-n").forEach(x => x.remove()); return; }
+  if(!profById){ loadProfs().then(fsAskApply).catch(() => {}); return; }
+  const asc = fsAskS !== "desc", numQ = ["psize", "height", "cup", "age"].includes(fsAskQ);
+  let shown = 0, none = 0;
+  out.querySelectorAll(".fsgrid").forEach(g => {
+    g.querySelectorAll(".fsask-l,.fsgh").forEach(x => x.remove());
+    const cards = [...g.querySelectorAll(".fscard[data-cid]")].map(el => { const c = M.casts.find(x => x.id === el.dataset.cid); return { el, info: fsAskInfo(c, fsAskQ) }; });
+    cards.forEach(x => {
+      x.el.style.display = "";
+      const top = x.el.querySelector(".fsc-top");
+      if(top) top.insertAdjacentHTML("afterend", `<div class="fsc-l fsask-l ${x.info ? "" : "no"}">${x.info ? esc(x.info.t) : "プロフに書いていない"}</div>`);
+      if(!x.info){ none++; }
+      // 絞りこみ（Pの状態・髪・たばこ）：プロフに書いてある子のうち、合う子だけ
+      if(!numQ && fsAskS && (!x.info || !(x.info.tags || []).includes(fsAskS))) x.el.style.display = "none";
+      else shown++;
+    });
+    // 並べかえ（プロフにない子はいちばん下）
+    cards.sort((a, b) => (a.info ? 0 : 1) - (b.info ? 0 : 1) || (numQ && a.info && b.info ? (asc ? a.info.v - b.info.v : b.info.v - a.info.v) : 0));
+    let lastG = null;
+    cards.forEach(x => {
+      // 📏 身長は 5cm ごとに見出し
+      if(fsAskQ === "height" && x.info){ const gk = Math.floor(x.info.v / 5) * 5; if(gk !== lastG){ lastG = gk; g.insertAdjacentHTML("beforeend", `<div class="fsgh">📏 ${gk}〜${gk + 4}cm</div>`); } }
+      else if(fsAskQ === "height" && !x.info && lastG !== "none"){ lastG = "none"; g.insertAdjacentHTML("beforeend", `<div class="fsgh">プロフに身長なし</div>`); }
+      g.appendChild(x.el);
+    });
+  });
+  out.querySelectorAll(".fsask-n").forEach(x => x.remove());
+  const q0 = FS_ASK.find(x => x[0] === fsAskQ), s0 = q0 && q0[2].find(x => x[0] === fsAskS);
+  const head = out.querySelector(".fshead");
+  if(head) head.insertAdjacentHTML("beforeend", ` <span class="fsask-n">${esc(q0[1])}${s0 ? "：" + esc(s0[1]) : ""}${!numQ && fsAskS ? "（" + shown + "人）" : ""}</span>`);
+}
+{ const __fsPaintAsk = fsPaint; fsPaint = async function(){ const r = await __fsPaintAsk.apply(this, arguments); try{ fsAskPaint(); fsAskApply(); }catch(e){ console.error(e); } return r; }; }
+{ const __fsClearAsk = fsClear; fsClear = function(){ fsAskQ = ""; fsAskS = ""; return __fsClearAsk.apply(this, arguments); }; }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .fsask{background:#F6F4FF;border:1.5px solid #DCD6FA;border-radius:12px;padding:8px 10px;margin:8px 0}
+  .fsask > b{font-size:14px;color:#3B3480} .fsask .chips{margin-top:5px}
+  .fsasks .chip{background:#fff} .fsasks .chip.on{background:#6E5BD6;border-color:#6E5BD6;color:#fff}
+  .fsc-l.fsask-l{background:#EEEBFF;color:#2E2770;font-weight:900;font-size:13px} .fsc-l.fsask-l.no{background:#F3F2F7;color:#9A97AE;font-weight:700}
+  .fsgh{grid-column:1/-1;font-weight:900;color:#3B3480;border-bottom:2px solid #DCD6FA;padding:4px 2px 2px;margin-top:4px}
+  .fsask-n{font-size:12.5px;background:#6E5BD6;color:#fff;border-radius:99px;padding:1px 10px;margin-left:6px}
 </style>`);
 
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
