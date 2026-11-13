@@ -684,7 +684,7 @@ document.addEventListener("input", e => { if(e.target && ["f_map", "nh_map", "hb
 document.head.insertAdjacentHTML("beforeend", `<style>.lmwarn{background:#FFF4E5;border:1.5px solid #FFB547;color:#a35a00;border-radius:10px;padding:4px 10px;font-size:12.5px;font-weight:700;margin-top:4px;flex-basis:100%}</style>`);
 function mapLink(h){
   const u = String(h.map_url || "").trim();
-  if(/^https?:\/\//i.test(u) && !isLongMap(u)) return u;
+  if(/^https?:\/\//i.test(u)) return u;   // 長いURLでも、入っている地図を使う（調べる一覧になってしまうより、建物に行けるほうがいい）2026/11/13
   return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent((h.area || "") + " " + (h.hotel_name || "") + " ホテル");
 }
 // ホテル・自宅の欄に書いたホテルの地図（ホテル一覧の名前が入っていれば。長い名前を先に探す）

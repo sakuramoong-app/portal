@@ -83,6 +83,11 @@ function rcHotelOf(r){
 }
 function rcMapOf(r){
   if(!String(r.address || "").trim()) return "";
+  // 2026/11/13 店長：お客さんの場所に地図のURLが入っていれば、それ（自宅・貼った地図）
+  const p = typeof placeOf === "function" ? placeOf(r) : null;
+  if(p && /^https?:\/\//i.test(String(p.map_url || "").trim())) return String(p.map_url).trim();
+  // 🏠 自宅：住所そのままで地図（「ホテル」をつけない）
+  if(r.place_kind === "home") return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent((String(r.area || "").replace(/^出張（(.*)）$/, "$1").replace(/自宅$/, "").replace(/^出張$/, "") + " " + String(r.address).replace(/[\s　]+[0-9０-９]+[号室]*$/, "")).trim());
   return mapLink(rcHotelOf(r) || { area: r.area || "", hotel_name: String(r.address).replace(/[\s　]*[0-9０-９]+[号室]*$/, "") });
 }
 // 🏨 このキャストがNG（×）・条件つき（△）のホテル、店としてNGのホテル → 予約のカードに出す（2026/11/11 店長：まちがえて受けたとき気づけるように）
@@ -112,11 +117,11 @@ function openHotelBox(id){
   const area = r.area || "", addr = String(r.address || ""), m = addr.match(/^(.*?)[\s　]*([0-9０-９]+)[号室]*$/);
   const hotels = (M.hotels || []).filter(h => !area || !h.area || h.area === area);
   bg.innerHTML = `<div class="modal" style="max-width:560px"><button class="x" onclick="$('hbBg').classList.remove('show')">×</button>
-    <h2>🏨 ホテル・部屋（${esc(castName(r.cast_id))}・${hm(r.start_at)}〜）</h2>
+    <h2>${r.place_kind === "home" ? "🏠 自宅の住所・部屋" : "🏨 ホテル・部屋"}（${esc(castName(r.cast_id))}・${hm(r.start_at)}〜）</h2>
     <div class="hbinfo">📍 エリア <b>${esc(area || "なし")}</b>　🚕 交通費 <b>${yen(r.transport || 0)}</b>　総額 <b>${yen(r.total)}</b>
       <small>（エリア・交通費を変えるときは「✏️ 開く」から。料金が変わるため）</small></div>
     <div class="row2" style="margin-top:8px">
-      <div class="f"><label>ホテル名</label><input id="hb_name" list="hbList" value="${esc(m ? m[1] : addr)}" oninput="hbCheck(${id})"><datalist id="hbList">${hotels.map(h => `<option value="${esc(h.hotel_name)}">`).join("")}</datalist></div>
+      <div class="f"><label>${r.place_kind === "home" ? "住所・建物名" : "ホテル名"}</label><input id="hb_name" list="hbList" value="${esc(m ? m[1] : addr)}" oninput="hbCheck(${id})"><datalist id="hbList">${hotels.map(h => `<option value="${esc(h.hotel_name)}">`).join("")}</datalist></div>
       <div class="f"><label>部屋番号</label><input id="hb_room" inputmode="numeric" value="${esc(m ? m[2] : "")}" style="max-width:120px"></div>
     </div>
     <div id="hbMore"></div>
@@ -131,6 +136,14 @@ function hbCheck(id){
   const hit = (M.hotels || []).find(h => (!area || !h.area || h.area === area) && key(h.hotel_name) === key(name));
   const q2 = encodeURIComponent(((area || "").replace(/^出張（(.*)）$/, "$1").replace(/^出張$/, "") + " " + name).trim());
   if(!name){ el.innerHTML = ""; return; }
+  // 🏠 自宅（2026/11/13）：ホテルリストは関係なし。お客さんの場所として覚える（次回の受付の「過去の場所」に出る）。地図のURLもそこに
+  if(r.place_kind === "home"){
+    const p = typeof placeOf === "function" ? placeOf(r) : null;
+    el.innerHTML = `<div class="hbok" style="background:#F2F8FF;border-color:#9cc6ee">🏠 自宅です（ホテルリストには足しません）。<b>このお客さんの場所</b>として覚えます → 次回の受付で「📍 過去の場所」に出ます
+        <div style="margin:6px 0;display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn btn-ghost btn-sm" onclick="hbWin('https://www.google.com/maps/search/?api=1&query=${q2}')">🗺 Googleマップで調べる（小窓）</button></div>
+        <div class="f"><label>地図のURL（Googleマップで「共有」→「リンクをコピー」して貼る）</label><input id="hb_map" value="${esc((p && p.map_url) || "")}" placeholder="https://maps.app.goo.gl/…"></div></div>`;
+    return;
+  }
   el.innerHTML = hit
     ? `<div class="hbok">✅ ホテルリストにあります${hit.store_status === "ng" ? `<b style="color:#c0392b">（🚫 店としてNG）</b>` : hit.store_status === "far" ? "（△ 遠い）" : ""}　${hit.map_url ? `<a href="javascript:void 0" onclick="hbWin('${esc(hit.map_url)}')">🗺 地図を見る</a>` : `<a href="javascript:void 0" onclick="hbWin('https://www.google.com/maps/search/?api=1&query=${q2}')">🗺 Googleマップで調べる</a>`}</div>`
     : `<div class="newhotel">🆕 「<b>${esc(name)}</b>」は${area ? esc(area) + "の" : ""}ホテルリストにありません。
@@ -152,7 +165,18 @@ async function hbSave(id){
       q(await sb.from("prof_hotels").insert(row)); M.hotels.push(row);
     }
   }catch(e){ toast("ホテルリストに足せませんでした：" + (e.message || e)); }
-  if(address === (r.address || "")){ $("hbBg").classList.remove("show"); return; }
+  // 🏠 自宅：お客さんの場所（住所・地図のURL）として覚える（2026/11/13）
+  if(r.place_kind === "home" && r.customer_id && address){
+    const map = $("hb_map") ? $("hb_map").value.trim() : "";
+    if(map && !/^https?:\/\//i.test(map)){ toast("地図のURLは https:// から始まるものを貼ってください"); return; }
+    try{
+      const ex = (placesByCust[r.customer_id] || []).find(p => samePlace(p, r.area, address)) || placeOf(r);
+      if(ex) q(await sb.from("kb_customer_places").update({ address, place_kind: "home", map_url: map || ex.map_url || "", updated_at: new Date().toISOString(), updated_by: KB.operatorName() }).eq("id", ex.id));
+      else q(await sb.from("kb_customer_places").insert({ customer_id: r.customer_id, area: r.area || "", address, place_kind: "home", map_url: map, use_count: 1, last_used: r.biz_date || day, updated_by: KB.operatorName() }));
+      placesByCust[r.customer_id] = await loadPlacesFor([r.customer_id]);
+    }catch(e){ toast("お客さんの場所に覚えられませんでした：" + (e.message || e)); }
+  }
+  if(address === (r.address || "")){ $("hbBg").classList.remove("show"); renderList(); return; }
   if(await pushLog(id, `🏨 ホテル・部屋 → ${address || "（なし）"}`, { address })){ $("hbBg").classList.remove("show"); toast("ホテル・部屋を保存しました"); renderList(); }
 }
 document.head.insertAdjacentHTML("beforeend", `<style>.rc-hotel{font-family:inherit;font-size:13px;font-weight:800;background:#F2F8FF;border:1.5px solid #9cc6ee;color:#1f5d99;border-radius:99px;padding:2px 10px;cursor:pointer}
