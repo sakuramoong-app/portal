@@ -2272,5 +2272,49 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .cc2imp .tobibox{border-width:2.5px}
 </style>`);
 
+/* ---------- 🏨 ホテルの入室（2026/11/14 店長）：受付の時刻の下に「このあと入室」「入室済み（なるはや）」
+   ・このあと＝お客様はこのあとホテルに入室／入室済み＝もう入室しているので、なるはやで準備して向かってもらう
+   ・予約の guest_flags に room_later / room_in（データベースの形は変えない）。どちらか1つ
+   ・キャストに送る文の日時の下に1行。予約のカードにも印 ---------- */
+const ROOM = [["room_later", "🏨 このあと入室"], ["room_in", "🚪 入室済み（なるはや）"]];
+const ROOM_MSG = { room_later: "※お客様はこのあとホテルに入室します", room_in: "※お客様はすでにホテルに入室済みです。なるはやで準備して向かってください" };
+function roomOf(flags){ const l = flags instanceof Set ? [...flags] : (Array.isArray(flags) ? flags : []); return l.find(k => k === "room_later" || k === "room_in") || ""; }
+function paintRoomChips(){
+  const st = $("f_start"); if(!st) return;
+  let el = $("roomChips");
+  if(!el){ el = document.createElement("div"); el.id = "roomChips"; st.parentNode.insertAdjacentElement("afterend", el); }
+  const cur = roomOf(guestFlags);
+  el.innerHTML = ROOM.map(([k, l]) => `<button type="button" class="chip rmchip ${k} ${cur === k ? "on" : ""}" onclick="toggleRoom('${k}')">${l}</button>`).join("");
+}
+function toggleRoom(k){
+  const on = guestFlags.has(k);
+  ROOM.forEach(([x]) => guestFlags.delete(x));
+  if(!on) guestFlags.add(k);
+  if(typeof formDirty !== "undefined") formDirty = true;
+  paintRoomChips(); try{ recalc(); }catch(e){}
+}
+{ const __openFormRoom = openForm; openForm = function(){ const r = __openFormRoom.apply(this, arguments); try{ paintRoomChips(); }catch(e){} return r; }; }
+{ const __buildMsgRoom = buildMsg; buildMsg = function(){
+  const r = __buildMsgRoom.apply(this, arguments);
+  const k = roomOf(guestFlags), el = $("msg");
+  if(k && el && !el.value.includes(ROOM_MSG[k])){
+    const v = el.value, m = v.match(/\d{1,2}\/\d{1,2}\([日月火水木金土]\) [^\n]*〜[^\n]*/);
+    el.value = m ? v.replace(m[0], m[0] + "\n" + ROOM_MSG[k]) : v + "\n" + ROOM_MSG[k];
+  }
+  return r; }; }
+{ const __resCardRoom = resCard; resCard = function(r){
+  const h = __resCardRoom.apply(this, arguments), k = roomOf(r && r.guest_flags);
+  if(!k) return h;
+  const b = `<span class="rc-room ${k}">${k === "room_in" ? "🚪 入室済み・なるはや" : "🏨 このあと入室"}</span>`;
+  return h.includes('<span class="rc-k">📍') ? h.replace('<span class="rc-k">📍', b + '<span class="rc-k">📍') : h;
+}; }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  #roomChips{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}
+  .rmchip.room_in.on{background:#E5484D;border-color:#E5484D;color:#fff}
+  .rmchip.room_later.on{background:#2E6BB0;border-color:#2E6BB0;color:#fff}
+  .rc-room{display:inline-block;font-size:11.5px;font-weight:900;border-radius:99px;padding:1px 8px;margin-right:4px}
+  .rc-room.room_in{background:#E5484D;color:#fff;animation:tlnow 1.4s ease-in-out infinite} .rc-room.room_later{background:#EEF4FF;color:#2E6BB0;border:1.5px solid #9DBCEB}
+</style>`);
+
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
 init();
