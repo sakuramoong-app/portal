@@ -677,11 +677,19 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 let cngRev = null, cngRevHideDone = true;
 // 🎯 しぼりこみ（2026/11/14 店長：665件は多すぎる）：期間（お客さんが最後に来た日）・在籍中の子だけ・キャストで
 let cngDays = 365, cngWho = "now", cngCast = "";
-function cngIsNow(x){ const c = x.n.cast_id && M.casts.find(y => y.id === x.n.cast_id); return !!c && c.status !== "left"; }
+// エクセルの名前だけのNG（「美咲」→ 櫻井美咲）もキャストにつなげて見る（受付と同じ考え方）2026/11/14
+function cngCastOf(n){
+  if(n.cast_id) return M.casts.find(y => y.id === n.cast_id) || null;
+  const k = String(n.cast_name || "").normalize("NFKC").replace(/[\s　]/g, ""); if(!k) return null;
+  const nm = c => [c.official_name, c.temp_name].filter(Boolean).map(s => String(s).normalize("NFKC").replace(/[\s　]/g, ""));
+  const ex = M.casts.filter(c => nm(c).includes(k)); if(ex.length) return ex.find(c => c.status !== "left") || ex[0];
+  const tl = M.casts.filter(c => nm(c).some(s => s.length > k.length && k.length >= 2 && s.endsWith(k))); return tl.length === 1 ? tl[0] : null;
+}
+function cngIsNow(x){ const c = cngCastOf(x.n); return !!c && c.status !== "left"; }
 function cngIn(x, skipCast){
   if(cngDays && (!x.last || x.last < new Date(Date.now() - cngDays * 86400000 + 9 * 3600000).toISOString().slice(0, 10))) return false;
   if(cngWho === "now" && !cngIsNow(x)) return false;
-  if(cngWho === "none" && x.n.cast_id) return false;
+  if(cngWho === "none" && cngCastOf(x.n)) return false;
   if(!skipCast && cngCast && x.nm !== cngCast) return false;
   return true;
 }
@@ -704,7 +712,7 @@ async function openCastNgReview(){
       (r.data || []).forEach(x => { if(x.biz_date && (!last[x.customer_id] || x.biz_date > last[x.customer_id])) last[x.customer_id] = x.biz_date; });
     }
     cngRev = ns.map(n => {
-      const nm = n.cast_id ? castLabel(n.cast_id) : n.cast_name, short = String(n.cast_name || nm || "").trim();
+      const cc0 = cngCastOf(n), nm = cc0 ? (cc0.official_name || cc0.temp_name) : n.cast_name, short = String(n.cast_name || nm || "").trim();
       const hs = (hist[n.customer_id] || []).slice().sort((a, b) => String(b.biz_date || "").localeCompare(String(a.biz_date || "")));
       const same = x => (n.cast_id && x.cast_id === n.cast_id) || (short && String(x.cast_raw || "").includes(short));
       let src = hs.filter(x => x.cast_ng && same(x));

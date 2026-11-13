@@ -1147,9 +1147,11 @@ async function checkOldNomi(){
       rows2.sort((a, b)=>String(b.biz_date).localeCompare(String(a.biz_date)));
       // このお客さんは、このキャストNG？（顧客台帳）
       try{
-        let n = await sb.from("kb_cust_cast_ng").select("id,reason,ask").eq("customer_id", custId).eq("cast_id", cid).limit(1);
-        if(n.error) n = await sb.from("kb_cust_cast_ng").select("id,reason").eq("customer_id", custId).eq("cast_id", cid).limit(1);   // SQL 162 の前
-        if(!n.error && n.data && n.data[0]) ng = { cid, id: n.data[0].id, reason: n.data[0].reason || "", ask: !!n.data[0].ask };
+        // 2026/11/14：キャストIDがつながっていないNG（エクセルの「美咲」「みさ」など名前だけ）も、名前でこの子なら止める
+        let n = await sb.from("kb_cust_cast_ng").select("id,reason,ask,cast_id,cast_name").eq("customer_id", custId).limit(200);
+        if(n.error) n = await sb.from("kb_cust_cast_ng").select("id,reason,cast_id,cast_name").eq("customer_id", custId).limit(200);   // SQL 162 の前
+        const hitNg = !n.error && (n.data || []).find(x => x.cast_id ? x.cast_id === cid : (typeof castByRaw === "function" && (castByRaw(x.cast_name) || {}).id === cid));
+        if(hitNg) ng = { cid, id: hitNg.id, reason: hitNg.reason || "", ask: !!hitNg.ask };
       }catch(e){}
       const last = rows2[0];
       if(last){
