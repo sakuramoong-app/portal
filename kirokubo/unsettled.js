@@ -163,7 +163,7 @@ function unsBoxHtml(id, c){
       <b class="ab">${UNS_ABC[i] || i + 1}</b> <b>${unsMd(x.date)}</b>（${esc(castName(id))}）<span class="${x.amount >= 0 ? "neg" : "pos"}">${esc(x.what)}</span>${unsJump(x.date, id)}</label>`).join("")}
     ${picked.length ? `<div class="ut">当日の投函額 ${yen(c.drop)}${picked.map(x => (x.amount >= 0 ? " ＋ " : " − ") + yen(Math.abs(x.amount))).join("")} ＝
         ${due >= 0 ? `<span class="due">💰 合計で投函 ${yen(due)}</span>` : `<span class="due give">💴 お店から渡す ${yen(-due)}</span>`}</div>
-      <div class="unsexact">⚠️ 未精算を合算します。お釣りが発生しないように、<b>ちょうど ${yen(Math.abs(due))}</b> で${due >= 0 ? "投函" : "お渡し"}してください<br><small>投函した額をちょうどで入れないと、精算済にできません</small></div>
+      ${due < 0 ? `<div class="unsexact">🚫 合算しても、お店から ${yen(-due)} 渡すことになるので、この合算は精算できません。<br><small>返金の日のチェックをはずして、この日の分だけ精算してください（返金は、その日の精算画面で「💴 返金する」）</small></div>` : `<div class="unsexact">⚠️ 未精算を合算します。お釣りが発生しないように、<b>ちょうど ${yen(Math.abs(due))}</b> で${due >= 0 ? "投函" : "お渡し"}してください<br><small>投函した額をちょうどで入れないと、精算済にできません</small></div>`}
       <div class="hint2" style="font-size:11.5px">「精算済にする」で、チェックしたものも精算になります（のこりは A から繰り上げ）。投函した額は、この合計と比べます。</div>` : `<div class="hint2" style="font-size:11.5px">チェックしないものは、つぎの精算にのこります</div>`}
     </div>`;
 }
@@ -1285,4 +1285,18 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   const NOTE = `※領収書（${rcptText(a)}）も必ずいっしょに投函・お渡しください`;
   const had = MEMO_NOTE.includes(NOTE); if(!had) MEMO_NOTE.push(NOTE);
   try{ return __cdiRc.apply(this, arguments); } finally{ if(!had){ const i = MEMO_NOTE.indexOf(NOTE); if(i >= 0) MEMO_NOTE.splice(i, 1); } }
+}; }
+// 💴 返金だけのときは、写真・監視カメラの欄を出さない（いらないので。場所は「回収」）2026/11/15
+{ const __cardRf = cardHtml; cardHtml = function(id, c){
+  const h = __cardRf.apply(this, arguments);
+  try{
+    const cd = unsCD()[id] || {};
+    if(cd.settled || cd.direct_home || !isRefund(id, c)) return h;
+    const t = document.createElement("div"); t.innerHTML = h;
+    const pl = t.querySelector("#pl-" + id); if(pl){ [...pl.options].forEach(o => o.selected = o.value === "回収"); pl.setAttribute("style", "background-color:" + (PLACE_COLOR["回収"] || "#fff")); plSel[id] = "回収"; const o = pl.querySelector('option[value="回収"]') || [...pl.options].find(x => x.textContent === "回収"); if(o) o.setAttribute("selected", ""); }
+    const cam = t.querySelector("#camw-" + id); if(cam) cam.setAttribute("style", "display:none");
+    const ph = t.querySelector("#ph-" + id); if(ph) ph.outerHTML = `<div class="stt" style="color:#1f4f80">📷 返金のときは、写真と監視カメラの確認はいりません（内勤の手渡し）</div>`;
+    t.querySelectorAll(".phchk small").forEach(s => s.textContent = "金額や精算メモがちがっていたら ✓ しないで、店長に聞いてください");
+    return t.innerHTML;
+  }catch(e){ return h; }
 }; }

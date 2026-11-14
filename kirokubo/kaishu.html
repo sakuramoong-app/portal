@@ -84,7 +84,7 @@
   td.cntc .dif{font-size:12px;font-weight:800;color:var(--sub);margin-top:2px} td.cntc.ok{background:#E5F6EC} td.cntc.ok .dif{color:#2e8b57} td.cntc.ok input.cnt{border-color:#2e8b57;color:#2e8b57;background:#fff}
   td.cntc.ng{background:#FFF1F1} td.cntc.ng .dif{color:#c0392b} td.cntc .hyaku{font-size:20px;margin-left:4px;vertical-align:middle}
   td.cntc .hazu{font-size:17px;white-space:nowrap} td.cntc .hazu small,td.cntc .tokan small{font-size:11px;color:var(--sub);font-weight:800} td.cntc .tokan{margin-top:3px;white-space:nowrap}
-  td.cntc .mv{margin-top:6px;padding:5px 6px;border-radius:8px;background:#F3EEFF;color:#5b3fa6;font-size:12px;text-align:left;white-space:normal} td.cntc .mv .mva{margin-top:3px;font-weight:900;text-align:right} td.cntc .mv .mva.ok{color:#2e8b57} td.cntc .mv .mva.ng{color:#c0392b}
+  td.cntc .mv{margin-top:6px;padding:5px 6px;border-radius:8px;background:#F3EEFF;color:#5b3fa6;font-size:12px;text-align:left;white-space:normal} td.cntc .mv .mva{margin-top:3px;font-weight:900;text-align:right} td.cntc .mv .mva.ok{color:#2e8b57} td.cntc .mv .mva.ng{color:#c0392b} td.cntc .mv .mvp{font-size:11.5px;color:#2f7fd0;font-weight:800;text-align:right}
   .cmebtn{font-family:inherit;font-weight:800;font-size:12px;padding:4px 8px;border-radius:8px;border:1.5px solid #E0001B;background:#fff;color:#E0001B;cursor:pointer;white-space:nowrap} .cmebtn.on{background:#E0001B;color:#fff} .chaintbl input.cnt{width:86px}
   .chaintbl tr.cur td{background:#FFF6D6} .chaintbl tr.tot td{border-top:2px solid #333} .chaintbl td,.chaintbl th{white-space:nowrap} .chaintbl td.l{white-space:normal} a.chainbtn{font-weight:900;color:#5b3fa6}
   tr.perfect td:first-child b{color:#2e8b57}
@@ -894,15 +894,17 @@ function movesOf(r){
   return a;
 }
 const moveNet = r => movesOf(r).reduce((a, x) => a + x.sgn * x.amt, 0);
+// この日にできて、まだ精算していない未精算・お釣り（移したあとの残りがこれと同じなら、ずれではない）
+const pendingOf = r => -((r.R && r.R.unsMade) || []).filter(u => u.cast_id === r.id && u.biz_date === r.day && isMoveUns(u) && !u.done_on).reduce((a, u) => a + Number(u.amount || 0), 0);
 // 移したあと（0 なら、この日の袋は「はず」どおり）
 const afterOf = r => { const v = countVal(r); return v == null ? null : v + moveNet(r) - r.amt; };
 // 💯 完璧回収：移したあと ±0・精算ミスなし・領収書の回収待ちなし
 const countPerfect = r => { const af = afterOf(r); return af === 0 && !Number((r.s || {}).diff || 0) && !hasReceipt(r); };
 function moveHtml(r, diff){
-  const m = movesOf(r); if(!m.length || diff == null) return "";
+  const m = movesOf(r); if(diff == null || (!m.length && !(diff && diff === pendingOf(r)))) return "";
   const after = diff + moveNet(r);
   return `<div class="mv">${m.map(x => `<div>${x.text}${x.d ? ` <a class="j" href="javascript:void 0" onclick="openDay('${x.d}')">↗</a>` : ""}</div>`).join("")}
-    <div class="mva ${after ? "ng" : "ok"}">移したあと <b>${pm(after)}</b>${after ? "" : " ✅"}</div></div>`;
+    <div class="mva ${after ? "ng" : "ok"}">移したあと <b>${pm(after)}</b>${after ? "" : " ✅"}</div>${after && after === pendingOf(r) ? `<div class="mvp">＝ まだ精算していない${after > 0 ? "お釣り（キャストに返す分・つぎの精算まで袋に）" : "未精算（キャストからもらう分）"}</div>` : ""}</div>`;
 }
 function countCell(r, ed){
   const man = r.cl.collected != null, v = countVal(r), auto = !man && v != null, ok = countPerfect(r);
