@@ -2276,8 +2276,10 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    ・このあと＝お客様はこのあとホテルに入室／入室済み＝もう入室しているので、なるはやで準備して向かってもらう
    ・予約の guest_flags に room_later / room_in（データベースの形は変えない）。どちらか1つ
    ・キャストに送る文の日時の下に1行。予約のカードにも印 ---------- */
-const ROOM = [["room_later", "🏨 このあと入室"], ["room_in", "🚪 入室済み（なるはや）"]];
-const ROOM_MSG = { room_later: "※お客様はこのあとホテルに入室します", room_in: "※お客様はすでにホテルに入室済みです。なるはやで準備して向かってください" };
+const ROOM = [["room_later", "🏨 このあと入室（15分後）"], ["room_in", "🚪 入室済み（今）"]];
+// 2026/11/15 店長：このあと＝開始時刻を今から15分後に／入室済み＝開始時刻を今に。文も変えた
+const ROOM_MSG_F = { room_later: t => `※お客様はこのあと${t ? t + "ごろ" : ""}ホテルに入室します`, room_in: () => "※お客様はすでにホテルに入室済みなので、準備でき次第お願いいたします" };
+const ROOM_MSG = new Proxy({}, { get: (_, k) => ROOM_MSG_F[k] ? ROOM_MSG_F[k]($("f_start") ? $("f_start").value : "") : undefined });
 function roomOf(flags){ const l = flags instanceof Set ? [...flags] : (Array.isArray(flags) ? flags : []); return l.find(k => k === "room_later" || k === "room_in") || ""; }
 function paintRoomChips(){
   const st = $("f_start"); if(!st) return;
@@ -2289,7 +2291,9 @@ function paintRoomChips(){
 function toggleRoom(k){
   const on = guestFlags.has(k);
   ROOM.forEach(([x]) => guestFlags.delete(x));
-  if(!on) guestFlags.add(k);
+  if(!on){ guestFlags.add(k);
+    const d = new Date(Date.now() + (k === "room_later" ? 15 : 0) * 60000);
+    if($("f_start")) $("f_start").value = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
   if(typeof formDirty !== "undefined") formDirty = true;
   paintRoomChips(); try{ recalc(); }catch(e){}
 }
@@ -2305,7 +2309,7 @@ function toggleRoom(k){
 { const __resCardRoom = resCard; resCard = function(r){
   const h = __resCardRoom.apply(this, arguments), k = roomOf(r && r.guest_flags);
   if(!k) return h;
-  const b = `<span class="rc-room ${k}">${k === "room_in" ? "🚪 入室済み・なるはや" : "🏨 このあと入室"}</span>`;
+  const b = `<span class="rc-room ${k}">${k === "room_in" ? "🚪 入室済み" : "🏨 このあと入室"}</span>`;
   return h.includes('<span class="rc-k">📍') ? h.replace('<span class="rc-k">📍', b + '<span class="rc-k">📍') : h;
 }; }
 document.head.insertAdjacentHTML("beforeend", `<style>
