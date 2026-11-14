@@ -1147,15 +1147,17 @@ function envHtml(rows, ed, pre, title){
       <div class="envwhen">🧾 ${r.paidOn && r.paidOn > r.day ? `<b>→ ${md(r.paidOn)} ${r.cd.settled_at ? when(r.cd.settled_at).split(" ")[1] || "" : ""} に精算（後日）</b>` : `${r.cd.settled_at ? when(r.cd.settled_at) : ""} に精算`}${r.place ? "・" + esc(r.place === "回収" ? "手渡し（回収）" : r.place + "に投函") : ""}${r.cd.settled_by ? "・" + (typeof KBF !== "undefined" ? KBF.staffTag(r.cd.settled_by) : esc(r.cd.settled_by)) : ""}${r.cl.state && r.cl.updated_by ? `<br>✔ 回収サイン：${typeof KBF !== "undefined" ? KBF.staffTag(r.cl.updated_by) : esc(r.cl.updated_by)} ${r.cl.updated_at ? when(r.cl.updated_at) : ""}` : r.auto ? "<br>✔ 自動（その場で受け取った精算）" : ""}</div>
       ${envSignHtml(r, ed)}
       <div class="envh">① ${refund ? "返金の精算（キャストからのお金はありません）" : "透明封筒を開けて、中のお金を数えて入れる"}</div>
-      ${refund ? `<div class="envsub">封筒中：${num(cnt)}円（お店から渡した分）</div>` : `<div class="envcount">封筒中 ${ed ? `<input type="number" class="cnt" value="${cnt != null ? cnt : ""}" placeholder="数えた額" onchange="setCollected('${esc(r.id)}',this.value,${r.amt},'${r.day}',${E.dep == null ? "null" : E.dep})">` : `<b>${cnt != null ? num(cnt) : "—"}</b>`} 円
-        <div class="envcmp">${cnt == null ? "数えたら入れてください" : dif === 0 ? `✅ 精算で投函した額（${num(E.dep)}円）と同じ` : `⚠️ 精算で投函した額 ${num(E.dep)}円 より ${num(Math.abs(dif))}円 ${dif < 0 ? "少ない" : "多い"}`}</div>${envUnsHtml(r, cnt, E.dep, ed)}</div>`}
+      <div class="envcount ${st.perfect ? "ok" : ""}">
+        <div class="envgoal">🎯 本来あるべき額<small>（店落ち − カード − 振込）</small><b>${num(r.amt)}円</b>${st.target !== r.amt ? `<small class="envpend">＋ まだ${st.target > r.amt ? "返していないお釣り" : "もらっていない未精算"} ${num(Math.abs(st.target - r.amt))}円（袋で${st.target > r.amt ? "あずかる" : "足りない"}）→ 目標 <b>${num(st.target)}円</b></small>` : ""}</div>
+        ${refund ? `<div class="envsub">封筒中：${num(cnt)}円（お店から渡した分）</div>` : `<div class="envin">封筒中 ${ed ? `<input type="number" class="cnt" value="${cnt != null ? cnt : ""}" placeholder="数えた額" onchange="setCollected('${esc(r.id)}',this.value,${r.amt},'${r.day}',${E.dep == null ? "null" : E.dep})">` : `<b>${cnt != null ? num(cnt) : "—"}</b>`} 円</div>`}
+        <div class="envnow">${st.now == null ? "封筒の中のお金を数えて入れてください" : `封筒中 ${num(cnt)}${st.plus ? ` ${st.plus > 0 ? "＋" : "−"} ✓した処理 ${num(Math.abs(st.plus))}` : ""}${st.recv ? ` ${st.recv > 0 ? "＋" : "−"} ほかの封筒の分 ${num(Math.abs(st.recv))}` : ""} ＝ <b>${num(st.now)}円</b>
+          <div class="envres">${st.perfect ? "💯 完璧回収" : st.rest === 0 ? `✅ 本来あるべき額と同じ（のこりの ✓ ${st.left}）` : `本来あるべき額まで <b>${st.rest < 0 ? "あと " + num(-st.rest) + "円" : num(st.rest) + "円 多い"}</b>（② ③ を ✓ して合わせる）`}</div>`}</div>
+        ${refund || cnt == null || E.dep == null ? "" : `<div class="envcmp">${dif === 0 ? `✅ 封筒中は、精算で投函した額（${num(E.dep)}円）と同じ` : `⚠️ 封筒中が、精算で投函した額 ${num(E.dep)}円 より ${num(Math.abs(dif))}円 ${dif < 0 ? "少ない" : "多い"}`}</div>${envUnsHtml(r, cnt, E.dep, ed)}`}</div>
       <div class="envh">② 精算メモ・領収書を見くらべる（合っていたら ✓）</div>${E.checks.map(([k, h]) => cb(k, h)).join("")}
       <div class="envh">③ 交通費・未精算など、別の処理（金額が合っていたら ✓ して処理）</div>
       ${E.mv.length ? E.mv.map(m => cb(m.key, m.text, m.sgn * m.amt)).join("") : `<div class="envsub">別の処理はありません</div>`}
       ${E.recv.map(m => `<div class="envrecv">↪ ${m.text}<b class="envamt ${m.sgn < 0 ? "m" : ""}">${m.sgn > 0 ? "＋" : "−"}${num(m.amt)}</b><small>（ほかの日の封筒で処理）</small></div>`).join("")}
       ${E.info.map(t => `<div class="envsub">${t}</div>`).join("")}
-      <div class="envcalc ${st.perfect ? "ok" : ""}">${st.now == null ? "封筒中を入れると、ここで計算します" : `封筒中 ${num(cnt)}${st.plus ? ` ${st.plus > 0 ? "＋" : "−"} ✓した処理 ${num(Math.abs(st.plus))}` : ""}${st.recv ? ` ${st.recv > 0 ? "＋" : "−"} ほかの封筒から ${num(Math.abs(st.recv))}` : ""} ＝ <b>${num(st.now)}</b>　／　はず ${num(r.amt)}${st.target !== r.amt ? `（＋まだの${st.target > r.amt ? "お釣り" : "未精算"} ${num(Math.abs(st.target - r.amt))}）` : ""}
-        <div class="envres">${st.perfect ? "💯 完璧回収" : st.rest === 0 ? `✅ 金額は合っています（のこりの ✓ ${st.left}）` : `のこり ${st.rest > 0 ? "＋" : "−"}${num(Math.abs(st.rest))}（まだ ✓ していない処理があれば ✓）`}</div>`}</div>
       <details class="envng"><summary>⚠️ チェックリストの内容や金額が合っていないとき</summary>
         <ol><li>元の精算画面で、正しく直す（「精算済をもどす」→ 直す → 精算済にする）<a class="j" href="settle.html?d=${r.day}&c=${encodeURIComponent(r.id)}" target="_blank" rel="noopener">↗ ${md(r.day)} の精算へ</a></li>
           <li>正しい額と元の額をくらべて、差額を出す</li>
@@ -1180,6 +1182,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .envc .envcalc{margin:8px 0 4px;padding:6px 8px;border-radius:10px;background:#F3EEFF;font-size:13px;font-weight:700} .envc .envcalc.ok{background:#E5F6EC} .envc .envres{font-weight:900;margin-top:2px} .envc .envcalc.ok .envres{color:#1E7A3C}
   .envc .envng{margin:4px 0;font-size:12px} .envc .envng summary{cursor:pointer;color:#c0392b;font-weight:800} .envc .envng ol{margin:4px 0;padding-left:1.4em}
   .envc .envunsbtn{margin-top:4px} .envc .envuns{width:100%;font-size:12px;font-weight:800;color:#2f7fd0}
+  .envc .envcount{display:grid;gap:6px} .envc .envcount.ok{border-color:#2E9E4A;background:#EEFAF1} .envc .envgoal{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;font-size:14px} .envc .envgoal b{font-size:20px;color:#a1271c;margin-left:auto} .envc .envgoal small{font-size:11.5px;color:#8a7f99;font-weight:700} .envc .envgoal .envpend{width:100%;color:#2f7fd0}
+  .envc .envin{display:flex;align-items:center;gap:6px} .envc .envnow{font-size:13px;font-weight:700} .envc .envnow b{font-size:16px} .envc .envcount.ok .envres{color:#1E7A3C}
   .envc .envlog{margin:6px 0 2px;font-size:12px;color:#5C4B4F} .envc .envlog summary{cursor:pointer;font-weight:800;color:#5b3fa6} .envc .envlog div{padding:2px 0;border-top:1px dashed #EEE}
   .envc .envwhen{font-size:12.5px;color:#5b3fa6;font-weight:700;margin-top:4px}
   .envc.ok{border-color:#8FD3A0;background:#F1FBF4}
