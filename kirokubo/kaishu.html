@@ -378,7 +378,7 @@ async function loadDay(quiet){   // quiet：保存のあと（「読み込み中
     // 📮 封筒ごとチェック：この日にいっしょに精算した、ほかの日の精算（その日の「はず」を見る）
     R.envX = [];
     try{ const xd = [...new Set(R.cds.filter(c => c.biz_date === day && c.settled && c.settle_snapshot && Array.isArray(c.settle_snapshot.uns)).flatMap(c => c.settle_snapshot.uns.filter(x => x.kind === "day" && x.date).map(x => x.date)))];
-      if(xd.length){ const ex = await sb.from("kb_cast_days").select("biz_date,cast_id,settle_snapshot").in("biz_date", xd); R.envX = ex.error ? [] : (ex.data || []); } }catch(e){}
+      if(xd.length){ const ex = await sb.from("kb_cast_days").select("biz_date,cast_id,settle_snapshot,plus_items").in("biz_date", xd); R.envX = ex.error ? [] : (ex.data || []); } }catch(e){}
     R.unsMade = [];
     try{ const um = await sb.from("kb_unsettled").select("cast_id,biz_date,amount,done_on,source,note").eq("biz_date", day); R.unsMade = um.error ? [] : (um.data || []).filter(x => x.biz_date === day && Number(x.amount)); }catch(e){}
     R.kikiOpen = [];
@@ -491,7 +491,7 @@ async function loadEnvSet(){
     try{ R2.col = q(await sb.from("kb_collections").select("*").in("biz_date", days)) || []; }catch(e){}
     try{ const um = await sb.from("kb_unsettled").select("cast_id,biz_date,amount,done_on,source,note").in("biz_date", days); R2.unsMade = um.error ? [] : (um.data || []); }catch(e){}
     const xd = [...new Set(cds.flatMap(c => (c.settle_snapshot && Array.isArray(c.settle_snapshot.uns) ? c.settle_snapshot.uns : []).filter(x => x.kind === "day" && x.date).map(x => x.date)))];
-    if(xd.length){ try{ const ex = await sb.from("kb_cast_days").select("biz_date,cast_id,settle_snapshot").in("biz_date", xd); R2.envX = ex.error ? [] : (ex.data || []); }catch(e){} }
+    if(xd.length){ try{ const ex = await sb.from("kb_cast_days").select("biz_date,cast_id,settle_snapshot,plus_items").in("biz_date", xd); R2.envX = ex.error ? [] : (ex.data || []); }catch(e){} }
   }
   const rows = [];
   cds.forEach(c => { const r = rowsFor(c.biz_date, R2).find(x => x.id === c.cast_id); if(r && r.s && !rows.some(x => x.id === r.id && x.day === r.day)) rows.push(r); });
@@ -980,6 +980,26 @@ async function countUnsSync(cid, day, n, exp){
      ② そのあとやること（ほかの日の袋へ移す・もらう／キャッシュフローから交通費）を順番に出す → やったら ✓
      ③ 全部 ✓ で「✅ 完了」
    ・✓ は kb_collections.done_items（"env:…"）。お金の記録・計算は変えない（見るだけ＋✓） ---------- */
+/* 🧾 この封筒に入っているはずの領収書（2026/11/15 店長：内容を読んで自動で。ないときは出さない）
+   ・プラス（交通費・タクシー・立て替えなど）の項目 … その日の分と、合算したほかの日の分
+   ・いっしょに精算した「🧾 領収書のみ未回収／領収書未精算」の未精算
+   ・精算の履歴の「🧾 領収書だけ投函」 */
+const RCPT_RX = /交通|タクシー|領収|立替|立て替え|経費|チャージ|駐車|電車|バス|高速/;
+function receiptsOf(r){
+  const a = [], s = r.s || {};
+  const fromPlus = (cd, d) => (Array.isArray(cd && cd.plus_items) ? cd.plus_items : []).filter(x => Number(x.amount) && RCPT_RX.test(String(x.label || "交通費"))).forEach(x => a.push({ d, label: x.label || "交通費", amt: Number(x.amount) }));
+  fromPlus(r.cd, r.day);
+  (Array.isArray(s.uns) ? s.uns : []).forEach(x => {
+    if(x.kind === "day" && x.date){ const cdA = ((r.R && r.R.envX) || (D && D.envX) || []).find(c => c.cast_id === r.id && c.biz_date === x.date); fromPlus(cdA, x.date); }
+    else if(/🧾/.test(String(x.label || ""))) a.push({ d: x.date, label: String(x.label).replace(/^[A-Z]\s*/, "").slice(0, 40), amt: Number(x.amount) || 0, uns: true });
+  });
+  (Array.isArray(r.cd.settle_log) ? r.cd.settle_log : []).filter(l => l.kind === "receipt").forEach(l => a.push({ d: r.day, label: "領収書だけ投函" + (l.text ? "（" + String(l.text).slice(0, 30) + "）" : ""), amt: Number(l.amount) || 0 }));
+  return a;
+}
+function receiptLine(list){
+  const sum = list.reduce((t, x) => t + (x.amt || 0), 0);
+  return `🧾 領収書 <b>${list.length}枚</b>：${list.map(x => `${md(x.d)} ${esc(x.label)} ${x.amt ? num(x.amt) + "円" : "（金額なし）"}`).join("／")}${list.length > 1 ? `　合計 <b>${num(sum)}円</b>` : ""}`;
+}
 function envOf(r){
   const s = r.s || {}, memo = {};
   const own = s.drop != null ? Number(s.drop) : r.amt;
@@ -1010,7 +1030,8 @@ function envOf(r){
   if(Number(s.diff || 0)) todo.push(`📒 ${Number(s.diff) < 0 ? "未精算 " + num(-Number(s.diff)) : "お釣り " + num(Number(s.diff))}円 は、つぎの精算でキャストと（未精算の表に入っています）`);
   const checks = [["env:memo", `📝 精算メモが <b>${memoL.length}枚</b>：${memoL.map(([d, v]) => `${md(d)} ${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}`).join("／")}`],
     ["env:cash", `💴 お金が <b>${dep != null ? num(dep) : "?"}円</b>${dep != null && dep !== due ? `（本来 ${num(due)}円・${dep < due ? "足りない " + num(due - dep) : "多い " + num(dep - due)}）` : ""}${due < 0 ? "（お店から渡す封筒）" : ""}`],
-    ["env:rcpt", `🧾 領収書${hasReceipt(r) ? "が入っている（領収書だけ投函あり）" : "の有無（あるはずのものが入っている）"}`]];
+  ];
+  const rc = receiptsOf(r); if(rc.length) checks.push(["env:rcpt", receiptLine(rc)]);   // 領収書がないはずの封筒は出さない
   return { memoL, due, dep, todo, checks, keys: checks.map(c => c[0]).concat(todo.map((_, i) => "env:t" + i)) };
 }
 // 📦 ほかの日の封筒に合算で入っている日（この日の売上として、この日の中に出す。チェックは入っている封筒のカードで）2026/11/15

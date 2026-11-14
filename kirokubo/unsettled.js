@@ -1130,8 +1130,17 @@ function phChkItems(id, c){
     ["memo", `📝 精算メモが <b>${P.memo.length}枚</b> 入っている（${P.memo.map(m => unsMd(m[0])).join("・")}）`],
     ["memov", `🔢 精算メモの日付・名前・金額が合っている（${P.memo.map(([bd, v]) => `${unsMd(bd)} ${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}`).join("／")}）`],
     ["cash", `💴 写真のお金を数えた額が、実際に投函した額 <b>${c.deposited != null ? yen(c.deposited) : "（まだ入っていない）"}</b> と同じ${due >= 0 ? `（投函額 ${yen(due)}）` : ""}`],
-    ["rcpt", `🧾 領収書の有無を確認した（あるはずの領収書が入っている／ないはずなのに入っていない）`],
-  ];
+  ].concat((() => {   // 🧾 領収書：プラス（交通費・タクシー・立て替えなど）と、いっしょに精算する「🧾 領収書」の未精算から自動で。ないときは出さない（2026/11/15 店長）
+    const RX = /交通|タクシー|領収|立替|立て替え|経費|チャージ|駐車|電車|バス|高速/, a = [];
+    const fromPlus = (items, d) => (items || []).filter(x => Number(x.amount) && RX.test(String(x.label || "交通費"))).forEach(x => a.push([d, x.label || "交通費", Number(x.amount)]));
+    fromPlus(c.plusItems, day);
+    const cd = unsCD()[id] || {}, sel = unsSel[id] || new Set();
+    let open = []; try{ open = unsOpen(id); }catch(e){}
+    open.filter(x => sel.has(x.key)).forEach(x => { if(x.kind === "day" && x.raw && x.raw.c) fromPlus(x.raw.c.plusItems, x.date); else if(/🧾/.test(String(x.what || (x.raw && x.raw.note) || ""))) a.push([x.date, "領収書の未精算", Math.abs(Number(x.amount) || 0)]); });
+    if(!a.length) return [];
+    const sum = a.reduce((t, x) => t + x[2], 0);
+    return [["rcpt", `🧾 領収書 <b>${a.length}枚</b> が入っている：${a.map(x => `${unsMd(x[0])} ${esc(x[1])} ${x[2] ? yen(x[2]) : "（金額なし）"}`).join("／")}${a.length > 1 ? `　合計 <b>${yen(sum)}</b>` : ""}`]];
+  })());
 }
 function phChkOk(id){ const s = phChk[id] || new Set(); return phChkItems(id).every(([k]) => s.has(k)); }
 function phChkHtml(id, c, done){
