@@ -634,7 +634,7 @@ settleCanvas = function(id){
   }
   ops.push(["memo"]);
   if(P.rest.length){ ops.push(["head2", "📒 のこりの未精算（今日は精算しない）"]); P.rest.forEach(x => ops.push(["sub2", x])); }
-  const hOf = o => ({ head3: 34, why: 46, job: 40, jrow: 26, jsum: 30, abc: 32, pbox: 92, fx: 58, box: 112, row: 30, sub: 22, sub2: 24, line: 20, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 + 50 })[o[0]] || 30;
+  const hOf = o => ({ head3: 34, why: 46, job: 40, jrow: 26, jsum: 30, abc: 32, pbox: 92, fx: 58, box: 112, row: 30, sub: 22, sub2: 24, line: 20, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 + 20 + MEMO_NOTE.length * 20 })[o[0]] || 30;
   const H = 88 + ops.reduce((a, o) => a + hOf(o), 0) + 56;
   const cv = document.createElement("canvas"); cv.width = W * S; cv.height = H * S;
   const g = cv.getContext("2d"); g.scale(S, S);
@@ -1244,3 +1244,45 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 // 合算に選んだ日のうち、お店から渡す日（返金の日）
 function rfNegDays(id){ const sel = unsSel[id] || new Set(); let open = []; try{ open = unsOpen(id); }catch(e){} return [...new Set(open.filter(x => sel.has(x.key) && Number(x.amount) < 0 && x.date).map(x => x.date))]; }
+
+/* ---------- 🧾 領収書があるはずの精算は「領収書もいっしょに受け取って」を目立たせる（2026/11/15 店長）
+   領収書の写真を送ってきた子のプラス（交通費など）を内勤が入れる → その日は直帰 → 後日、お金だけ回収して領収書を受け取り忘れる、を防ぐ
+   ・プラス（交通費・タクシー・立て替えなど）と、いっしょに精算する「🧾 領収書」の未精算から自動で
+   ・精算画面のお店用のいちばん上に赤い枠／キャストに送る文にも1行 ---------- */
+function rcptListOf(id, c){
+  c = c || calcCast(id);
+  const RX = /交通|タクシー|領収|立替|立て替え|経費|チャージ|駐車|電車|バス|高速/, a = [];
+  const fromPlus = (items, d) => (items || []).filter(x => Number(x.amount) && RX.test(String(x.label || "交通費"))).forEach(x => a.push([d, x.label || "交通費", Number(x.amount)]));
+  fromPlus(c.plusItems, day);
+  const sel = unsSel[id] || new Set(); let open = []; try{ open = unsOpen(id); }catch(e){}
+  open.filter(x => sel.has(x.key)).forEach(x => { if(x.kind === "day" && x.raw && x.raw.c) fromPlus(x.raw.c.plusItems, x.date); else if(/🧾/.test(String(x.what || (x.raw && x.raw.note) || ""))) a.push([x.date, "領収書の未精算", Math.abs(Number(x.amount) || 0)]); });
+  return a;
+}
+const rcptText = a => a.map(x => `${unsMd(x[0])} ${x[1]} ${x[2] ? yen(x[2]) : "（金額なし）"}`).join("／");
+function rcptBannerHtml(id, c){
+  const a = rcptListOf(id, c); if(!a.length) return "";
+  return `<div class="rcptban">🧾 領収書 <b>${a.length}枚</b> があります。お金といっしょに<b>領収書も必ず受け取ってください</b><div class="rcptl">${esc(rcptText(a))}${a.length > 1 ? `　合計 <b>${yen(a.reduce((t, x) => t + x[2], 0))}</b>` : ""}</div><small>お金だけ受け取って領収書がないと、その額がずっとマイナスのままになります</small></div>`;
+}
+{ const __svRc = settleViewHtml; settleViewHtml = function(id, c){
+  const V = __svRc.apply(this, arguments), cd = (c && c.cd) || unsCD()[id] || {};
+  if(cd.settled) return V;
+  return Object.assign({}, V, { dep: rcptBannerHtml(id, c) + V.dep });
+}; }
+{ const __cdRc = copyDetail; copyDetail = function(id){
+  const a = rcptListOf(id);
+  if(!a.length) return __cdRc.apply(this, arguments);
+  const NOTE = `※領収書（${rcptText(a)}）も必ずいっしょに投函・お渡しください`;
+  const had = MEMO_NOTE.includes(NOTE); if(!had) MEMO_NOTE.push(NOTE);
+  try{ return __cdRc.apply(this, arguments); } finally{ if(!had){ const i = MEMO_NOTE.indexOf(NOTE); if(i >= 0) MEMO_NOTE.splice(i, 1); } }
+}; }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .rcptban{border:3px solid #E5484D;background:#FFF1F1;color:#a1271c;border-radius:14px;padding:8px 12px;margin:6px 0 8px;font-weight:800;font-size:14px;animation:svrBlink 1.6s ease-in-out infinite}
+  .rcptban .rcptl{font-size:13px;color:#5C4B4F;margin-top:3px} .rcptban small{display:block;color:#8a5a55;font-weight:600;margin-top:2px}
+</style>`);
+{ const __cdiRc = copyDetailImg; copyDetailImg = function(id){
+  const a = rcptListOf(id);
+  if(!a.length) return __cdiRc.apply(this, arguments);
+  const NOTE = `※領収書（${rcptText(a)}）も必ずいっしょに投函・お渡しください`;
+  const had = MEMO_NOTE.includes(NOTE); if(!had) MEMO_NOTE.push(NOTE);
+  try{ return __cdiRc.apply(this, arguments); } finally{ if(!had){ const i = MEMO_NOTE.indexOf(NOTE); if(i >= 0) MEMO_NOTE.splice(i, 1); } }
+}; }
