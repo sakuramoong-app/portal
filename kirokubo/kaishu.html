@@ -527,6 +527,86 @@ async function loadEnvSet(){
   cds.forEach(c => { const r = rowsFor(c.biz_date, R2).find(x => x.id === c.cast_id); if(r && r.s && !rows.some(x => x.id === r.id && x.day === r.day)) rows.push(r); });
   ENVSET = { rows, title, p };
 }
+/* ---------- 📮 封筒精算の画面（2026/11/15 店長：見づらいので、左にキャスト一覧・まん中に選んだ子の封筒・右に処理の流れ）
+   中身（計算・✓・記録）は封筒カードと同じ。見た目と並びだけ ---------- */
+let envPick = "", envFilter = "all";
+const envKey = r => r.day + "|" + r.id;
+function envStatusOf(r){
+  if(!r.cd.settled) return r.kind === "home" ? "home" : "none";
+  if(envMerged(r)) return "merged";
+  const st = envState(r);
+  return st.perfect ? "done" : (st.counted != null && !r.s.refund) || st.dn.length ? "doing" : "wait";
+}
+const ENV_ST = { done: ["✔ 完了", "done"], doing: ["● 処理中", "doing"], wait: ["⏳ 待ち", "wait"], none: ["❗ 未精算", "none"], home: ["🏠 直帰", "none"], merged: ["📦 合算", "merged"] };
+const envIsDone = r => ["done", "merged"].includes(envStatusOf(r));
+function envPickSet(k){ envPick = k; paintDay(); try{ const el = document.getElementById("envdetail"); if(el && el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: "start", behavior: "smooth" }); }catch(e){} }
+function envFilterSet(f){ envFilter = f; paintDay(); }
+function envBoardHtml(list, ed, title){
+  const all = list.slice(), doneN = all.filter(envIsDone).length;
+  const shown = all.filter(r => envFilter === "all" || (envFilter === "done" ? envIsDone(r) : !envIsDone(r)));
+  const cur = shown.find(r => envKey(r) === envPick) || shown.find(r => !envIsDone(r)) || shown[0] || null;
+  if(cur) envPick = envKey(cur);
+  const envs = all.filter(r => r.cd.settled && !envMerged(r)), perfectN = envs.filter(r => envStatusOf(r) === "done").length;
+  const sumHazu = envs.reduce((a, r) => a + r.amt, 0), notYet = all.filter(r => !r.cd.settled);
+  const pct = envs.length ? Math.round(perfectN / envs.length * 100) : 0;
+  const tiles = `<div class="ebtiles">
+      <div class="ebtile prog"><small>封筒精算の進みぐあい</small><b>${perfectN} / ${envs.length}通</b><i style="--p:${pct}%"></i></div>
+      <div class="ebtile"><small>🎯 本来あるべき額の合計</small><b>${yen(sumHazu)}</b></div>
+      <div class="ebtile ok"><small>💯 完璧回収</small><b>${perfectN}通</b></div>
+      <div class="ebtile wait"><small>● 処理中・⏳ 待ち</small><b>${envs.length - perfectN}通</b></div>
+      <div class="ebtile ng"><small>❗ まだ精算していない</small><b>${notYet.length}人</b></div></div>`;
+  const item = r => { const s = envStatusOf(r), lb = ENV_ST[s][0], cl = ENV_ST[s][1];
+    return `<button type="button" class="ebitem ${envKey(r) === envPick ? "on" : ""}" onclick="envPickSet('${envKey(r)}')">${typeof KBF !== "undefined" ? KBF.img(r.id, 34) : ""}
+      <span class="ebn"><b>${esc(names[r.id] || r.id)}</b><small>${r.day !== (D && D.day) ? md(r.day) + "の分・" : ""}${num(r.amt)}円</small></span><span class="ebst ${cl}">${lb}</span></button>`; };
+  const idx = cur ? shown.indexOf(cur) : -1, prev = idx > 0 ? shown[idx - 1] : null, next = idx >= 0 && idx < shown.length - 1 ? shown[idx + 1] : null;
+  const left = `<aside class="eblist"><div class="ebfil">${[["all", "すべて", all.length], ["open", "未完了", all.length - doneN], ["done", "完了", doneN]].map(([k, l, n]) => `<button type="button" class="${envFilter === k ? "on" : ""}" onclick="envFilterSet('${k}')">${l} <i>${n}</i></button>`).join("")}</div>
+    ${shown.length ? shown.map(item).join("") : `<div class="lead">いません</div>`}</aside>`;
+  let head = "", body;
+  if(cur){
+    const s = envStatusOf(cur);
+    head = `<div class="ebhead">${typeof KBF !== "undefined" ? KBF.img(cur.id, 52) : ""}<div class="ebhn"><b>${esc(names[cur.id] || cur.id)}</b><small>${md(cur.day)}(${DOW[new Date(cur.day + "T12:00:00Z").getUTCDay()]})の分${cur.place ? "・" + esc(cur.place === "回収" ? "手渡し" : cur.place + "に投函") : ""}</small></div>
+      <span class="ebst ${ENV_ST[s][1]}">${ENV_ST[s][0]}</span>
+      <span class="ebnav"><button type="button" class="btn btn-ghost btn-sm" ${prev ? `onclick="envPickSet('${envKey(prev)}')"` : "disabled"}>‹ 前の子</button><button type="button" class="btn btn-ghost btn-sm" ${next ? `onclick="envPickSet('${envKey(next)}')"` : "disabled"}>次の子 ›</button></span></div>`;
+  }
+  if(!cur) body = `<div class="lead">封筒はありません</div>`;
+  else if(!cur.cd.settled) body = `<div class="ebempty">${cur.kind === "home" ? "🏠 直帰（まだ精算していない）" : "💴 まだ精算していません"}。精算画面で精算してください。<br><a class="j" href="settle.html?d=${cur.day}&c=${encodeURIComponent(cur.id)}" target="_blank" rel="noopener">↗ ${md(cur.day)} の精算へ</a></div>`;
+  else { const h = envHtml([cur], ed, true, ""), i = h.indexOf('<div class="envlist">'); body = i >= 0 ? h.slice(i) : h; }
+  const guide = `<aside class="ebguide"><h4>📋 処理の流れ</h4><ol>
+      <li>透明封筒を開けて、精算メモで「だれの・いつの精算か」を見る</li>
+      <li>封筒の中のお金を数えて「封筒中」に入れる</li>
+      <li>精算メモ・領収書を見くらべて ✓</li>
+      <li>交通費・未精算など別の処理を、金額が合っていたら ✓（本来あるべき額に近づく）</li>
+      <li>本来あるべき額と同じになって、全部 ✓ で 💯 完璧回収</li></ol>
+    <h4>ステータス</h4><div class="eblegend">${["done", "doing", "wait", "none", "merged"].map(k => `<span class="ebst ${ENV_ST[k][1]}">${ENV_ST[k][0]}</span>`).join("")}</div>
+    <small>合わないとき：精算画面で直す → 正しい額と元の額をくらべる → キャストに送りなおして差額をもらう／渡す</small></aside>`;
+  return `<h3 class="sec">📮 封筒ごとチェック（${esc(title)}）</h3>${tiles}<div class="envboard">${left}<section class="ebdetail" id="envdetail">${head}${body}</section>${guide}</div>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .ebtiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:6px 0 10px}
+  .ebtile{border:2px solid #F3D6E0;border-radius:14px;padding:8px 12px;background:#fff;display:grid;gap:2px}
+  .ebtile small{font-size:11.5px;font-weight:800;color:#8A7680} .ebtile b{font-size:20px;color:#4A3A40;font-variant-numeric:tabular-nums}
+  .ebtile.ok b{color:#2E8B57} .ebtile.wait b{color:#B26A00} .ebtile.ng b{color:#c0392b}
+  .ebtile.prog i{display:block;height:6px;border-radius:9px;background:linear-gradient(90deg,#e5638c var(--p),#F3D6E0 var(--p))}
+  .envboard{display:grid;grid-template-columns:250px minmax(0,1fr) 230px;gap:12px;align-items:start}
+  @media (max-width:1150px){ .envboard{grid-template-columns:220px minmax(0,1fr)} .ebguide{grid-column:1 / -1} }
+  @media (max-width:720px){ .envboard{grid-template-columns:minmax(0,1fr)} .eblist{max-height:260px;overflow:auto} }
+  .eblist,.ebguide{border:2px solid #F3D6E0;border-radius:16px;padding:8px;background:#fff;display:grid;gap:6px}
+  .ebfil{display:flex;gap:4px;flex-wrap:wrap} .ebfil button{font-family:inherit;font-weight:800;font-size:12px;border:2px solid #F3D6E0;background:#fff;border-radius:99px;padding:3px 10px;cursor:pointer}
+  .ebfil button.on{background:#e5638c;border-color:#e5638c;color:#fff} .ebfil i{font-style:normal;opacity:.8}
+  .ebitem{display:flex;align-items:center;gap:8px;text-align:left;font-family:inherit;border:2px solid #F3E6EA;border-radius:12px;background:#fff;padding:6px 8px;cursor:pointer;width:100%}
+  .ebitem.on{border-color:#e5638c;box-shadow:0 0 0 3px #FFE4EC} .ebitem .ebn{flex:1;min-width:0;display:grid} .ebitem .ebn small{color:#8A7680;font-weight:700;font-variant-numeric:tabular-nums}
+  .ebst{font-size:11.5px;font-weight:900;border-radius:99px;padding:2px 8px;white-space:nowrap}
+  .ebst.done{background:#E5F6EC;color:#2E8B57} .ebst.doing{background:#FFE4EC;color:#c2185b} .ebst.wait{background:#F1EEF0;color:#7a6a70} .ebst.none{background:#FFE8EC;color:#c0392b} .ebst.merged{background:#F1EAFA;color:#5b3fa6}
+  .ebdetail{border:2px solid #F3D6E0;border-radius:16px;background:#fff;padding:10px 12px;min-width:0}
+  .ebhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:2px solid #F7E6EC;padding-bottom:8px;margin-bottom:6px}
+  .ebhead .ebhn{display:grid;flex:1;min-width:0} .ebhead .ebhn b{font-size:20px} .ebhead .ebhn small{color:#5b3fa6;font-weight:800}
+  .ebhead .ebnav{display:flex;gap:6px}
+  .ebdetail .envlist{display:block} .ebdetail .envc{border:none;background:transparent;padding:0} .ebdetail .envc > summary{display:none}
+  .ebdetail .envcount .envgoal b{font-size:26px} .ebdetail .envnow b{font-size:18px}
+  .ebempty{padding:16px;font-weight:800;color:#c0392b;line-height:1.9}
+  .ebguide h4{margin:2px 0;font-size:14px} .ebguide ol{margin:0;padding-left:1.3em;display:grid;gap:5px;font-size:12.5px;font-weight:700}
+  .ebguide small{color:#8A7680;font-weight:700;font-size:11.5px} .eblegend{display:flex;flex-wrap:wrap;gap:4px}
+</style>`);
 function envTabHtml(rows, ed){
   let h = `<div class="kanabar envpick">${[["day", "📅 " + md(D.day) + "に精算した封筒"]].concat(PLACES.map(p => [p, "📮 " + p + "で回収"])).map(([k, l]) => `<button type="button" class="kb ${envSel === k ? "on" : ""}" onclick="setEnvSel('${k}')">${l}</button>`).join("")}</div>`;
   if(PLACES.includes(envSel)){
@@ -537,13 +617,9 @@ function envTabHtml(rows, ed){
   if(!ENVSET) return h + `<div class="lead">読み込み中…</div>`;
   const kf = r => !kanaSel || kanaHeadK(r.id) === kanaSel;   // あかさたな（2026/11/15）
   h += kanaBarK(ENVSET.rows.concat(envSel === "day" ? rows.filter(r => !r.cd.settled) : []));
-  h += envHtml(ENVSET.rows.filter(kf), ed, true, ENVSET.title + (kanaSel ? "・" + kanaSel + "行" : "")) || `<h3 class="sec">📮 ${esc(ENVSET.title + (kanaSel ? "・" + kanaSel + "行" : ""))}</h3><div class="lead">封筒はありません</div>`;
-  if(envSel === "day"){
-    const noEnv = rows.filter(r => !r.cd.settled && kf(r));   // まだ精算していない子（直帰も）だけ
-    if(noEnv.length) h += `<h3 class="sec">⏳ ${md(D.day)}の分で、まだ精算していない子（${noEnv.length}人）</h3><div class="noenv">${noEnv.map(r => { const pd = (r.s && r.s.paidOn) || r.paidOn || "";
-      return `<span>${esc(names[r.id] || r.id)}：${r.cd.settled && pd && pd !== r.day ? `→ ${md(pd)} に精算（その日の封筒に入っている） <a class="j" href="javascript:void 0" onclick="openDay('${pd}')">${md(pd)}の封筒へ ↗</a>`
-        : r.kind === "home" ? "🏠 直帰（まだ精算していない）" : `<b style="color:#c0392b">💴 まだ精算していない</b>`}</span>`; }).join("")}</div>`;
-  }
+  // 📮 封筒精算の画面：封筒（精算した子）と、まだ精算していない子（この日のとき）
+  const list = ENVSET.rows.filter(kf).concat(envSel === "day" ? rows.filter(r => !r.cd.settled && kf(r)) : []);
+  h += envBoardHtml(list, ed, ENVSET.title + (kanaSel ? "・" + kanaSel + "行" : ""));
   return h;
 }
 document.head.insertAdjacentHTML("beforeend", `<style>
