@@ -368,7 +368,7 @@ async function loadDay(quiet){   // quiet：保存のあと（「読み込み中
   KB.rememberDay(day);
   if(keepY == null) $("dayArea").innerHTML = `<div class="lead">読み込み中…</div>`;
   try{
-    const R = await readRange(day, nextDay(day));
+    const R = await readRange(dayTab === "today" && dayN > 1 ? prevDay(day, dayN - 1) : day, nextDay(day));   // ① 当日回収で何日分かならべるときは、その前の日も
     if(day !== $("day").value || mode !== "day") return;   // とちゅうで日を変えた
     // 🪙 キキララから払って、まだ返していない日払い（この日までの全部）
     // 📒 まだ精算していない未精算・お釣り（kb_unsettled）。キャストの行の「交通費・経費・精算ミス」に出す
@@ -420,13 +420,72 @@ function bag3Html(rows, ex, staff, ho, ed, kret){
     <div class="b3 b3three"><div class="b3h">③ 袋の中身の総額（① ＋ ②）<b>${yen(B.three)}</b></div>
       <div class="b3f">${yen(B.one)} ＋ ${yen(B.two)} ＝ <b>${yen(B.three)}</b></div></div></div>`;
 }
+/* ---------- 🗂 見るときごとのタブ（2026/11/15 店長：情報が多くて、いつどれを見ればいいかわからない）
+   ① 当日回収（毎日・翌日に）：当日回収と内勤の日払いだけ。何日分かならべる（休み明けの火曜に3日分など）
+   📮 封筒（メイン）：後日回収の確認・待機場で回収したあと。封筒ごとチェック
+   📋 くわしい表：今までの表（調べるときだけ） ---------- */
+let dayTab = (() => { try{ return localStorage.getItem("kaishuTab") || "env"; }catch(e){ return "env"; } })();
+let dayN = (() => { try{ return Number(localStorage.getItem("kaishuDays")) || 1; }catch(e){ return 1; } })();
+const prevDay = (d, n) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() - n); return x.toISOString().slice(0, 10); };
+function setDayTab(t){ dayTab = t; try{ localStorage.setItem("kaishuTab", t); }catch(e){} if(t === "today" && dayN > 1) loadDay(true); else paintDay(); }
+function setDayN(n){ dayN = n; try{ localStorage.setItem("kaishuDays", String(n)); }catch(e){} loadDay(true); }
+function tabBarHtml(){
+  return `<div class="dtabs">${[["today", "① 当日回収（毎日）"], ["env", "📮 封筒（後日回収・待機場）"], ["table", "📋 くわしい表"]].map(([k, l]) => `<button type="button" class="dtab ${dayTab === k ? "on" : ""}" onclick="setDayTab('${k}')">${l}</button>`).join("")}</div>`;
+}
+// ① 当日回収：日ごとに、当日回収した子・経費・内勤の日払い → ① ／社長に手渡し／袋の中身
+function todayDayHtml(d){
+  const rows = rowsFor(d, D), t = totalsFor(d, D, rows), B3 = bag3Calc(rows, t.ex, t.staff, t.ho, t.kikiRet), dt = new Date(d + "T12:00:00Z");
+  const bag = t.ho && t.ho.bag_amount != null ? Number(t.ho.bag_amount) : null, bdf = bag == null ? null : bag - t.hand;
+  const src = x => !x.paid ? `<b style="color:#c0392b">まだ取っていない</b>` : x.pay_source === "kikirara" ? "🪙 キキララから" : x.pay_source === "split" ? `💴 回収金 ${num(Number(x.day_paid) - kikiAmt(x))}＋🪙 キキララ ${num(kikiAmt(x))}` : "💴 回収金から";
+  return `<div class="tdcard"><div class="tdh"><b>${md(d)}(${DOW[dt.getUTCDay()]})</b><a class="j" href="javascript:void 0" onclick="openDay('${d}');setDayTab('table')">📋 くわしく</a></div>
+    <div class="tdsec">✔ 当日回収（${B3.dayL.length}人）<b>${yen(B3.dayAmt)}</b></div>
+    <div class="tdl">${B3.dayL.length ? B3.dayL.map(r => `<span>${esc(names[r.id] || r.id)} ${num(r.amt)}</span>`).join("") : `<span class="none">なし</span>`}</div>
+    <div class="tdsec">− 経費 <b>${yen(t.ex)}</b></div>
+    <div class="tdsec">👛 内勤の日払い <b>${yen(t.staffSum)}</b></div>
+    <div class="tdl">${t.staff.length ? t.staff.map(x => `<span>${esc(staffNames[x.staff_id] || x.staff_id)} ${num(x.day_paid)}（${src(x)}）</span>`).join("") : `<span class="none">なし</span>`}</div>
+    <div class="tdsec">− 回収金から払った日払い <b>${yen(B3.paidCash)}</b></div>
+    <div class="tdone">① 当日回収 − 経費 − 回収金から払った日払い ＝ <b>${yen(B3.one)}</b></div>
+    <div class="tdsec">🤝 社長に手渡し（随時の回収合計）<b style="color:#E0001B">${yen(t.hand)}</b></div>
+    <div class="tdsec ${bdf == null ? "" : bdf === 0 ? "ok" : "ng"}">👛 袋の中身（数えた額）<b>${bag == null ? "まだ" : yen(bag)}</b>${bdf == null ? "" : bdf === 0 ? " ✅" : ` ⚠️ ${bdf > 0 ? yen(bdf) + " 多い" : yen(-bdf) + " 足りない"}`}</div>
+    ${t.T.yetN ? `<div class="tdsec ng">■ まだ回収サインがない ${t.T.yetN}人</div>` : ""}</div>`;
+}
+function todayHtml(){
+  const days = []; for(let i = dayN - 1; i >= 0; i--) days.push(prevDay(D.day, i));
+  return `<div class="card"><div class="tdtop"><b>① 当日回収と内勤の日払い</b><span class="tdn">ならべる日数：${[1, 2, 3, 7].map(n => `<button type="button" class="kb ${dayN === n ? "on" : ""}" onclick="setDayN(${n})">${n}日</button>`).join("")}</span>
+    <small>カレンダーで選んだ日${dayN > 1 ? "と、その前の " + (dayN - 1) + "日" : ""}をならべます（休み明けは3日など）</small></div>
+    <div class="tdgrid">${days.map(todayDayHtml).join("")}</div></div>`;
+}
+// 📮 封筒タブ：封筒ごとチェック ＋ 封筒のない子（まだ精算していない・直帰・ほかの日にまとめて精算）
+function envTabHtml(rows, ed){
+  const noEnv = rows.filter(r => !(r.cd.settled && r.s && r.kind === "done" && !r.s.only));
+  return envHtml(rows, ed) + (noEnv.length ? `<h3 class="sec">⏳ この日の封筒がない子（${noEnv.length}人）</h3><div class="noenv">${noEnv.map(r => `<span>${esc(names[r.id] || r.id)}：${
+      r.kind === "later" || (r.s && r.s.only) ? `→ ${md(r.paidOn || r.s.paidOn || r.day)} に精算 <a class="j" href="javascript:void 0" onclick="openDay('${r.paidOn || r.s.paidOn || r.day}')">${md(r.paidOn || r.s.paidOn || r.day)}の封筒へ ↗</a>`
+      : r.kind === "home" ? "🏠 直帰（まだ精算していない）" : `<b style="color:#c0392b">💴 まだ精算していない</b>`}</span>`).join("")}</div>` : "");
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .dtabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+  .dtab{font-family:inherit;font-weight:900;font-size:14px;padding:9px 14px;border-radius:12px;border:2px solid #F1C6D3;background:#fff;color:#9C4E68;cursor:pointer}
+  .dtab.on{background:#e5638c;border-color:#e5638c;color:#fff}
+  .tdtop{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px} .tdtop small{color:var(--sub);width:100%}
+  .tdgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+  .tdcard{border:2px solid #F1E3E7;border-radius:14px;padding:8px 10px;background:#fff;font-size:13px}
+  .tdcard .tdh{display:flex;justify-content:space-between;align-items:center;font-size:16px;margin-bottom:4px}
+  .tdcard .tdsec{display:flex;justify-content:space-between;gap:6px;font-weight:800;padding:3px 0;border-top:1px dashed #F1E3E7}
+  .tdcard .tdsec.ok{color:#1E7A3C} .tdcard .tdsec.ng{color:#c0392b}
+  .tdcard .tdl{display:flex;flex-wrap:wrap;gap:3px 10px;font-size:12px;color:#5C4B4F;padding:0 0 3px 8px} .tdcard .tdl .none{color:var(--sub)}
+  .tdcard .tdone{background:#FFF3C4;border-radius:8px;padding:5px 8px;margin:4px 0;font-weight:800;text-align:right}
+  .noenv{display:flex;flex-direction:column;gap:3px;font-size:13px;margin:4px 0 10px}
+  @media (max-width:420px){ .tdgrid{grid-template-columns:1fr} }
+</style>`);
 function paintDay(){
   if(!D) return;
   const all = rowsFor(D.day, D), rows = all.filter(r => !place || r.place === place);
   const { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand, kikiPaid, kikiPaidSum, kikiRet, kikiRetSum, unpaid, unpaidSum, adv, advOpen } = totalsFor(D.day, D, rows);
   const TRL = { wait: "振込待ち", owner: "社長の確認待ち", done: "✅ 振込処理完了" }, trLine = r => `${esc(names[r.cast_id] || "")} ${["cancel", "tobi", "flowed"].includes(r.status) ? "キャンセル料" : "もらい忘れ"}（${TRL[r.transfer_status] || ""}）`;
   const ed = KB.CAN_EDIT && !D.no171, dt = new Date(D.day + "T12:00:00Z");
-  let h = D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "";
+  if(dayTab === "today"){ $("dayArea").innerHTML = tabBarHtml() + todayHtml(); return; }
+  if(dayTab === "env"){ $("dayArea").innerHTML = tabBarHtml() + `<div class="card">${envTabHtml(rows, ed)}</div>`; return; }
+  let h = tabBarHtml() + (D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "");
   h += `<div class="sum">
     <div class="s">想定店落ち 1日の粗利（F）<b>${yen(F)}</b></div>
     <div class="handcol"><div class="s handbox">🤝 随時の回収合計（＝社長に手渡し）<b style="color:#E0001B">${yen(hand)}</b></div>${bagHtml(ho, hand, ed)}</div>
@@ -494,7 +553,6 @@ function paintDay(){
   h += rows.length ? `<div class="tbl"><table class="coltbl">
     <tr><th class="l">キャスト名</th><th>店落ち（Z列＋雑費）／カード</th><th class="l">回収サイン・だれが いつ どこで</th><th>封筒の中（はず／投函／±）</th><th class="l">交通費・経費・精算ミス（処理したら ✓）</th></tr>
     ${bodyRows}</table></div>` : `<div class="lead">この日の回収はありません。</div>`;
-  h += envHtml(rows, ed);   // 📮 封筒ごとチェック（2026/11/15）
   // 紙の下の欄と同じ：クレジットカード総額・経費・回収の合計・内勤日払い
   const byS = k => rows.filter(r => r.state === k), sAmt = l => l.reduce((a, r) => a + r.amt, 0);
   h += `<div class="paperfoot">
@@ -906,9 +964,12 @@ function envHtml(rows, ed){
     return `<details class="envc ${all ? "ok" : ""}" ${all ? "" : "open"}><summary>${typeof KBF !== "undefined" ? KBF.img(r.id, 26) : ""}<b>${esc(names[r.id] || r.id)}</b>
         <small>${r.cd.settled_at ? when(r.cd.settled_at) : ""}${r.place ? "・" + esc(r.place === "回収" ? "手渡し" : r.place) : ""}</small>
         <span class="envst">${all ? "✅ 完了" : "あと " + left}</span></summary>
+      <div class="envsign"><span class="cs" style="flex-wrap:wrap">${["day", "later", "me"].map(k => `<button class="${k} ${r.state === k ? "on" : ""}" ${ed ? "" : "disabled"} onclick="setState('${r.id}','${r.state === k && !r.auto ? "" : k}')">${STATE[k]}</button>`).join("")}</span>${!r.state || r.state === "none" ? `<span style="color:#E0001B;font-weight:800;font-size:12px"> ■ まだ回収していない</span>` : ""}</div>
+      <table class="coltbl envcnt"><tr>${countCell(r, ed)}</tr></table>
       <div class="envh">① 封筒に入っていなければいけないもの（実際の封筒と見くらべて ✓）</div>${E.checks.map(([k, h]) => cb(k, h)).join("")}
       <div class="envsub">ちがったら：お金は上の表の「封筒中」に数えた額を入れる（キャストの未精算になる）。メモが足りない・金額がちがうときは、キャストに直してもらう</div>
       ${E.todo.length ? `<div class="envh">② そのあとやること（やったら ✓）</div>${E.todo.map((t, i) => cb("env:t" + i, t)).join("")}` : `<div class="envsub">② やることはありません（この封筒のお金は、そのまま${md(r.day)}の袋へ）</div>`}
+      ${extraList(r).some(x => x.key) ? `<div class="envh">③ 交通費・経費・精算ミス（処理したら ✓）</div>${extraItems(r, ed)}` : ""}
       ${chainNeed(r) ? `<div class="envsub"><a class="j" href="javascript:void 0" onclick="chainView('${esc(r.id)}','${r.day}')">🔗 関係する日をならべる</a></div>` : ""}</details>`;
   };
   const done = list.filter(r => { const E = envOf(r), dn = doneItems(r); return E.keys.every(k => dn.includes(k)); }).length;
@@ -919,6 +980,7 @@ function envHtml(rows, ed){
 document.head.insertAdjacentHTML("beforeend", `<style>
   .envlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:8px;margin:6px 0 12px}
   .envc{border:2.5px solid #F2B705;border-radius:14px;background:#FFFDF3;padding:6px 10px}
+  .envc .envsign{margin:6px 0 2px} .envc table.envcnt{width:100%;margin:4px 0} .envc table.envcnt td{border:none;padding:4px 6px;border-radius:10px}
   .envc.ok{border-color:#8FD3A0;background:#F1FBF4}
   .envc summary{cursor:pointer;display:flex;align-items:center;gap:6px;font-size:14px}
   .envc summary small{color:var(--sub)} .envc .envst{margin-left:auto;font-weight:900;font-size:12px;color:#B26A00} .envc.ok .envst{color:#1E7A3C}
