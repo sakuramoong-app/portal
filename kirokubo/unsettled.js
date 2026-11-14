@@ -798,7 +798,7 @@ function settleViewHtml(id, c){
   const rfDone = done && (cd.settle_snapshot || {}).refund;
   const dep = `${trBox}<div class="dep depdue duebox ${P.due < 0 ? "give" : ""}"><span>${P.due < 0 ? "💴 お店から渡す額" : "💰 投函額"}</span><b>${yen(Math.abs(P.due))}</b></div>`
     + (rfDone ? `<div class="stt rfdone">💴 返金ずみ：${rfDone.src === "kiki" ? "🪙 キキララから立て替えて渡した" : "💴 当日の回収金から渡した"}（${yen(rfDone.amount)}）</div>`
-      : !done && rfMergedNeg(id, c) ? `<div class="rfbox need" style="border-color:#E5484D;background:#FFF1F1"><div class="rfh" style="color:#c0392b">🚫 この合算は精算できません</div>合算しても、お店から ${yen(-P.due)} 渡すことになります（複数日の精算でお釣りを出すのと同じなので禁止）。<br>未精算のチェックをはずして、<b>返金だけ</b>で精算してください。</div>`
+      : !done && rfMergedNeg(id, c) ? `<div class="rfbox need" style="border-color:#E5484D;background:#FFF1F1"><div class="rfh" style="color:#c0392b">🚫 この合算は精算できません</div>合算しても、お店から ${yen(-P.due)} 渡すことになります（複数日の精算でお釣りを出すのと同じなので禁止）。<br><b>こうすれば精算できます：</b><br>① 返金の日のチェックをはずして、${unsMd(day)} の分だけ精算する（いつもの投函）<br>② 返金の日は、その日の精算画面で「💴 返金する」→「🪙 キキララから立て替えて渡した」${rfNegDays(id).map(d => ` <a class="j" href="settle.html?d=${d}&c=${encodeURIComponent(id)}" target="_blank" rel="noopener">↗ ${unsMd(d)} の精算へ</a>`).join("")}</div>`
       : !done && isRefund(id, c) ? rfBoxHtml(id, -P.due) : `
     <div class="dep"><span>実際に投函（回収）した額</span><input type="number" id="dep-${id}" value="${c.deposited != null ? c.deposited : ""}" placeholder="投函した額" ${KB.CAN_EDIT ? "" : "disabled"} onchange="setDeposit('${id}',this.value)"></div>
     <div class="stt" style="color:${diff == null ? "#9C8B8F" : diff === 0 ? "#2e8b57" : diff < 0 ? "#c0392b" : "#2f7fd0"}">${diff == null ? "投函した額をまだ入れていません（お金を確認してから入れる）"
@@ -1242,3 +1242,5 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .rfbox .rfh{font-weight:900;color:#1f4f80;margin-bottom:4px} .rfbox label{display:block;padding:4px 0;cursor:pointer} .rfbox small{color:#6b7a90;font-weight:600}
   .rfdone{color:#1f4f80;font-weight:800}
 </style>`);
+// 合算に選んだ日のうち、お店から渡す日（返金の日）
+function rfNegDays(id){ const sel = unsSel[id] || new Set(); let open = []; try{ open = unsOpen(id); }catch(e){} return [...new Set(open.filter(x => sel.has(x.key) && Number(x.amount) < 0 && x.date).map(x => x.date))]; }
