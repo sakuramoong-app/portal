@@ -425,20 +425,20 @@ function bag3Html(rows, ex, staff, ho, ed, kret){
    ① 当日回収（毎日・翌日に）：当日回収と内勤の日払いだけ。何日分かならべる（休み明けの火曜に3日分など）
    📮 封筒（メイン）：後日回収の確認・待機場で回収したあと。封筒ごとチェック
    📋 くわしい表：今までの表（調べるときだけ） ---------- */
-let dayTab = (() => { try{ return localStorage.getItem("kaishuTab") || "env"; }catch(e){ return "env"; } })();
+let dayTab = (() => { try{ const t = localStorage.getItem("kaishuTab"); return t === "today" ? "today" : "env"; }catch(e){ return "env"; } })();   // 📋 くわしい表は 📮 封筒と合体（2026/11/15）
 let dayN = (() => { try{ return Number(localStorage.getItem("kaishuDays")) || 1; }catch(e){ return 1; } })();
 const prevDay = (d, n) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() - n); return x.toISOString().slice(0, 10); };
 function setDayTab(t){ dayTab = t; try{ localStorage.setItem("kaishuTab", t); }catch(e){} if((t === "today" && dayN > 1) || t === "env") loadDay(true); else paintDay(); }
 function setDayN(n){ dayN = n; try{ localStorage.setItem("kaishuDays", String(n)); }catch(e){} loadDay(true); }
 function tabBarHtml(){
-  return `<div class="dtabs">${[["today", "① 当日回収（毎日）"], ["env", "📮 封筒（後日回収・待機場）"], ["table", "📋 くわしい表"]].map(([k, l]) => `<button type="button" class="dtab ${dayTab === k ? "on" : ""}" onclick="setDayTab('${k}')">${l}</button>`).join("")}</div>`;
+  return `<div class="dtabs">${[["today", "① 当日回収（毎日）"], ["env", "📮 封筒（後日回収・待機場）"]].map(([k, l]) => `<button type="button" class="dtab ${dayTab === k ? "on" : ""}" onclick="setDayTab('${k}')">${l}</button>`).join("")}</div>`;
 }
 // ① 当日回収：日ごとに、当日回収した子・経費・内勤の日払い → ① ／社長に手渡し／袋の中身
 function todayDayHtml(d){
   const rows = rowsFor(d, D), t = totalsFor(d, D, rows), B3 = bag3Calc(rows, t.ex, t.staff, t.ho, t.kikiRet), dt = new Date(d + "T12:00:00Z");
   const bag = t.ho && t.ho.bag_amount != null ? Number(t.ho.bag_amount) : null, bdf = bag == null ? null : bag - t.hand;
   const src = x => !x.paid ? `<b style="color:#c0392b">まだ取っていない</b>` : x.pay_source === "kikirara" ? "🪙 キキララから" : x.pay_source === "split" ? `💴 回収金 ${num(Number(x.day_paid) - kikiAmt(x))}＋🪙 キキララ ${num(kikiAmt(x))}` : "💴 回収金から";
-  return `<div class="tdcard"><div class="tdh"><b>${md(d)}(${DOW[dt.getUTCDay()]})</b><a class="j" href="javascript:void 0" onclick="openDay('${d}');setDayTab('table')">📋 くわしく</a></div>
+  return `<div class="tdcard"><div class="tdh"><b>${md(d)}(${DOW[dt.getUTCDay()]})</b><a class="j" href="javascript:void 0" onclick="openDay('${d}');envSel='day';setDayTab('env')">📮 この日の封筒・入力へ</a></div>
     <div class="tdsec">✔ 当日回収（${B3.dayL.length}人）<b>${yen(B3.dayAmt)}</b></div>
     <div class="tdl">${B3.dayL.length ? B3.dayL.map(r => `<span>${esc(names[r.id] || r.id)} ${num(r.amt)}</span>`).join("") : `<span class="none">なし</span>`}</div>
     <div class="tdsec">− 経費 <b>${yen(t.ex)}</b></div>
@@ -534,7 +534,7 @@ function paintDay(){
   const TRL = { wait: "振込待ち", owner: "社長の確認待ち", done: "✅ 振込処理完了" }, trLine = r => `${esc(names[r.cast_id] || "")} ${["cancel", "tobi", "flowed"].includes(r.status) ? "キャンセル料" : "もらい忘れ"}（${TRL[r.transfer_status] || ""}）`;
   const ed = KB.CAN_EDIT && !D.no171, dt = new Date(D.day + "T12:00:00Z");
   if(dayTab === "today"){ $("dayArea").innerHTML = tabBarHtml() + todayHtml(); return; }
-  if(dayTab === "env"){ $("dayArea").innerHTML = tabBarHtml() + `<div class="card">${envTabHtml(rows, ed)}</div>`; return; }
+  if(dayTab !== "today" && envSel !== "day"){ $("dayArea").innerHTML = tabBarHtml() + `<div class="card">${envTabHtml(rows, ed)}</div>`; return; }
   let h = tabBarHtml() + (D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "");
   h += `<div class="sum">
     <div class="s">想定店落ち 1日の粗利（F）<b>${yen(F)}</b></div>
@@ -574,6 +574,7 @@ function paintDay(){
   /* 👛 回収（2026/11/6 店長：紙の回収明細と同じ1枚の表に。内勤ごと・場所ごとに分けるのはやめた）
      回収サインは3択：✔ 当日回収（その日に内勤が受け取った）／✔ 後日内勤回収（あとの日に内勤が受け取った）／✔ 店長回収（ポスティングの金庫から店長が回収して、日ごとの売上袋へ）
      だれが・いつ・どこで精算したかは、精算のときの記録から自動で出す */
+  const hT0 = h.length;
   h += `<div class="card"><h2>👛 回収明細（${md(D.day)}(${DOW[dt.getUTCDay()]})${place ? "・" + esc(place) : ""}）</h2>` + kanaBarK(rows);
   // 並べ替え：いつもの順／担当内勤ごと（精算を受けた内勤。まだ精算していない子は最後）。表の形はそのまま（2026/11/7）
   // エリアごと：投函した待機場（池袋・鶯谷・五反田）→ 手渡し（回収）→ まだ精算していない（2026/11/7）
@@ -603,6 +604,7 @@ function paintDay(){
   h += rows.length ? `<div class="tbl"><table class="coltbl">
     <tr><th class="l">キャスト名</th><th>店落ち（Z列＋雑費）／カード</th><th class="l">回収サイン・だれが いつ どこで</th><th>封筒の中（はず／投函／±）</th><th class="l">交通費・経費・精算ミス（処理したら ✓）</th></tr>
     ${bodyRows}</table></div>` : `<div class="lead">この日の回収はありません。</div>`;
+  const hT1 = h.length;
   // 紙の下の欄と同じ：クレジットカード総額・経費・回収の合計・内勤日払い
   const byS = k => rows.filter(r => r.state === k), sAmt = l => l.reduce((a, r) => a + r.amt, 0);
   h += `<div class="paperfoot">
@@ -617,6 +619,7 @@ function paintDay(){
       const col = sAmt(byS("day")) + sAmt(byS("later")) + sAmt(byS("me"));
       const paidCash = staff.filter(x => x.paid).reduce((a, x) => a + Number(x.day_paid || 0) - kikiAmt(x), 0);
       return ""; /* 2026/11/11：上の ①②③（袋の中身）に移した */ })()}</div>`;
+  const hT2 = h.length;
   // 📮 封筒（ポスティングの金庫）：この日の封筒の数・前回からたまっている封筒・回収した封筒の数
   h += `<h3 class="sec">📮 ポスティングの封筒</h3>` + PLACES.filter(p => !place || place === p).map(p => {
     const posted = rows.filter(r => r.cd.settled && r.place === p).length;
@@ -627,6 +630,7 @@ function paintDay(){
     ・封筒の中：<b>はず</b>＝封筒に入っていなければいけない額（店落ち − カード − 振込）。<b>封筒中</b>＝精算で投函した額（自動。数えてちがったら手で入れなおす → 精算の投函とちがえば、キャストの未精算・お釣りにできます）。<b>±</b>＝封筒中 − はず（ほかの日の未精算・お釣りをいっしょに精算した分、精算ミスの分などを下に出します）。この日の分がそろっていれば <b>💯 完璧回収</b>（自動）<br>
     ・交通費・プラスはキャッシュフローから出して、袋には「店落ち − カード」の額をそろえます　・精算ミスは精算画面で未精算・お釣りになっています。項目ごとに、処理したら ✓</div>`;
   h += `</div>`;
+  const hT3 = h.length;
 
   const ex2 = (ho && Array.isArray(ho.expenses) ? ho.expenses : []).map((x, i) => Object.assign({ i }, x));
   const notColRows = rowsFor(D.day, D).filter(r => (r.state === "none" || !r.state) && r.amt);
@@ -692,6 +696,8 @@ function paintDay(){
     <div class="chk"><input type="checkbox" ${ho && ho.received_at ? "checked" : ""} ${KB.IS_OWNER && !D.no171 ? "" : "disabled"} onchange="setReceived(this.checked)"> 社長が受け取った
       <small>${ho && ho.received_at ? `${esc(ho.received_by)} ${when(ho.received_at)}（${yen(ho.received_amount ?? hand)}）` : "（社長のログインでだけ押せる・日時が残る）"}</small></div>
   </div></div>`;
+  // 📮 封筒タブ（この日）：表のかわりに封筒カード。上の合計・袋の中身①②③・紙の下の欄・社長に渡す額（経費・キキララ・立て替え・受け取り）はそのまま（2026/11/15 くわしい表と合体）
+  if(dayTab !== "today") h = h.slice(0, hT0) + `<div class="card">${envTabHtml(rows, ed)}` + h.slice(hT1, hT2) + `</div>` + h.slice(hT3);
   $("dayArea").innerHTML = h;
 }
 // 回収の表の1行（キャスト1人）
@@ -1019,7 +1025,7 @@ function envHtml(rows, ed, pre, title){
       <div class="envh">① 封筒に入っていなければいけないもの（実際の封筒と見くらべて ✓）</div>${E.checks.map(([k, h]) => cb(k, h)).join("")}
       <div class="envsub">ちがったら：お金は上の表の「封筒中」に数えた額を入れる（キャストの未精算になる）。メモが足りない・金額がちがうときは、キャストに直してもらう</div>
       ${E.todo.length ? `<div class="envh">② そのあとやること（やったら ✓）</div>${E.todo.map((t, i) => cb("env:t" + i, t)).join("")}` : `<div class="envsub">② やることはありません（この封筒のお金は、そのまま${md(r.day)}の袋へ）</div>`}
-      ${extraList(r).some(x => x.key) ? `<div class="envh">③ 交通費・経費・精算ミス（処理したら ✓）</div>${extraItems(r, ed)}` : ""}
+      ${(() => { const info = extraList(r).filter(x => !x.key && /📒/.test(x.html)); return info.length ? `<div class="envsub">${info.map(x => x.html).join("<br>")}</div>` : ""; })()}   <!-- ② と ③ は同じ意味なので ② にまとめた（2026/11/15）。まだ精算していないほかの日の未精算だけ、お知らせで出す -->
       ${chainNeed(r) ? `<button type="button" class="btn btn-primary btn-sm envchain" onclick="chainView('${esc(r.id)}','${r.day}')">🔗 関係する日をならべる（未精算・合算がからむ）</button>` : ""}</details>`;
   };
   const done = list.filter(r => { const E = envOf(r), dn = doneItems(r); return E.keys.every(k => dn.includes(k)); }).length;
