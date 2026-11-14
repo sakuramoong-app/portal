@@ -1114,6 +1114,7 @@ function mergedCard(r, ed){
   return `<details class="envc merged" open><summary>${typeof KBF !== "undefined" ? KBF.img(r.id, 26) : ""}<b>${esc(names[r.id] || r.id)}</b>
       <small><b>${md(r.day)}の分</b>・${md(pd)} に合算で精算</small><span class="envst">📦 ${md(pd)}の封筒</span></summary>
     <div class="envwhen">🧾 → ${md(pd)} ${r.cd.settled_at ? (when(r.cd.settled_at).split(" ")[1] || "") : ""} に合算で精算${r.cd.settled_by ? "・" + (typeof KBF !== "undefined" ? KBF.staffTag(r.cd.settled_by) : esc(r.cd.settled_by)) : ""}${r.cl.state && r.cl.updated_by ? `<br>✔ 回収サイン：${typeof KBF !== "undefined" ? KBF.staffTag(r.cl.updated_by) : esc(r.cl.updated_by)} ${r.cl.updated_at ? when(r.cl.updated_at) : ""}` : ""}</div>
+    ${envLinksHtml(r)}
     ${envSignHtml(r, ed)}
     <div class="envsub" style="font-size:12.5px;color:#5b3fa6">この日の分は、${md(pd)} の封筒にいっしょに入っています（精算メモ ${md(r.day)} ${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}）。中身のチェックは ${md(pd)} の封筒カードで</div>
     <button type="button" class="btn btn-ghost btn-sm" onclick="openDay('${pd}')">📮 ${md(pd)}の封筒へ</button>
@@ -1128,6 +1129,14 @@ function envUnsHtml(r, cnt, dep, ed){
   if(cu && Number(cu.amount) === -dif && dif) return `<div class="envuns done">📒 キャストの${amtTxt(dif)} にしました（次の精算で、キャストの精算画面にわけが出ます）${ed ? ` <a class="j" href="javascript:void 0" onclick="countUnsSync('${esc(r.id)}','${r.day}',${dep},${dep},'go')">取り消す</a>` : ""}</div>`;
   if(!dif) return "";
   return ed ? `<button type="button" class="btn btn-primary btn-sm envunsbtn" onclick="countUnsSync('${esc(r.id)}','${r.day}',${cnt},${dep},'go')">📒 差額を${cu ? "直して " : ""}キャストの${amtTxt(dif)} にする</button>` : "";
+}
+// 封筒カードの上のリンク（前の回収明細の表の左にあったもの）：精算へ・その日の回収明細へ・写真・メモ・精算の履歴（2026/11/15 店長）
+function envLinksHtml(r){
+  return `<div class="rowlinks envlinks"><a class="j" href="settle.html?d=${r.day}&c=${encodeURIComponent(r.id)}" target="_blank" rel="noopener" title="この日のこの子の精算へ">↗ 精算</a>
+    ${r.day !== (D && D.day) ? `<a class="j" href="javascript:void 0" onclick="envSel='day';openDay('${r.day}')" title="この日の回収明細へ">📅 ${md(r.day)}の回収明細へ</a>` : ""}
+    <a class="j" href="javascript:void 0" onclick="phView('${r.day}','${esc(r.id)}')">🖼 写真を見る</a>
+    ${r.day === (D && D.day) ? `<a class="j" href="javascript:void 0" onclick="editColNote('${esc(r.id)}')">📝 メモ</a>` : ""}</div>
+    ${r.cl.note ? `<div class="colnote"${r.day === (D && D.day) ? ` onclick="editColNote('${esc(r.id)}')"` : ""}>📝 ${esc(r.cl.note)}</div>` : ""}${histHtml(r)}`;
 }
 function envHtml(rows, ed, pre, title){
   const list = pre ? rows : rows.filter(r => r.cd.settled && r.s && r.kind === "done" && !r.s.only);   // pre：もう封筒だけにした一覧（待機場の回収・この日に精算した封筒）
@@ -1145,6 +1154,7 @@ function envHtml(rows, ed, pre, title){
         <small><b>${md(r.day)}の分</b>${r.place ? "・" + esc(r.place === "回収" ? "手渡し" : r.place) : ""}</small>
         <span class="envst">${st.perfect ? "💯 完璧回収" : "あと " + st.left}</span></summary>
       <div class="envwhen">🧾 ${r.paidOn && r.paidOn > r.day ? `<b>→ ${md(r.paidOn)} ${r.cd.settled_at ? when(r.cd.settled_at).split(" ")[1] || "" : ""} に精算（後日）</b>` : `${r.cd.settled_at ? when(r.cd.settled_at) : ""} に精算`}${r.place ? "・" + esc(r.place === "回収" ? "手渡し（回収）" : r.place + "に投函") : ""}${r.cd.settled_by ? "・" + (typeof KBF !== "undefined" ? KBF.staffTag(r.cd.settled_by) : esc(r.cd.settled_by)) : ""}${r.cl.state && r.cl.updated_by ? `<br>✔ 回収サイン：${typeof KBF !== "undefined" ? KBF.staffTag(r.cl.updated_by) : esc(r.cl.updated_by)} ${r.cl.updated_at ? when(r.cl.updated_at) : ""}` : r.auto ? "<br>✔ 自動（その場で受け取った精算）" : ""}</div>
+      ${envLinksHtml(r)}
       ${envSignHtml(r, ed)}
       <div class="envh">① ${refund ? "返金の精算（キャストからのお金はありません）" : "透明封筒を開けて、中のお金を数えて入れる"}</div>
       <div class="envcount ${st.perfect ? "ok" : ""}">
@@ -1182,6 +1192,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .envc .envcalc{margin:8px 0 4px;padding:6px 8px;border-radius:10px;background:#F3EEFF;font-size:13px;font-weight:700} .envc .envcalc.ok{background:#E5F6EC} .envc .envres{font-weight:900;margin-top:2px} .envc .envcalc.ok .envres{color:#1E7A3C}
   .envc .envng{margin:4px 0;font-size:12px} .envc .envng summary{cursor:pointer;color:#c0392b;font-weight:800} .envc .envng ol{margin:4px 0;padding-left:1.4em}
   .envc .envunsbtn{margin-top:4px} .envc .envuns{width:100%;font-size:12px;font-weight:800;color:#2f7fd0}
+  .envc .envlinks{display:flex;flex-wrap:wrap;gap:4px 12px;margin:4px 0;font-size:12.5px;font-weight:800}
   .envc .envcount{display:grid;gap:6px} .envc .envcount.ok{border-color:#2E9E4A;background:#EEFAF1} .envc .envgoal{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;font-size:14px} .envc .envgoal b{font-size:20px;color:#a1271c;margin-left:auto} .envc .envgoal small{font-size:11.5px;color:#8a7f99;font-weight:700} .envc .envgoal .envpend{width:100%;color:#2f7fd0}
   .envc .envin{display:flex;align-items:center;gap:6px} .envc .envnow{font-size:13px;font-weight:700} .envc .envnow b{font-size:16px} .envc .envcount.ok .envres{color:#1E7A3C}
   .envc .envlog{margin:6px 0 2px;font-size:12px;color:#5C4B4F} .envc .envlog summary{cursor:pointer;font-weight:800;color:#5b3fa6} .envc .envlog div{padding:2px 0;border-top:1px dashed #EEE}
