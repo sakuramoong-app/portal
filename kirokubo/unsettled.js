@@ -495,7 +495,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .ur{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:3px 0} .ur small{color:#8a7f99;font-size:11.5px}
   .ur .ab{display:inline-flex;width:22px;height:22px;border-radius:50%;background:#7b5cd6;color:#fff;align-items:center;justify-content:center;font-size:12px}
   .neg{color:#d9534f} .pos{color:#2f7fd0}
-  .ut{margin-top:6px;font-weight:700} .due{display:inline-block;background:#00B0F0;border:2px solid #0A84C6;border-radius:10px;padding:2px 10px;color:#E0001B;font-size:18px;font-weight:900}
+  .ut{margin-top:6px;font-weight:700} .due{display:inline-block;background:#FFF4C2;border:2px solid #E0A800;border-radius:10px;padding:2px 10px;color:#D0121B;font-size:18px;font-weight:900}
   .due.give{background:#E3F1FF;border-color:#2f7fd0;color:#2f7fd0}
   .uhd{font-weight:900;font-size:15px;color:#5b3fa6;margin-bottom:6px} .uhd small{font-weight:600;font-size:11.5px;color:#8a7f99;margin-left:6px}
   .unsgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px;align-items:start}
@@ -593,10 +593,10 @@ copyDetail = function(id){
     const fx = sumFx(P); lines.push(fx[0], fx[1]);
     lines.push(P.due >= 0 ? `💰 合計で投函　${yen(P.due)}` : `💴 お店から渡す　${yen(-P.due)}`);
   }
-  if(P.rest.length){ lines.push("", "【のこりの未精算（今日は精算しない）】"); P.rest.forEach(x => lines.push(x)); }
   lines.push("", `📝 精算メモに書くこと（1営業日に1枚・${P.memo.length}枚）`);
   P.memo.forEach(([bd, v]) => lines.push(`　営業日 ${unsMd(bd)}／名前 ${castName(id)}／金額 ${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}`));
   MEMO_NOTE.forEach(t => lines.push("　" + t));
+  if(P.rest.length){ lines.push("", "【のこりの未精算（今日は精算しない）】"); P.rest.forEach(x => lines.push(x)); }
   lines.push("📖 投函のしかた：https://sakuramoong-app.github.io/portal/kirokubo/posting.html", "", "お疲れさまでした🌸");
   navigator.clipboard.writeText(lines.join("\n")).then(() => toast("📋 精算明細をコピーしました"), () => alert(lines.join("\n")));
 };
@@ -625,8 +625,8 @@ settleCanvas = function(id){
     const fx = sumFx(P); ops.push(["fx", fx[0], fx[1]]);
     ops.push(["box", P.due, "💰 合計で投函", "💴 お店から渡す（合計）"]);
   }
-  if(P.rest.length){ ops.push(["head2", "📒 のこりの未精算（今日は精算しない）"]); P.rest.forEach(x => ops.push(["sub2", x])); }
   ops.push(["memo"]);
+  if(P.rest.length){ ops.push(["head2", "📒 のこりの未精算（今日は精算しない）"]); P.rest.forEach(x => ops.push(["sub2", x])); }
   const hOf = o => ({ head3: 34, why: 46, job: 40, jrow: 26, jsum: 30, abc: 32, pbox: 92, fx: 58, box: 112, row: 30, sub: 22, sub2: 24, line: 20, head: 40, head2: 40, memo: 46 + (1 + P.memo.length) * 30 + 50 })[o[0]] || 30;
   const H = 88 + ops.reduce((a, o) => a + hOf(o), 0) + 56;
   const cv = document.createElement("canvas"); cv.width = W * S; cv.height = H * S;
@@ -644,9 +644,9 @@ settleCanvas = function(id){
     const h = hOf(o), k = o[0];
     if(k === "box"){
       const give = o[1] < 0;
-      rbox(PAD, y + 4, W - PAD * 2, h - 12, 14, give ? "#E3F1FF" : "#00B0F0", give ? "#2f7fd0" : "#0A84C6", 3);
-      txt(give ? o[3] : o[2], PAD + 16, y + 34, "bold 17px", give ? "#1f4f80" : "#08304d");
-      txt(yen(Math.abs(o[1])), W - PAD - 16, y + 92, "900 42px", give ? "#2f7fd0" : "#E0001B", "right");
+      rbox(PAD, y + 4, W - PAD * 2, h - 12, 14, give ? "#E3F1FF" : "#FFF4C2", give ? "#2f7fd0" : "#E0A800", 3);
+      txt(give ? o[3] : o[2], PAD + 16, y + 34, "bold 17px", give ? "#1f4f80" : "#4a3600");
+      txt(yen(Math.abs(o[1])), W - PAD - 16, y + 92, "900 42px", give ? "#2f7fd0" : "#D0121B", "right");
     } else if(k === "job"){   // 1本目：ラベル＋くわしいところ
       rbox(PAD, y + 8, 64, 26, 8, o[4] ? "#EEE8EA" : "#e5638c", o[4] ? "#EEE8EA" : "#e5638c", 1);
       txt(o[1], PAD + 32, y + 27, "bold 14px", o[4] ? "#9C8B8F" : "#fff", "center");
@@ -720,8 +720,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .sv .pb .k{font-weight:800;font-size:13.5px;color:#6b3550} .sv .pb .v{text-align:right;font-weight:900;font-size:22px;color:#e5638c}
   .sv .h3{font-weight:800;font-size:13.5px;margin-top:8px}
   .sv .why{background:#E3F1FF;color:#1f4f80;border-radius:8px;padding:6px 10px;font-size:12.5px;font-weight:700;margin:6px 0}
-  .sv .bb{background:#00B0F0;border:3px solid #0A84C6;border-radius:14px;padding:8px 14px;margin:8px 0}
-  .sv .bb .k{font-weight:800;color:#08304d} .sv .bb .v{text-align:right;font-weight:900;font-size:32px;color:#E0001B}
+  .sv .bb{background:#FFF4C2;border:3px solid #E0A800;border-radius:14px;padding:8px 14px;margin:8px 0}
+  .sv .bb .k{font-weight:800;color:#4a3600} .sv .bb .v{text-align:right;font-weight:900;font-size:32px;color:#D0121B}
   .sv .bb.give{background:#E3F1FF;border-color:#2f7fd0} .sv .bb.give .k{color:#1f4f80} .sv .bb.give .v{color:#2f7fd0}
   .sv .hd{background:#F1EAFA;color:#5b3fa6;font-weight:800;padding:4px 8px;margin-top:8px;border-radius:4px}
   .sv .hd.gray{background:#F4F1F6;color:#8a7f99}
@@ -776,14 +776,19 @@ function settleViewHtml(id, c){
     const fx = sumFx(P); h += `<div class="fx"><div style="color:#5b3fa6">${fx[0]}</div><div class="n">${fx[1]}</div></div>`;
     h += `<div class="bb ${P.due < 0 ? "give" : ""}"><div class="k">${P.due < 0 ? "💴 お店から渡す（合計）" : "💰 合計で投函"}</div><div class="v">${yen(Math.abs(P.due))}</div></div>`;
   }
-  if(P.rest.length) h += `<div class="hd gray">📒 のこりの未精算（今日は精算しない）</div>` + P.rest.map(x => `<div class="sub2">${esc(x)}</div>`).join("");
   h += `<div class="h3">📝 精算メモに書くこと（1営業日に1枚・${P.memo.length}枚）</div><table class="mm"><tr><th>営業日</th><th>名前</th><th>金額</th></tr>`
     + P.memo.map(([bd, v]) => `<tr><td>${unsMd(bd)}</td><td>${esc(castName(id))}</td><td>${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}</td></tr>`).join("") + `</table>`
     + `<div class="mmn">${MEMO_NOTE.map(esc).join("<br>")}</div>`;
+  if(P.rest.length) h += `<div class="hd gray">📒 のこりの未精算（今日は精算しない）</div>` + P.rest.map(x => `<div class="sub2">${esc(x)}</div>`).join("");
   // 🏪 お店用（投函した額まではアコーディオンの中・過去の未精算と店落ちは外）
   const diff = c.deposited != null ? c.deposited - P.due : null, sel = unsSel[id] || new Set();
   // お店用の中身（並びは cardHtml で：未精算 → 回収場所・コピー・精算済 → カメラ → 投函額 → 実際に投函した額 → 写真）2026/11/4
-  const dep = `<div class="dep depdue"><span>${P.due < 0 ? "お店から渡す額" : "投函額"}</span><b style="font-size:22px;color:${P.due < 0 ? "#2f7fd0" : "#d0121b"}">${yen(Math.abs(P.due))}</b></div>
+  // 🚃 お店用に交通費・プラス：キャッシュフローから出して、その日の袋へ（封筒の額には入っていない）2026/11/15 店長
+  const trDays = [[day, (Number(c.transportBack) || 0) + (Number(c.plus) || 0)]];
+  if(!done){ const sel2 = unsSel[id] || new Set(), op2 = unsOpen(id); op2.filter(x => sel2.has(x.key) && x.kind === "day" && x.raw && x.raw.c).forEach(x => trDays.push([x.date, (Number(x.raw.c.transportBack) || 0) + (Number(x.raw.c.plus) || 0)])); }
+  const trBox = trDays.some(t => t[1]) ? `<div class="dep trcf"><span>🚃 交通費・プラス（キャッシュフローから）</span><b>${yen(trDays.reduce((a, t) => a + t[1], 0))}</b></div>
+    <div class="stt" style="color:#5b3fa6">${trDays.filter(t => t[1]).map(t => `${unsMd(t[0])}の分 ${yen(t[1])} → キャッシュフローから出して <b>${unsMd(t[0])}の袋</b>へ`).join("<br>")}<br><small>（封筒の投函額には入っていません）</small></div>` : "";
+  const dep = `<div class="dep depdue"><span>${P.due < 0 ? "お店から渡す額" : "投函額"}</span><b style="font-size:22px;color:${P.due < 0 ? "#2f7fd0" : "#d0121b"}">${yen(Math.abs(P.due))}</b></div>${trBox}
     <div class="dep"><span>実際に投函（回収）した額</span><input type="number" id="dep-${id}" value="${c.deposited != null ? c.deposited : ""}" placeholder="投函した額" ${KB.CAN_EDIT ? "" : "disabled"} onchange="setDeposit('${id}',this.value)"></div>
     <div class="stt" style="color:${diff == null ? "#9C8B8F" : diff === 0 ? "#2e8b57" : diff < 0 ? "#c0392b" : "#2f7fd0"}">${diff == null ? "投函した額をまだ入れていません（お金を確認してから入れる）"
       : diff === 0 ? "✅ 未精算・お釣りは出ていません" : diff < 0 ? `⚠ 未精算が出ます（足りない ${yen(-diff)}）` : `⚠ お釣りが出ます（多い ${yen(diff)}）`}</div>`;
@@ -949,6 +954,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .homebtn{background:#EDEDED !important;border-color:#bbb !important;font-weight:800}
   .ptime{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .ptime input, input[id^="uo_t_"]{font-family:inherit;font-size:16px;font-weight:800;padding:10px 12px;border:1.5px solid var(--line,#F1E3E7);border-radius:12px;background:#fff;color:var(--ink,#5C4B4F);min-width:150px}   /* 受付の時刻の欄と同じ形 */ .ptime small{flex-basis:100%;font-weight:700;color:#9C8B8F;font-size:11.5px}
   .dep{border-radius:14px !important} .gb{border-radius:14px !important} .shop{border-top:none !important;background:#FFFDFB;border:2px solid #F1E3E7;border-radius:16px;padding:8px 12px 10px !important}
+  .dep.trcf{background:#F3EEFF;border-radius:10px;padding:6px 8px;margin-top:6px} .dep.trcf b{color:#5b3fa6;font-size:18px}
   .dep.depdue{border:none;background:transparent;padding:4px 4px 0;margin:6px 0 0}
   .zpw{background:#FFF3C4;border:2px solid #F2B705;border-radius:14px;padding:8px 10px;margin-top:10px} .zpw .zph{margin:0 0 6px;font-weight:900;color:#7a5200;font-size:14.5px} .zpw .zph b{color:#c0392b;font-size:16px}
   .pmz input{border:1.5px solid var(--line,#F1E3E7);border-radius:12px;padding:7px 10px;font-family:inherit;font-size:14px;background:#fff;color:inherit}

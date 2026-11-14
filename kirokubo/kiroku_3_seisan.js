@@ -113,7 +113,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .sbig{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin:8px 0}
   .sb{border-radius:14px;padding:10px 14px} .sb .k{font-size:13px;font-weight:800} .sb .k small{font-weight:600;margin-left:4px;font-size:11.5px}
   .sb .v{font-size:34px;font-weight:900;line-height:1.2;margin:2px 0} .sb .s{font-size:12px;opacity:.85} .sb .s2{font-size:13px;font-weight:800;margin-top:4px}
-  .sb.drop{background:#00B0F0;border:3px solid #0A84C6;color:#08304d} .sb.drop .v{color:#E0001B;text-shadow:0 0 6px #fff,0 0 2px #fff;text-decoration:underline double;text-underline-offset:6px}
+  .sb.drop{background:#FFF4C2;border:3px solid #E0A800;color:#4a3600} .sb.drop .v{color:#D0121B;text-shadow:0 0 6px #fff,0 0 2px #fff;text-decoration:underline double;text-underline-offset:6px}
   .sb.give{background:#E3F1FF;border:3px solid #2f7fd0;color:#1f4f80} .sb.give .v{color:#2f7fd0}
   .sb.take{background:#FFE3F0;border:2px solid #F7B6CF;color:#6b3550} .sb.take .v{color:#5C4B4F}
   .sb .s2.ng{color:#d9534f} .sb .s2.ok{color:#2f9e6e}
@@ -146,7 +146,7 @@ function settleCanvas(id){
   g.font = `bold 24px ${FONT}`; g.fillText(`${castName(id)}さん`, PAD, 58);
   // 💰 投函額（いちばん大きく。黄色の箱に赤い字）／カードで現金がないときは「お店から渡す」
   const give = c.drop < 0;
-  g.fillStyle = give ? "#E3F1FF" : "#00B0F0"; g.strokeStyle = give ? "#2f7fd0" : "#0A84C6"; g.lineWidth = 3;
+  g.fillStyle = give ? "#E3F1FF" : "#FFF4C2"; g.strokeStyle = give ? "#2f7fd0" : "#E0A800"; g.lineWidth = 3;
   g.beginPath(); g.roundRect ? g.roundRect(PAD, 88, W - PAD * 2, BOX - 8, 14) : g.rect(PAD, 88, W - PAD * 2, BOX - 8); g.fill(); g.stroke();
   g.textAlign = "left"; g.fillStyle = give ? "#1f4f80" : "#08304d"; g.font = `bold 17px ${FONT}`;
   g.fillText(give ? "💴 お店からキャストに渡す" : "💰 投函額（封筒に入れて投函）", PAD + 16, 118);
