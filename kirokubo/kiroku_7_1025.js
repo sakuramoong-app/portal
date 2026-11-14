@@ -2409,5 +2409,23 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .fsask-n{font-size:12.5px;background:#6E5BD6;color:#fff;border-radius:99px;padding:1px 10px;margin-left:6px}
 </style>`);
 
+/* ---------- 🚕 お店のエリアとちがう場所なら、交通費を必須（2026/11/14 店長）
+   ・お店の名前のエリア（サクラムーン池袋 → 池袋）と、予約のエリアがちがうとき
+   ・交通費を特別にとらないときは、交通費を入れて、同じ額を割引に入れる ---------- */
+const STORE_AREA_RX = /池袋|五反田|鶯谷|錦糸町|渋谷|新宿|上野|秋葉原|大塚|巣鴨/;
+function storeAreaOf(k){ const m = String(k ? storeLabel(k) : "").match(STORE_AREA_RX); return m ? m[0] : ""; }
+function areaDiffers(){ const sa = storeAreaOf($("f_store") && $("f_store").value), a = ($("f_area") ? $("f_area").value : "").trim(); return !!sa && !!a && !a.includes(sa); }
+function transportMissing(){ return areaDiffers() && !(Number($("f_transport").value) > 0); }
+{ const __mrTr = missingRequired; missingRequired = function(){ const l = __mrTr.apply(this, arguments); if(transportMissing()) l.push(["交通費（お店のエリアとちがう場所）", "f_transport"]); return l; }; }
+function paintTrHint(){
+  const inp = $("f_transport"); if(!inp) return;
+  let el = $("trHint"); if(!el){ el = document.createElement("div"); el.id = "trHint"; inp.insertAdjacentElement("afterend", el); }
+  if(!areaDiffers()){ el.innerHTML = ""; inp.classList.remove("need"); return; }
+  el.innerHTML = `<div class="trhint ${transportMissing() ? "ng" : ""}">🚕 お店（${esc(storeAreaOf($("f_store").value))}）とちがうエリアなので、<b>交通費は必須</b>です。<br><small>交通費を特別にとらないなどのときは、交通費を入れて、同じ額を割引に入力してください</small></div>`;
+  inp.classList.toggle("need", transportMissing());
+}
+{ const __recalcTr = recalc; recalc = function(){ const r = __recalcTr.apply(this, arguments); try{ paintTrHint(); }catch(e){} return r; }; }
+document.head.insertAdjacentHTML("beforeend", `<style>.trhint{font-size:12.5px;font-weight:800;color:#8a5a00;background:#FFF6E0;border:1.5px solid #F2C94C;border-radius:10px;padding:5px 9px;margin-top:4px} .trhint.ng{color:#8A1C2B;background:#FFF0F1;border-color:#E5484D} .trhint small{font-weight:700}</style>`);
+
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
 init();

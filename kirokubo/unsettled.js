@@ -163,6 +163,7 @@ function unsBoxHtml(id, c){
       <b class="ab">${UNS_ABC[i] || i + 1}</b> <b>${unsMd(x.date)}</b>（${esc(castName(id))}）<span class="${x.amount >= 0 ? "neg" : "pos"}">${esc(x.what)}</span>${unsJump(x.date, id)}</label>`).join("")}
     ${picked.length ? `<div class="ut">当日の投函額 ${yen(c.drop)}${picked.map(x => (x.amount >= 0 ? " ＋ " : " − ") + yen(Math.abs(x.amount))).join("")} ＝
         ${due >= 0 ? `<span class="due">💰 合計で投函 ${yen(due)}</span>` : `<span class="due give">💴 お店から渡す ${yen(-due)}</span>`}</div>
+      <div class="unsexact">⚠️ 未精算を合算します。お釣りが発生しないように、<b>ちょうど ${yen(Math.abs(due))}</b> で${due >= 0 ? "投函" : "お渡し"}してください<br><small>投函した額をちょうどで入れないと、精算済にできません</small></div>
       <div class="hint2" style="font-size:11.5px">「精算済にする」で、チェックしたものも精算になります（のこりは A から繰り上げ）。投函した額は、この合計と比べます。</div>` : `<div class="hint2" style="font-size:11.5px">チェックしないものは、つぎの精算にのこります</div>`}
     </div>`;
 }
@@ -172,6 +173,8 @@ function unsCopy(id){
   open.forEach((x, i) => lines.push(unsLine(x, i, id) + (sel.has(x.key) ? "　→ 今日いっしょに精算" : "　→ 後日")));
   const due = c.drop + picked.reduce((a, x) => a + x.amount, 0);
   lines.push("", `当日の投函額 ${yen(c.drop)}${picked.map(x => (x.amount >= 0 ? " ＋ " : " − ") + yen(Math.abs(x.amount))).join("")}`, due >= 0 ? `合計で投函　${yen(due)}` : `お店から渡す　${yen(-due)}`);
+  // キャストにも：合算するときは、ちょうどで（2026/11/14 店長）
+  if(picked.length) lines.push("", "※未精算を合算します。お釣りが発生しないように、ちょうどの額で投函をお願いします");
   navigator.clipboard.writeText(lines.join("\n")).then(() => toast("📋 未精算をコピーしました"), () => alert(lines.join("\n")));
 }
 
@@ -246,6 +249,12 @@ settle = async function(id, stay){   // stay：精算して、そのあとも待
   const c = calcCast(id), sel = unsSel[id] || new Set(), open = unsOpen(id), picked = open.filter(x => sel.has(x.key));
   const add = picked.reduce((a, x) => a + x.amount, 0), due = c.drop + add;
   const diff = c.deposited != null ? c.deposited - due : null;   // −＝足りない（未精算）／＋＝多い（お釣り）
+  // 🚫 未精算を合算するときは、投函した額がちょうどでないと精算済にできない（2026/11/14 店長：複数日の精算でお釣り・足りないが出ると追えなくなる）
+  //   未精算だけを精算するとき（その日の精算なし・別の流れ）は、今までどおりお釣りOK
+  if(picked.length && (c.deposited == null || Number(c.deposited) !== due)){
+    toast(`🚫 未精算を合算しています。投函した額を、ちょうど ${yen(due)} で入れてから精算済にしてください` + (c.deposited != null ? `（いま ${yen(c.deposited)}）` : "（まだ入っていません）"));
+    return;
+  }
   const msg = castName(id) + (c.partNo > 1 ? "（" + (PART_MARK[c.partNo - 1] || c.partNo) + " の精算）" : "") + " を精算済にしますか？\n手取り " + yen(c.takeHome) + "／当日の投函額 " + yen(c.drop)
     + (picked.length ? "\n＋ 未精算 " + picked.length + "件（" + yen(add) + "）→ 合計 " + yen(due) : "")
     + (diff ? "\n投函した額 " + yen(c.deposited) + " → " + (diff < 0 ? "未精算 " + yen(-diff) : "お釣り " + yen(diff)) + " を未精算に入れます" : "");
@@ -480,6 +489,7 @@ let unsDay = "";
 setInterval(() => { if(typeof day !== "undefined" && day && day !== unsDay){ unsDay = day; unsLoad(); } }, 800);
 document.head.insertAdjacentHTML("beforeend", `<style>
   .unsbox{background:#F6F2FF;border:2px dashed #A98BE6;border-radius:12px;padding:8px 12px;margin:8px 0;font-size:13.5px}
+  .unsexact{background:#FFF0F1;border:2px solid #E5484D;color:#8A1C2B;border-radius:10px;padding:6px 10px;margin:6px 0;font-weight:800;font-size:13.5px} .unsexact small{font-weight:700}
   .ujump{margin-left:8px;font-size:11.5px;font-weight:800;color:#2f7fd0;text-decoration:none;border:1.5px solid #BFD8F2;background:#fff;border-radius:99px;padding:1px 8px;white-space:nowrap}
   .unsbox > b{color:#5b3fa6} .unsbox > small{color:#8a7f99;margin-left:4px}
   .ur{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:3px 0} .ur small{color:#8a7f99;font-size:11.5px}

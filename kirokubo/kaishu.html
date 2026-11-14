@@ -146,7 +146,8 @@ const when = t => { const d = new Date(t); if(isNaN(d)) return ""; const b = KB.
 const md = s => { const p = String(s).split("-"); return `${Number(p[1])}/${Number(p[2])}`; };
 const num = n => (Number(n) || 0).toLocaleString("ja-JP");
 const sgn = n => (n > 0 ? "＋" : n < 0 ? "−" : "") + num(Math.abs(n));
-const jump = (d, cid) => `<a class="j" href="settle.html?d=${d}${cid ? "&c=" + encodeURIComponent(cid) : ""}" target="_blank" rel="noopener" title="その日のそのキャストの精算へ">${md(d)} ↗</a>`;
+// その日の回収明細へ（2026/11/14 店長：精算画面ではなく、回収明細のその日に）
+const jump = (d, cid) => `<a class="j" href="javascript:void 0" onclick="openDay('${d}')" title="回収明細のその日へ">${md(d)} ↗</a>`;
 const backOf = KBM.backOf;   // 💴 計算は kb_money.js の1か所に
 // 雑費（精算と同じ）：手で直していればその額。なければ 報酬＋OP 10,500円ごとに500円（3,000円まで）。雑費なしの曜日（キャストのルール）は0
 let ZRULES = [];
