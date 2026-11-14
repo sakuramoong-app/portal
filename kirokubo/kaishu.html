@@ -1019,17 +1019,19 @@ async function setCollected(cid, v, amt, day, exp){
   day = day || D.day;
   const n = v === "" ? null : Math.round(Number(v) || 0);   // 空にすると、自動（当日回収なら精算の投函額）にもどる
   await saveCol(cid, { collected: n, done: n != null && n === amt }, true, day);
-  if(exp != null) await countUnsSync(cid, day, n, exp);
+  // 封筒中が精算の投函とちがっても、ここでは聞かない。封筒カードの「📒 未精算にする」ボタンで（2026/11/15 店長）
+  if(exp != null) await countUnsSync(cid, day, n, exp, "keep");
   afterColSave();
 }
-async function countUnsSync(cid, day, n, exp){
+async function countUnsSync(cid, day, n, exp, mode){   // mode：未指定＝聞いてから／"go"＝ボタンで（聞かない）／"keep"＝封筒中を入れたとき（ぴったりにもどったら取り消すだけ）
   let ex = [];
   try{ ex = (q(await sb.from("kb_unsettled").select("*").eq("cast_id", cid).eq("biz_date", day)) || []).filter(u => u.cast_id === cid && u.biz_date === day && isCountUns(u)); }
   catch(e){ toast("未精算が読めませんでした：" + (e.message || e)); return; }
   const other = n == null ? 0 : n - exp, cur = ex.reduce((a, u) => a + Number(u.amount || 0), 0);
   if(cur === -other) return;   // もう同じ額で入っている
   if(ex.some(u => u.done_on)){ toast("この日の封筒のずれは、もう未精算として精算ずみなので変えません"); return; }
-  if(other && !confirm(`${md(day)} の ${names[cid] || cid}：封筒の中 ${num(n)}円 は、精算で投函した額 ${num(exp)}円 より ${num(Math.abs(other))}円 ${other < 0 ? "足りません" : "多いです"}。\n\nキャストの${other < 0 ? "未精算" : "お釣り"} ${num(Math.abs(other))}円 にしますか？\n（次の精算で、キャストの精算画面にわけが出ます）`)) return;
+  if(mode === "keep" && other) return;   // ずれは、ボタンを押したときだけ未精算に
+  if(other && mode !== "go" && !confirm(`${md(day)} の ${names[cid] || cid}：封筒の中 ${num(n)}円 は、精算で投函した額 ${num(exp)}円 より ${num(Math.abs(other))}円 ${other < 0 ? "足りません" : "多いです"}。\n\nキャストの${other < 0 ? "未精算" : "お釣り"} ${num(Math.abs(other))}円 にしますか？\n（次の精算で、キャストの精算画面にわけが出ます）`)) return;
   const by = KB.operatorName();
   try{
     for(const u of ex) q(await sb.from("kb_unsettled").delete().eq("id", u.id));   // まだ精算していない前の分は入れなおす
@@ -1040,6 +1042,7 @@ async function countUnsSync(cid, day, n, exp){
       if(cdL){ const lg = (Array.isArray(cdL.settle_log) ? cdL.settle_log : []).concat([{ at: new Date().toISOString(), by, kind: "memo", text: `回収明細：封筒中 ${num(n)}円（精算の投函 ${num(exp)}円）${other ? "→ " + (other < 0 ? "未精算 " : "お釣り ") + num(Math.abs(other)) + "円 にした" : "→ ずれの未精算を取り消した"}` }]);
         q(await sb.from("kb_cast_days").update({ settle_log: lg }).eq("biz_date", day).eq("cast_id", cid)); cdL.settle_log = lg; } }catch(e){}
   }catch(e){ toast("未精算にできませんでした：" + (e.message || e)); }
+  if(mode === "go") afterColSave();   // ボタンで入れたときは、画面を読みなおす
 }
 /* ---------- 📮 封筒ごとチェック（2026/11/15 店長：日ごとに見ると、かんな 11/2・11/3・11/8 のように複雑すぎてわからない）
    ・1回の精算 ＝ 封筒1つ。この日に精算した封筒ごとに
@@ -1116,6 +1119,16 @@ function mergedCard(r, ed){
     <button type="button" class="btn btn-ghost btn-sm" onclick="openDay('${pd}')">📮 ${md(pd)}の封筒へ</button>
     <button type="button" class="btn btn-primary btn-sm envchain" onclick="chainView('${esc(r.id)}','${r.day}')">🔗 関係する日をならべる</button></details>`;
 }
+// 📒 封筒中が精算の投函とちがうとき：ボタンでキャストの未精算（お釣り）にする（2026/11/15 店長：確認ダイアログではなくボタン）
+function envUnsHtml(r, cnt, dep, ed){
+  if(cnt == null || dep == null) return "";
+  const dif = cnt - dep, cu = ((r.R && r.R.unsMade) || []).find(u => u.cast_id === r.id && u.biz_date === r.day && isCountUns(u));
+  const amtTxt = n => `${n < 0 ? "未精算" : "お釣り"} ${num(Math.abs(n))}円`;
+  if(cu && cu.done_on) return `<div class="envuns done">📒 ${amtTxt(-Number(cu.amount))} にしました（${md(cu.done_on)} に精算ずみ）</div>`;
+  if(cu && Number(cu.amount) === -dif && dif) return `<div class="envuns done">📒 キャストの${amtTxt(dif)} にしました（次の精算で、キャストの精算画面にわけが出ます）${ed ? ` <a class="j" href="javascript:void 0" onclick="countUnsSync('${esc(r.id)}','${r.day}',${dep},${dep},'go')">取り消す</a>` : ""}</div>`;
+  if(!dif) return "";
+  return ed ? `<button type="button" class="btn btn-primary btn-sm envunsbtn" onclick="countUnsSync('${esc(r.id)}','${r.day}',${cnt},${dep},'go')">📒 差額を${cu ? "直して " : ""}キャストの${amtTxt(dif)} にする</button>` : "";
+}
 function envHtml(rows, ed, pre, title){
   const list = pre ? rows : rows.filter(r => r.cd.settled && r.s && r.kind === "done" && !r.s.only);   // pre：もう封筒だけにした一覧（待機場の回収・この日に精算した封筒）
   if(!list.length) return "";
@@ -1135,7 +1148,7 @@ function envHtml(rows, ed, pre, title){
       ${envSignHtml(r, ed)}
       <div class="envh">① ${refund ? "返金の精算（キャストからのお金はありません）" : "透明封筒を開けて、中のお金を数えて入れる"}</div>
       ${refund ? `<div class="envsub">封筒中：${num(cnt)}円（お店から渡した分）</div>` : `<div class="envcount">封筒中 ${ed ? `<input type="number" class="cnt" value="${cnt != null ? cnt : ""}" placeholder="数えた額" onchange="setCollected('${esc(r.id)}',this.value,${r.amt},'${r.day}',${E.dep == null ? "null" : E.dep})">` : `<b>${cnt != null ? num(cnt) : "—"}</b>`} 円
-        <div class="envcmp">${cnt == null ? "数えたら入れてください" : dif === 0 ? `✅ 精算で投函した額（${num(E.dep)}円）と同じ` : `⚠️ 精算で投函した額 ${num(E.dep)}円 より ${num(Math.abs(dif))}円 ${dif < 0 ? "少ない" : "多い"}（入れたときにキャストの${dif < 0 ? "未精算" : "お釣り"}にできます）`}</div></div>`}
+        <div class="envcmp">${cnt == null ? "数えたら入れてください" : dif === 0 ? `✅ 精算で投函した額（${num(E.dep)}円）と同じ` : `⚠️ 精算で投函した額 ${num(E.dep)}円 より ${num(Math.abs(dif))}円 ${dif < 0 ? "少ない" : "多い"}`}</div>${envUnsHtml(r, cnt, E.dep, ed)}</div>`}
       <div class="envh">② 精算メモ・領収書を見くらべる（合っていたら ✓）</div>${E.checks.map(([k, h]) => cb(k, h)).join("")}
       <div class="envh">③ 交通費・未精算など、別の処理（金額が合っていたら ✓ して処理）</div>
       ${E.mv.length ? E.mv.map(m => cb(m.key, m.text, m.sgn * m.amt)).join("") : `<div class="envsub">別の処理はありません</div>`}
@@ -1166,6 +1179,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .envc .envrecv{display:flex;gap:6px;font-size:12.5px;color:#5b3fa6;padding:2px 0 2px 22px} .envc .envrecv small{color:#8a7f99}
   .envc .envcalc{margin:8px 0 4px;padding:6px 8px;border-radius:10px;background:#F3EEFF;font-size:13px;font-weight:700} .envc .envcalc.ok{background:#E5F6EC} .envc .envres{font-weight:900;margin-top:2px} .envc .envcalc.ok .envres{color:#1E7A3C}
   .envc .envng{margin:4px 0;font-size:12px} .envc .envng summary{cursor:pointer;color:#c0392b;font-weight:800} .envc .envng ol{margin:4px 0;padding-left:1.4em}
+  .envc .envunsbtn{margin-top:4px} .envc .envuns{width:100%;font-size:12px;font-weight:800;color:#2f7fd0}
   .envc .envlog{margin:6px 0 2px;font-size:12px;color:#5C4B4F} .envc .envlog summary{cursor:pointer;font-weight:800;color:#5b3fa6} .envc .envlog div{padding:2px 0;border-top:1px dashed #EEE}
   .envc .envwhen{font-size:12.5px;color:#5b3fa6;font-weight:700;margin-top:4px}
   .envc.ok{border-color:#8FD3A0;background:#F1FBF4}
