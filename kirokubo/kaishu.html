@@ -469,6 +469,8 @@ function setEnvSel(k){ envSel = k; try{ localStorage.setItem("kaishuEnvSel", k);
 function setEnvBatch(p, v){ envBatch[p] = v; ENVSET = null; paintDay(); loadDay(true); }
 const tms = t => new Date(t).getTime();
 async function loadEnvSet(){
+  // 📅 この日：売上の営業日で（いつ精算したかは関係なく、この日の分を精算した子 ＝ この日の封筒カード）2026/11/15 店長
+  if(envSel === "day" || !PLACES.includes(envSel)){ ENVSET = { rows: rowsFor(D.day, D).filter(r => r.cd.settled && r.s), title: md(D.day) + "の売上の封筒" }; return; }
   let from, to, p = null, title;
   if(envSel === "day" || !PLACES.includes(envSel)){
     from = new Date(D.day + "T06:00:00+09:00").toISOString(); to = new Date(nextDay(D.day) + "T06:00:00+09:00").toISOString(); title = md(D.day) + "に精算した封筒";
@@ -505,8 +507,8 @@ function envTabHtml(rows, ed){
   if(!ENVSET) return h + `<div class="lead">読み込み中…</div>`;
   h += envHtml(ENVSET.rows, ed, true, ENVSET.title) || `<h3 class="sec">📮 ${esc(ENVSET.title)}</h3><div class="lead">封筒はありません</div>`;
   if(envSel === "day"){
-    const noEnv = rows.filter(r => !ENVSET.rows.some(e => e.id === r.id && e.day === r.day));
-    if(noEnv.length) h += `<h3 class="sec">⏳ ${md(D.day)}の分で、この日の封筒にない子（${noEnv.length}人）</h3><div class="noenv">${noEnv.map(r => { const pd = (r.s && r.s.paidOn) || r.paidOn || "";
+    const noEnv = rows.filter(r => !r.cd.settled);   // まだ精算していない子（直帰も）だけ
+    if(noEnv.length) h += `<h3 class="sec">⏳ ${md(D.day)}の分で、まだ精算していない子（${noEnv.length}人）</h3><div class="noenv">${noEnv.map(r => { const pd = (r.s && r.s.paidOn) || r.paidOn || "";
       return `<span>${esc(names[r.id] || r.id)}：${r.cd.settled && pd && pd !== r.day ? `→ ${md(pd)} に精算（その日の封筒に入っている） <a class="j" href="javascript:void 0" onclick="openDay('${pd}')">${md(pd)}の封筒へ ↗</a>`
         : r.kind === "home" ? "🏠 直帰（まだ精算していない）" : `<b style="color:#c0392b">💴 まだ精算していない</b>`}</span>`; }).join("")}</div>`;
   }
@@ -1011,10 +1013,25 @@ function envOf(r){
     ["env:rcpt", `🧾 領収書${hasReceipt(r) ? "が入っている（領収書だけ投函あり）" : "の有無（あるはずのものが入っている）"}`]];
   return { memoL, due, dep, todo, checks, keys: checks.map(c => c[0]).concat(todo.map((_, i) => "env:t" + i)) };
 }
+// 📦 ほかの日の封筒に合算で入っている日（この日の売上として、この日の中に出す。チェックは入っている封筒のカードで）2026/11/15
+const envMerged = r => !!(r.s && r.s.paidOn && !r.s.only && r.s.paidOn !== r.day);
+function envSignHtml(r, ed){
+  return `<div class="envsign"><span class="cs" style="flex-wrap:wrap">${["day", "later", "me"].map(k => `<button class="${k} ${r.state === k ? "on" : ""}" ${ed ? "" : "disabled"} onclick="setState('${r.id}','${r.state === k && !r.auto ? "" : k}','${r.day}')">${STATE[k]}</button>`).join("")}</span>${!r.state || r.state === "none" ? `<span style="color:#E0001B;font-weight:800;font-size:12px"> ■ まだ回収していない</span>` : ""}</div>`;
+}
+function mergedCard(r, ed){
+  const pd = r.s.paidOn, v = r.s.drop != null ? Number(r.s.drop) : r.amt;
+  return `<details class="envc merged" open><summary>${typeof KBF !== "undefined" ? KBF.img(r.id, 26) : ""}<b>${esc(names[r.id] || r.id)}</b>
+      <small><b>${md(r.day)}の分</b>・${md(pd)} に合算で精算</small><span class="envst">📦 ${md(pd)}の封筒</span></summary>
+    ${envSignHtml(r, ed)}
+    <div class="envsub" style="font-size:12.5px;color:#5b3fa6">この日の分は、${md(pd)} の封筒にいっしょに入っています（精算メモ ${md(r.day)} ${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}）。中身のチェックは ${md(pd)} の封筒カードで</div>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="openDay('${pd}')">📮 ${md(pd)}の封筒へ</button>
+    <button type="button" class="btn btn-primary btn-sm envchain" onclick="chainView('${esc(r.id)}','${r.day}')">🔗 関係する日をならべる</button></details>`;
+}
 function envHtml(rows, ed, pre, title){
   const list = pre ? rows : rows.filter(r => r.cd.settled && r.s && r.kind === "done" && !r.s.only);   // pre：もう封筒だけにした一覧（待機場の回収・この日に精算した封筒）
   if(!list.length) return "";
   const card = r => {
+    if(envMerged(r)) return mergedCard(r, ed);
     const E = envOf(r), dn = doneItems(r), all = E.keys.every(k => dn.includes(k)), left = E.keys.filter(k => !dn.includes(k)).length;
     const cb = (k, html) => `<label class="envi ${dn.includes(k) ? "on" : ""}"><input type="checkbox" ${dn.includes(k) ? "checked" : ""} ${ed ? "" : "disabled"} onchange="setDoneItem('${esc(r.id)}','${k}',this.checked,'${r.day}')"> ${html}</label>`;
     return `<details class="envc ${all ? "ok" : ""}" ${all ? "" : "open"}><summary>${typeof KBF !== "undefined" ? KBF.img(r.id, 26) : ""}<b>${esc(names[r.id] || r.id)}</b>
@@ -1028,7 +1045,7 @@ function envHtml(rows, ed, pre, title){
       ${(() => { const info = extraList(r).filter(x => !x.key && /📒/.test(x.html)); return info.length ? `<div class="envsub">${info.map(x => x.html).join("<br>")}</div>` : ""; })()}   <!-- ② と ③ は同じ意味なので ② にまとめた（2026/11/15）。まだ精算していないほかの日の未精算だけ、お知らせで出す -->
       ${chainNeed(r) ? `<button type="button" class="btn btn-primary btn-sm envchain" onclick="chainView('${esc(r.id)}','${r.day}')">🔗 関係する日をならべる（未精算・合算がからむ）</button>` : ""}</details>`;
   };
-  const done = list.filter(r => { const E = envOf(r), dn = doneItems(r); return E.keys.every(k => dn.includes(k)); }).length;
+  const done = list.filter(r => { if(envMerged(r)) return false; const E = envOf(r), dn = doneItems(r); return E.keys.every(k => dn.includes(k)); }).length;
   return `<h3 class="sec">📮 封筒ごとチェック（${title || "この日に精算した封筒"} ${list.length}通・✅ ${done}通 完了）</h3>
     <div class="leg">1回の精算 ＝ 封筒1つです。封筒を開けたら、① 入っていなければいけないものと見くらべて ✓ → ② やることを順番にやって ✓。全部 ✓ で ✅ 完了</div>
     <div class="envlist">${list.map(card).join("")}</div>`;
@@ -1038,6 +1055,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .envc{border:2.5px solid #F2B705;border-radius:14px;background:#FFFDF3;padding:6px 10px}
   .envc .envsign{margin:6px 0 2px} .envc table.envcnt{width:100%;margin:4px 0} .envc table.envcnt td{border:none;padding:4px 6px;border-radius:10px}
   .envc .envchain{margin:8px 0 4px} .envbatch{margin:4px 0 8px;font-weight:800;font-size:13px;display:flex;flex-wrap:wrap;gap:8px;align-items:center} .envbatch select{font-family:inherit;font-size:13px;padding:5px 8px;border-radius:10px}
+  .envc.merged{border-color:#C9B6EA;background:#F8F4FF}
   .envc.ok{border-color:#8FD3A0;background:#F1FBF4}
   .envc summary{cursor:pointer;display:flex;align-items:center;gap:6px;font-size:14px}
   .envc summary small{color:var(--sub)} .envc .envst{margin-left:auto;font-weight:900;font-size:12px;color:#B26A00} .envc.ok .envst{color:#1E7A3C}
