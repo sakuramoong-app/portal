@@ -323,7 +323,7 @@ const doneItems = r => Array.isArray(r.cl.done_items) ? r.cl.done_items : [];
 const todoOf = r => extraList(r).filter(x => x.key && !doneItems(r).includes(x.key)).length;
 function extraItems(r, ed){
   const done = doneItems(r);
-  return extraList(r).map(x => `<label class="xi">${x.key ? `<input type="checkbox" ${done.includes(x.key) ? "checked" : ""} ${ed ? "" : "disabled"} onchange="setDoneItem('${r.id}','${x.key}',this.checked)" title="処理した"> ` : ""}${x.html}${x.key && done.includes(x.key) ? ` <small style="color:#2e8b57">✓処理ずみ</small>` : ""}</label>`).join("");
+  return extraList(r).map(x => `<label class="xi">${x.key ? `<input type="checkbox" ${done.includes(x.key) ? "checked" : ""} ${ed ? "" : "disabled"} onchange="setDoneItem('${r.id}','${x.key}',this.checked,'${r.day}')" title="処理した"> ` : ""}${x.html}${x.key && done.includes(x.key) ? ` <small style="color:#2e8b57">✓処理ずみ</small>` : ""}</label>`).join("");
 }
 // 1日の合計
 function totalsFor(day, R, rows){
@@ -385,6 +385,7 @@ async function loadDay(quiet){   // quiet：保存のあと（「読み込み中
     if(!R.no185){ try{ const ko = await sb.from("kb_staff_work").select("*").eq("paid", true).in("pay_source", ["kikirara", "split"]).is("kiki_returned_on", null).order("biz_date"); R.kikiOpen = ko.error ? [] : (ko.data || []).filter(x => Number(x.day_paid)); }catch(e){} }
     D = Object.assign(R, { day });
   }catch(e){ $("dayArea").innerHTML = `<div class="warn">読めませんでした：${esc(e.message || e)}</div>`; return; }
+  if(dayTab === "env"){ try{ await loadEnvSet(); }catch(e){ ENVSET = { rows: [], title: "封筒が読めませんでした：" + (e.message || e) }; } }
   paintDay();
   if(keepY != null) window.scrollTo(0, keepY);
 }
@@ -427,7 +428,7 @@ function bag3Html(rows, ex, staff, ho, ed, kret){
 let dayTab = (() => { try{ return localStorage.getItem("kaishuTab") || "env"; }catch(e){ return "env"; } })();
 let dayN = (() => { try{ return Number(localStorage.getItem("kaishuDays")) || 1; }catch(e){ return 1; } })();
 const prevDay = (d, n) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() - n); return x.toISOString().slice(0, 10); };
-function setDayTab(t){ dayTab = t; try{ localStorage.setItem("kaishuTab", t); }catch(e){} if(t === "today" && dayN > 1) loadDay(true); else paintDay(); }
+function setDayTab(t){ dayTab = t; try{ localStorage.setItem("kaishuTab", t); }catch(e){} if((t === "today" && dayN > 1) || t === "env") loadDay(true); else paintDay(); }
 function setDayN(n){ dayN = n; try{ localStorage.setItem("kaishuDays", String(n)); }catch(e){} loadDay(true); }
 function tabBarHtml(){
   return `<div class="dtabs">${[["today", "① 当日回収（毎日）"], ["env", "📮 封筒（後日回収・待機場）"], ["table", "📋 くわしい表"]].map(([k, l]) => `<button type="button" class="dtab ${dayTab === k ? "on" : ""}" onclick="setDayTab('${k}')">${l}</button>`).join("")}</div>`;
@@ -456,11 +457,60 @@ function todayHtml(){
     <div class="tdgrid">${days.map(todayDayHtml).join("")}</div></div>`;
 }
 // 📮 封筒タブ：封筒ごとチェック ＋ 封筒のない子（まだ精算していない・直帰・ほかの日にまとめて精算）
+/* 📮 封筒タブ（2026/11/15 店長：待機場で回収してきた封筒を、中身を見るときに1つずつチェックしたい）
+   ・「○日に精算した封筒」＝ その営業日（朝6時〜次の朝6時）に精算した封筒（ほかの日の分をあとで精算したものも）
+   ・「📮 池袋で回収」など ＝ 待機場で回収した1回分（前の回収から、その回収まで）にその待機場へ投函された封筒。まだ回収していない分も選べる
+   ・回収サイン・✓ に関係なく、精算の記録（いつ・どこに精算したか）から出す
+   ・いっしょに精算したほかの日（合算）は、その封筒の中に入っている（別の封筒にはしない） */
+let envSel = (() => { try{ return localStorage.getItem("kaishuEnvSel") || "day"; }catch(e){ return "day"; } })();
+const envBatch = {};   // 待機場 → 回収の id（"" ＝ まだ回収していない）
+let ENVSET = null, CHK = [];
+function setEnvSel(k){ envSel = k; try{ localStorage.setItem("kaishuEnvSel", k); }catch(e){} ENVSET = null; paintDay(); loadDay(true); }
+function setEnvBatch(p, v){ envBatch[p] = v; ENVSET = null; paintDay(); loadDay(true); }
+const tms = t => new Date(t).getTime();
+async function loadEnvSet(){
+  let from, to, p = null, title;
+  if(envSel === "day" || !PLACES.includes(envSel)){
+    from = new Date(D.day + "T06:00:00+09:00").toISOString(); to = new Date(nextDay(D.day) + "T06:00:00+09:00").toISOString(); title = md(D.day) + "に精算した封筒";
+  } else {
+    p = envSel; const hist = CHK.filter(x => x.place === p), cur = envBatch[p] != null ? envBatch[p] : (hist[0] ? String(hist[0].id) : "");
+    const i = hist.findIndex(h => String(h.id) === String(cur));
+    if(i < 0){ from = hist[0] ? hist[0].checked_at : "2000-01-01T00:00:00Z"; to = new Date(Date.now() + 60000).toISOString(); title = p + "にたまっている封筒（まだ回収していない）"; }
+    else { from = hist[i + 1] ? hist[i + 1].checked_at : "2000-01-01T00:00:00Z"; to = hist[i].checked_at; title = `${p}で ${when(hist[i].checked_at)} に回収した封筒`; }
+  }
+  let qq = sb.from("kb_cast_days").select("*").eq("settled", true);
+  if(p) qq = qq.eq("settle_place", p);
+  let cds = q(await qq.gt("settled_at", from).lte("settled_at", to).order("settled_at")) || [];
+  cds = cds.filter(c => c.settled && c.settled_at && tms(c.settled_at) > tms(from) && tms(c.settled_at) <= tms(to) && (!p || c.settle_place === p))
+    .filter(c => { const s = c.settle_snapshot || {}; return !(s.paidOn && !s.only && s.paidOn !== c.biz_date); });   // いっしょに精算した日は、その封筒の中
+  const days = [...new Set(cds.map(c => c.biz_date))], R2 = { cds, resv: [], col: [], unsMade: [], envX: [] };
+  if(days.length){
+    try{ R2.resv = q(await sb.from("kb_reservations").select(RESV_COLS).in("biz_date", days).eq("deleted", false)) || []; }catch(e){}
+    try{ R2.col = q(await sb.from("kb_collections").select("*").in("biz_date", days)) || []; }catch(e){}
+    try{ const um = await sb.from("kb_unsettled").select("cast_id,biz_date,amount,done_on,source,note").in("biz_date", days); R2.unsMade = um.error ? [] : (um.data || []); }catch(e){}
+    const xd = [...new Set(cds.flatMap(c => (c.settle_snapshot && Array.isArray(c.settle_snapshot.uns) ? c.settle_snapshot.uns : []).filter(x => x.kind === "day" && x.date).map(x => x.date)))];
+    if(xd.length){ try{ const ex = await sb.from("kb_cast_days").select("biz_date,cast_id,settle_snapshot").in("biz_date", xd); R2.envX = ex.error ? [] : (ex.data || []); }catch(e){} }
+  }
+  const rows = [];
+  cds.forEach(c => { const r = rowsFor(c.biz_date, R2).find(x => x.id === c.cast_id); if(r && r.s && !rows.some(x => x.id === r.id && x.day === r.day)) rows.push(r); });
+  ENVSET = { rows, title, p };
+}
 function envTabHtml(rows, ed){
-  const noEnv = rows.filter(r => !(r.cd.settled && r.s && r.kind === "done" && !r.s.only));
-  return envHtml(rows, ed) + (noEnv.length ? `<h3 class="sec">⏳ この日の封筒がない子（${noEnv.length}人）</h3><div class="noenv">${noEnv.map(r => `<span>${esc(names[r.id] || r.id)}：${
-      r.kind === "later" || (r.s && r.s.only) ? `→ ${md(r.paidOn || r.s.paidOn || r.day)} に精算 <a class="j" href="javascript:void 0" onclick="openDay('${r.paidOn || r.s.paidOn || r.day}')">${md(r.paidOn || r.s.paidOn || r.day)}の封筒へ ↗</a>`
-      : r.kind === "home" ? "🏠 直帰（まだ精算していない）" : `<b style="color:#c0392b">💴 まだ精算していない</b>`}</span>`).join("")}</div>` : "");
+  let h = `<div class="kanabar envpick">${[["day", "📅 " + md(D.day) + "に精算した封筒"]].concat(PLACES.map(p => [p, "📮 " + p + "で回収"])).map(([k, l]) => `<button type="button" class="kb ${envSel === k ? "on" : ""}" onclick="setEnvSel('${k}')">${l}</button>`).join("")}</div>`;
+  if(PLACES.includes(envSel)){
+    const p = envSel, hist = CHK.filter(x => x.place === p), cur = envBatch[p] != null ? envBatch[p] : (hist[0] ? String(hist[0].id) : "");
+    h += `<div class="envbatch">回収した回：<select onchange="setEnvBatch('${p}',this.value)"><option value="" ${!hist.some(x => String(x.id) === String(cur)) ? "selected" : ""}>まだ回収していない（たまっている ${ENV[p] ? ENV[p].since.length + "通" : ""}）</option>${hist.map(x => `<option value="${x.id}" ${String(x.id) === String(cur) ? "selected" : ""}>${when(x.checked_at)} ${esc(x.checked_by || "")} が回収（${x.found}通／あるはず ${x.expected}通）</option>`).join("")}</select>
+      ${KB.CAN_EDIT && ENV[p] && !hist.some(x => String(x.id) === String(cur)) ? `<span class="envcnt2">回収した封筒 <input type="number" min="0" id="env-${p}" oninput="envCheck('${p}')" style="width:64px"> 通 <button class="btn btn-primary btn-sm" onclick="save('${p}')">📮 回収した</button><span class="envres" id="envres-${p}"></span></span>` : ""}</div>`;
+  }
+  if(!ENVSET) return h + `<div class="lead">読み込み中…</div>`;
+  h += envHtml(ENVSET.rows, ed, true, ENVSET.title) || `<h3 class="sec">📮 ${esc(ENVSET.title)}</h3><div class="lead">封筒はありません</div>`;
+  if(envSel === "day"){
+    const noEnv = rows.filter(r => !ENVSET.rows.some(e => e.id === r.id && e.day === r.day));
+    if(noEnv.length) h += `<h3 class="sec">⏳ ${md(D.day)}の分で、この日の封筒にない子（${noEnv.length}人）</h3><div class="noenv">${noEnv.map(r => { const pd = (r.s && r.s.paidOn) || r.paidOn || "";
+      return `<span>${esc(names[r.id] || r.id)}：${r.cd.settled && pd && pd !== r.day ? `→ ${md(pd)} に精算（その日の封筒に入っている） <a class="j" href="javascript:void 0" onclick="openDay('${pd}')">${md(pd)}の封筒へ ↗</a>`
+        : r.kind === "home" ? "🏠 直帰（まだ精算していない）" : `<b style="color:#c0392b">💴 まだ精算していない</b>`}</span>`; }).join("")}</div>`;
+  }
+  return h;
 }
 document.head.insertAdjacentHTML("beforeend", `<style>
   .dtabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
@@ -938,7 +988,7 @@ function envOf(r){
   (Array.isArray(s.uns) ? s.uns : []).forEach(x => {
     const n = Number(x.amount || 0); if(!x.date || x.date === r.day) return;
     if(x.kind === "day"){
-      const cdA = ((D && D.envX) || []).find(c => c.cast_id === r.id && c.biz_date === x.date), sA = cdA && cdA.settle_snapshot;
+      const cdA = ((r.R && r.R.envX) || (D && D.envX) || []).find(c => c.cast_id === r.id && c.biz_date === x.date), sA = cdA && cdA.settle_snapshot;
       const amtA = sA && sA.shopDrop != null ? Number(sA.shopDrop) - Number(sA.cardPaid || 0) - Number(sA.transferPaid || 0) : null;
       if(amtA == null){ todo.push(`📤 この封筒の ${md(x.date)}の分 <b>${pm(n)}円</b> → ${md(x.date)}の袋へ（${md(x.date)}の回収明細で確かめる）`); return; }
       todo.push(amtA >= 0 ? `📤 ${md(x.date)}の袋へ <b>${num(amtA)}円</b> 移す（${md(x.date)}の精算の分）` : `📥 ${md(x.date)}の袋から <b>${num(-amtA)}円</b> もらって、${md(r.day)}の袋へ（${md(x.date)}にお店から渡した分）`);
@@ -955,25 +1005,25 @@ function envOf(r){
     ["env:rcpt", `🧾 領収書${hasReceipt(r) ? "が入っている（領収書だけ投函あり）" : "の有無（あるはずのものが入っている）"}`]];
   return { memoL, due, dep, todo, checks, keys: checks.map(c => c[0]).concat(todo.map((_, i) => "env:t" + i)) };
 }
-function envHtml(rows, ed){
-  const list = rows.filter(r => r.cd.settled && r.s && r.kind === "done" && !r.s.only);
+function envHtml(rows, ed, pre, title){
+  const list = pre ? rows : rows.filter(r => r.cd.settled && r.s && r.kind === "done" && !r.s.only);   // pre：もう封筒だけにした一覧（待機場の回収・この日に精算した封筒）
   if(!list.length) return "";
   const card = r => {
     const E = envOf(r), dn = doneItems(r), all = E.keys.every(k => dn.includes(k)), left = E.keys.filter(k => !dn.includes(k)).length;
-    const cb = (k, html) => `<label class="envi ${dn.includes(k) ? "on" : ""}"><input type="checkbox" ${dn.includes(k) ? "checked" : ""} ${ed ? "" : "disabled"} onchange="setDoneItem('${esc(r.id)}','${k}',this.checked)"> ${html}</label>`;
+    const cb = (k, html) => `<label class="envi ${dn.includes(k) ? "on" : ""}"><input type="checkbox" ${dn.includes(k) ? "checked" : ""} ${ed ? "" : "disabled"} onchange="setDoneItem('${esc(r.id)}','${k}',this.checked,'${r.day}')"> ${html}</label>`;
     return `<details class="envc ${all ? "ok" : ""}" ${all ? "" : "open"}><summary>${typeof KBF !== "undefined" ? KBF.img(r.id, 26) : ""}<b>${esc(names[r.id] || r.id)}</b>
-        <small>${r.cd.settled_at ? when(r.cd.settled_at) : ""}${r.place ? "・" + esc(r.place === "回収" ? "手渡し" : r.place) : ""}</small>
+        <small><b>${md(r.day)}の分</b>・${r.cd.settled_at ? "精算 " + when(r.cd.settled_at) : ""}${r.place ? "・" + esc(r.place === "回収" ? "手渡し" : r.place) : ""}</small>
         <span class="envst">${all ? "✅ 完了" : "あと " + left}</span></summary>
-      <div class="envsign"><span class="cs" style="flex-wrap:wrap">${["day", "later", "me"].map(k => `<button class="${k} ${r.state === k ? "on" : ""}" ${ed ? "" : "disabled"} onclick="setState('${r.id}','${r.state === k && !r.auto ? "" : k}')">${STATE[k]}</button>`).join("")}</span>${!r.state || r.state === "none" ? `<span style="color:#E0001B;font-weight:800;font-size:12px"> ■ まだ回収していない</span>` : ""}</div>
+      <div class="envsign"><span class="cs" style="flex-wrap:wrap">${["day", "later", "me"].map(k => `<button class="${k} ${r.state === k ? "on" : ""}" ${ed ? "" : "disabled"} onclick="setState('${r.id}','${r.state === k && !r.auto ? "" : k}','${r.day}')">${STATE[k]}</button>`).join("")}</span>${!r.state || r.state === "none" ? `<span style="color:#E0001B;font-weight:800;font-size:12px"> ■ まだ回収していない</span>` : ""}</div>
       <table class="coltbl envcnt"><tr>${countCell(r, ed)}</tr></table>
       <div class="envh">① 封筒に入っていなければいけないもの（実際の封筒と見くらべて ✓）</div>${E.checks.map(([k, h]) => cb(k, h)).join("")}
       <div class="envsub">ちがったら：お金は上の表の「封筒中」に数えた額を入れる（キャストの未精算になる）。メモが足りない・金額がちがうときは、キャストに直してもらう</div>
       ${E.todo.length ? `<div class="envh">② そのあとやること（やったら ✓）</div>${E.todo.map((t, i) => cb("env:t" + i, t)).join("")}` : `<div class="envsub">② やることはありません（この封筒のお金は、そのまま${md(r.day)}の袋へ）</div>`}
       ${extraList(r).some(x => x.key) ? `<div class="envh">③ 交通費・経費・精算ミス（処理したら ✓）</div>${extraItems(r, ed)}` : ""}
-      ${chainNeed(r) ? `<div class="envsub"><a class="j" href="javascript:void 0" onclick="chainView('${esc(r.id)}','${r.day}')">🔗 関係する日をならべる</a></div>` : ""}</details>`;
+      ${chainNeed(r) ? `<button type="button" class="btn btn-primary btn-sm envchain" onclick="chainView('${esc(r.id)}','${r.day}')">🔗 関係する日をならべる（未精算・合算がからむ）</button>` : ""}</details>`;
   };
   const done = list.filter(r => { const E = envOf(r), dn = doneItems(r); return E.keys.every(k => dn.includes(k)); }).length;
-  return `<h3 class="sec">📮 封筒ごとチェック（この日に精算した封筒 ${list.length}通・✅ ${done}通 完了）</h3>
+  return `<h3 class="sec">📮 封筒ごとチェック（${title || "この日に精算した封筒"} ${list.length}通・✅ ${done}通 完了）</h3>
     <div class="leg">1回の精算 ＝ 封筒1つです。封筒を開けたら、① 入っていなければいけないものと見くらべて ✓ → ② やることを順番にやって ✓。全部 ✓ で ✅ 完了</div>
     <div class="envlist">${list.map(card).join("")}</div>`;
 }
@@ -981,6 +1031,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .envlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:8px;margin:6px 0 12px}
   .envc{border:2.5px solid #F2B705;border-radius:14px;background:#FFFDF3;padding:6px 10px}
   .envc .envsign{margin:6px 0 2px} .envc table.envcnt{width:100%;margin:4px 0} .envc table.envcnt td{border:none;padding:4px 6px;border-radius:10px}
+  .envc .envchain{margin:8px 0 4px} .envbatch{margin:4px 0 8px;font-weight:800;font-size:13px;display:flex;flex-wrap:wrap;gap:8px;align-items:center} .envbatch select{font-family:inherit;font-size:13px;padding:5px 8px;border-radius:10px}
   .envc.ok{border-color:#8FD3A0;background:#F1FBF4}
   .envc summary{cursor:pointer;display:flex;align-items:center;gap:6px;font-size:14px}
   .envc summary small{color:var(--sub)} .envc .envst{margin-left:auto;font-weight:900;font-size:12px;color:#B26A00} .envc.ok .envst{color:#1E7A3C}
@@ -989,10 +1040,12 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .envc .envsub{font-size:11.5px;color:#8a7f99;margin:3px 0}
   @media (max-width:420px){ .envlist{grid-template-columns:1fr} }
 </style>`);
-function setDoneItem(cid, key, on){
-  const r = rowsFor(D.day, D).find(x => x.id === cid), l = (r ? doneItems(r) : []).filter(k => k !== key);
+async function setDoneItem(cid, key, on, day){   // day：📮 封筒タブで、ほかの日の封筒に ✓ するとき
+  day = day || D.day;
+  const r = (day === D.day ? rowsFor(D.day, D).find(x => x.id === cid) : null) || (ENVSET ? ENVSET.rows.find(x => x.id === cid && x.day === day) : null);
+  const l = (r ? doneItems(r) : []).filter(k => k !== key);
   if(on) l.push(key);
-  saveCol(cid, { done_items: l });
+  await saveCol(cid, { done_items: l }, true, day); afterColSave();
 }
 async function saveHo(patch){
   try{ q(await sb.from("kb_handovers").upsert(Object.assign({ biz_date: D.day, updated_by: KB.operatorName(), updated_at: new Date().toISOString() }, patch), { onConflict: "biz_date" })); }
@@ -1138,7 +1191,7 @@ function paintMonth(){
 /* ---------- 📮 待機場の封筒 ---------- */
 async function load(){
   try{
-    const chk = q(await sb.from("kb_envelope_checks").select("*").order("checked_at", { ascending: false }).limit(100)) || [];
+    const chk = CHK = q(await sb.from("kb_envelope_checks").select("*").order("checked_at", { ascending: false }).limit(100)) || [];
     for(const p of PLACES){
       const hist = chk.filter(x => x.place === p), last = hist[0] || null;
       let qq = sb.from("kb_cast_days").select("biz_date,cast_id,settled_at").eq("settled", true).eq("settle_place", p).order("settled_at");
