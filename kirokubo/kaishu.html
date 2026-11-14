@@ -84,6 +84,7 @@
   td.cntc .dif{font-size:12px;font-weight:800;color:var(--sub);margin-top:2px} td.cntc.ok{background:#E5F6EC} td.cntc.ok .dif{color:#2e8b57} td.cntc.ok input.cnt{border-color:#2e8b57;color:#2e8b57;background:#fff}
   td.cntc.ng{background:#FFF1F1} td.cntc.ng .dif{color:#c0392b} td.cntc .hyaku{font-size:20px;margin-left:4px;vertical-align:middle}
   td.cntc .hazu{font-size:17px;white-space:nowrap} td.cntc .hazu small,td.cntc .tokan small{font-size:11px;color:var(--sub);font-weight:800} td.cntc .tokan{margin-top:3px;white-space:nowrap}
+  td.cntc .mv{margin-top:6px;padding:5px 6px;border-radius:8px;background:#F3EEFF;color:#5b3fa6;font-size:12px;text-align:left;white-space:normal} td.cntc .mv .mva{margin-top:3px;font-weight:900;text-align:right} td.cntc .mv .mva.ok{color:#2e8b57} td.cntc .mv .mva.ng{color:#c0392b}
   .chaintbl tr.cur td{background:#FFF6D6} .chaintbl tr.tot td{border-top:2px solid #333} .chaintbl td,.chaintbl th{white-space:nowrap} .chaintbl td.l{white-space:normal} a.chainbtn{font-weight:900;color:#5b3fa6}
   tr.perfect td:first-child b{color:#2e8b57}
   .mk{font-weight:900;font-size:16px;} .mk.day{color:#222;} .mk.later{color:#1f6fd1;} .mk.me,.mk.none{color:#E0001B;}
@@ -372,6 +373,9 @@ async function loadDay(quiet){   // quiet：保存のあと（「読み込み中
     // 📒 まだ精算していない未精算・お釣り（kb_unsettled）。キャストの行の「交通費・経費・精算ミス」に出す
     R.unsOpen = [];
     try{ const uo = await sb.from("kb_unsettled").select("cast_id,biz_date,amount").is("done_on", null).order("biz_date"); R.unsOpen = uo.error ? [] : (uo.data || []).filter(x => Number(x.amount)); }catch(e){}
+    // 🔁 この日にできた未精算・お釣り（あとの日に精算したものも）→ 「○日から入る／○日へ移す」を出す（2026/11/15）
+    R.unsMade = [];
+    try{ const um = await sb.from("kb_unsettled").select("cast_id,biz_date,amount,done_on,source").eq("biz_date", day); R.unsMade = um.error ? [] : (um.data || []).filter(x => x.biz_date === day && Number(x.amount)); }catch(e){}
     R.kikiOpen = [];
     if(!R.no185){ try{ const ko = await sb.from("kb_staff_work").select("*").eq("paid", true).in("pay_source", ["kikirara", "split"]).is("kiki_returned_on", null).order("biz_date"); R.kikiOpen = ko.error ? [] : (ko.data || []).filter(x => Number(x.day_paid)); }catch(e){} }
     D = Object.assign(R, { day });
@@ -690,6 +694,27 @@ const hasReceipt = r => (Array.isArray(r.cd.settle_log) ? r.cd.settle_log : []).
 // 💯 完璧回収：この日の分（ほかの日の分を除いた投函）がはずの額と同じ・精算ミスなし・領収書の回収待ちなし
 const countPerfect = r => { const v = countVal(r); return v != null && v - unsSumOf(r) === r.amt && !Number((r.s || {}).diff || 0) && !hasReceipt(r); };
 const pm = n => (n > 0 ? "＋" : n < 0 ? "−" : "±") + num(Math.abs(n));
+/* 🔁 日をまたいだ未精算・お釣りは、その日の袋どうしでお金を移す（2026/11/15 店長）
+   ・B日に A日の未精算をいっしょに精算 → B日：「📤 A日の袋へ ○円 移す」／A日：「📥 B日から ○円 入る」
+   ・B日に A日のお釣りを返した → B日：「📥 A日の袋から ○円 もらう」／A日：「📤 B日へ ○円 移す」
+   ・移すと、どちらの日も封筒は「はず」の額になる（袋の中身 ①②③ は、はずの額で計算しているので変わらない）。表示だけで記録は変えない */
+function movesOf(r){
+  const a = [];
+  unsList(r).forEach(x => { const n = Number(x.amount);
+    a.push(n > 0 ? { sgn: -1, amt: n, d: x.date, text: `📤 ${md(x.date)}の袋へ <b>${num(n)}円</b> 移す（${md(x.date)}の未精算の分）` }
+                 : { sgn: 1, amt: -n, d: x.date, text: `📥 ${md(x.date)}の袋から <b>${num(-n)}円</b> もらう（${md(x.date)}のお釣りを返した分）` }); });
+  ((r.R && r.R.unsMade) || []).filter(u => u.cast_id === r.id && u.biz_date === r.day && u.source === "auto" && u.done_on && u.done_on !== r.day).forEach(u => { const n = Number(u.amount);
+    a.push(n > 0 ? { sgn: 1, amt: n, d: u.done_on, text: `📥 ${md(u.done_on)}から <b>${num(n)}円</b> 入る（${md(u.done_on)}に精算した未精算）` }
+                 : { sgn: -1, amt: -n, d: u.done_on, text: `📤 ${md(u.done_on)}の袋へ <b>${num(-n)}円</b> 移す（${md(u.done_on)}に返したお釣りの分）` }); });
+  return a;
+}
+const moveNet = r => movesOf(r).reduce((a, x) => a + x.sgn * x.amt, 0);
+function moveHtml(r, diff){
+  const m = movesOf(r); if(!m.length || diff == null) return "";
+  const after = diff + moveNet(r);
+  return `<div class="mv">${m.map(x => `<div>${x.text} <a class="j" href="javascript:void 0" onclick="openDay('${x.d}')">↗</a></div>`).join("")}
+    <div class="mva ${after ? "ng" : "ok"}">移したあと <b>${pm(after)}</b>${after ? "" : " ✅"}</div></div>`;
+}
 function countCell(r, ed){
   const man = r.cl.collected != null, v = countVal(r), auto = !man && v != null, ok = countPerfect(r);
   const us = unsSumOf(r), sd = Number((r.s || {}).diff || 0), diff = v == null ? null : v - r.amt, other = diff == null ? 0 : diff - us - sd;
@@ -701,14 +726,14 @@ function countCell(r, ed){
   }
   return `<td class="amt cntc ${ok ? "ok" : v != null ? "ng" : ""}"><div class="hazu"><small>はず</small> <b>${num(r.amt)}</b>${ok ? `<span class="hyaku">💯</span>` : ""}</div>
       <div class="tokan"><small>投函</small> ${ed ? `<input type="number" class="cnt ${auto ? "auto" : ""}" value="${v != null ? v : ""}" onchange="setCollected('${r.id}',this.value,${r.amt + us})">` : (v != null ? `<b>${num(v)}</b>` : "—")}</div>
-      <div class="dif">${v == null ? "まだ回収していない" : ok ? "完璧回収" : `<b>${pm(diff)}</b>${hasReceipt(r) && !diff ? "（領収書の回収待ち）" : ""}`}${why.length ? `<br><small>${why.join("<br>")}</small>` : ""}${auto ? `<br><small>投函は自動（精算で投函した額）</small>` : ""}</div></td>`;
+      <div class="dif">${v == null ? "まだ回収していない" : ok ? "完璧回収" : `<b>${pm(diff)}</b>${hasReceipt(r) && !diff ? "（領収書の回収待ち）" : ""}`}${why.length ? `<br><small>${why.join("<br>")}</small>` : ""}${auto ? `<br><small>投函は自動（精算で投函した額）</small>` : ""}</div>${moveHtml(r, diff)}</td>`;
 }
 /* ---------- 🔗 関係する日をならべる（2026/11/15 店長：未精算 × 複数日 × 交通費がからむと、1日ずつ見てもわからない）
    ・その子の、未精算・お釣りでつながっている日（いっしょに精算した日・未精算ができた日・精算した日）を集めて、1つの表にならべる
    ・日ごとに：はず（店落ち − カード − 振込）／投函／±／そのわけ（いっしょに精算した分・精算ミス）／交通費・プラス（キャッシュフローから）
    ・いちばん下に合計：± の合計 ＝ まだ精算していない未精算・お釣り（合っていれば ✅）
    ・見るだけ。記録は変えない ---------- */
-const chainNeed = r => !!(unsList(r).length || Number((r.s || {}).diff || 0) || (D && D.unsOpen || []).some(u => u.cast_id === r.id));
+const chainNeed = r => !!(r.kind === "later" || (r.s && Array.isArray(r.s.uns) && r.s.uns.length) || Number((r.s || {}).diff || 0) || (D && D.unsOpen || []).some(u => u.cast_id === r.id) || (r.R && r.R.unsMade || []).some(u => u.cast_id === r.id));
 async function chainDays(cid, day){
   const days = new Set([day]); let cds = [], uns = [], col = [];
   for(let round = 0; round < 5; round++){
@@ -739,7 +764,8 @@ function chainRows(cid, C){
     const amt = shop - Number(s.cardPaid || 0) - Number(s.transferPaid || 0);
     const ul = (Array.isArray(s.uns) ? s.uns : []).filter(x => x.kind !== "day" && Number(x.amount)), us = ul.reduce((a, x) => a + Number(x.amount), 0);
     const sd = Number(s.diff || 0), auto = amt + sd + us, dep = cl.collected != null ? Number(cl.collected) : auto;
-    return { d, settled: true, amt, dep, pm: dep - amt, ul, us, sd, other: dep - auto, tb: Number(s.transportBack || 0) + Number(s.plus || 0), paidOn: s.paidOn || "",
+    const mvIn = C.uns.filter(u => u.biz_date === d && u.source === "auto" && u.done_on && u.done_on !== d).reduce((a, u) => a + Number(u.amount || 0), 0);
+    return { d, settled: true, amt, dep, pm: dep - amt, after: dep - amt - us + mvIn, ul, us, sd, other: dep - auto, tb: Number(s.transportBack || 0) + Number(s.plus || 0), paidOn: s.paidOn || "",
       uMade: C.uns.filter(u => u.biz_date === d) };
   });
 }
@@ -749,17 +775,17 @@ function chainHtml(cid, day, C){
   const sumAmt = set.reduce((a, x) => a + x.amt, 0), sumDep = set.reduce((a, x) => a + x.dep, 0), sumPm = sumDep - sumAmt;
   const why = x => {
     const a = [];
-    (x.ul || []).forEach(u => a.push(`↔ ${md(u.date)}の${Number(u.amount) >= 0 ? "未精算" : "お釣り"}をいっしょに精算 ${pm(Number(u.amount))}`));
+    (x.ul || []).forEach(u => a.push(`↔ ${md(u.date)}の${Number(u.amount) >= 0 ? "未精算" : "お釣り"}をいっしょに精算 ${pm(Number(u.amount))} → ${Number(u.amount) >= 0 ? `📤 ${md(u.date)}の袋へ ${num(u.amount)} 移す` : `📥 ${md(u.date)}の袋から ${num(-u.amount)} もらう`}`));
     if(x.sd) a.push(`<span style="color:#c0392b">⚠️ 投函が${x.sd < 0 ? "足りない → 未精算 " + num(-x.sd) : "多い → お釣り " + num(x.sd)}</span>`);
-    (x.uMade || []).forEach(u => a.push(`📒 ${md(u.biz_date)}の${Number(u.amount) >= 0 ? "未精算" : "お釣り"} ${num(Math.abs(Number(u.amount)))} → ${u.done_on ? `<b style="color:#2e8b57">${md(u.done_on)}に精算ずみ</b>` : `<b style="color:#c0392b">まだ</b>`}`));
+    (x.uMade || []).forEach(u => a.push(`📒 ${md(u.biz_date)}の${Number(u.amount) >= 0 ? "未精算" : "お釣り"} ${num(Math.abs(Number(u.amount)))} → ${u.done_on ? `<b style="color:#2e8b57">${md(u.done_on)}に精算ずみ</b>${u.source === "auto" && u.done_on !== u.biz_date ? (Number(u.amount) >= 0 ? `（📥 ${md(u.done_on)}から入る）` : `（📤 ${md(u.done_on)}の袋へ移す）`) : ""}` : `<b style="color:#c0392b">まだ</b>`}`));
     if(x.other) a.push(`<span style="color:#c0392b">❓ 数えた額のずれ ${pm(x.other)}</span>`);
     return a.join("<br>") || (x.settled ? "そろっている" : "");
   };
-  return `<table class="ex chaintbl"><tr><th class="l">日付</th><th>はず<br><small>店落ち−カード−振込</small></th><th>投函</th><th>±</th><th class="l">わけ</th><th>🚃 交通費・プラス<br><small>キャッシュフローから</small></th></tr>
+  return `<table class="ex chaintbl"><tr><th class="l">日付</th><th>はず<br><small>店落ち−カード−振込</small></th><th>投函</th><th>±</th><th>移したあと</th><th class="l">わけ</th><th>🚃 交通費・プラス<br><small>キャッシュフローから</small></th></tr>
     ${L.map(x => `<tr class="${x.d === day ? "cur" : ""}"><td class="l"><a class="j" href="javascript:void 0" onclick="chainClose();openDay('${x.d}')">${md(x.d)} ↗</a>${x.d === day ? " <small>（今の日）</small>" : ""}</td>
-      ${x.settled ? `<td>${num(x.amt)}</td><td>${num(x.dep)}</td><td style="font-weight:900;color:${x.pm ? "#c0392b" : "#2e8b57"}">${pm(x.pm)}</td><td class="l">${why(x)}</td><td>${x.tb ? num(x.tb) : ""}</td>`
-        : `<td colspan="3" style="color:#c0392b">${x.home ? "🏠 直帰（まだ精算していない）" : "まだ精算していない"}</td><td class="l">${why(x)}</td><td></td>`}</tr>`).join("")}
-    <tr class="tot"><td class="l"><b>合計</b></td><td><b>${num(sumAmt)}</b></td><td><b>${num(sumDep)}</b></td><td><b>${pm(sumPm)}</b></td>
+      ${x.settled ? `<td>${num(x.amt)}</td><td>${num(x.dep)}</td><td style="font-weight:900;color:${x.pm ? "#c0392b" : "#2e8b57"}">${pm(x.pm)}</td><td style="font-weight:900;color:${x.after ? "#c0392b" : "#2e8b57"}">${pm(x.after)}${x.after ? "" : " ✅"}</td><td class="l">${why(x)}</td><td>${x.tb ? num(x.tb) : ""}</td>`
+        : `<td colspan="4" style="color:#c0392b">${x.home ? "🏠 直帰（まだ精算していない）" : "まだ精算していない"}</td><td class="l">${why(x)}</td><td></td>`}</tr>`).join("")}
+    <tr class="tot"><td class="l"><b>合計</b></td><td><b>${num(sumAmt)}</b></td><td><b>${num(sumDep)}</b></td><td><b>${pm(sumPm)}</b></td><td><b>${pm(set.reduce((a, x) => a + x.after, 0))}</b></td>
       <td class="l" colspan="2">まだ精算していない未精算・お釣り ${openU.length ? `<b>${pm(-openSum)}</b>` : "<b>なし</b>"}　${sumPm === -openSum ? `<b style="color:#2e8b57">✅ 合っています</b>` : `<b style="color:#c0392b">⚠️ ${yen(Math.abs(sumPm + openSum))} 合いません（数えた額のずれ・手で足した未精算など）</b>`}</td></tr></table>
     <div class="leg" style="margin-top:6px">・± ＝ 投函 − はず。ほかの日の未精算をいっしょに精算した日は ＋、投函が足りなかった日は − になります<br>
       ・± を全部たすと、まだ精算していない未精算・お釣りと同じになります（未精算はプラスの額で残っているので、合計では − で出ます）<br>・交通費・プラスはキャッシュフローから出すので、はず・投函には入りません</div>`;
