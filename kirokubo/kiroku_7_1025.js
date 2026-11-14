@@ -2427,5 +2427,47 @@ function paintTrHint(){
 { const __recalcTr = recalc; recalc = function(){ const r = __recalcTr.apply(this, arguments); try{ paintTrHint(); }catch(e){} return r; }; }
 document.head.insertAdjacentHTML("beforeend", `<style>.trhint{font-size:12.5px;font-weight:800;color:#8a5a00;background:#FFF6E0;border:1.5px solid #F2C94C;border-radius:10px;padding:5px 9px;margin-top:4px} .trhint.ng{color:#8A1C2B;background:#FFF0F1;border-color:#E5484D} .trhint small{font-weight:700}</style>`);
 
+/* ✏️ 予約の備考：消せない・直すだけできる（2026/11/15 店長）
+   ・直すと「✏️ 直した（だれ・いつ）」がつく。最初に書いた文は orig に残す（消えない）
+   ・空にはできない（消すのと同じになるので） */
+function bikoEditBtn(id, i){ return KB.CAN_EDIT ? ` <a class="bkedit" href="javascript:void 0" title="この備考を直す（消すことはできません）" onclick="event.stopPropagation();bikoEdit(${id == null ? "null" : id},${i})">✏️</a>` : ""; }
+function bikoEdited(l){ return l && l.edited_at ? ` <small class="bked" title="${esc("最初の文：" + (l.orig || ""))}">（✏️ ${esc(l.edited_by || "")} ${esc(whenShort(l.edited_at))} に直した）</small>` : ""; }
+async function bikoEdit(id, i){
+  if(!KB.CAN_EDIT) return;
+  const pending = id == null, r = pending ? null : rows.find(x => x.id === id) || (editing && editing.id === id ? editing : null);
+  const list = pending ? formPending : logOf(r || {});
+  const l = list[i]; if(!l) return;
+  const t = prompt("備考を直す（消すことはできません）", l.text || "");
+  if(t == null) return;
+  if(!t.trim()){ toast("備考は消せません。直す文を入れてください"); return; }
+  if(t.trim() === l.text) return;
+  const by = KB.operatorName() || "（担当者なし）";
+  const nl = Object.assign({}, l, { text: t.trim(), orig: l.orig != null ? l.orig : l.text, edited_at: new Date().toISOString(), edited_by: by });
+  if(pending){ formPending[i] = nl; renderFormLog(); return; }
+  const log = list.slice(); log[i] = nl;
+  try{
+    q(await sb.from("kb_reservations").update({ memo_log: log, updated_by: by }).eq("id", id));
+    if(r) Object.assign(r, { memo_log: log, updated_by: by, updated_at: new Date().toISOString() });
+    if(editing && editing.id === id) editing.memo_log = log;
+    toast("備考を直しました");
+  }catch(e){ toast("保存できませんでした：" + (e.message || e)); return; }
+  renderList(); if(editing && editing.id === id) renderFormLog();
+}
+memoBoxes = function(r){
+  const all = logOf(r), logs = all.map((l, i) => ({ l, i })).reverse();
+  return `<div class="bikobox">${logs.length ? logs.map(({ l, i }) => `<div class="bk1"><div class="t">${esc(l.text)}${bikoEdited(l)}</div><div class="s">${KBF.staffTag(l.by)} ${esc(whenShort(l.at))}${bikoEditBtn(r.id, i)}</div></div>`).join("")
+      : `<div class="none">まだ備考はありません（受付：${esc(r.created_by || "")} ${whenShort(r.created_at)}）</div>`}</div>
+    ${KB.CAN_EDIT ? `<button type="button" class="addbiko" onclick="event.stopPropagation();addLogPrompt(${r.id})">＋ 備考を書く</button>` : ""}`;
+};
+renderFormLog = function(){
+  const el = $("formLog"); if(!el) return;
+  const logs = editing ? logOf(rows.find(x => x.id === editing.id) || editing) : formPending, rid = editing ? editing.id : null;
+  el.innerHTML = `<div class="mlog full">${logs.length ? logs.map((l, i) => `<div><b>${esc(whenShort(l.at))} ${KBF.staffTag(l.by)}</b> ${esc(l.text)}${bikoEdited(l)}${bikoEditBtn(rid, i)}</div>`).join("") : `<div class="none">まだありません</div>`}</div>
+    ${KB.CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:6px"><input id="formLogText" maxlength="200" placeholder="例：お客様に折り返し済み" style="flex:1"
+      onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addFormLog();}"><button type="button" class="btn btn-ghost btn-sm" onclick="addFormLog()">＋ 書く</button></div>
+      <div style="font-size:11px;color:var(--sub);margin-top:3px">備考は消せません。まちがえたら ✏️ で直してください（直した人・時刻と、最初の文が残ります）</div>` : ""}`;
+};
+(function(){ const st = document.createElement("style"); st.textContent = ".bkedit{text-decoration:none;font-size:12px;margin-left:4px;cursor:pointer}.bked{color:#9C8B8F;font-weight:400}"; document.head.appendChild(st); })();
+
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
 init();
