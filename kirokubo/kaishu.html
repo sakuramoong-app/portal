@@ -372,17 +372,18 @@ async function loadDay(quiet){   // quiet：保存のあと（「読み込み中
    ① 当日回収：当日回収したキャストと額 − 日払い・経費（回収金から出たお金）
    ② その後に店長が回収：後日内勤回収・店長回収したキャストと額 ＋ 手で足すお金（キキララへの返金分など。袋に入るお金）
    ③ 袋の中身の総額 ＝ ① ＋ ② */
-function bag3Calc(rows, ex, staff, ho){
+function bag3Calc(rows, ex, staff, ho, kret){   // kret：この日に「返金完了」したキキララの日払い（② に自動で入る。2026/11/14 店長）
   const sum = l => l.reduce((a, r) => a + (Number(r.amt) || 0), 0);
   const dayL = rows.filter(r => r.state === "day"), laterL = rows.filter(r => r.state === "later" || r.state === "me");
   const paidCash = (staff || []).filter(x => x.paid).reduce((a, x) => a + Number(x.day_paid || 0) - kikiAmt(x), 0);
   const items = (ho && Array.isArray(ho.expenses) ? ho.expenses : []).map((x, i) => Object.assign({ i }, x)).filter(x => x.type === "bagin");
   const inSum = items.reduce((a, x) => a + (Number(x.amount) || 0), 0);
-  const one = sum(dayL) - (Number(ex) || 0) - paidCash, two = sum(laterL) + inSum;
-  return { dayL, laterL, paidCash, items, inSum, dayAmt: sum(dayL), laterAmt: sum(laterL), one, two, three: one + two };
+  const kikiIn = (kret || []).reduce((a, x) => a + kikiAmt(x), 0);
+  const one = sum(dayL) - (Number(ex) || 0) - paidCash, two = sum(laterL) + inSum + kikiIn;
+  return { dayL, laterL, paidCash, items, inSum, kikiIn, kret: kret || [], dayAmt: sum(dayL), laterAmt: sum(laterL), one, two, three: one + two };
 }
-function bag3Html(rows, ex, staff, ho, ed){
-  const B = bag3Calc(rows, ex, staff, ho);
+function bag3Html(rows, ex, staff, ho, ed, kret){
+  const B = bag3Calc(rows, ex, staff, ho, kret);
   const who = l => l.length ? l.map(r => `<span class="b3c">${esc(names[r.id] || r.id)} <b>${num(r.amt)}</b>${r.state === "later" ? `<small>（後日内勤${r.paidOn ? "・" + md(r.paidOn) : ""}）</small>` : r.state === "me" ? "<small>（店長回収）</small>" : ""}</span>`).join("") : `<span class="b3none">なし</span>`;
   return `<div class="bag3">
     <div class="b3 b3one"><div class="b3h">① 当日回収（${B.dayL.length}人）<b>${yen(B.one)}</b></div>
@@ -390,11 +391,12 @@ function bag3Html(rows, ex, staff, ho, ed){
       <div class="b3f">回収 ${yen(B.dayAmt)} − 経費 ${yen(ex)} − 回収金から払った日払い ${yen(B.paidCash)} ＝ <b>${yen(B.one)}</b></div></div>
     <div class="b3 b3two"><div class="b3h">② その後に店長が回収（${B.laterL.length}人）<b>${yen(B.two)}</b></div>
       <div class="b3l">${who(B.laterL)}</div>
-      ${B.items.length || ed ? `<table class="ex b3in">${B.items.map(x => `<tr><td class="l">${ed ? `<input value="${esc(x.memo || "")}" placeholder="メモ（例：キキララへの返金分）" maxlength="60" style="width:100%" onchange="setExp(${x.i},'memo',this.value)">` : esc(x.memo || "")}</td>
+      ${B.items.length || ed ? `<table class="ex b3in">${B.items.map(x => `<tr><td class="l">${ed ? `<input value="${esc(x.memo || "")}" placeholder="メモ（キキララへの返金は「返金完了」で自動で入ります）" maxlength="60" style="width:100%" onchange="setExp(${x.i},'memo',this.value)">` : esc(x.memo || "")}</td>
         <td>＋ ${ed ? `<input type="number" value="${Number(x.amount) || ""}" placeholder="金額" style="width:100px;text-align:right" onchange="setExp(${x.i},'amount',this.value)">` : num(x.amount)}</td>
         <td class="l">${ed ? `<a class="j" href="javascript:void 0" onclick="delExp(${x.i})">🗑</a>` : ""}</td></tr>`).join("")}
-        ${ed ? `<tr><td class="l" colspan="3"><button class="btn btn-ghost btn-sm" onclick="addExp('bagin')">＋ 袋に入れたお金を足す（キキララへの返金分など）</button></td></tr>` : ""}</table>` : ""}
-      <div class="b3f">後日内勤回収・店長回収 ${yen(B.laterAmt)}${B.inSum ? " ＋ 手で足したお金 " + yen(B.inSum) : ""} ＝ <b>${yen(B.two)}</b></div></div>
+        ${ed ? `<tr><td class="l" colspan="3"><button class="btn btn-ghost btn-sm" onclick="addExp('bagin')">＋ 袋に入れたお金を足す（キキララへの返金は自動）</button></td></tr>` : ""}</table>` : ""}
+      ${B.kret.length ? `<div class="b3l">${B.kret.map(x => `<span class="b3c">🪙 キキララへ返金 ${md(x.biz_date)}の${esc(staffNames[x.staff_id] || x.staff_id)} <b>${num(kikiAmt(x))}</b><small>（返金完了で自動）</small></span>`).join("")}</div>` : ""}
+      <div class="b3f">後日内勤回収・店長回収 ${yen(B.laterAmt)}${B.kikiIn ? " ＋ キキララへ返金 " + yen(B.kikiIn) : ""}${B.inSum ? " ＋ 手で足したお金 " + yen(B.inSum) : ""} ＝ <b>${yen(B.two)}</b></div></div>
     <div class="b3 b3three"><div class="b3h">③ 袋の中身の総額（① ＋ ②）<b>${yen(B.three)}</b></div>
       <div class="b3f">${yen(B.one)} ＋ ${yen(B.two)} ＝ <b>${yen(B.three)}</b></div></div></div>`;
 }
@@ -412,7 +414,7 @@ function paintDay(){
     <div class="s">回収サイン<b><span class="mk day">✔${T.dayN}</span>　<span class="mk later">✔${T.laterN}</span>　<span class="mk me">✔${T.meN}</span>　<span class="mk none">■${T.noneN}</span></b></div>
     <div class="s ${T.yetN ? "ng" : ""}">まだチェックしていない<b>${T.yetN}人</b></div>
     <div class="s ${T.todo ? "ng" : ""}">処理まだ（交通費・経費・精算ミス）<b>${T.todo}件</b></div></div>`;
-  h += bag3Html(rows, ex, staff, ho, ed);   // 💰 ① 当日回収 ② その後に店長が回収 ③ 袋の中身の総額（2026/11/11 店長：上にまとめる）
+  h += bag3Html(rows, ex, staff, ho, ed, kikiRet);   // 💰 ① 当日回収 ② その後に店長が回収 ③ 袋の中身の総額（2026/11/11 店長：上にまとめる）
   /* 👛 回収を3つに分ける（2026/11/4 店長の希望）
      ① 内勤者ごと：精算場所「回収」（内勤がその場で受け取った）。精算した内勤ごと。内勤の日払いをどこから取ったかも
      ② 池袋・鶯谷・五反田：封筒（ポスティング）。待機場ごと。あるはずの封筒の数もいっしょに
