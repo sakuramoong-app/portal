@@ -1043,6 +1043,7 @@ function mergedCard(r, ed){
   const pd = r.s.paidOn, v = r.s.drop != null ? Number(r.s.drop) : r.amt;
   return `<details class="envc merged" open><summary>${typeof KBF !== "undefined" ? KBF.img(r.id, 26) : ""}<b>${esc(names[r.id] || r.id)}</b>
       <small><b>${md(r.day)}の分</b>・${md(pd)} に合算で精算</small><span class="envst">📦 ${md(pd)}の封筒</span></summary>
+    <div class="envwhen">🧾 → ${md(pd)} ${r.cd.settled_at ? (when(r.cd.settled_at).split(" ")[1] || "") : ""} に合算で精算${r.cd.settled_by ? "・" + (typeof KBF !== "undefined" ? KBF.staffTag(r.cd.settled_by) : esc(r.cd.settled_by)) : ""}${r.cl.state && r.cl.updated_by ? `<br>✔ 回収サイン：${typeof KBF !== "undefined" ? KBF.staffTag(r.cl.updated_by) : esc(r.cl.updated_by)} ${r.cl.updated_at ? when(r.cl.updated_at) : ""}` : ""}</div>
     ${envSignHtml(r, ed)}
     <div class="envsub" style="font-size:12.5px;color:#5b3fa6">この日の分は、${md(pd)} の封筒にいっしょに入っています（精算メモ ${md(r.day)} ${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}）。中身のチェックは ${md(pd)} の封筒カードで</div>
     <button type="button" class="btn btn-ghost btn-sm" onclick="openDay('${pd}')">📮 ${md(pd)}の封筒へ</button>
@@ -1058,7 +1059,7 @@ function envHtml(rows, ed, pre, title){
     return `<details class="envc ${all ? "ok" : ""}" ${all ? "" : "open"}><summary>${typeof KBF !== "undefined" ? KBF.img(r.id, 26) : ""}<b>${esc(names[r.id] || r.id)}</b>
         <small><b>${md(r.day)}の分</b>${r.place ? "・" + esc(r.place === "回収" ? "手渡し" : r.place) : ""}</small>
         <span class="envst">${all ? "✅ 完了" : "あと " + left}</span></summary>
-      <div class="envwhen">🧾 ${r.paidOn && r.paidOn > r.day ? `<b>→ ${md(r.paidOn)} ${r.cd.settled_at ? when(r.cd.settled_at).split(" ")[1] || "" : ""} に精算（後日）</b>` : `${r.cd.settled_at ? when(r.cd.settled_at) : ""} に精算`}${r.place ? "・" + esc(r.place === "回収" ? "手渡し（回収）" : r.place + "に投函") : ""}${r.cd.settled_by ? "・" + esc(r.cd.settled_by) : ""}</div>
+      <div class="envwhen">🧾 ${r.paidOn && r.paidOn > r.day ? `<b>→ ${md(r.paidOn)} ${r.cd.settled_at ? when(r.cd.settled_at).split(" ")[1] || "" : ""} に精算（後日）</b>` : `${r.cd.settled_at ? when(r.cd.settled_at) : ""} に精算`}${r.place ? "・" + esc(r.place === "回収" ? "手渡し（回収）" : r.place + "に投函") : ""}${r.cd.settled_by ? "・" + (typeof KBF !== "undefined" ? KBF.staffTag(r.cd.settled_by) : esc(r.cd.settled_by)) : ""}${r.cl.state && r.cl.updated_by ? `<br>✔ 回収サイン：${typeof KBF !== "undefined" ? KBF.staffTag(r.cl.updated_by) : esc(r.cl.updated_by)} ${r.cl.updated_at ? when(r.cl.updated_at) : ""}` : r.auto ? "<br>✔ 自動（その場で受け取った精算）" : ""}</div>
       <div class="envsign"><span class="cs" style="flex-wrap:wrap">${["day", "later", "me"].map(k => `<button class="${k} ${r.state === k ? "on" : ""}" ${ed ? "" : "disabled"} onclick="setState('${r.id}','${r.state === k && !r.auto ? "" : k}','${r.day}')">${STATE[k]}</button>`).join("")}</span>${!r.state || r.state === "none" ? `<span style="color:#E0001B;font-weight:800;font-size:12px"> ■ まだ回収していない</span>` : ""}</div>
       <table class="coltbl envcnt"><tr>${countCell(r, ed)}</tr></table>
       <div class="envh">① 封筒に入っていなければいけないもの（実際の封筒と見くらべて ✓）</div>${E.checks.map(([k, h]) => cb(k, h)).join("")}
