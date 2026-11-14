@@ -295,7 +295,7 @@ settle = async function(id, stay){   // stay：精算して、そのあとも待
       note: diff < 0 ? "投函が足りなかった（投函 " + yen(c.deposited) + "／" + yen(due) + "）" : "多く投函した（投函 " + yen(c.deposited) + "／" + yen(due) + "）" }));
   }catch(e){ toast("未精算を保存できませんでした：" + (e.message || e)); return; }
   const cd = unsCD()[id] || {}, logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).slice();
-  logs.push({ at, by, kind: "settle", place, amount: c.deposited != null ? c.deposited : null, cam: cd.camera_check || "", text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") + (typeof RF_NOW !== "undefined" && RF_NOW && RF_NOW.id === id ? "\n💴 返金：" + (RF_NOW.src === "kiki" ? "🪙 キキララから立て替えて渡した" : "💴 当日の回収金から渡した") + " " + yen(RF_NOW.amount) + "（📋 返金の確認 ✓）" : noPh ? "\n📷 写真なし（キャストがくれなかった）" : "\n📋 写真の指さし確認 ✓（精算メモの枚数・日付と金額・お金・領収書）") + (by !== KB.operatorName() ? "\n（入力：" + KB.operatorName() + "）" : "") + (stay ? "\n🟡 このあとも待機中" : "") });
+  logs.push({ at, by, kind: "settle", place, amount: c.deposited != null ? c.deposited : null, cam: cd.camera_check || "", text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") + (typeof RF_NOW !== "undefined" && RF_NOW && RF_NOW.id === id ? "\n💴 返金：" + (RF_NOW.src === "kiki" ? "🪙 キキララから立て替えて渡した" : "💴 当日（" + unsMd(day) + "）の回収金から渡した") + " " + yen(RF_NOW.amount) + "（📋 返金の確認 ✓）" : noPh ? "\n📷 写真なし（キャストがくれなかった）" : "\n📋 写真の指さし確認 ✓（精算メモの枚数・日付と金額・お金・領収書）") + (by !== KB.operatorName() ? "\n（入力：" + KB.operatorName() + "）" : "") + (stay ? "\n🟡 このあとも待機中" : "") });
   if(noPh) finalSnap.noPhoto = true;
   await saveDay(id, Object.assign({ settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: finalSnap, deposited: null }, HAS_SLOG ? { settle_log: logs } : {}, HAS_170 ? { direct_home: false } : {}, stay ? { status: "待機中" } : {}));
   delete unsSel[id]; delete ptVal[id]; delete settleSkip[day + "|" + id]; delete noPhoto[id]; delete plSel[id]; delete ptDay[id]; delete ptBy[id]; await unsLoad();   // チェックを外した予約は、のこり（未精算）として次に出る
@@ -1181,7 +1181,7 @@ function isRefund(id, c){ c = c || calcCast(id); const sel = unsSel[id]; return 
 function rfBoxHtml(id, amt){
   const v = rfSrc[id] || "", ed = KB.CAN_EDIT ? "" : "disabled";
   return `<div class="rfbox ${v ? "" : "need"}" id="rf-${id}"><div class="rfh">💴 返金のしかた（キャストに ${yen(amt)} 渡す）</div>
-    <label><input type="radio" name="rf-${id}" ${v === "cash" ? "checked" : ""} ${ed} onchange="setRfSrc('${id}','cash')"> 💴 当日の回収金から、内勤が渡した</label>
+    <label><input type="radio" name="rf-${id}" ${v === "cash" ? "checked" : ""} ${ed} onchange="setRfSrc('${id}','cash')"> 💴 当日（${unsMd(day)}の売上営業日）の回収金から、内勤が渡した</label>
     <label><input type="radio" name="rf-${id}" ${v === "kiki" ? "checked" : ""} ${ed} onchange="setRfSrc('${id}','kiki')"> 🪙 キキララから立て替えて渡した（別の日に会ったときなど）</label>
     <small>渡した日時・渡した人は、下の「🕒 精算（投函・回収）した日時」に入れてください。写真はいりません。<br>別の日の投函と合算して差し引くときは、ここではなく次の精算で（未精算を合算）</small></div>`;
 }
@@ -1197,7 +1197,7 @@ function setRfSrc(id, v){
   if(!isRefund(id, c)) return __phItems(id, c);
   const amt = -Number(c.drop), kiki = rfSrc[id] === "kiki";
   return [["rfgive", `💴 キャストに <b>${yen(amt)}</b> 渡した（${kiki ? "キキララ" : "当日の回収金"}から・数えて確認した）`],
-    ["rfmemo", kiki ? `📝 キキララのエクセルに書いた（${unsMd(day)} ${esc(castName(id))} 返金 ${yen(amt)}）` : `📝 精算メモ（営業日 ${unsMd(day)}／${esc(castName(id))}／¥-${amt.toLocaleString("ja-JP")}）を内勤が書いて、当日の回収金に入れた`]]
+    ["rfmemo", kiki ? `📝 キキララのエクセルに書いた（${unsMd(day)} ${esc(castName(id))} 返金 ${yen(amt)}）` : `📝 精算メモ（営業日 ${unsMd(day)}／${esc(castName(id))}／¥-${amt.toLocaleString("ja-JP")}）を内勤が書いて、お金と透明封筒に同封し当日（${unsMd(day)}）の回収袋に入れた`]]
     .concat(__phItems(id, c).filter(x => x[0] === "rcpt"));
 }; }
 { const __phHtml = phChkHtml; phChkHtml = function(id, c, done){
