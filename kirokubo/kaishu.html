@@ -974,7 +974,7 @@ function chainHtml(cid, day, C){
   };
   const ed = KB.CAN_EDIT;
   // 封筒中・店長回収は、ここで入れても回収明細のその日と同じところに入る（連動）
-  const depCell = x => ed ? `<input type="number" class="cnt ${x.man ? "" : "auto"}" value="${x.dep}" onchange="setCollected('${esc(cid)}',this.value,${x.amt + x.us},'${x.d}',${x.auto})">` : num(x.dep);
+  const depCell = x => ed ? `<input type="number" class="cnt ${x.man ? "" : "auto"}" value="${x.dep}" onchange="setCollected('${esc(cid)}',this.value,${x.amt - (x.after - x.pm)},'${x.d}',${x.auto})">` : num(x.dep);
   const meCell = x => `<button class="cmebtn ${x.state === "me" ? "on" : ""}" ${ed ? "" : "disabled"} onclick="setState('${esc(cid)}','${x.state === "me" ? "" : "me"}','${x.d}')">${STATE.me}</button>${x.state && x.state !== "me" ? `<div><small>${esc(STATE[x.state] || x.state)}</small></div>` : ""}`;
   return `<table class="ex chaintbl"><tr><th class="l">日付<br><small>押すと精算へ</small></th><th>はず<br><small>店落ち−カード−振込</small></th><th>封筒中</th><th>±</th><th>移したあと</th><th>回収</th><th class="l">わけ</th><th>🚃 交通費・プラス<br><small>キャッシュフローから</small></th></tr>
     ${L.map(x => `<tr class="${x.d === day ? "cur" : ""}"><td class="l"><a class="j" href="settle.html?d=${x.d}&c=${encodeURIComponent(cid)}" target="_blank" rel="noopener" title="この日のこの子の精算へ">${md(x.d)} ↗</a>${x.d === day ? " <small>（今の日）</small>" : ""}</td>
@@ -1069,9 +1069,10 @@ function envOf(r){
   const dep = s.deposited != null ? Number(s.deposited) : null;
   // やること：回収明細の「移す」と同じ計算（movesOf）から。ほかの日の袋とのやりとり・キャッシュフローの交通費（2026/11/15 ひとつにまとめた）
   const todo = movesOf(r).filter(m => !m.recv).map(m => m.text.replace("→ この袋へ", "→ " + md(r.day) + "の袋へ").replace("🚃 この袋から", "🚃 " + md(r.day) + "の袋から"));
+  if(s.refund && s.refund.src === "kiki") todo.push(`🪙 キキララから <b>${num(s.refund.amount)}円</b> 立て替えた → 回収金からキキララへもどしたら、🪙 キキララの表で「返金完了」`);
   if(Number(s.diff || 0)) todo.push(`📒 ${Number(s.diff) < 0 ? "未精算 " + num(-Number(s.diff)) : "お釣り " + num(Number(s.diff))}円 は、つぎの精算でキャストと（未精算の表に入っています）`);
   const checks = [["env:memo", `📝 精算メモが <b>${memoL.length}枚</b>：${memoL.map(([d, v]) => `${md(d)} ${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}`).join("／")}`],
-    ["env:cash", `💴 お金が <b>${dep != null ? num(dep) : "?"}円</b>${dep != null && dep !== due ? `（本来 ${num(due)}円・${dep < due ? "足りない " + num(due - dep) : "多い " + num(dep - due)}）` : ""}${due < 0 ? "（お店から渡す封筒）" : ""}`],
+    s.refund ? ["env:cash", `💴 キャストに <b>${num(s.refund.amount)}円</b> 渡した（${s.refund.src === "kiki" ? "🪙 キキララから立て替え" : "💴 当日の回収金から"}・この封筒はお店から渡した精算メモだけ）`] : ["env:cash", `💴 お金が <b>${dep != null ? num(dep) : "?"}円</b>${dep != null && dep !== due ? `（本来 ${num(due)}円・${dep < due ? "足りない " + num(due - dep) : "多い " + num(dep - due)}）` : ""}${due < 0 ? "（お店から渡す封筒）" : ""}`],
   ];
   const rc = receiptsOf(r); if(rc.length) checks.push(["env:rcpt", receiptLine(rc)]);   // 領収書がないはずの封筒は出さない
   return { memoL, due, dep, todo, checks, keys: checks.map(c => c[0]).concat(todo.map((_, i) => "env:t" + i)) };
