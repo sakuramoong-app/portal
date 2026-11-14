@@ -275,6 +275,7 @@ settle = async function(id, stay){   // stay：精算して、そのあとも待
                  uns: picked.map((x, i) => ({ kind: x.kind, date: x.date, amount: x.amount, id: x.raw.id || null, label: labels[i] })), due };
   // ② この精算に入れた予約を覚える。前の精算（①…）があれば、合計した数字にして parts に並べる
   snap.resIds = c.live.map(r => r.id); snap.part = (c.partNo || 1); snap.place = place;   // どこで精算したか（②のときに①を出す）
+  if(typeof RF_NOW !== "undefined" && RF_NOW && RF_NOW.id === id){ snap.refund = { src: RF_NOW.src, amount: RF_NOW.amount, kiki_returned_on: null }; snap.deposited = c.drop; snap.diff = 0; }   // 💴 返金だけ（2026/11/15）
   const finalSnap = c.prevParts && c.prevParts.length ? kbSumParts(c.prevParts.concat([snap])) : snap;
   try{
     for(const x of picked){
@@ -294,7 +295,7 @@ settle = async function(id, stay){   // stay：精算して、そのあとも待
       note: diff < 0 ? "投函が足りなかった（投函 " + yen(c.deposited) + "／" + yen(due) + "）" : "多く投函した（投函 " + yen(c.deposited) + "／" + yen(due) + "）" }));
   }catch(e){ toast("未精算を保存できませんでした：" + (e.message || e)); return; }
   const cd = unsCD()[id] || {}, logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).slice();
-  logs.push({ at, by, kind: "settle", place, amount: c.deposited != null ? c.deposited : null, cam: cd.camera_check || "", text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") + (noPh ? "\n📷 写真なし（キャストがくれなかった）" : "\n📋 写真の指さし確認 ✓（精算メモの枚数・日付と金額・お金・領収書）") + (by !== KB.operatorName() ? "\n（入力：" + KB.operatorName() + "）" : "") + (stay ? "\n🟡 このあとも待機中" : "") });
+  logs.push({ at, by, kind: "settle", place, amount: c.deposited != null ? c.deposited : null, cam: cd.camera_check || "", text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") + (typeof RF_NOW !== "undefined" && RF_NOW && RF_NOW.id === id ? "\n💴 返金：" + (RF_NOW.src === "kiki" ? "🪙 キキララから立て替えて渡した" : "💴 当日の回収金から渡した") + " " + yen(RF_NOW.amount) + "（📋 返金の確認 ✓）" : noPh ? "\n📷 写真なし（キャストがくれなかった）" : "\n📋 写真の指さし確認 ✓（精算メモの枚数・日付と金額・お金・領収書）") + (by !== KB.operatorName() ? "\n（入力：" + KB.operatorName() + "）" : "") + (stay ? "\n🟡 このあとも待機中" : "") });
   if(noPh) finalSnap.noPhoto = true;
   await saveDay(id, Object.assign({ settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: finalSnap, deposited: null }, HAS_SLOG ? { settle_log: logs } : {}, HAS_170 ? { direct_home: false } : {}, stay ? { status: "待機中" } : {}));
   delete unsSel[id]; delete ptVal[id]; delete settleSkip[day + "|" + id]; delete noPhoto[id]; delete plSel[id]; delete ptDay[id]; delete ptBy[id]; await unsLoad();   // チェックを外した予約は、のこり（未精算）として次に出る
@@ -794,10 +795,13 @@ function settleViewHtml(id, c){
   if(!done){ const sel2 = unsSel[id] || new Set(), op2 = unsOpen(id); op2.filter(x => sel2.has(x.key) && x.kind === "day" && x.raw && x.raw.c).forEach(x => trDays.push([x.date, (Number(x.raw.c.transportBack) || 0) + (Number(x.raw.c.plus) || 0)])); }
   const trBox = trDays.some(t => t[1]) ? `<div class="dep trcf"><span>🚃 交通費・プラス</span><b>${yen(trDays.reduce((a, t) => a + t[1], 0))}</b></div>
     <div class="stt" style="color:#5b3fa6">${trDays.filter(t => t[1]).map(t => `${unsMd(t[0])}の分 ${yen(t[1])} → キャッシュフローから出して <b>${unsMd(t[0])}の袋</b>へ`).join("<br>")}<br><small>（封筒の投函額には入っていません）</small></div>` : "";
-  const dep = `${trBox}<div class="dep depdue duebox ${P.due < 0 ? "give" : ""}"><span>${P.due < 0 ? "💴 お店から渡す額" : "💰 投函額"}</span><b>${yen(Math.abs(P.due))}</b></div>
+  const rfDone = done && (cd.settle_snapshot || {}).refund;
+  const dep = `${trBox}<div class="dep depdue duebox ${P.due < 0 ? "give" : ""}"><span>${P.due < 0 ? "💴 お店から渡す額" : "💰 投函額"}</span><b>${yen(Math.abs(P.due))}</b></div>`
+    + (rfDone ? `<div class="stt rfdone">💴 返金ずみ：${rfDone.src === "kiki" ? "🪙 キキララから立て替えて渡した" : "💴 当日の回収金から渡した"}（${yen(rfDone.amount)}）</div>`
+      : !done && isRefund(id, c) ? rfBoxHtml(id, -P.due) : `
     <div class="dep"><span>実際に投函（回収）した額</span><input type="number" id="dep-${id}" value="${c.deposited != null ? c.deposited : ""}" placeholder="投函した額" ${KB.CAN_EDIT ? "" : "disabled"} onchange="setDeposit('${id}',this.value)"></div>
     <div class="stt" style="color:${diff == null ? "#9C8B8F" : diff === 0 ? "#2e8b57" : diff < 0 ? "#c0392b" : "#2f7fd0"}">${diff == null ? "投函した額をまだ入れていません（お金を確認してから入れる）"
-      : diff === 0 ? "✅ 未精算・お釣りは出ていません" : diff < 0 ? `⚠ 未精算が出ます（足りない ${yen(-diff)}）` : `⚠ お釣りが出ます（多い ${yen(diff)}）`}</div>`;
+      : diff === 0 ? "✅ 未精算・お釣りは出ていません" : diff < 0 ? `⚠ 未精算が出ます（足りない ${yen(-diff)}）` : `⚠ お釣りが出ます（多い ${yen(diff)}）`}</div>`);
   const stat = diff == null ? "投函した額 まだ" : diff === 0 ? "✅ ぴったり" : diff < 0 ? `⚠ 未精算 ${yen(-diff)}` : `⚠ お釣り ${yen(diff)}`;
   const shop = `<div class="sv"><details class="gb gbd" ${shopOpen.has(id) ? "open" : ""} ontoggle="this.open ? shopOpen.add('${id}') : shopOpen.delete('${id}')"><summary class="k">🏪 店落ち（暫定的な残額＋雑費）<small>押すと開く</small></summary><div class="v">${yen(c.shopDrop)}</div>
       ${R("総額", yen(c.total))}${R("キャスト報酬（報酬＋OP）", yen(c.reward + c.option))}${R("暫定的な残額（総額−報酬）", yen(c.provisional))}${R("＋ 雑費", yen(c.zappi))}${R("＝ 店落ち（暫定的な残額＋雑費）", yen(c.provisional + c.zappi))}${R("【税務用】源泉徴収（手取りからは引かない）", yen(c.withholding))}${R("実質的な店落ち（暫定的な残額−源泉）", yen(c.realDrop))}</details></div>`;
@@ -875,7 +879,7 @@ cardHtml = function(id, c){
       <button class="linecopy" onclick="copyDetailImg('${id}')"><span>🖼 明細コピー</span><small>LINEで貼付 📷</small></button>
       ${KB.CAN_EDIT ? (done
         ? `<button class="btn btn-ghost btn-sm" onclick="unsettle('${id}')">↩ 精算済をもどす</button>`
-        : home ? `<button class="btn btn-ghost btn-sm" onclick="setDirectHome('${id}',false)">↩ 直帰をもどす</button>`
+        : home ? `${V.due < 0 ? `<button class="btn btn-primary btn-sm" onclick="setDirectHome('${id}',false)" title="直帰をもどして、返金の精算をする">💴 返金する（直帰をもどす）</button>` : ""}<button class="btn btn-ghost btn-sm" onclick="setDirectHome('${id}',false)">↩ 直帰をもどす</button>`
         : `<button class="btn btn-primary btn-sm" onclick="settle('${id}')">✅ 精算済にする</button>
            <button class="btn btn-ghost btn-sm" onclick="settle('${id}',true)" title="精算して、このあとも待機（あとで予約が入ったら②として精算）">✅ 精算して待機中のまま</button>
            <button class="btn btn-ghost btn-sm homebtn" onclick="setDirectHome('${id}',true)">🏠 直帰</button>`) : ""}
@@ -1164,3 +1168,63 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 // 投函した額を直したら、「お金」の ✓ ははずす（もう一度、写真と見くらべる）
 if(typeof setDeposit === "function"){ const __sdChk = setDeposit; setDeposit = function(id){ if(phChk[id]) phChk[id].delete("cash"); return __sdChk.apply(this, arguments); }; }
+
+/* ---------- 💴 返金だけ（お店からキャストに渡す・合算なし）2026/11/15 店長
+   カード払いなどで、お店からキャストに渡す額があるとき。キャストは投函しないので、投函・写真のかわりに
+   ・返金のしかた：💴 当日の回収金から内勤が渡した／🪙 キキララから立て替えて渡した（別の日に会ったとき）
+   ・指さし確認：渡した額を数えた／精算メモ（回収金から）かキキララのエクセル（キキララから）を内勤が書いた
+   ・写真・監視カメラはいらない。場所は「回収」（内勤の手渡し）
+   ・別の日の投函と合算して差し引くときは、ここではなく未精算の合算で（次の精算で）
+   ・キキララから立て替えた分は、回収明細の 🪙 キキララで「返金完了」（日払いのキキララと同じ） ---------- */
+const rfSrc = {};   // cast_id → "cash" | "kiki"
+function isRefund(id, c){ c = c || calcCast(id); const sel = unsSel[id]; return Number(c.drop) < 0 && !(sel && sel.size) && (c.partNo || 1) === 1; }
+function rfBoxHtml(id, amt){
+  const v = rfSrc[id] || "", ed = KB.CAN_EDIT ? "" : "disabled";
+  return `<div class="rfbox ${v ? "" : "need"}" id="rf-${id}"><div class="rfh">💴 返金のしかた（キャストに ${yen(amt)} 渡す）</div>
+    <label><input type="radio" name="rf-${id}" ${v === "cash" ? "checked" : ""} ${ed} onchange="setRfSrc('${id}','cash')"> 💴 当日の回収金から、内勤が渡した</label>
+    <label><input type="radio" name="rf-${id}" ${v === "kiki" ? "checked" : ""} ${ed} onchange="setRfSrc('${id}','kiki')"> 🪙 キキララから立て替えて渡した（別の日に会ったときなど）</label>
+    <small>渡した日時・渡した人は、下の「🕒 精算（投函・回収）した日時」に入れてください。写真はいりません。<br>別の日の投函と合算して差し引くときは、ここではなく次の精算で（未精算を合算）</small></div>`;
+}
+function setRfSrc(id, v){
+  rfSrc[id] = v;
+  const el = document.getElementById("rf-" + id); if(el){ try{ el.outerHTML = rfBoxHtml(id, -Number(calcCast(id).drop)); }catch(e){} }
+  if(phChk[id]) phChk[id].delete("rfmemo");
+  const ck = document.getElementById("phchk-" + id); if(ck){ try{ ck.outerHTML = phChkHtml(id, null, false); }catch(e){} }
+  try{ sgRepaint(id); }catch(e){}
+}
+{ const __phItems = phChkItems; phChkItems = function(id, c){
+  c = c || calcCast(id);
+  if(!isRefund(id, c)) return __phItems(id, c);
+  const amt = -Number(c.drop), kiki = rfSrc[id] === "kiki";
+  return [["rfgive", `💴 キャストに <b>${yen(amt)}</b> 渡した（${kiki ? "キキララ" : "当日の回収金"}から・数えて確認した）`],
+    ["rfmemo", kiki ? `📝 キキララのエクセルに書いた（${unsMd(day)} ${esc(castName(id))} 返金 ${yen(amt)}）` : `📝 精算メモ（営業日 ${unsMd(day)}／${esc(castName(id))}／¥-${amt.toLocaleString("ja-JP")}）を内勤が書いて、当日の回収金に入れた`]]
+    .concat(__phItems(id, c).filter(x => x[0] === "rcpt"));
+}; }
+{ const __phHtml = phChkHtml; phChkHtml = function(id, c, done){
+  const h = __phHtml(id, c, done);
+  return !done && isRefund(id, c) ? h.replace("📋 写真の指さし確認（全部 ✓ しないと精算済にできません）", "📋 返金の確認（全部 ✓ しないと精算済にできません）") : h;
+}; }
+{ const __settleRf = settle; settle = async function(id, stay){
+  const c = calcCast(id);
+  if(!isRefund(id, c)) return __settleRf.apply(this, arguments);
+  if(!rfSrc[id]){ toast("💴 返金のしかた（当日の回収金から／キキララから立て替え）を選んでから精算済にしてください"); const w = document.getElementById("rf-" + id); if(w) w.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
+  if(!phChkOk(id)){ toast("📋 返金の確認を、1つずつ ✓ してから精算済にしてください"); const w = document.getElementById("phchk-" + id); if(w) w.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
+  // 写真・監視カメラはいらない：場所は「回収」、写真なしで通す（記録には返金と残す）
+  const pl = document.getElementById("pl-" + id); if(pl) pl.value = "回収"; plSel[id] = "回収";
+  const hadNo = noPhoto[id]; noPhoto[id] = true; RF_NOW = { id, src: rfSrc[id], amount: -Number(c.drop) };
+  try{ return await __settleRf.apply(this, arguments); }
+  finally{ RF_NOW = null; if(!hadNo) delete noPhoto[id]; }
+}; }
+let RF_NOW = null;   // 返金の精算中（スナップショットに refund を入れる）
+// すごろく：返金のときは「投函の額」＝返金のしかたを選んだ、「お金の写真」＝いらない
+{ const __sgRf = sgSteps; sgSteps = function(id, c, cd){
+  const s = __sgRf.apply(this, arguments); c = c || calcCast(id); cd = cd || unsCD()[id] || {};
+  if(cd.settled || !isRefund(id, c)) return s;
+  return s.map(x => x.k === "dep" ? Object.assign({}, x, { l: "返金のしかた", ok: !!rfSrc[id] }) : x.k === "ph" ? Object.assign({}, x, { l: "写真（いらない）", ok: true }) : x.k === "chk" ? Object.assign({}, x, { l: "📋 返金の確認" }) : x).filter(x => x.k !== "cam");
+}; }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .rfbox{border:2.5px solid #2f7fd0;border-radius:14px;background:#EEF6FF;padding:8px 12px;margin:8px 0;font-size:13px;font-weight:700}
+  .rfbox.need{border-color:#F2B705;background:#FFFBEA;animation:svrBlink 1.4s ease-in-out infinite}
+  .rfbox .rfh{font-weight:900;color:#1f4f80;margin-bottom:4px} .rfbox label{display:block;padding:4px 0;cursor:pointer} .rfbox small{color:#6b7a90;font-weight:600}
+  .rfdone{color:#1f4f80;font-weight:800}
+</style>`);
