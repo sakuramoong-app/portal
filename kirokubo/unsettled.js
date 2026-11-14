@@ -798,6 +798,7 @@ function settleViewHtml(id, c){
   const rfDone = done && (cd.settle_snapshot || {}).refund;
   const dep = `${trBox}<div class="dep depdue duebox ${P.due < 0 ? "give" : ""}"><span>${P.due < 0 ? "💴 お店から渡す額" : "💰 投函額"}</span><b>${yen(Math.abs(P.due))}</b></div>`
     + (rfDone ? `<div class="stt rfdone">💴 返金ずみ：${rfDone.src === "kiki" ? "🪙 キキララから立て替えて渡した" : "💴 当日の回収金から渡した"}（${yen(rfDone.amount)}）</div>`
+      : !done && rfMergedNeg(id, c) ? `<div class="rfbox need" style="border-color:#E5484D;background:#FFF1F1"><div class="rfh" style="color:#c0392b">🚫 この合算は精算できません</div>合算しても、お店から ${yen(-P.due)} 渡すことになります（複数日の精算でお釣りを出すのと同じなので禁止）。<br>未精算のチェックをはずして、<b>返金だけ</b>で精算してください。</div>`
       : !done && isRefund(id, c) ? rfBoxHtml(id, -P.due) : `
     <div class="dep"><span>実際に投函（回収）した額</span><input type="number" id="dep-${id}" value="${c.deposited != null ? c.deposited : ""}" placeholder="投函した額" ${KB.CAN_EDIT ? "" : "disabled"} onchange="setDeposit('${id}',this.value)"></div>
     <div class="stt" style="color:${diff == null ? "#9C8B8F" : diff === 0 ? "#2e8b57" : diff < 0 ? "#c0392b" : "#2f7fd0"}">${diff == null ? "投函した額をまだ入れていません（お金を確認してから入れる）"
@@ -1183,7 +1184,9 @@ function rfDueOf(id, c){
   let open = []; try{ open = sel.size ? unsOpen(id) : []; }catch(e){}
   return Number(c.drop) + open.filter(x => sel.has(x.key)).reduce((a, x) => a + Number(x.amount || 0), 0);
 }
-function isRefund(id, c){ c = c || calcCast(id); return rfDueOf(id, c) < 0 && (c.partNo || 1) === 1; }
+// 合算してもお店から渡す額が残る精算は禁止（複数日の精算でお釣りを出すのと同じ。2026/11/15 店長）→ 返金だけは合算しないときだけ
+const rfMergedNeg = (id, c) => { const sel = unsSel[id]; return !!(sel && sel.size) && rfDueOf(id, c) < 0; };
+function isRefund(id, c){ c = c || calcCast(id); const sel = unsSel[id]; return !(sel && sel.size) && Number(c.drop) < 0 && (c.partNo || 1) === 1; }
 function rfBoxHtml(id, amt){
   const v = rfSrc[id] || "", ed = KB.CAN_EDIT ? "" : "disabled";
   return `<div class="rfbox ${v ? "" : "need"}" id="rf-${id}"><div class="rfh">💴 返金のしかた（キャストに ${yen(amt)} 渡す）</div>
@@ -1214,6 +1217,7 @@ function setRfSrc(id, v){
 }; }
 { const __settleRf = settle; settle = async function(id, stay){
   const c = calcCast(id);
+  if(rfMergedNeg(id, c)){ toast("🚫 合算しても、お店から渡す額が残ります（複数日の精算でお釣りを出すのと同じなので禁止）。合算をやめて、返金だけで精算してください"); return; }
   if(!isRefund(id, c)) return __settleRf.apply(this, arguments);
   if(!rfSrc[id]){ toast("💴 返金のしかた（当日の回収金から／キキララから立て替え）を選んでから精算済にしてください"); const w = document.getElementById("rf-" + id); if(w) w.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
   if(!phChkOk(id)){ toast("📋 返金の確認を、1つずつ ✓ してから精算済にしてください"); const w = document.getElementById("phchk-" + id); if(w) w.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
