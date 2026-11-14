@@ -245,6 +245,12 @@ settle = async function(id, stay){   // stay：精算して、そのあとも待
     const w = document.getElementById("camw-" + id); if(w) w.scrollIntoView({ block: "center", behavior: "smooth" });
     return;
   }
+  // 📋 写真の指さし確認：全部 ✓ しないと精算済にできない（写真なしのときはなし）2026/11/15 店長
+  if(!noPhoto[id] && !phChkOk(id)){
+    toast("📋 写真を見て、精算メモの枚数・日付と金額・お金・領収書を1つずつ確認して ✓ してから精算済にしてください");
+    const w = document.getElementById("phchk-" + id); if(w) w.scrollIntoView({ block: "center", behavior: "smooth" });
+    return;
+  }
   const noPh = !!noPhoto[id] && !(phList && phList.length);
   const c = calcCast(id), sel = unsSel[id] || new Set(), open = unsOpen(id), picked = open.filter(x => sel.has(x.key));
   const add = picked.reduce((a, x) => a + x.amount, 0), due = c.drop + add;
@@ -288,7 +294,7 @@ settle = async function(id, stay){   // stay：精算して、そのあとも待
       note: diff < 0 ? "投函が足りなかった（投函 " + yen(c.deposited) + "／" + yen(due) + "）" : "多く投函した（投函 " + yen(c.deposited) + "／" + yen(due) + "）" }));
   }catch(e){ toast("未精算を保存できませんでした：" + (e.message || e)); return; }
   const cd = unsCD()[id] || {}, logs = (Array.isArray(cd.settle_log) ? cd.settle_log : []).slice();
-  logs.push({ at, by, kind: "settle", place, amount: c.deposited != null ? c.deposited : null, cam: cd.camera_check || "", text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") + (noPh ? "\n📷 写真なし（キャストがくれなかった）" : "") + (by !== KB.operatorName() ? "\n（入力：" + KB.operatorName() + "）" : "") + (stay ? "\n🟡 このあとも待機中" : "") });
+  logs.push({ at, by, kind: "settle", place, amount: c.deposited != null ? c.deposited : null, cam: cd.camera_check || "", text: `精算済にしました（${place}）手取り ${yen(c.takeHome)}／当日の投函額 ${yen(c.drop)}` + (picked.length ? `\n＋ 未精算をいっしょに精算：${labels.join("／")}\n→ 合計 ${yen(due)}` : "") + (diff ? `\n投函した額 ${yen(c.deposited)}（${diff < 0 ? "足りない " + yen(-diff) + " を未精算に" : "多い " + yen(diff) + " をお釣りに"}）` : "") + (noPh ? "\n📷 写真なし（キャストがくれなかった）" : "\n📋 写真の指さし確認 ✓（精算メモの枚数・日付と金額・お金・領収書）") + (by !== KB.operatorName() ? "\n（入力：" + KB.operatorName() + "）" : "") + (stay ? "\n🟡 このあとも待機中" : "") });
   if(noPh) finalSnap.noPhoto = true;
   await saveDay(id, Object.assign({ settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: finalSnap, deposited: null }, HAS_SLOG ? { settle_log: logs } : {}, HAS_170 ? { direct_home: false } : {}, stay ? { status: "待機中" } : {}));
   delete unsSel[id]; delete ptVal[id]; delete settleSkip[day + "|" + id]; delete noPhoto[id]; delete plSel[id]; delete ptDay[id]; delete ptBy[id]; await unsLoad();   // チェックを外した予約は、のこり（未精算）として次に出る
@@ -788,7 +794,7 @@ function settleViewHtml(id, c){
   if(!done){ const sel2 = unsSel[id] || new Set(), op2 = unsOpen(id); op2.filter(x => sel2.has(x.key) && x.kind === "day" && x.raw && x.raw.c).forEach(x => trDays.push([x.date, (Number(x.raw.c.transportBack) || 0) + (Number(x.raw.c.plus) || 0)])); }
   const trBox = trDays.some(t => t[1]) ? `<div class="dep trcf"><span>🚃 交通費・プラス</span><b>${yen(trDays.reduce((a, t) => a + t[1], 0))}</b></div>
     <div class="stt" style="color:#5b3fa6">${trDays.filter(t => t[1]).map(t => `${unsMd(t[0])}の分 ${yen(t[1])} → キャッシュフローから出して <b>${unsMd(t[0])}の袋</b>へ`).join("<br>")}<br><small>（封筒の投函額には入っていません）</small></div>` : "";
-  const dep = `<div class="dep depdue"><span>${P.due < 0 ? "お店から渡す額" : "投函額"}</span><b style="font-size:22px;color:${P.due < 0 ? "#2f7fd0" : "#d0121b"}">${yen(Math.abs(P.due))}</b></div>${trBox}
+  const dep = `${trBox}<div class="dep depdue duebox ${P.due < 0 ? "give" : ""}"><span>${P.due < 0 ? "💴 お店から渡す額" : "💰 投函額"}</span><b>${yen(Math.abs(P.due))}</b></div>
     <div class="dep"><span>実際に投函（回収）した額</span><input type="number" id="dep-${id}" value="${c.deposited != null ? c.deposited : ""}" placeholder="投函した額" ${KB.CAN_EDIT ? "" : "disabled"} onchange="setDeposit('${id}',this.value)"></div>
     <div class="stt" style="color:${diff == null ? "#9C8B8F" : diff === 0 ? "#2e8b57" : diff < 0 ? "#c0392b" : "#2f7fd0"}">${diff == null ? "投函した額をまだ入れていません（お金を確認してから入れる）"
       : diff === 0 ? "✅ 未精算・お釣りは出ていません" : diff < 0 ? `⚠ 未精算が出ます（足りない ${yen(-diff)}）` : `⚠ お釣りが出ます（多い ${yen(diff)}）`}</div>`;
@@ -814,7 +820,7 @@ function shopAllToggle(){
   document.querySelectorAll("details.gbd").forEach(d => { d.open = openAll; });
   const b = document.getElementById("shopAllBtn"); if(b) b.textContent = openAll ? "🏪 全キャストの店落ちを閉じる" : "🏪 全キャストの店落ちを開く";
 }
-const svOpen = new Set();   // 開いているアコーディオン（描きなおしても閉じない）
+const svClosed = new Set();   // 閉じたアコーディオン（2026/11/15 店長：精算の中身はいつも開いておく。閉じたものだけ覚える）
 cardHtml = function(id, c){
   // 精算済でも、そのあとでふえた予約があれば「まだ」（ふえた予約だけ精算できる）2026/11/4
   const pendAll = kbPendingAfterSettle(c.cd, c.all || []);
@@ -840,7 +846,7 @@ cardHtml = function(id, c){
     ${!done && !off && !nothing ? sgHtml(id, c, cd) : ""}
     ${resPickHtml(id, c)}
     <div class="svg2"><div class="svl">
-    <details class="svf" ${svOpen.has(id) ? "open" : ""} ontoggle="this.open ? svOpen.add('${id}') : svOpen.delete('${id}')">
+    <details class="svf" ${svClosed.has(id) ? "" : "open"} ontoggle="this.open ? svClosed.delete('${id}') : svClosed.add('${id}')">
     <summary>🧾 精算の中身（1本目〜精算メモに書くこと）<small>${V.due < 0 ? "お店から渡す" : "投函"} ${yen(Math.abs(V.due))}</small></summary>
     ${c.why.length ? `<div class="note2">🧮 ${c.why.map(esc).join("<br>")}</div>` : ""}
     ${c.cardUnconfirmed ? `<div class="warn" style="margin:6px 0">⚠️ お支払いが「カード」のままの予約が ${c.cardUnconfirmed}件あります。カード決済の完了を確認して、本日のキャスト一覧のカードのプルダウンで「✅ 決済済み」にしてください。</div>` : ""}
@@ -883,6 +889,7 @@ cardHtml = function(id, c){
     </div>
     ${V.dep}
     ${photoBox(id)}
+    ${phChkHtml(id, c, done)}
     </div></div>
     </div></div>
     ${settleLogHtml(id)}
@@ -955,6 +962,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .ptime{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .ptime input, input[id^="uo_t_"]{font-family:inherit;font-size:16px;font-weight:800;padding:10px 12px;border:1.5px solid var(--line,#F1E3E7);border-radius:12px;background:#fff;color:var(--ink,#5C4B4F);min-width:150px}   /* 受付の時刻の欄と同じ形 */ .ptime small{flex-basis:100%;font-weight:700;color:#9C8B8F;font-size:11.5px}
   .dep{border-radius:14px !important} .gb{border-radius:14px !important} .shop{border-top:none !important;background:#FFFDFB;border:2px solid #F1E3E7;border-radius:16px;padding:8px 12px 10px !important}
   .dep.trcf{background:#F3EEFF;border-radius:10px;padding:6px 8px;margin-top:6px} .dep.trcf b{color:#5b3fa6;font-size:18px}
+  .sv .dep.depdue.duebox{background:#FFF4C2;border:3px solid #E0A800;border-radius:14px;padding:8px 14px;margin:8px 0} .sv .dep.duebox span{color:#4a3600} .sv .dep.duebox b{font-size:26px;color:#D0121B}
+  .sv .dep.depdue.duebox.give{background:#E3F1FF;border-color:#2f7fd0} .sv .dep.duebox.give span{color:#1f4f80} .sv .dep.duebox.give b{color:#2f7fd0}
   .dep.depdue{border:none;background:transparent;padding:4px 4px 0;margin:6px 0 0}
   .zpw{background:#FFF3C4;border:2px solid #F2B705;border-radius:14px;padding:8px 10px;margin-top:10px} .zpw .zph{margin:0 0 6px;font-weight:900;color:#7a5200;font-size:14.5px} .zpw .zph b{color:#c0392b;font-size:16px}
   .pmz input{border:1.5px solid var(--line,#F1E3E7);border-radius:12px;padding:7px 10px;font-family:inherit;font-size:14px;background:#fff;color:inherit}
@@ -996,6 +1005,7 @@ function sgSteps(id, c, cd){
     { k: "res", l: "予約が終わった", ok: live.length > 0 && live.every(r => r.status === "done") },
     { k: "dep", l: "投函の額", ok: c.deposited != null },
     { k: "ph", l: "お金の写真", ok: !!(ph && ph.length) || !!noPhoto[id] },
+    { k: "chk", l: "📋 指さし確認", ok: !!noPhoto[id] || (typeof phChkOk === "function" && phChkOk(id)) },
   ];
   if(place && place !== "回収") s.push({ k: "cam", l: "📹 カメラ確認", ok: (cd.camera_check || "") === "ok" });
   s.push({ k: "done", l: "精算済", ok: !!cd.settled });
@@ -1003,7 +1013,7 @@ function sgSteps(id, c, cd){
 }
 function sgHtml(id, c, cd){
   const s = sgSteps(id, c, cd), next = s.findIndex(x => !x.ok);
-  return `<div class="sg" id="sg-${id}">${s.map((x, i) => `<span class="sgs ${x.ok ? "ok" : i === next ? "now" : ""}"><b>${x.ok ? "✓" : "①②③④⑤"[i]}</b>${esc(x.l)}</span>${i < s.length - 1 ? `<span class="sga ${x.ok ? "ok" : ""}"></span>` : ""}`).join("")}</div>`;
+  return `<div class="sg" id="sg-${id}">${s.map((x, i) => `<span class="sgs ${x.ok ? "ok" : i === next ? "now" : ""}"><b>${x.ok ? "✓" : "①②③④⑤⑥"[i]}</b>${esc(x.l)}</span>${i < s.length - 1 ? `<span class="sga ${x.ok ? "ok" : ""}"></span>` : ""}`).join("")}</div>`;
 }
 function sgRepaint(id){ const el = document.getElementById("sg-" + id); if(el){ try{ el.outerHTML = sgHtml(id); }catch(e){} } }
 document.head.insertAdjacentHTML("beforeend", `<style>
@@ -1106,3 +1116,42 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .rpick .rp.done{opacity:.5;cursor:default} .rpick .rp.skip{opacity:.75}
   .rpick .rpst{font-size:12px;font-weight:800;color:#8a6b75;background:#F3EEF0;border-radius:99px;padding:1px 8px}
 </style>`);
+
+/* ---------- 📋 写真の指さし確認（2026/11/15 店長：「確認しました」だけでOKを出さない）
+   写真が来たら、精算メモの枚数・日付と金額・お金・領収書の有無を1つずつ見て ✓。全部 ✓ しないと精算済にできない
+   ・「写真なし（キャストがくれなかった）」のときは出さない
+   ・✓ は精算済にしたとき、精算の履歴に残る ---------- */
+const phChk = {};   // cast_id → Set（✓ した項目）
+function phChkItems(id, c){
+  let P; try{ P = settleParts(id); }catch(e){ P = { memo: [], due: 0 }; }
+  const due = P.due;
+  c = c || calcCast(id);
+  return [
+    ["memo", `📝 精算メモが <b>${P.memo.length}枚</b> 入っている（${P.memo.map(m => unsMd(m[0])).join("・")}）`],
+    ["memov", `🔢 精算メモの日付・名前・金額が合っている（${P.memo.map(([bd, v]) => `${unsMd(bd)} ${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}`).join("／")}）`],
+    ["cash", `💴 写真のお金を数えた額が、実際に投函した額 <b>${c.deposited != null ? yen(c.deposited) : "（まだ入っていない）"}</b> と同じ${due >= 0 ? `（投函額 ${yen(due)}）` : ""}`],
+    ["rcpt", `🧾 領収書の有無を確認した（あるはずの領収書が入っている／ないはずなのに入っていない）`],
+  ];
+}
+function phChkOk(id){ const s = phChk[id] || new Set(); return phChkItems(id).every(([k]) => s.has(k)); }
+function phChkHtml(id, c, done){
+  if(done || noPhoto[id]) return "";
+  const s = phChk[id] || new Set(), it = phChkItems(id, c), all = it.every(([k]) => s.has(k));
+  return `<div class="phchk ${all ? "ok" : ""}" id="phchk-${id}"><div class="phchkh">📋 写真の指さし確認（全部 ✓ しないと精算済にできません）</div>
+    ${it.map(([k, l]) => `<label><input type="checkbox" ${s.has(k) ? "checked" : ""} ${KB.CAN_EDIT ? "" : "disabled"} onchange="phChkSet('${id}','${k}',this.checked)"> ${l}</label>`).join("")}
+    <small>キャストが投函する内容をまちがえていたら（メモが足りない・金額がちがう等）✓ しないで、キャストに直してもらう</small></div>`;
+}
+function phChkSet(id, k, on){
+  const s = phChk[id] = phChk[id] || new Set();
+  if(on) s.add(k); else s.delete(k);
+  const el = document.getElementById("phchk-" + id); if(el){ try{ el.outerHTML = phChkHtml(id, null, false); }catch(e){} }
+  try{ sgRepaint(id); }catch(e){}
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .phchk{border:2.5px solid #E5484D;border-radius:14px;padding:8px 10px;margin:8px 0;background:#FFF5F5;font-size:13px;font-weight:700}
+  .phchk.ok{border-color:#2E9E4A;background:#EEFAF1}
+  .phchk .phchkh{font-weight:900;color:#c0392b;margin-bottom:4px} .phchk.ok .phchkh{color:#1E7A3C}
+  .phchk label{display:block;padding:3px 0;cursor:pointer} .phchk small{color:#8a7f99;font-weight:600}
+</style>`);
+// 投函した額を直したら、「お金」の ✓ ははずす（もう一度、写真と見くらべる）
+if(typeof setDeposit === "function"){ const __sdChk = setDeposit; setDeposit = function(id){ if(phChk[id]) phChk[id].delete("cash"); return __sdChk.apply(this, arguments); }; }
