@@ -274,7 +274,7 @@ settle = async function(id, stay){   // stay：精算して、そのあとも待
     for(const x of picked){
       const txt = `${unsMd(day)}の精算で、この日の${x.kind === "day" ? "精算" : "未精算（" + x.what + "）"}をいっしょに精算しました（合計 ${yen(due)}・${place}）`;
       if(x.kind === "day"){
-        const s2 = Object.assign({}, { reward: x.raw.c.reward, option: x.raw.c.option, takeHome: x.raw.c.takeHome, total: x.raw.c.total, cardPaid: x.raw.c.cardPaid, drop: x.raw.c.drop, zappi: x.raw.c.zappi }, { paidOn: day, by, at });
+        const s2 = Object.assign({}, { reward: x.raw.c.reward, option: x.raw.c.option, takeHome: x.raw.c.takeHome, total: x.raw.c.total, cardPaid: x.raw.c.cardPaid, drop: x.raw.c.drop, zappi: x.raw.c.zappi, transportBack: x.raw.c.transportBack, plus: x.raw.c.plus, minus: x.raw.c.minus, withholding: x.raw.c.withholding, realDrop: x.raw.c.realDrop }, { paidOn: day, by, at });
         // ② その日の前の精算（①…）があれば合わせる（のこした予約だけを、あとで精算したとき）
         s2.resIds = (x.raw.c.live || []).map(r => r.id); s2.shopDrop = x.raw.c.shopDrop; s2.transferPaid = x.raw.c.transferPaid || 0;
         const s2all = (x.raw.c.prevParts || []).length ? kbSumParts(x.raw.c.prevParts.concat([s2])) : s2;
@@ -400,7 +400,7 @@ async function unsOnlySettle(cid){
     for(const x of picked){
       const txt = `${unsMd(day)}に、この日の${x.kind === "day" ? "精算" : "未精算（" + x.what + "）"}を精算しました（未精算だけの精算・合計 ${yen(sum)}・${place}）`;
       if(x.kind === "day"){
-        const s2 = { reward: x.raw.c.reward, option: x.raw.c.option, takeHome: x.raw.c.takeHome, total: x.raw.c.total, cardPaid: x.raw.c.cardPaid, drop: x.raw.c.drop, zappi: x.raw.c.zappi, paidOn: day, by, at, only: true };   // only＝未精算だけの個別精算
+        const s2 = { reward: x.raw.c.reward, option: x.raw.c.option, takeHome: x.raw.c.takeHome, total: x.raw.c.total, cardPaid: x.raw.c.cardPaid, drop: x.raw.c.drop, zappi: x.raw.c.zappi, transportBack: x.raw.c.transportBack, plus: x.raw.c.plus, minus: x.raw.c.minus, withholding: x.raw.c.withholding, realDrop: x.raw.c.realDrop, paidOn: day, by, at, only: true };   // only＝未精算だけの個別精算
         s2.resIds = (x.raw.c.live || []).map(r => r.id); s2.shopDrop = x.raw.c.shopDrop; s2.transferPaid = x.raw.c.transferPaid || 0;   // ② 前の精算と合わせる
         const s2all = (x.raw.c.prevParts || []).length ? kbSumParts(x.raw.c.prevParts.concat([s2])) : s2;
         await unsLogOther(x.date, cid, txt, { settled: true, settled_at: at, settled_by: by, settle_place: place, settle_snapshot: s2all }, { at, kind: "late", place, amount: x.amount, cam });

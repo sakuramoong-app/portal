@@ -170,7 +170,7 @@ async function init(){
   $("wip").innerHTML = KB.wipBanner();
   $("gate").style.display = "none"; $("main").style.display = "";
   try{ const mc = q(await sb.from("master_casts").select("*")) || []; window.KBF_CASTS = mc; mc.forEach(c => { names[c.id] = c.official_name || c.temp_name || c.id; kanas[c.id] = c.kana || names[c.id]; shiftNames[c.id] = c.shift_name || c.official_name || ""; }); }catch(e){}
-  try{ ZRULES = q(await sb.from("kb_cast_rules").select("*").eq("active", true).eq("kind", "zappi_exempt")) || []; }catch(e){}
+  try{ ZRULES = q(await sb.from("kb_cast_rules").select("*").eq("active", true).in("kind", ["zappi_exempt", "transport_back"])) || []; }catch(e){}
   try{ (q(await sb.from("kb_staff_rates").select("staff_id,record_name")) || []).forEach(r => { if(r.record_name) staffNames[r.staff_id] = r.record_name; }); }catch(e){}
   $("day").value = KB.startDay();   // 記録簿・精算で見ていた日
   paintPlaces(); loadDay(); load();
@@ -288,11 +288,23 @@ function rowsFor(day, R){
   .sort(kaishuSortFn(day, R));   // 並び順は精算と同じ（あいうえお順／出勤が早い順／退勤が早い順・精算とどちらで選んでも同じ）2026/11/7
 }
 // 交通費・経費・精算ミス（その子のぶん）
+// 🚃 交通費・プラス（キャッシュフローから）。あとの日に「まとめて精算」「未精算だけ精算」した日は、前は記録に交通費が入っていなかった（2026/11/15 かんな 11/2）
+//   → 記録にないときは、その日の予約と台帳の交通費バックの条件から計算する（記録は変えない）
+function tbOf(r){
+  const s = r.s || {};
+  if(s.transportBack != null || s.plus != null) return { v: Number(s.transportBack || 0) + Number(s.plus || 0), calc: false };
+  if(!r.R || !r.R.resv) return { v: 0, calc: false };
+  try{
+    const all = r.R.resv.filter(x => x.biz_date === r.day && x.cast_id === r.id);
+    const c = KBM.calcCast({ all, cd: Object.assign({}, r.cd, { settled: false }), rules: KBM.rulesOn(ZRULES, r.id, r.day), day: r.day });
+    return { v: Number(c.transportBack || 0) + Number(c.plus || 0), calc: true };
+  }catch(e){ return { v: 0, calc: false }; }
+}
 // 項目ごとに { key（処理✓のキー。空＝チェックなし）, html }
 function extraList(r){
   const s = r.s || {}, a = [], id = r.id;
-  const tb = Number(s.transportBack || 0) + Number(s.plus || 0);
-  if(tb) a.push({ key: "tb", html: `🚃 交通費・プラス ${num(tb)}（キャッシュフローから）` });
+  const tbx = tbOf(r), tb = tbx.v;
+  if(tb) a.push({ key: "tb", html: `🚃 交通費・プラス ${num(tb)}（キャッシュフローから${tbx.calc ? "・予約から計算" : ""}）` });
   if(Number(s.minus || 0)) a.push({ key: "minus", html: `➖ マイナス ${num(s.minus)}` });
   if(s.diff) a.push({ key: "diff", warn: true, html: `<span style="color:#c0392b">⚠️ 精算ミス：投函が${s.diff < 0 ? "足りない " + num(-s.diff) + "（未精算へ）" : "多い " + num(s.diff) + "（お釣りへ）"} ${jump(r.day, id)}</span>` });
   (s.uns || []).forEach(x => a.push({ key: "uns:" + x.date, html: `<span style="color:#5b3fa6">↔ ${md(x.date)} の${x.kind === "day" ? "精算" + (x.amount != null && Number(x.amount) ? " " + num(x.amount) : "") : x.amount >= 0 ? "未精算 " + num(x.amount) : "お釣り " + num(-x.amount)} をいっしょに精算 ${jump(x.date, id)}</span>` }));
