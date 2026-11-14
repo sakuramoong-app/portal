@@ -786,7 +786,7 @@ function settleViewHtml(id, c){
   // 🚃 お店用に交通費・プラス：キャッシュフローから出して、その日の袋へ（封筒の額には入っていない）2026/11/15 店長
   const trDays = [[day, (Number(c.transportBack) || 0) + (Number(c.plus) || 0)]];
   if(!done){ const sel2 = unsSel[id] || new Set(), op2 = unsOpen(id); op2.filter(x => sel2.has(x.key) && x.kind === "day" && x.raw && x.raw.c).forEach(x => trDays.push([x.date, (Number(x.raw.c.transportBack) || 0) + (Number(x.raw.c.plus) || 0)])); }
-  const trBox = trDays.some(t => t[1]) ? `<div class="dep trcf"><span>🚃 交通費・プラス（キャッシュフローから）</span><b>${yen(trDays.reduce((a, t) => a + t[1], 0))}</b></div>
+  const trBox = trDays.some(t => t[1]) ? `<div class="dep trcf"><span>🚃 交通費・プラス</span><b>${yen(trDays.reduce((a, t) => a + t[1], 0))}</b></div>
     <div class="stt" style="color:#5b3fa6">${trDays.filter(t => t[1]).map(t => `${unsMd(t[0])}の分 ${yen(t[1])} → キャッシュフローから出して <b>${unsMd(t[0])}の袋</b>へ`).join("<br>")}<br><small>（封筒の投函額には入っていません）</small></div>` : "";
   const dep = `<div class="dep depdue"><span>${P.due < 0 ? "お店から渡す額" : "投函額"}</span><b style="font-size:22px;color:${P.due < 0 ? "#2f7fd0" : "#d0121b"}">${yen(Math.abs(P.due))}</b></div>${trBox}
     <div class="dep"><span>実際に投函（回収）した額</span><input type="number" id="dep-${id}" value="${c.deposited != null ? c.deposited : ""}" placeholder="投函した額" ${KB.CAN_EDIT ? "" : "disabled"} onchange="setDeposit('${id}',this.value)"></div>
