@@ -1035,8 +1035,9 @@ function envHtml(rows, ed, pre, title){
     const E = envOf(r), dn = doneItems(r), all = E.keys.every(k => dn.includes(k)), left = E.keys.filter(k => !dn.includes(k)).length;
     const cb = (k, html) => `<label class="envi ${dn.includes(k) ? "on" : ""}"><input type="checkbox" ${dn.includes(k) ? "checked" : ""} ${ed ? "" : "disabled"} onchange="setDoneItem('${esc(r.id)}','${k}',this.checked,'${r.day}')"> ${html}</label>`;
     return `<details class="envc ${all ? "ok" : ""}" ${all ? "" : "open"}><summary>${typeof KBF !== "undefined" ? KBF.img(r.id, 26) : ""}<b>${esc(names[r.id] || r.id)}</b>
-        <small><b>${md(r.day)}の分</b>・${r.cd.settled_at ? "精算 " + when(r.cd.settled_at) : ""}${r.place ? "・" + esc(r.place === "回収" ? "手渡し" : r.place) : ""}</small>
+        <small><b>${md(r.day)}の分</b>${r.place ? "・" + esc(r.place === "回収" ? "手渡し" : r.place) : ""}</small>
         <span class="envst">${all ? "✅ 完了" : "あと " + left}</span></summary>
+      <div class="envwhen">🧾 ${r.paidOn && r.paidOn > r.day ? `<b>→ ${md(r.paidOn)} ${r.cd.settled_at ? when(r.cd.settled_at).split(" ")[1] || "" : ""} に精算（後日）</b>` : `${r.cd.settled_at ? when(r.cd.settled_at) : ""} に精算`}${r.place ? "・" + esc(r.place === "回収" ? "手渡し（回収）" : r.place + "に投函") : ""}${r.cd.settled_by ? "・" + esc(r.cd.settled_by) : ""}</div>
       <div class="envsign"><span class="cs" style="flex-wrap:wrap">${["day", "later", "me"].map(k => `<button class="${k} ${r.state === k ? "on" : ""}" ${ed ? "" : "disabled"} onclick="setState('${r.id}','${r.state === k && !r.auto ? "" : k}','${r.day}')">${STATE[k]}</button>`).join("")}</span>${!r.state || r.state === "none" ? `<span style="color:#E0001B;font-weight:800;font-size:12px"> ■ まだ回収していない</span>` : ""}</div>
       <table class="coltbl envcnt"><tr>${countCell(r, ed)}</tr></table>
       <div class="envh">① 封筒に入っていなければいけないもの（実際の封筒と見くらべて ✓）</div>${E.checks.map(([k, h]) => cb(k, h)).join("")}
@@ -1056,6 +1057,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .envc .envsign{margin:6px 0 2px} .envc table.envcnt{width:100%;margin:4px 0} .envc table.envcnt td{border:none;padding:4px 6px;border-radius:10px}
   .envc .envchain{margin:8px 0 4px} .envbatch{margin:4px 0 8px;font-weight:800;font-size:13px;display:flex;flex-wrap:wrap;gap:8px;align-items:center} .envbatch select{font-family:inherit;font-size:13px;padding:5px 8px;border-radius:10px}
   .envc.merged{border-color:#C9B6EA;background:#F8F4FF}
+  .envc .envwhen{font-size:12.5px;color:#5b3fa6;font-weight:700;margin-top:4px}
   .envc.ok{border-color:#8FD3A0;background:#F1FBF4}
   .envc summary{cursor:pointer;display:flex;align-items:center;gap:6px;font-size:14px}
   .envc summary small{color:var(--sub)} .envc .envst{margin-left:auto;font-weight:900;font-size:12px;color:#B26A00} .envc.ok .envst{color:#1E7A3C}
