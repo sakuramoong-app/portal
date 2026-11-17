@@ -3977,7 +3977,7 @@ function tplBlockForm(b){
   if(b.type === "video") return `<div style="display:flex;gap:6px;align-items:flex-end"><div style="flex:1">${f("no", "Free動画（MP4）の番号", "例：2")}</div>
     <button type="button" class="btn btn-sm btn-primary" style="white-space:nowrap" onclick="tplVidFor(${b.id})" title="動画をアップして、この番号の欄に自動で入れる">🎥 アップして入れる</button></div>`;
   if(b.type === "image") return `<div style="display:flex;gap:6px;align-items:flex-end"><div style="flex:1">${f("no", "FreeJPGの番号（いくつでも。例：116, 117）", "例：116")}</div>
-    <button type="button" class="btn btn-sm btn-primary" style="white-space:nowrap" onclick="tplUpFor(${b.id})" title="画像をアップして、この番号の欄に自動で入れる">🖼 アップして入れる</button></div>` + f("url", "押したときに開くURL（なくてもいい）", "https://…");
+    <button type="button" class="btn btn-sm btn-primary" style="white-space:nowrap" onclick="tplUpFor(${b.id})" title="画像をアップして、この番号の欄に自動で入れる">🖼 アップして入れる</button>${tplCur && tplCur.inline && tplNums(b.no).length ? `<button type="button" class="btn btn-sm btn-ghost" style="white-space:nowrap" onclick="tplRepFor(${b.id})" title="この番号のまま、画像だけ入れかえる">🔁 この番号の画像を差しかえ</button>` : ""}</div>` + f("url", "押したときに開くURL（なくてもいい）", "https://…");
   if(b.type === "banner") return f("no", "FreeGIFの番号（バナーの画像）", "例：27") + f("url", "押したときに開くURL（空なら、ヘブンのその子のページ）", "https://…");
   if(b.type === "link") return f("text", "見える文字", "例：　‹　2025/05/13　最新作発売！") + f("url", "URL", "https://…");
   if(b.type === "text") return t("text", "説明文（行の頭に「＊」でピンクの行）", "", 70);
@@ -4384,6 +4384,15 @@ function ieRepOffer(img, n){
   m.style.left = Math.max(8, Math.min(window.innerWidth - 330, r.left)) + "px"; m.style.top = (window.scrollY + r.bottom + 4) + "px"; m.style.display = "flex";
 }
 function ieRepClose(){ const m = document.getElementById("ieRepMenu"); if(m) m.style.display = "none"; }
+// 画像のブロックの「🔁 この番号の画像を差しかえ」（番号が2つ以上なら、どれか聞く）
+function tplRepFor(id){
+  const b = tplFind(id); if(!b || !CAN_EDIT) return;
+  const ns = tplNums(b.no).map(Number); let n = ns[0];
+  if(ns.length > 1){ const a = prompt("どの番号の画像を差しかえますか？（" + ns.join(", ") + "）", String(ns[0])); if(a == null) return; n = Number(String(a).normalize("NFKC").trim()); if(!ns.includes(n)){ toast("その番号はこのブロックにありません"); return; } }
+  if(!n) return;
+  ieRepNo = n;
+  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*"; inp.onchange = () => { if(inp.files[0]) ieRepGo(inp.files[0]); }; inp.click();
+}
 async function ieRepGo(file){
   const n = ieRepNo; if(!file || !n || !tplCur || !CAN_EDIT) return;
   const label = tplStoreOf(tplCur.mk).label;
@@ -4394,12 +4403,15 @@ async function ieRepGo(file){
     const r = await hpFn({ action: "free_jpg_upload", store: tplCur.mk, mode: "replace", no: n, file: { b64: await fuB64(f), type: f.type, name: f.name || "" } });
     if(!(r && (r.ok || /確かめられません/.test(r.error || "")))) throw new Error((r && r.error) || "うまくいきませんでした");
     // 画面の画像を読みなおす（コードは data-code のままなので、保存には出ない）
-    document.querySelectorAll("#ieBox img").forEach(im => { const s = im.getAttribute("src") || ""; if(new RegExp("FreePIC/Free" + n + "\\.jpg").test(s)) im.src = s.replace(/[?#].*$/, "") + "?t=" + Date.now(); });
+    const roots = [document, ...[...document.querySelectorAll("#ieBox *")].map(x => x.shadowRoot).filter(Boolean)];   // 画像のブロックの見本は shadow の中
+    roots.forEach(rt => rt.querySelectorAll(rt === document ? "#ieBox img" : "img").forEach(im => { const s = im.getAttribute("src") || ""; if(new RegExp("FreePIC/Free" + n + "\\.jpg").test(s)) im.src = s.replace(/[?#].*$/, "") + "?t=" + Date.now(); }));
     toast(r.ok ? `✅ ${n}番を差しかえました` : "⚠ " + r.error);
   }catch(e){ toast("⚠ " + (e.message || e)); }
 }
 document.addEventListener("click", e => {
-  const img = e.target && e.target.closest && e.target.closest("#ieBox img");
+  // 画像のブロックの見本は shadow の中なので、押した道すじ（composedPath）から探す（2026/11/18 直し）
+  const path = e.composedPath ? e.composedPath() : [e.target];
+  const img = path.some(n => n && n.id === "ieBox") ? path.find(n => n && n.tagName === "IMG") : null;
   if(!img){ if(!(e.target.closest && e.target.closest("#ieRepMenu"))) ieRepClose(); return; }
   const m = (img.getAttribute("src") || "").match(/FreePIC\/Free(\d+)\.jpg/i);
   if(!m || !CAN_EDIT) return;
