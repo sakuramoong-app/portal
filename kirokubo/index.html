@@ -4823,7 +4823,8 @@ function ncPaint(){
   bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:900px;width:100%;max-height:90vh;overflow:auto;font-size:14px">
     <div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">🩷 ヘブン 同時投稿先 1〜10（${esc(x.names[0] || "")}）</b><span style="margin-left:auto"></span><button class="btn btn-ghost btn-sm" onclick="if(!NC_CUR.busy) document.getElementById('ncBg').remove()">閉じる</button></div>
     <div class="hint" style="margin:4px 0 8px">各媒体の管理画面から、この子の写メ日記の投稿用アドレスを集めて、ヘブン（サクラムーン池袋）の「他サイトへの同時投稿」の今の中身とくらべます。「🔎 集める」は<b>読むだけ</b>（どこも変えません）。2分くらいかかります。</div>
-    <div style="margin-top:8px"><button class="btn btn-primary" onclick="ncRun()" ${x.busy ? "disabled" : ""}>${x.busy ? "⏳ 集めています…" : "🔎 集める（読むだけ）"}</button></div>
+    <div style="margin-top:8px"><button class="btn btn-primary" onclick="ncRun()" ${x.busy ? "disabled" : ""}>${x.busy ? "⏳ 集めています…" : "🔎 集める（読むだけ）"}</button>
+      ${CAN_EDIT && !x.busy ? `<button class="btn btn-primary ncauto" onclick="ncAuto()">🤖 全部自動で（発行・取得 → 集める → ヘブンに入れる）</button>` : ""}</div>
     ${r ? `${r.sakura && r.sakura.note ? `<div class="hint" style="color:#B7791F;margin-top:6px">⚠ ${esc(r.sakura.note)}</div>` : ""}
     <table class="nctbl"><tr><th>番号</th><th>媒体</th><th>集めたアドレス</th><th>ヘブン（サクラ）の今</th><th></th></tr>
       ${(r.slots || []).map(sl => { const [k, t] = judge(sl); const cur = now[sl.no - 1] || "";
@@ -4850,10 +4851,34 @@ function ncPaint(){
 }
 // 台帳の「📧 メールアドレス」（画面に入れたばかりのものを先に）
 function ncEmail(){ const el = $("onb_email"), c = NC_CUR && casts.find(x => x.id === NC_CUR.cid); return String((el && el.value) || (c && c.onboarding && c.onboarding.email) || "").trim(); }
+// 🤖 全部自動で（2026/11/18 店長）：集める → まだない情報局・マンゾクのアドレスを発行・取得 → ヘブン（サクラ）の空いている番号に入れる
+//   駅チカ（3番：逆AFにいない子）・風じゃ（8番）は手で。もう入っている番号・同じアドレスがほかにある番号はさわらない
+const NC_ISSUABLE = /まだ発行していない|まだメアドを取得していない/;
+async function ncAuto(){
+  const x = NC_CUR; if(!x || x.busy || !CAN_EDIT) return;
+  if(!confirm(`「${x.names[0]}」の写メ日記の同時投稿先を、全部自動で入れます。\n\n① 各媒体からアドレスを集める\n② まだない情報局・マンゾクのアドレスは、その媒体で発行・取得する\n③ ヘブン（サクラムーン池袋）の「他サイトへの同時投稿」の空いている番号に入れる\n\nもう入っている番号はさわりません。駅チカ（3番）・風じゃ（8番）は手で入れてください。いいですか？`)) return;
+  await ncRun();
+  const todo = ((x.res && x.res.slots) || []).filter(sl => !sl.addr && sl.no <= 7 && NC_ISSUABLE.test(sl.note || ""));
+  const issued = [];
+  for(const sl of todo){
+    x.busy = true; x.msg = `⏳ ${esc(sl.label)} でアドレスを発行・取得しています…（${issued.length + 1}/${todo.length}）`; ncPaint();
+    try{
+      const r = await hpFn({ action: "newcast_issue", names: x.names, no: sl.no });
+      const ns = r && r.slot ? r.slot : { no: sl.no, label: sl.label, addr: "", error: (r && r.error) || "発行できませんでした" };
+      x.res.slots = x.res.slots.map(z => z.no === sl.no ? ns : z);
+      issued.push(`${sl.no}番 ${ns.addr ? "✅" : "⚠"} ${ns.note || ns.error || ""}`);
+    }catch(e){ issued.push(`${sl.no}番 ⚠ ${e.message || e}`); }
+  }
+  x.busy = false; ncPaint();   // ここで「🆕 入れる予定」（x.newRows）が決まる
+  const pre = issued.length ? `発行・取得：<br>${issued.map(esc).join("<br>")}<br>` : "";
+  if(!(x.newRows || []).length){ x.msg = pre + "ヘブンに入れる番号はありません（もう入っている・アドレスがない・手で入れる番号だけです）。"; ncPaint(); return; }
+  await ncWrite(true);
+  x.msg = pre + (x.msg || ""); ncPaint();
+}
 // 🆕 の番号だけ、ヘブン（サクラ）に入れる
-async function ncWrite(){
+async function ncWrite(auto){
   const x = NC_CUR; if(!x || x.busy || !(x.newRows || []).length || !CAN_EDIT) return;
-  if(!confirm(`ヘブン（サクラムーン池袋）の「${x.names[0]}」の「他サイトへの同時投稿」に、\n${x.newRows.map(r => r.no + "番：" + r.addr).join("\n")}\nを入れます。ほかの番号・ほかの欄はさわりません。いいですか？`)) return;
+  if(!auto && !confirm(`ヘブン（サクラムーン池袋）の「${x.names[0]}」の「他サイトへの同時投稿」に、\n${x.newRows.map(r => r.no + "番：" + r.addr).join("\n")}\nを入れます。ほかの番号・ほかの欄はさわりません。いいですか？`)) return;
   x.busy = true; x.msg = "⏳ ヘブンに入れています…（1分くらい）"; ncPaint();
   try{
     const r = await hpFn({ action: "newcast_fwd_write", names: x.names, set: x.newRows });
