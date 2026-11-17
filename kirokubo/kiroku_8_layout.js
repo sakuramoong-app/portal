@@ -139,7 +139,7 @@ function workSince(r){
 /* 🌸 背景にうすく文字をならべる（2026/11/18 店長：今日か今日以外かが、もっとわかるように。気持ち悪くない程度に）
    今日：「本日のページ」（ピンク）／今日以外：「11/21(土) の画面」（青） */
 function kbDayMark(text, color){
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='420' height='220'><text x='30' y='120' transform='rotate(-18 210 110)' font-family='sans-serif' font-size='26' font-weight='800' fill='${color}' fill-opacity='0.07'>${text}</text></svg>`;
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='420' height='220'><text x='30' y='120' transform='rotate(-18 210 110)' font-family='sans-serif' font-size='30' font-weight='900' fill='${color}' fill-opacity='0.17'>${text}</text></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 { const __tintMark = kbDayTint; kbDayTint = function(){

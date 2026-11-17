@@ -303,3 +303,55 @@ function nrCallLines(){
   }
   return __nrPreCall(t.replace(/\{確認電話\}/g, nrCallLines().join("\n")));
 }; }
+
+/* ---------- ⭐ 探す（アキネーター）：キャストをキープして、マッチ率を出す（2026/11/18 店長）
+   ・カードの「⭐ キープ」で、気になる子をキープ → 上に小さく並ぶ
+   ・そのあと「お客様が聞きたいこと」をえらんでいくと（Pの状態・髪・たばこ の答え）、キープした子ごとに 合う／合わない と マッチ率
+   ・📐 Pサイズ・📏 身長・🍒 胸・🎂 年齢 は、キープした子の数字をならべて見せる（合う・合わないはなし）
+   ・🔄 クリア（探すの「クリア」）でキープも消える ---------- */
+let FS_KEEP = [], FS_CRIT = {};
+function fsKeepToggle(cid){ const i = FS_KEEP.indexOf(cid); if(i >= 0) FS_KEEP.splice(i, 1); else FS_KEEP.push(cid); fsKeepPaint(); }
+function fsKeepPaint(){
+  const out = $("fsOut"); if(!out) return;
+  // カードに ⭐ キープ
+  out.querySelectorAll(".fscard[data-cid]").forEach(el => {
+    let b = el.querySelector(".fskeepbtn");
+    if(!b){ const top = el.querySelector(".fsc-top") || el; top.insertAdjacentHTML("beforeend", `<button type="button" class="fskeepbtn" onclick="event.stopPropagation();fsKeepToggle('${el.dataset.cid}')"></button>`); b = el.querySelector(".fskeepbtn"); }
+    const on = FS_KEEP.includes(el.dataset.cid); b.classList.toggle("on", on); b.textContent = on ? "⭐ キープ中" : "☆ キープ"; el.classList.toggle("fskept", on);
+  });
+  // 上の キープ の列
+  let box = $("fsKeep");
+  if(!FS_KEEP.length){ if(box) box.remove(); return; }
+  if(!box){ const head = out.querySelector(".fshead"); (head || out).insertAdjacentHTML(head ? "afterend" : "afterbegin", `<div id="fsKeep" class="fskeep"></div>`); box = $("fsKeep"); }
+  const crit = Object.entries(FS_CRIT).filter(([q, s]) => s);
+  const numQ = Object.keys(FS_CRIT).filter(q => ["psize", "height", "cup", "age"].includes(q));
+  const lab = (q, s) => { const q0 = FS_ASK.find(x => x[0] === q), s0 = q0 && q0[2].find(x => x[0] === s); return s0 ? s0[1] : s; };
+  box.innerHTML = `<div class="fskeep-h">⭐ キープ ${FS_KEEP.length}人${crit.length ? `<small>（${crit.map(([q, s]) => esc(lab(q, s))).join("・")} でマッチ率）</small>` : `<small>（お客様が聞きたいことを えらぶと、マッチ率が出ます）</small>`}</div>
+    <div class="fskeep-l">${FS_KEEP.map(cid => {
+      const c = M.casts.find(x => x.id === cid); if(!c) return "";
+      const res = crit.map(([q, s]) => { const inf = typeof profById !== "undefined" && profById ? fsAskInfo(c, q) : null; return { q, s, ok: !!(inf && (inf.tags || []).includes(s)), unk: !inf }; });
+      const okN = res.filter(r => r.ok).length, rate = res.length ? Math.round(okN / res.length * 100) : null;
+      const nums = numQ.map(q => { const inf = profById ? fsAskInfo(c, q) : null; return inf ? inf.t : ""; }).filter(Boolean);
+      return `<div class="fskc ${rate === 100 ? "best" : rate != null && rate < 50 ? "low" : ""}">${typeof KBF !== "undefined" ? KBF.img(cid, 28) : ""}<b>${esc(castName(cid))}</b>
+        ${rate != null ? `<span class="fsrate">${rate}%</span>` : ""}
+        <span class="fsres">${res.map(r => `<i class="${r.ok ? "ok" : r.unk ? "unk" : "ng"}">${r.ok ? "○" : r.unk ? "？" : "×"}${esc(lab(r.q, r.s))}</i>`).join("")}${nums.map(t => `<i class="num">${esc(t)}</i>`).join("")}</span>
+        <button type="button" class="fskx" onclick="fsKeepToggle('${cid}')" aria-label="キープをはずす">×</button></div>`; }).join("")}</div>`;
+}
+{ const __fsAskSubK = fsAskSub; fsAskSub = function(k){ const r = __fsAskSubK.apply(this, arguments); if(fsAskQ){ if(fsAskS) FS_CRIT[fsAskQ] = fsAskS; else delete FS_CRIT[fsAskQ]; } fsKeepPaint(); return r; }; }
+{ const __fsAskPickK = fsAskPick; fsAskPick = function(k){ const r = __fsAskPickK.apply(this, arguments); if(fsAskQ && ["psize", "height", "cup", "age"].includes(fsAskQ)) FS_CRIT[fsAskQ] = FS_CRIT[fsAskQ] || ""; fsKeepPaint(); return r; }; }
+{ const __fsPaintK = fsPaint; fsPaint = async function(){ const r = await __fsPaintK.apply(this, arguments); try{ fsKeepPaint(); }catch(e){} return r; }; }
+{ const __fsClearK = fsClear; fsClear = function(){ FS_KEEP = []; FS_CRIT = {}; return __fsClearK.apply(this, arguments); }; }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .fskeepbtn{font-family:inherit;font-size:11.5px;font-weight:800;border:1.5px solid #F2C94C;background:#fff;color:#8A6100;border-radius:99px;padding:2px 8px;cursor:pointer;margin-left:auto}
+  .fskeepbtn.on{background:#F2C94C;color:#3a2a00}
+  .fscard.fskept{box-shadow:0 0 0 3px #F2C94C}
+  .fskeep{background:#FFFBEA;border:2px solid #F2C94C;border-radius:12px;padding:6px 8px;margin:6px 0;display:grid;gap:4px}
+  .fskeep-h{font-weight:900;font-size:13px;color:#6b4e00} .fskeep-h small{font-weight:700;color:#8a7f60;margin-left:6px}
+  .fskeep-l{display:flex;flex-wrap:wrap;gap:6px}
+  .fskc{display:flex;align-items:center;gap:6px;background:#fff;border:1.5px solid #F2E2A8;border-radius:10px;padding:3px 6px;font-size:12.5px}
+  .fskc.best{border-color:#2E9E4A;background:#EEFAF1} .fskc.low{opacity:.75}
+  .fsrate{font-weight:900;color:#1E7A3C;font-size:14px} .fskc.low .fsrate{color:#c0392b}
+  .fsres{display:flex;flex-wrap:wrap;gap:3px} .fsres i{font-style:normal;font-weight:800;border-radius:99px;padding:0 6px;font-size:11px}
+  .fsres i.ok{background:#E5F6EC;color:#1E7A3C} .fsres i.ng{background:#FFE8EC;color:#c0392b} .fsres i.unk{background:#F1EEF0;color:#7a6a70} .fsres i.num{background:#EEEBFF;color:#2E2770}
+  .fskx{border:none;background:none;font-weight:900;color:#9C8B8F;cursor:pointer;padding:0 4px}
+</style>`);
