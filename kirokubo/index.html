@@ -4795,6 +4795,63 @@ const ONB_STEPS = [["explain", "面接で口頭の説明をした"], ["contract"
 const ONB_MEDS = ["カマグラ", "シルデナ", "その他"];   // 💊 よく使う薬（2026/11/14）
 const ONB_IC = ["", "あり", "なし"], ONB_TABAKO = ["", "吸わない", "紙タバコ", "電子タバコ", "紙と電子の両方"];
 const KIT_LABEL = { shop: "事務所で買う（500円）", own: "自分で用意する" };
+/* 🩷 新人：ヘブン（サクラムーン池袋）の「他サイトへの同時投稿」1〜10 のアドレスを、各媒体の管理画面から集める（読むだけ。2026/11/18 店長）
+   キャストがヘブンのサクラムーンに1回投稿すると、10媒体に流れる。いま入っている番号はさわらない（入れるのは次の段階）
+   ぴゅあらば：逆AF倶楽部に所属 → 逆AF倶楽部、ほか → ラナ鶯谷 */
+let NC_CUR = null;
+function ncOpen(cid){
+  const c = casts.find(x => x.id === cid); if(!c) return;
+  NC_CUR = { cid, names: [c.official_name, c.temp_name].map(s => String(s || "").trim()).filter(Boolean), af: !!(c.stores && c.stores.gyakuanal), res: null };
+  let bg = document.getElementById("ncBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "ncBg"; bg.style.cssText = "position:fixed;inset:0;z-index:335;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg);
+    bg.addEventListener("click", e => { if(e.target === bg && !NC_CUR.busy) bg.remove(); }); }
+  ncPaint();
+}
+function ncPaint(){
+  const bg = document.getElementById("ncBg"), x = NC_CUR; if(!bg || !x) return;
+  const r = x.res, now = r && r.sakura && r.sakura.now || [];
+  const judge = sl => { const cur = now[sl.no - 1] || "";
+    if(!r.sakura || !r.sakura.found || !now.length) return ["unk", "？"];
+    if(!sl.addr) return ["ng", cur ? "（今のまま）" : "⚠ アドレスがない"];
+    if(cur.toLowerCase() === sl.addr.toLowerCase()) return ["ok", "✅ 入っている"];
+    if(!cur) return ["new", "🆕 入れる予定"];
+    return ["diff", "⚠ ちがうものが入っている（さわらない）"]; };
+  bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:900px;width:100%;max-height:90vh;overflow:auto;font-size:14px">
+    <div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">🩷 ヘブン 同時投稿先 1〜10（${esc(x.names[0] || "")}）</b><span style="margin-left:auto"></span><button class="btn btn-ghost btn-sm" onclick="if(!NC_CUR.busy) document.getElementById('ncBg').remove()">閉じる</button></div>
+    <div class="hint" style="margin:4px 0 8px">各媒体の管理画面から、この子の写メ日記の投稿用アドレスを集めて、ヘブン（サクラムーン池袋）の「他サイトへの同時投稿」の今の中身とくらべます。<b>読むだけ</b>（どこも変えません）。2分くらいかかります。</div>
+    <label style="display:inline-flex;gap:6px;align-items:center;font-weight:800"><input type="checkbox" ${x.af ? "checked" : ""} onchange="NC_CUR.af=this.checked" style="width:auto"> 逆AF倶楽部に所属している（ぴゅあらばは逆AF倶楽部から）</label>
+    <div style="margin-top:8px"><button class="btn btn-primary" onclick="ncRun()" ${x.busy ? "disabled" : ""}>${x.busy ? "⏳ 集めています…" : "🔎 集める（読むだけ）"}</button></div>
+    ${r ? `${r.sakura && r.sakura.note ? `<div class="hint" style="color:#B7791F;margin-top:6px">⚠ ${esc(r.sakura.note)}</div>` : ""}
+    <table class="nctbl"><tr><th>番号</th><th>媒体</th><th>集めたアドレス</th><th>ヘブン（サクラ）の今</th><th></th></tr>
+      ${(r.slots || []).map(sl => { const [k, t] = judge(sl); const cur = now[sl.no - 1] || "";
+        return `<tr class="${k}"><td>${sl.no}</td><td>${esc(sl.label)}${sl.name ? `<small>（${esc(sl.name)}）</small>` : ""}</td>
+          <td>${sl.addr ? `<span class="ncaddr">${esc(sl.addr)}</span> <button class="btn btn-ghost btn-sm" onclick="fuCopy('${esc(sl.addr)}')">📋</button>` : `<span class="ncno">${esc(sl.error || sl.note || "なし")}</span>`}</td>
+          <td>${cur ? `<span class="ncaddr">${esc(cur)}</span>` : `<span class="ncno">（空）</span>`}</td><td><b>${t}</b></td></tr>`; }).join("")}</table>
+    <div class="hint" style="margin-top:6px">「🆕 入れる予定」の番号を、次の段階でヘブンに入れられるようにします。⚠ の番号は手で確かめてください。</div>` : ""}
+  </div>`;
+  if(!document.getElementById("ncCss")) document.head.insertAdjacentHTML("beforeend", `<style id="ncCss">
+    .ncbtnrow{margin-top:6px}
+    .nctbl{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px} .nctbl th,.nctbl td{border-bottom:1px solid #F3D6E0;padding:5px 6px;text-align:left;vertical-align:top}
+    .nctbl th{background:#FFF0F5;font-size:12px} .nctbl small{display:block;color:#9C8B8F} .ncaddr{font-family:monospace;font-size:12px;word-break:break-all}
+    .ncno{color:#9C8B8F} .nctbl tr.ok td:last-child{color:#1E7A3C} .nctbl tr.new td:last-child{color:#C2185B} .nctbl tr.diff td:last-child,.nctbl tr.ng td:last-child{color:#B7791F}</style>`);
+}
+async function ncRun(){
+  const x = NC_CUR; if(!x || x.busy) return;
+  // 1回で全部だと時間切れになるので、ヘブン（サクラ）の今 → 番号ごとに1つずつ
+  x.busy = true; x.res = { slots: [], sakura: null }; ncPaint();
+  try{
+    const r0 = await hpFn({ action: "newcast_collect", names: x.names, af: x.af, only: [] });
+    if(!r0 || !r0.ok) throw new Error((r0 && r0.error) || "集められませんでした");
+    x.res.sakura = r0.sakura; ncPaint();
+    for(let no = 1; no <= 10; no++){
+      let sl;
+      try{ const r = await hpFn({ action: "newcast_collect", names: x.names, af: x.af, only: [no], sakura: false }); sl = r && r.ok && r.slots && r.slots[0] ? r.slots[0] : { no, label: no + "番", addr: "", error: (r && r.error) || "読めませんでした" }; }
+      catch(e){ sl = { no, label: no + "番", addr: "", error: String(e.message || e) }; }
+      x.res.slots.push(sl); ncPaint();
+    }
+  }catch(e){ toast("⚠ " + (e.message || e)); }
+  x.busy = false; ncPaint();
+}
 function renderOnb(c){
   const o = (c && c.onboarding) || {}, md2 = at => { const d = new Date(at); return isNaN(d) ? "" : (d.getMonth() + 1) + "/" + d.getDate(); };
   const sel = (id, list, v, emptyLabel) => `<select id="${id}">${list.map(x => `<option value="${x}" ${x === (v || "") ? "selected" : ""}>${x || emptyLabel}</option>`).join("")}</select>`;
@@ -4802,6 +4859,7 @@ function renderOnb(c){
     <div class="f"><label>👜 仕事ポーチ（在籍作成ルームで選んだもの）</label><div id="onb_kit" style="font-size:14px;padding:4px 2px">${c && (c.room_ids || []).length ? "読んでいます…" : "在籍作成ルームとつながっていません"}</div></div>
     <div class="f" style="margin-top:6px"><label>📧 メールアドレス（写メ日記・姫デコの登録など）</label><input id="onb_email" type="email" maxlength="200" value="${esc(o.email || "")}" placeholder="在籍作成ルームでもらったアドレス"></div>
     <div id="onb_room"></div>
+    ${c && c.id && CAN_EDIT ? `<div class="ncbtnrow"><button type="button" class="btn btn-ghost btn-sm" onclick="ncOpen('${c.id}')">🩷 ヘブン 同時投稿先 1〜10 を集める（読むだけ）</button></div>` : ""}
     <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${ONB_STEPS.map(([k, l]) => `<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
       <input type="checkbox" id="onb_${k}" ${o[k] ? "checked" : ""} style="width:auto;transform:scale(1.25)"> ${l}
       ${o[k] ? `<small style="color:#1f9d6b;font-weight:800">✅ ${o[k].at ? esc(md2(o[k].at)) + " " + esc(o[k].by || "") : "エクセルから"}</small>` : `<small style="color:#c77700;font-weight:800">まだ</small>`}</label>`).join("")}</div>
