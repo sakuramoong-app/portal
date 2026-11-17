@@ -1,6 +1,6 @@
 /* ============================================================
    🧭 記録簿トップの並び（2026/11/18 店長 OK：見本 https://claude.ai/artifact/HpLvDVBBPJ9G2NQGS1p5r3）
-   ・左の縦の列：メニュー・今日の数字・内勤の日払い（社長用の集計も）。たたまずに出す
+   ・左の縦の列：メニュー・今日の数字・内勤の日払い（社長用の集計も）。今日の数字・日払いは、ふだんは閉じておく
    ・日付の行（タブ・日付・並び）は、右の列のいちばん上で固定（下に読み進めても残る）
    ・本日のお知らせと内勤カレンダーの今日の予定を、1つの枠「📢 お知らせ・今日の予定」に（予定はここでは見るだけ）
    ・中身（予約・計算・ボタン）は変えない。置き場所を動かすだけ（同じ id のまま動かすので、ほかのところはそのまま動く）
@@ -27,10 +27,10 @@
     nav.classList.remove("navinhead");
     box.appendChild(nav); side.appendChild(box);
   }
-  // 左の列：今日の数字・内勤の日払い・社長用（ひらいたまま）
+  // 左の列：今日の数字・内勤の日払い・社長用（ふだんは閉じておく。2026/11/18 店長）
   ["todayBox", "staffPayBox", "ownerBox"].forEach(id => {
     const d = document.getElementById(id); if(!d) return;
-    d.open = true; d.classList.add("kbside-box"); side.appendChild(d);
+    d.open = false; d.classList.add("kbside-box"); side.appendChild(d);
   });
   // 📢 お知らせ・今日の予定（本日のお知らせ＋内勤カレンダーの予定）
   const notice = col.querySelector(".notice"), nev = document.getElementById("nEvents");
@@ -58,4 +58,23 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .kbnews-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;align-items:start}
   .kbnews-g .notice{margin:0} .kbnews-g .nevents{margin:0;background:#EEF6FF;border-radius:12px;padding:6px 10px;min-height:40px}
   .kbnews-g .nevents:empty::before{content:"📅 内勤カレンダーの今日の予定はありません";color:var(--sub,#7A6670);font-size:12.5px;font-weight:700}
+</style>`);
+/* 💴 内勤の日払い：左の列でも横にスクロールしないで見えるように、1人ずつカードの形に（2026/11/18 店長「すごく見づらい」）
+   表の中身・入力・保存ボタンはそのまま（見た目だけ） */
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .kbside #staffPayGrid .wrapx{overflow:visible}
+  .kbside #staffPayGrid table.list,.kbside #staffPayGrid table.list tbody{display:block;width:100%}
+  .kbside #staffPayGrid table.list tr:has(th){display:none}
+  .kbside #staffPayGrid table.list tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 8px;border:1.5px solid var(--line,#F3D6E0);border-radius:12px;padding:8px;margin:0 0 8px}
+  .kbside #staffPayGrid table.list td{display:block;padding:0;border:none;min-width:0;text-align:left}
+  .kbside #staffPayGrid table.list td:nth-child(1),.kbside #staffPayGrid table.list td:nth-child(7),.kbside #staffPayGrid table.list td:nth-child(8),.kbside #staffPayGrid table.list td:nth-child(9){grid-column:1 / -1}
+  .kbside #staffPayGrid table.list td:nth-child(1) b{font-size:15px}
+  .kbside #staffPayGrid table.list td::before{display:block;font-size:11px;font-weight:800;color:var(--sub,#7A6670)}
+  .kbside #staffPayGrid table.list td:nth-child(2)::before{content:"出勤"} .kbside #staffPayGrid table.list td:nth-child(3)::before{content:"退勤"}
+  .kbside #staffPayGrid table.list td:nth-child(4)::before{content:"時間"} .kbside #staffPayGrid table.list td:nth-child(5)::before{content:"時給"}
+  .kbside #staffPayGrid table.list td:nth-child(6)::before{content:"日払い"} .kbside #staffPayGrid table.list td:nth-child(7)::before{content:"どこから"}
+  .kbside #staffPayGrid table.list td:nth-child(8)::before{content:"メモ"}
+  .kbside #staffPayGrid table.list td select,.kbside #staffPayGrid table.list td input{width:100% !important;box-sizing:border-box;max-width:100%}
+  .kbside #staffPayGrid table.list td:nth-child(7) div{white-space:normal !important}
+  .kbside #staffPayGrid table.list td:nth-child(9) .btn{width:100%}
 </style>`);
