@@ -3478,10 +3478,12 @@ function vuPaintCover(){
     <div><div style="font-weight:800;font-size:13px">表紙の画像</div><label class="btn btn-ghost btn-sm" style="cursor:pointer">べつの画像にする<input type="file" accept="image/jpeg,image/png" style="display:none" onchange="vuCoverPick(this.files[0])"></label></div></div>`;
 }
 async function vuCoverPick(f){ try{ const p = await fuPrepare(f); vuCover = p.type === "image/jpeg" ? p : await new Promise(ok => { const u = URL.createObjectURL(p), i = new Image(); i.onload = () => { const cv = document.createElement("canvas"); cv.width = i.naturalWidth; cv.height = i.naturalHeight; cv.getContext("2d").drawImage(i, 0, 0); cv.toBlob(b => { URL.revokeObjectURL(u); ok(new File([b], "cover.jpg", { type: "image/jpeg" })); }, "image/jpeg", 0.9); }; i.src = u; }); vuPaintCover(); }catch(e){ toast(e.message || String(e)); } }
-async function vuUpload(){
-  if(!vuFile || vuBusy) return;
+async function vuUpload(rno){
+  // rno ＝ 番号を決めて差しかえ（2026/11/18 店長OK：その番号の今の動画を消して、同じ番号に入れる。紹介文のコードはそのまま）
+  if(vuBusy) return;
+  if(!vuFile){ if(rno) toast("先に上の「ここを押して動画を選ぶ」で、差しかえる動画を選んでください"); return; }
   const store = $("vu_store").value, label = PROF_STORE_OF[store] || store;
-  if(!confirm(`${label} の公式HPの「MP4ムービー」に、空いている番号で動画をアップします。いいですか？`)) return;
+  if(!confirm(rno ? `${label} の公式HPの「MP4ムービー」の ${rno}番 を、選んだ動画に差しかえます。\nもとの ${rno}番 の動画は消えます（紹介文の %MP4FREE${rno}-W% はそのまま新しい動画になります）。いいですか？` : `${label} の公式HPの「MP4ムービー」に、空いている番号で動画をアップします。いいですか？`)) return;
   vuBusy = true; $("vu_go").disabled = true;
   const id = Date.now() + "_" + Math.random().toString(36).slice(2, 8), vp = `${store}/${id}.mp4`, cp = vuCover ? `${store}/${id}_cover.jpg` : null;
   try{
@@ -3490,13 +3492,14 @@ async function vuUpload(){
     if(up1.error) throw new Error("動画を置けませんでした（SQL 235 はもう実行しましたか？）：" + up1.error.message);
     if(cp){ const up2 = await sb.storage.from("cms-upload-tmp").upload(cp, vuCover, { contentType: "image/jpeg", upsert: false }); if(up2.error) throw new Error("表紙を置けませんでした：" + up2.error.message); }
     $("vu_msg").innerHTML = "⏳ 公式HPに入れています…（1〜2分）";
-    const r = await hpFn({ action: "free_mp4_upload", store, video: vp, cover: cp });
+    const r = await hpFn(Object.assign({ action: "free_mp4_upload", store, video: vp, cover: cp }, rno ? { no: rno, mode: "replace" } : {}));
     if(r && r.no && r.tags && (r.ok || /確かめられません/.test(r.error || ""))){
       vuDone.unshift({ sk: store, store: label, no: r.no, tags: r.tags, warn: r.ok ? (r.coverOk === false ? "表紙は入りませんでした（管理画面で入れてください）" : "") : r.error });
-      $("vu_msg").innerHTML = r.ok ? `<b style="color:#1E8E5A">✅ ${r.no}番にアップしました</b>` : `<span style="color:#B7791F">⚠ ${esc(r.error)}</span>`;
+      $("vu_msg").innerHTML = r.ok ? `<b style="color:#1E8E5A">✅ ${r.no}番に${rno ? "差しかえました" : "アップしました"}</b>` : `<span style="color:#B7791F">⚠ ${esc(r.error)}</span>`;
       vuFile = null; vuCover = null; $("vu_prev").innerHTML = "🎥 ほかの動画もアップするときは、ここを押して選ぶ"; $("vu_cover").innerHTML = "";
       if(vuOnDone){ try{ vuOnDone(r.no); }catch(e){} $("vu_msg").innerHTML += `<div style="margin-top:4px"><b>🎨 テンプレの動画ブロックに ${r.no}番 を入れました。</b> <button class="btn btn-sm btn-primary" onclick="document.getElementById('vidUpBg').remove()">テンプレにもどる</button></div>`; }
       vuPaintDone();
+      if(rno) vuLib();
     } else { $("vu_msg").innerHTML = `<span style="color:#C0392B">⚠ ${esc((r && r.error) || "うまくいきませんでした")}</span>`; $("vu_go").disabled = false; }
   }catch(e){ $("vu_msg").innerHTML = `<span style="color:#C0392B">⚠ ${esc(e.message || String(e))}</span>`; $("vu_go").disabled = false;
     try{ await sb.storage.from("cms-upload-tmp").remove([vp, cp].filter(Boolean)); }catch(x){} }
@@ -3521,11 +3524,12 @@ async function vuLib(){
   if(!r || !r.ok || !Array.isArray(r.slots)){ el.innerHTML = `<div style="color:#C0392B;margin-top:10px">⚠ ${esc((r && r.error) || "読めませんでした")}</div>`; return; }
   const used = r.slots.filter(s => s.used).sort((a, b) => b.no - a.no);
   el.innerHTML = `<div style="margin-top:12px;font-weight:800">📚 ${esc(r.store || "")} の動画（${used.length}本・新しい番号から／空き ${r.slots.length - used.length}）</div>
-    <div class="hint">表紙を押すと <b>%MP4FREE番号-W%</b> をコピーします${vuOnDone ? "（🎨 テンプレから開いたときは「これを使う」で動画ブロックに入ります）" : ""}。</div>
+    <div class="hint">表紙を押すと <b>%MP4FREE番号-W%</b> をコピーします。上で動画を選んでから「🔁 この番号に差しかえ」で、その番号に上書きできます${vuOnDone ? "（🎨 テンプレから開いたときは「これを使う」で動画ブロックに入ります）" : ""}。</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:6px">${used.map(s => `<div style="border:1.5px solid var(--line);border-radius:10px;padding:4px;text-align:center;background:#fff">
       <div style="position:relative;cursor:pointer" onclick="fuCopy('%MP4FREE${s.no}-W%')" title="押すとコードをコピー"><img loading="lazy" src="${esc(site)}/galpic/FLVminiPIC${s.no}.jpg" onerror="this.style.visibility='hidden'" style="width:100%;height:96px;object-fit:cover;border-radius:6px;background:#222">
         <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px;text-shadow:0 0 6px #000">▶</span></div>
       <div style="font-size:12px;font-weight:800">動画 ${s.no}番</div>
+      ${CAN_EDIT ? `<button class="btn btn-sm btn-ghost" style="width:100%;margin-bottom:3px" onclick="vuUpload(${s.no})" title="上で選んだ動画を、この番号に上書きします">🔁 この番号に差しかえ</button>` : ""}
       ${vuOnDone ? `<button class="btn btn-sm btn-primary" style="width:100%" onclick="vuUse(${s.no})">これを使う</button>` : `<button class="btn btn-sm btn-ghost" style="width:100%" onclick="fuCopy('%MP4FREE${s.no}-W%')">📋 コピー</button>`}</div>`).join("")}</div>`;
 }
 function vuUse(n){ if(vuOnDone){ try{ vuOnDone(n); }catch(e){} } const bg = document.getElementById("vidUpBg"); if(bg) bg.remove(); toast(`🎨 動画ブロックに ${n}番 を入れました`); }
