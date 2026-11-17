@@ -4820,7 +4820,7 @@ function ncPaint(){
     return ["diff", "⚠ ちがうものが入っている（さわらない）"]; };
   bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:900px;width:100%;max-height:90vh;overflow:auto;font-size:14px">
     <div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">🩷 ヘブン 同時投稿先 1〜10（${esc(x.names[0] || "")}）</b><span style="margin-left:auto"></span><button class="btn btn-ghost btn-sm" onclick="if(!NC_CUR.busy) document.getElementById('ncBg').remove()">閉じる</button></div>
-    <div class="hint" style="margin:4px 0 8px">各媒体の管理画面から、この子の写メ日記の投稿用アドレスを集めて、ヘブン（サクラムーン池袋）の「他サイトへの同時投稿」の今の中身とくらべます。<b>読むだけ</b>（どこも変えません）。2分くらいかかります。</div>
+    <div class="hint" style="margin:4px 0 8px">各媒体の管理画面から、この子の写メ日記の投稿用アドレスを集めて、ヘブン（サクラムーン池袋）の「他サイトへの同時投稿」の今の中身とくらべます。「🔎 集める」は<b>読むだけ</b>（どこも変えません）。2分くらいかかります。</div>
     <div style="margin-top:8px"><button class="btn btn-primary" onclick="ncRun()" ${x.busy ? "disabled" : ""}>${x.busy ? "⏳ 集めています…" : "🔎 集める（読むだけ）"}</button></div>
     ${r ? `${r.sakura && r.sakura.note ? `<div class="hint" style="color:#B7791F;margin-top:6px">⚠ ${esc(r.sakura.note)}</div>` : ""}
     <table class="nctbl"><tr><th>番号</th><th>媒体</th><th>集めたアドレス</th><th>ヘブン（サクラ）の今</th><th></th></tr>
@@ -4828,13 +4828,54 @@ function ncPaint(){
         return `<tr class="${k}"><td>${sl.no}</td><td>${esc(sl.label)}${sl.name ? `<small>（${esc(sl.name)}）</small>` : ""}</td>
           <td>${sl.addr ? `<span class="ncaddr">${esc(sl.addr)}</span> <button class="btn btn-ghost btn-sm" onclick="fuCopy('${esc(sl.addr)}')">📋</button>` : `<span class="ncno">${esc(sl.error || sl.note || "なし")}</span>${sl.manual ? ` <a class="btn btn-ghost btn-sm" href="https://fuzoku.jp/entry/" target="_blank" rel="noopener">風じゃを開く</a>` : ""}`}</td>
           <td>${cur ? `<span class="ncaddr">${esc(cur)}</span>` : `<span class="ncno">（空）</span>`}</td><td><b>${t}</b></td></tr>`; }).join("")}</table>
-    <div class="hint" style="margin-top:6px">「🆕 入れる予定」の番号を、次の段階でヘブンに入れられるようにします。⚠ の番号は手で確かめてください。</div>` : ""}
+    ${(() => { const nw = (r.slots || []).filter(sl => judge(sl)[0] === "new"); x.newRows = nw.map(sl => ({ no: sl.no, addr: sl.addr }));
+      return x.busy || (r.slots || []).length < 10 ? "" : nw.length ? `<div class="ncact"><button class="btn btn-primary" onclick="ncWrite()">🩷 🆕 の ${nw.length}こ（${nw.map(s => s.no + "番").join("・")}）をヘブンに入れる</button><div class="hint">空いている番号だけ入れます。入れたあと読みなおして、ほかの欄（写真・プロフィールなど）が変わっていないかも確かめます。</div></div>`
+        : `<div class="hint" style="margin-top:6px">入れる予定の番号はありません。⚠ の番号は手で確かめてください。</div>`; })()}` : ""}
+    <div class="ncmail"><b>📨 ヘブン（サクラムーン池袋）の登録メール</b>
+      ${ncEmail() ? `<div class="hint">あて先：<span class="ncaddr">${esc(ncEmail())}</span>（台帳の「📧 メールアドレス」）</div>
+        <button class="btn btn-ghost btn-sm" onclick="ncMail('diary')" ${x.busy ? "disabled" : ""}>📷 写メ日記の登録メールを送る</button>
+        <button class="btn btn-ghost btn-sm" onclick="ncMail('hime')" ${x.busy ? "disabled" : ""}>💌 姫デコの登録メールを送る</button>`
+        : `<div class="hint">台帳の「📧 メールアドレス」が空です。先に入れて保存してください。</div>`}</div>
+    ${x.msg ? `<div class="ncmsg">${x.msg}</div>` : ""}
   </div>`;
   if(!document.getElementById("ncCss")) document.head.insertAdjacentHTML("beforeend", `<style id="ncCss">
     .ncbtnrow{margin-top:6px}
     .nctbl{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px} .nctbl th,.nctbl td{border-bottom:1px solid #F3D6E0;padding:5px 6px;text-align:left;vertical-align:top}
     .nctbl th{background:#FFF0F5;font-size:12px} .nctbl small{display:block;color:#9C8B8F} .ncaddr{font-family:monospace;font-size:12px;word-break:break-all}
+    .ncact{margin-top:10px;padding:10px;border:2px solid #F2A7C3;border-radius:12px;background:#FFF7FA} .ncmail{margin-top:12px;padding:10px;border:1.5px dashed #F3D6E0;border-radius:12px} .ncmail .btn{margin:4px 4px 0 0}
+    .ncmsg{margin-top:10px;padding:8px 10px;border-radius:10px;background:#F6F4FF;font-size:13px;line-height:1.6}
     .ncno{color:#9C8B8F} .nctbl tr.ok td:last-child{color:#1E7A3C} .nctbl tr.new td:last-child{color:#C2185B} .nctbl tr.diff td:last-child,.nctbl tr.ng td:last-child{color:#B7791F}</style>`);
+}
+// 台帳の「📧 メールアドレス」（画面に入れたばかりのものを先に）
+function ncEmail(){ const el = $("onb_email"), c = NC_CUR && casts.find(x => x.id === NC_CUR.cid); return String((el && el.value) || (c && c.onboarding && c.onboarding.email) || "").trim(); }
+// 🆕 の番号だけ、ヘブン（サクラ）に入れる
+async function ncWrite(){
+  const x = NC_CUR; if(!x || x.busy || !(x.newRows || []).length || !CAN_EDIT) return;
+  if(!confirm(`ヘブン（サクラムーン池袋）の「${x.names[0]}」の「他サイトへの同時投稿」に、\n${x.newRows.map(r => r.no + "番：" + r.addr).join("\n")}\nを入れます。ほかの番号・ほかの欄はさわりません。いいですか？`)) return;
+  x.busy = true; x.msg = "⏳ ヘブンに入れています…（1分くらい）"; ncPaint();
+  try{
+    const r = await hpFn({ action: "newcast_fwd_write", names: x.names, set: x.newRows });
+    if(!r || (r.error && !r.results)) throw new Error((r && r.error) || "入れられませんでした");
+    const ng = (r.results || []).filter(z => !z.ok), skip = (r.plan || []).filter(p => p.why);
+    x.msg = (ng.length ? `⚠ 入ったか確かめられない番号：${ng.map(z => z.no + "番").join("・")}` : `✅ ${(r.results || []).map(z => z.no + "番").join("・")} を入れました`)
+      + (skip.length ? `<br>入れなかった番号：${skip.map(p => esc(p.no + "番（" + p.why + "）")).join("・")}` : "")
+      + ((r.changed || []).length ? `<br><b style="color:#C0392B">⚠ 同時投稿先のほかに、変わった欄があります：${esc(r.changed.join("・"))}。ヘブンの管理画面で、この子のキャスト情報を確かめてください。</b>` : `<br>ほかの欄（写真・プロフィールなど）は変わっていません。`);
+  }catch(e){ x.msg = `<span style="color:#C0392B">⚠ ${esc(e.message || e)}</span>`; }
+  x.busy = false; ncPaint();
+  if(x.msg.startsWith("✅")) ncRun();   // 読みなおして ✅ になったか見る
+}
+// 📨 写メ日記・姫デコの登録メール
+async function ncMail(kind){
+  const x = NC_CUR, em = ncEmail(); if(!x || x.busy || !em || !CAN_EDIT) return;
+  const lab = kind === "hime" ? "姫デコ" : "写メ日記";
+  if(!confirm(`ヘブン（サクラムーン池袋）から、「${x.names[0]}」の${lab}の登録メールを\n${em}\nに送ります。いいですか？`)) return;
+  x.busy = true; x.msg = `⏳ ${lab}の登録メールを送っています…`; ncPaint();
+  try{
+    const r = await hpFn({ action: "newcast_reg_mail", names: x.names, kind, email: em });
+    if(!r) throw new Error("送れませんでした");
+    x.msg = r.ok ? `✅ ${lab}の登録メールを送りました（${esc(r.msg || "")}）。キャストにメールを見てもらってください。` : `⚠ ${lab}：${esc(r.error || r.msg || "送れたか確かめられませんでした。ヘブンの管理画面を見てください")}`;
+  }catch(e){ x.msg = `<span style="color:#C0392B">⚠ ${esc(e.message || e)}</span>`; }
+  x.busy = false; ncPaint();
 }
 async function ncRun(){
   const x = NC_CUR; if(!x || x.busy) return;
