@@ -3573,7 +3573,7 @@ const TPL_STORES = {
 function tplStoreOf(mk){ if(TPL_STORES[mk]) return TPL_STORES[mk]; const d = (typeof KBF !== "undefined" && KBF.SITE && KBF.SITE[mk]) ? "https://www." + KBF.SITE[mk] + ".com" : ""; return { label: (typeof KBF !== "undefined" && KBF.STORE_SHORT && KBF.STORE_SHORT[mk]) || mk, site: d, heavenShopId: (TPL_HEAVEN_SHOP[mk] || ""), heavenPath: "", btn: {}, generic: true }; }
 // 📷 サクラムーン以外のお店の、ヘブンの写メ日記ウィジェットのお店番号（ウィジェットのアドレスの「shopId=」のあとの数字）2026/11/17 店長：鶯谷にも
 //   番号が入っているお店は、テンプレで作るに「ヘブンの女の子番号」の欄と「📷 写メ日記」のブロックが出る
-const TPL_HEAVEN_SHOP = { lana_uguisu: "" };
+const TPL_HEAVEN_SHOP = { lana_uguisu: "1200004722" };
 const TPL_GENERIC_TYPES = ["video", "image", "link", "text", "html"];
 const TPL_PLACES = [["town", "🎬 デリヘルタウン欄（いちばん上）"], ["self", "💗 本人から一言"], ["mgr", "✍️ 店長から一言の下"]];
 const TPL_TYPES = {
