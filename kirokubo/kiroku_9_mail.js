@@ -268,3 +268,10 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .nrbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px;font-weight:800;font-size:13px}
   .nrbar select{font-family:inherit;font-size:13px;font-weight:700;padding:5px 8px;border-radius:10px}
 </style>`);
+/* ✏️ 返信の文を直す（①）は、いつも①の文をそのまま開く（2026/11/18 店長：②〜⑦をえらんでいるときに開くと、その文が①に保存されてしまっていた）
+   ②〜⑦をえらんでいるときは、その文の編集（✏️ この文を直す）を開く */
+{ const __openNetTplNR = openNetTpl; openNetTpl = function(){
+  if(NR_KIND !== "kakunin"){ nrEdit(); return; }
+  const keep = netTpl; netTpl = function(){ const v = M.set && M.set.net_reply_tpl; let t = typeof v === "string" && v.trim() ? v : NET_TPL_DEF; return t; };
+  try{ return __openNetTplNR.apply(this, arguments); } finally{ netTpl = keep; }
+}; }
