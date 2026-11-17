@@ -22,8 +22,12 @@
   // 左の列：メニュー
   const nav = document.getElementById("navArea");
   if(nav){
-    const box = document.createElement("div"); box.className = "kbside-box kbside-nav";
-    box.innerHTML = `<div class="kbside-h">メニュー</div>`;
+    // 折りたためる（2026/11/18 店長）。開いている・閉じているは、この端末で覚えておく
+    const box = document.createElement("details"); box.className = "kbside-box kbside-nav"; box.id = "kbMenu";
+    let mo = "1"; try{ mo = localStorage.getItem("kbMenuOpen") ?? "1"; }catch(e){}
+    box.open = mo !== "0";
+    box.innerHTML = `<summary class="kbside-h">メニュー</summary>`;
+    box.addEventListener("toggle", () => { try{ localStorage.setItem("kbMenuOpen", box.open ? "1" : "0"); }catch(e){} });
     nav.classList.remove("navinhead");
     box.appendChild(nav); side.appendChild(box);
   }
@@ -49,7 +53,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .kbcol{flex:999 1 560px;min-width:0}
   @media (max-width:900px){ .kbside{max-width:none} }
   .kbside-box{background:#fff;border:2px solid var(--line,#F3D6E0);border-radius:16px;padding:8px 10px;margin:0 !important}
-  .kbside-h{font-size:12px;font-weight:800;color:var(--sub,#7A6670);padding:2px 4px 6px}
+  .kbside-h{font-size:12px;font-weight:800;color:var(--sub,#7A6670);padding:2px 4px 6px;cursor:pointer} .kbside-nav:not([open]) .kbside-h{padding-bottom:2px}
   .kbside-nav .kbnav{display:flex !important;flex-direction:column;align-items:stretch;gap:6px;margin:0 !important}
   .kbside-nav .kbnav > *{width:100%;justify-content:flex-start;text-align:left;box-sizing:border-box}
   .kbside .todaygrid{grid-template-columns:repeat(2,minmax(0,1fr)) !important}
