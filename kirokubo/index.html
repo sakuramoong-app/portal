@@ -4884,7 +4884,7 @@ async function ncWrite(auto){
     const r = await hpFn({ action: "newcast_fwd_write", names: x.names, set: x.newRows });
     if(!r || (r.error && !r.results)) throw new Error((r && r.error) || "入れられませんでした");
     const ng = (r.results || []).filter(z => !z.ok), skip = (r.plan || []).filter(p => p.why);
-    x.msg = (ng.length ? `⚠ 入ったか確かめられない番号：${ng.map(z => z.no + "番").join("・")}${r.hvMsg ? `<br>ヘブンの画面の文：${esc(r.hvMsg)}` : ""}` : `✅ ${(r.results || []).map(z => z.no + "番").join("・")} を入れました`)
+    x.msg = (ng.length ? `⚠ 入ったか確かめられない番号：${ng.map(z => z.no + "番").join("・")}${(() => { const em = String(r.hvMsg || "").match(/[^／［・]*(?:選択されていません|入力されていません|してください|できません)[^／］]*/g) || []; return em.length ? `<br><b style="color:#C0392B">🛑 ヘブンがことわった理由：${esc(em.join("・"))}</b><br>ヘブンの管理画面で、この子のキャスト情報のその欄を入れて「更新する」を押してから、もう一度ためしてください。` : ""; })()}${r.hvMsg ? `<br><small>ヘブンの画面の文：${esc(r.hvMsg)}</small>` : ""}` : `✅ ${(r.results || []).map(z => z.no + "番").join("・")} を入れました`)
       + (skip.length ? `<br>入れなかった番号：${skip.map(p => esc(p.no + "番（" + p.why + "）")).join("・")}` : "")
       + ((r.changed || []).length ? `<br><b style="color:#C0392B">⚠ 同時投稿先のほかに、変わった欄があります：${esc(r.changed.join("・"))}。ヘブンの管理画面で、この子のキャスト情報を確かめてください。</b>` : `<br>ほかの欄（写真・プロフィールなど）は変わっていません。`);
   }catch(e){ x.msg = `<span style="color:#C0392B">⚠ ${esc(e.message || e)}</span>`; }
