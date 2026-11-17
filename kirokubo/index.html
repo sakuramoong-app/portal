@@ -2730,8 +2730,7 @@ function paintProf(){
     <div class="pfTools">
       ${CAN_EDIT && pf.stores.length > 1 ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfBulkOpen()">📋 他店舗へ一括反映</button>` : ""}
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfCopyAll()" title="性格タイプ〜オプション可否を文でコピー（お店ごとの紹介文をAIで作るときに）">📋 完成プロフ全文をコピー</button>
-      ${CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfHpImport()">🌐 公式HPから取りこむ</button>` : ""}
-      <a class="btn btn-ghost btn-sm" href="${PROF_STAFF_URL}${encodeURIComponent(pf.prof.id)}" target="_blank" rel="noopener">📂 プロフの画面で開く</a></div>
+      </div><!-- 🌐 公式HPから取りこむ・📂 プロフの画面で開く は消した（2026/11/17 店長） -->
     <div class="pfTabs pfStoreTabs">${pf.stores.map((s, i) => `<button type="button" class="pfTab ${s === sk ? "on" : ""}" onclick="pfTab(${i})">${esc(STORE_LABEL_OF(s))}${pf.dirty.has(s) ? " ✏️" : ""}</button>`).join("")}
       <span style="margin-left:auto"></span>
       ${CAN_EDIT && hpCanNew(pf.c, sk) ? `<button type="button" class="btn btn-primary btn-sm" onclick="hpNewOpen()">🆕 公式HPに新しく登録</button>` : ""}</div>
@@ -3571,7 +3570,10 @@ const TPL_STORES = {
     btn: { x: 203, review: 205, youtube: 204 }, heavenBtnGif: 27 }
 };
 // サクラムーンのほかのお店も「テンプレで作る」を開ける（2026/11/12 店長）：画像・動画・リンク・説明文だけ（花びらカード・Xなどのボタン・写メ日記は、お店ごとの番号がないので出さない）
-function tplStoreOf(mk){ if(TPL_STORES[mk]) return TPL_STORES[mk]; const d = (typeof KBF !== "undefined" && KBF.SITE && KBF.SITE[mk]) ? "https://www." + KBF.SITE[mk] + ".com" : ""; return { label: (typeof KBF !== "undefined" && KBF.STORE_SHORT && KBF.STORE_SHORT[mk]) || mk, site: d, heavenShopId: "", heavenPath: "", btn: {}, generic: true }; }
+function tplStoreOf(mk){ if(TPL_STORES[mk]) return TPL_STORES[mk]; const d = (typeof KBF !== "undefined" && KBF.SITE && KBF.SITE[mk]) ? "https://www." + KBF.SITE[mk] + ".com" : ""; return { label: (typeof KBF !== "undefined" && KBF.STORE_SHORT && KBF.STORE_SHORT[mk]) || mk, site: d, heavenShopId: (TPL_HEAVEN_SHOP[mk] || ""), heavenPath: "", btn: {}, generic: true }; }
+// 📷 サクラムーン以外のお店の、ヘブンの写メ日記ウィジェットのお店番号（ウィジェットのアドレスの「shopId=」のあとの数字）2026/11/17 店長：鶯谷にも
+//   番号が入っているお店は、テンプレで作るに「ヘブンの女の子番号」の欄と「📷 写メ日記」のブロックが出る
+const TPL_HEAVEN_SHOP = { lana_uguisu: "" };
 const TPL_GENERIC_TYPES = ["video", "image", "link", "text", "html"];
 const TPL_PLACES = [["town", "🎬 デリヘルタウン欄（いちばん上）"], ["self", "💗 本人から一言"], ["mgr", "✍️ 店長から一言の下"]];
 const TPL_TYPES = {
@@ -3899,7 +3901,7 @@ async function tplOpen(){
     <div class="tpLegend"><span class="tpS same">✅ いま入っている</span><span class="tpS new">🆕 これから足す</span><span class="tpS edit">✏️ 直した</span><span class="tpS moved">↕ 動かした</span><span class="tpS del">🗑 消す</span>
       <span class="hint">… 公式HPと同じ並びで、上から出しています。ブロックはつかんで上下にドラッグ（または ↑↓）で動かせます。</span></div>
     ${note ? `<div class="hint" style="color:#B7791F;margin-top:4px">⚠ ${esc(note)}</div>` : `<div class="hint" style="margin-top:4px">✅ 公式HPのいまの中身を読みました（${esc(st.label)} ${no}番）</div>`}
-    <label style="display:${st.generic ? "none" : "flex"};gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap"><span style="font-weight:800;font-size:13px">ヘブンの女の子番号</span>
+    <label style="display:${st.generic && !st.heavenShopId ? "none" : "flex"};gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap"><span style="font-weight:800;font-size:13px">ヘブンの女の子番号</span>
       <input id="tp_girlId" value="${esc(m.girlId || "")}" placeholder="例：47694060" oninput="tplCur.m.girlId=this.value;tplPaint(true)" style="width:140px">
       <span class="hint">口コミのボタン・写メ日記・イベントバナーのリンクに使う（ヘブンのその子のページのアドレスの「girlid-」のあとの数字）</span></label>
     <div id="tp_list" style="margin-top:6px"></div>
@@ -3995,7 +3997,7 @@ function tplPaintList(){
       ${list.map(tplBlockCard).join("") || `<div class="hint" style="padding:6px">（いまは何もありません）</div>`}
       ${del.map(b => `<div class="tpDel">🗑 消す：<b>${TPL_TYPES[b.type].label}</b><span style="margin-left:auto"></span><button type="button" class="btn btn-ghost btn-sm" onclick="tplUndel(${b.id})">↩ もどす</button></div>`).join("")}
       ${tplCur.adding === p ? `<div class="tpAddBox"><div style="display:flex;align-items:center;gap:6px"><b style="font-size:13px;color:#8A6100">🆕 ${info.n} ${info.title}のいちばん下に足す</b><span style="margin-left:auto"></span><button type="button" class="btn btn-ghost btn-sm" onclick="tplCur.adding=null;tplPaint()">やめる</button></div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${Object.entries(TPL_TYPES).filter(([k]) => !st.generic || TPL_GENERIC_TYPES.includes(k)).map(([k, t]) => `<button type="button" class="btn btn-ghost btn-sm" onclick="tplAdd('${k}','${p}')">${t.label}</button>`).join("")}</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${Object.entries(TPL_TYPES).filter(([k]) => !st.generic || TPL_GENERIC_TYPES.includes(k) || (k === "heaven" && st.heavenShopId)).map(([k, t]) => `<button type="button" class="btn btn-ghost btn-sm" onclick="tplAdd('${k}','${p}')">${t.label}</button>`).join("")}</div>
           <div style="font-weight:800;font-size:12px;margin:8px 0 4px;color:#8A6100">⭐ よく使う組み合わせ</div>
           <div style="display:flex;gap:4px;flex-wrap:wrap">${TPL_PRESETS.map(([l], i) => `<button type="button" class="btn btn-ghost btn-sm" onclick="tplPreset(${i},'${p}')">${l}</button>`).join("")}</div></div>`
         : `<button type="button" class="tpAddBtn" onclick="tplCur.adding='${p}';tplPaint()">＋ ${info.n} ${info.title}に足す（いちばん下に入ります）</button>`}
@@ -4267,7 +4269,7 @@ function iePaint(){
       <button type="button" class="btn btn-ghost btn-sm" onclick="ieReload()">🔄 公式HPから読みなおす</button>
       ${st.generic ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openIntroTplEditor('${skKeyOf(t.sk)}')">🎀 このお店の飾りテンプレを直す</button>` : `<button type="button" class="btn btn-ghost btn-sm" onclick="openIntroTplEditor('${t.mk}')">🎀 花びらカードのデザイン</button>`}</div>
     ${t.note ? `<div class="hint" style="color:#B7791F">⚠ ${esc(t.note)}</div>` : `<div class="hint">✅ 公式HPのいまの中身を読みました（${esc(st.label)} ${esc(t.no)}番）。ブロックは ⠿ をつかんで上下に動かせます。文はそのまま押して書けます。</div>`}
-    ${st.generic ? "" : `<label class="hint" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px">ヘブンの女の子番号 <input value="${esc(t.m.girlId || "")}" placeholder="例：47694060" style="width:130px" ${ed ? "" : "disabled"} oninput="tplCur.m.girlId=this.value;tplPaint(true);ieSync()"> （口コミ・写メ日記・バナーに使う）</label>`}
+    ${st.generic && !st.heavenShopId ? "" : `<label class="hint" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px">ヘブンの女の子番号 <input value="${esc(t.m.girlId || "")}" placeholder="例：47694060" style="width:130px" ${ed ? "" : "disabled"} oninput="tplCur.m.girlId=this.value;tplPaint(true);ieSync()"> （口コミ・写メ日記・バナーに使う）</label>`}
     <div id="tp_list"></div>
     <div id="ie_sum" class="ieSum"></div>`;
   if(!box.style.getPropertyValue("--iez")) box.style.setProperty("--iez", "0.8");
@@ -4278,7 +4280,7 @@ function ieInsBar(p, i){
   const t = tplCur, on = t.adding === p && t.addAt === i, st = tplStoreOf(t.mk);
   if(!CAN_EDIT) return "";
   if(!on) return `<div class="ieIns" data-p="${p}" data-i="${i}" onclick="tplCur.adding='${p}';tplCur.addAt=${i};iePaintList()" title="ここに入れる（画像はここにドラッグ・貼りつけでもアップできます）"><span>＋ ここに入れる</span></div>`;
-  const types = Object.entries(TPL_TYPES).filter(([k]) => k !== "text" && (!st.generic || TPL_GENERIC_TYPES.includes(k)));
+  const types = Object.entries(TPL_TYPES).filter(([k]) => k !== "text" && (!st.generic || TPL_GENERIC_TYPES.includes(k) || (k === "heaven" && st.heavenShopId)));
   return `<div class="tpAddBox ieAddBox" data-p="${p}" data-i="${i}"><div style="display:flex;align-items:center;gap:6px"><b style="font-size:13px;color:#8A6100">🆕 ここに入れる</b><span class="hint">（画像のファイルを、ここにドラッグしてもアップできます）</span><span style="margin-left:auto"></span><button type="button" class="btn btn-ghost btn-sm" onclick="tplCur.adding=null;tplCur.addAt=null;iePaintList()">やめる</button></div>
     <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px"><button type="button" class="btn btn-primary btn-sm" onclick="tplAdd('note','${p}')">📝 文章（そのまま書ける）</button>${types.map(([k, ty]) => `<button type="button" class="btn btn-ghost btn-sm" onclick="tplAdd('${k}','${p}')">${ty.label}</button>`).join("")}</div>
     <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${TPL_PRESETS.map(([l], k) => `<button type="button" class="btn btn-ghost btn-sm" onclick="tplPreset(${k},'${p}')">⭐ ${l}</button>`).join("")}</div></div>`;

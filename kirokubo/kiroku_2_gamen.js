@@ -296,7 +296,7 @@ async function pushShiftChange(cid, kind, st, en){
   if(kind === "time"){ p.p_start = st != null ? st : Number(orig.start); p.p_end = en != null ? en : Number(orig.end); }
   try{
     const r = q(await sb.rpc("kb_shift_from_kiroku", p)) || {};
-    if(r.success){ toast(kind === "absent" ? "🗓 サクラシフトもお休みにしました" : "🗓 サクラシフトの時間も変えました"); hpPushDay(cid, x.name, kind === "absent" ? { date: day, off: true } : { date: day, start: p.p_start, end: p.p_end }); }
+    if(r.success){ toast(kind === "absent" ? "🗓 サクラシフトもお休みにしました" : "🗓 サクラシフトの時間も変えました"); if(hpAskPush(kind, x.name)) hpPushDay(cid, x.name, kind === "absent" ? { date: day, off: true } : { date: day, start: p.p_start, end: p.p_end }); }
     else if(r.error) toast("サクラシフトに入れられませんでした（" + r.error + "）。シフトアプリで直してください");
   }catch(e){ toast("サクラシフトに入れられませんでした：" + (e.message || e) + "（SQL 218 がまだかも）"); }
 }
@@ -580,3 +580,15 @@ KB.closeOnBackdrop($("castBg"), closeCast);
 const __renderTL = renderTL;
 renderTL = function(){ __renderTL(); renderBoard(); };
 
+/* 🌐 記録簿からシフトを変えたとき、公式HPにも反映するか選ぶ（2026/11/17 店長）
+   ・サクラシフトにはいつも入れる。公式HPの出勤は「反映する／しない」をその都度えらぶ
+   ・localStorage kbHpPush（ask／always／never）で、毎回きかないようにもできる（画面のスイッチはまだ） */
+function hpPushMode(){ try{ return localStorage.getItem("kbHpPush") || "ask"; }catch(e){ return "ask"; } }
+function hpAskPush(kind, name){
+  const m = hpPushMode();
+  if(m === "always") return true;
+  if(m === "never"){ toast("🌐 公式HPには反映していません（この端末は「いつも反映しない」）"); return false; }
+  const ok = confirm(`🌐 ${name} の${kind === "absent" ? "お休み" : "時間の変更"}を、公式HPの出勤にも反映しますか？\n\nOK：公式HPにも反映する\nキャンセル：サクラシフトだけ（公式HPはそのまま）`);
+  if(!ok) toast("🌐 公式HPには反映していません（サクラシフトだけ変えました）");
+  return ok;
+}
