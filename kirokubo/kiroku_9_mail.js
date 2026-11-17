@@ -275,3 +275,31 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   const keep = netTpl; netTpl = function(){ const v = M.set && M.set.net_reply_tpl; let t = typeof v === "string" && v.trim() ? v : NET_TPL_DEF; return t; };
   try{ return __openNetTplNR.apply(this, arguments); } finally{ netTpl = keep; }
 }; }
+// 🤝 希望プレイに「キャストと相談」を足す（2026/11/18 店長）。もう入っていれば足さない
+function playAdd(w){ const el = $("f_play"); if(!el) return; const v = el.value.trim(); if(v.includes(w)) return; el.value = v ? v + "・" + w : w; try{ recalc(); }catch(e){} }
+/* 📞 返信①の確認電話のお願い（2026/11/18 店長）
+   ・中2日あいている予約（受付日の3日後以降。例：11/18 受付 → 11/21 の予約）… 前日の12時～21時に確認電話
+   ・12時台の予約 … 当日 11:45 に確認電話／13時以降の予約 … 1時間前（時刻つき）
+   ・いつも … ホテル入室前に確認電話
+   文の中の {確認電話} に入る。前の文の「★…前日…」「★…1時間前…」の行は、自動でこれにおきかえる */
+function nrCallLines(){
+  const d = ($("f_day") && $("f_day").value) || day, st = ($("f_start") && $("f_start").value) || "", today = KB.bizDateOf();
+  const gap = d && today ? Math.round((new Date(d + "T12:00:00Z") - new Date(today + "T12:00:00Z")) / 864e5) : 0;
+  const a = [];
+  if(gap >= 3) a.push("★大変お手数ですが、ご予約日前日の12時～21時頃に確認のお電話をお客様よりお願いいたします。");
+  if(st){
+    const [h, m] = st.split(":").map(Number);
+    if(h === 12) a.push("★大変お手数ですが、当日11:45に確認のお電話をお客様よりお願いいたします。");
+    else { let t = (h < 6 ? h + 24 : h) * 60 + m - 60; const hh = Math.floor(t / 60) % 24; a.push(`★大変お手数ですが、ご予約時間の1時間前（${hh}:${String(t % 60).padStart(2, "0")}）に確認のお電話をお客様よりお願いいたします。`); }
+  }
+  a.push("★必ずホテル入室前に、確認のお電話をお願いいたします。");
+  return a;
+}
+{ const __nrPreCall = nrPre; nrPre = function(t){
+  t = String(t || "");
+  if(!t.includes("{確認電話}")){
+    let first = true;
+    t = t.replace(/^★(?:大変お手数ですが、ご予約日前日|お手数ですが予約時間1時間前|お手数ですがホテル入室前)[^\n]*\n?/gm, () => first ? (first = false, "{確認電話}\n") : "");
+  }
+  return __nrPreCall(t.replace(/\{確認電話\}/g, nrCallLines().join("\n")));
+}; }

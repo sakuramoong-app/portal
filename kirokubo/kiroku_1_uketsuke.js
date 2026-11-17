@@ -1592,7 +1592,7 @@ function openNetTpl(){
   bg.innerHTML = `<div class="modal" style="max-width:640px"><button class="x" onclick="$('ntBg').classList.remove('show')">×</button>
     <h2>✏️ 📩 お客さまへの返信の文</h2>
     <p style="font-size:12.5px;color:var(--sub);line-height:1.7;margin:0 0 8px">いつもの注意事項なども、ここに書けば毎回入ります（内勤みんな同じ文）。<br>
-      {名前} {店名} {日時} {キャスト} {コース} {場所} {オプション行} {希望プレイ行} {料金} {支払} {電話} は、その予約の内容になります。</p>
+      {名前} {店名} {日時} {キャスト} {コース} {場所} {オプション行} {希望プレイ行} {料金} {支払} {電話} {確認電話}（予約の日時で、確認電話のお願いの行が自動で変わる） は、その予約の内容になります。</p>
     <textarea id="nt_text" rows="18" style="width:100%;font-family:inherit;font-size:13.5px">${esc(netTpl())}</textarea>
     ${KB.CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:8px"><button type="button" class="btn btn-primary" style="flex:1" onclick="saveNetTpl()">保存</button>
       <button type="button" class="btn btn-ghost" onclick="if(confirm('はじめの文にもどしますか？'))$('nt_text').value=NET_TPL_DEF">はじめの文にもどす</button></div>` : ""}</div>`;

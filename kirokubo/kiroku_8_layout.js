@@ -100,3 +100,25 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .kblay.kbside-off .kbside > :not(.kbsidebtn){display:none !important}
   .kblay.kbside-off .kbsidebtn{align-self:flex-start;padding:8px 10px;font-size:14px}
 </style>`);
+/* 📅 今日以外の日を開いているときは、ひと目でわかるように（2026/11/18 店長：先の日の画面に予約を書いてしまうことがある）
+   ・背景を水色に＋日付の行の上に「⚠️ 今日ではありません：○/○(○) の画面です」と「今日にもどる」 */
+function kbDayTint(){
+  try{
+    const today = KB.bizDateOf(), other = !!day && day !== today;
+    document.body.classList.toggle("kb-notToday", other);
+    const bar = document.querySelector("#kbCol .stickybar") || document.querySelector(".stickybar"); if(!bar) return;
+    let el = document.getElementById("kbDayWarn");
+    if(!el){ el = document.createElement("div"); el.id = "kbDayWarn"; el.className = "kbdaywarn"; bar.prepend(el); }
+    if(!other){ el.style.display = "none"; return; }
+    const d = new Date(day + "T12:00:00Z"), past = day < today;
+    el.style.display = "";
+    el.innerHTML = `⚠️ 今日ではありません：<b>${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]})</b> の画面です（${past ? "過去の日" : "先の日"}）<button type="button" class="btn btn-ghost btn-sm" onclick="goToday()">今日にもどる</button>`;
+  }catch(e){}
+}
+{ const __ldTint = loadDay; loadDay = async function(){ const r = await __ldTint.apply(this, arguments); kbDayTint(); return r; }; }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  body.kb-notToday{--bg:#E6EEFF;background:#E6EEFF !important}
+  body.kb-notToday .stickybar{background:#E6EEFF}
+  .kbdaywarn{background:#2F6FD0;color:#fff;font-weight:900;font-size:14px;border-radius:12px;padding:6px 12px;margin:0 0 6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+  .kbdaywarn .btn{background:#fff;color:#2F6FD0;border-color:#fff}
+</style>`);
