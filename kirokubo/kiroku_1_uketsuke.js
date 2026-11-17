@@ -1480,7 +1480,7 @@ function buildMsg(c){
     地図行: hotelMapUrl() ? "\n【地図】" + hotelMapUrl() : "",
     バック有OP: backOps, バック無OP: noBackOps,
     特記事項行: $("f_castnote") && $("f_castnote").value.trim() ? "\n【特記事項】" + $("f_castnote").value.trim() : "",
-    お金: fillVars(T[c.pay === "split" ? "split" : c.pay === "cash" ? "cash" : "card"], money),
+    お金: !c.pay ? "【お支払い】⚠️ まだ決まっていません（決まったら送りなおす）" : fillVars(T[c.pay === "split" ? "split" : c.pay === "cash" ? "cash" : "card"], money),   // 支払い方法を選んでいないのに「カード」の文が出ていた（2026/11/18 店長）
   };
   $("msg").value = fillVars(T.main, V);
 }
@@ -1563,7 +1563,7 @@ function netReply(){
   // 文は「✏️ 返信の文を直す」で、内勤みんなで直せる（kb_settings 'net_reply_tpl'。2026/11/5）
   const V = { 名前: $("f_name").value || "お客", 店名: storeLabel(store), 日時: `${cd2.getUTCMonth() + 1}/${cd2.getUTCDate()}(${DOW[cd2.getUTCDay()]}) ${st2 || "--:--"}〜${en || "--:--"}`,
     キャスト: who, コース: `${c.course}${/^\d+$/.test(c.course) ? "分" : ""}${c.ext ? "（延長" + c.ext * 30 + "分）" : ""}`, 場所: place || "（未定）",
-    オプション行: ops ? "\n■オプション：" + ops : "", 希望プレイ行: $("f_play") && $("f_play").value.trim() ? "\n■希望プレイ（無料の範囲）：" + $("f_play").value.trim() : "", 料金: c.total.toLocaleString("ja-JP") + "円", 支払: c.pay === "cash" ? "現金" : c.pay === "split" ? "現金＋カード" : "カード", 電話: STORE_TEL[store] || "" };
+    オプション行: ops ? "\n■オプション：" + ops : "", 希望プレイ行: $("f_play") && $("f_play").value.trim() ? "\n■希望プレイ（無料の範囲）：" + $("f_play").value.trim() : "", 料金: c.total.toLocaleString("ja-JP") + "円", 支払: !c.pay ? "お支払い方法はまだ" : c.pay === "cash" ? "現金" : c.pay === "split" ? "現金＋カード" : "カード", 電話: STORE_TEL[store] || "" };
   $("netReply").value = netTpl().replace(/\{(名前|店名|日時|キャスト|コース|場所|オプション行|希望プレイ行|料金|支払|電話)\}/g, (m, k) => V[k]);
 }
 const NET_TPL_DEF = `{名前}様

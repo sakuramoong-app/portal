@@ -147,3 +147,124 @@ function mailSiteCode(s){
   const m = M.media.find(x => x.label === s || (s && (x.label.includes(s) || s.includes(x.label))));
   return m ? m.code : "";
 }
+
+/* ---------- 📩 お客さまへの返信：テンプレをえらぶ（2026/11/18 店長：送った返信の例から）
+   ・① 予約の確認（いつもの文：✏️ 返信の文を直す）／② 時間がうまっている → 別の時間の提案／③ 本日の空き状況／④ おすすめキャスト
+     ⑤ 確定のお願い（間に合わなくなる）／⑥ 時間とカード決済の確認／⑦ またのご連絡をお待ちしています
+   ・{提案} は、下の「提案・案内する内容」に書いたもの（時間・場所・キャストなど）
+   ・②〜⑦ の文も「✏️ この文を直す」で内勤みんなで直せる（kb_settings 'net_reply_tpls'） ---------- */
+const NR_SIGN = `-- 
+サクラムーングループ
+03-5944-9075
+営業時間　12：00～翌5：00
+※毎週月曜日　12：00～22：00`;
+const NR_DEF = {
+  busy: { name: "② 時間がうまっている → 別の時間の提案", text: `{名前}様
+
+{店名}です。
+{月日}ですが、ご希望のお時間は先約がございます。
+
+{提案}でしたらご案内可能です。
+ご都合いかがでしょうか。
+お電話が優先のご予約となりますのでご了承ください。
+
+{署名}` },
+  today: { name: "③ 本日の空き状況", text: `{名前}様
+
+お問い合わせありがとうございます。
+
+本日の空き状況ですと、
+{提案}となります。
+
+ご都合いかがでしょうか。
+また、お電話でのお問い合わせが優先となりますのでご了承ください。
+
+ご連絡お待ちしております。
+
+{署名}` },
+  osusume: { name: "④ おすすめキャストのご案内", text: `{名前}様
+
+{店名}です。
+お問い合わせありがとうございます。
+
+{提案}
+
+がオススメとなっております。
+当日のご予約はお電話にてお願い申し上げます。
+ではご予約お待ちしております。
+
+{署名}` },
+  deadline: { name: "⑤ 確定のお願い（間に合わなくなる）", text: `度々のご連絡失礼いたします。
+
+{キャスト}さんですが、移動にお時間をいただきますので
+{提案}頃までにご予約確定をいただかないと
+{開始}は間に合わなくなりますのでご了承ください。
+
+なお、お電話でのご予約が優先となりますので
+他のご予約が入ってしまうこともございます。
+
+併せてご了承ください。
+ご返信お待ちしております。
+
+{署名}` },
+  cardcheck: { name: "⑥ 時間とカード決済の確認", text: `お問い合わせありがとうございます。
+
+ご希望のお時間ですが、{月日} {開始}でお間違いないでしょうか？
+
+カード決済可能ですが、手数料込で{料金}となります。
+上記お時間確認が取れましたらSMSにて決済URLをお送りいたします。
+
+ご返信お待ちしております。
+
+{署名}` },
+  again: { name: "⑦ またのご連絡をお待ちしています", text: `かしこまりました。
+{キャスト}さん人気のキャストですので、早めにご予約頂ければと思います。
+是非またのご連絡お待ちしております。
+
+{署名}` }
+};
+let NR_KIND = "kakunin";
+function nrTpls(){ const v = (M.set && M.set.net_reply_tpls) || {}; const o = {}; Object.keys(NR_DEF).forEach(k => { o[k] = { name: NR_DEF[k].name, text: typeof v[k] === "string" && v[k].trim() ? v[k] : NR_DEF[k].text }; }); return o; }
+function nrPre(t){
+  const d = ($("f_day") && $("f_day").value) || day, st = ($("f_start") && $("f_start").value) || "";
+  let md = "", hm = st;
+  if(d){ const x = new Date(d + "T12:00:00Z"); let s = x; if(st){ const [h, m] = st.split(":").map(Number); if(h < 6) s = new Date(x.getTime() + 864e5); hm = String(h % 24) + "：" + String(m).padStart(2, "0"); } md = `${s.getUTCMonth() + 1}/${s.getUTCDate()}(${DOW[s.getUTCDay()]})`; }
+  const tei = ($("nrSuggest") && $("nrSuggest").value.trim()) || "（ここに書く）";
+  return t.replace(/\{提案\}/g, tei).replace(/\{月日\}/g, md || "（日付）").replace(/\{開始\}/g, hm || "（時間）").replace(/\{署名\}/g, NR_SIGN);
+}
+{ const __netTplNR = netTpl; netTpl = function(){ return nrPre(NR_KIND === "kakunin" ? __netTplNR() : (nrTpls()[NR_KIND] || {}).text || __netTplNR()); }; }
+function nrBarPaint(){
+  const w = $("netReplyWrap"); if(!w) return;
+  let b = $("nrBar");
+  if(!b){ w.insertAdjacentHTML("afterbegin", `<div id="nrBar" class="nrbar"></div>`); b = $("nrBar"); }
+  const T = nrTpls(), uses = NR_KIND !== "kakunin" && /\{提案\}/.test(T[NR_KIND] ? T[NR_KIND].text : "");
+  const keep = $("nrSuggest") ? $("nrSuggest").value : "";
+  b.innerHTML = `<label>📩 返信の種類 <select id="nrKind" onchange="NR_KIND=this.value;nrBarPaint();netReply()"><option value="kakunin" ${NR_KIND === "kakunin" ? "selected" : ""}>① 予約の確認（いつもの文）</option>${Object.keys(T).map(k => `<option value="${k}" ${NR_KIND === k ? "selected" : ""}>${esc(T[k].name)}</option>`).join("")}</select></label>
+    ${NR_KIND !== "kakunin" && KB.CAN_EDIT ? `<button type="button" class="btn btn-ghost btn-sm" onclick="nrEdit()">✏️ この文を直す</button>` : ""}
+    <div id="nrSugWrap" style="${uses ? "" : "display:none"};width:100%"><label style="display:block;font-size:12.5px;font-weight:800">提案・案内する内容（{提案} に入ります）</label>
+      <textarea id="nrSuggest" rows="2" style="width:100%" placeholder="例：15：00～16：30で鶯谷でのご予約でしたら90分／かんなさん、朝倉りかさん" oninput="netReply()">${esc(keep)}</textarea></div>`;
+}
+{ const __netReplyNR = netReply; netReply = function(){ try{ if(!$("nrBar")) nrBarPaint(); }catch(e){} return __netReplyNR.apply(this, arguments); }; }
+function nrEdit(){
+  const k = NR_KIND, T = nrTpls(); if(!T[k]) return;
+  let bg = $("nrEdBg");
+  if(!bg){ bg = document.createElement("div"); bg.id = "nrEdBg"; bg.className = "modal-bg"; document.body.appendChild(bg); }
+  bg.innerHTML = `<div class="modal" style="max-width:640px"><button class="x" onclick="$('nrEdBg').classList.remove('show')">×</button>
+    <h2>✏️ ${esc(T[k].name)}</h2>
+    <p style="font-size:12.5px;color:var(--sub);line-height:1.7;margin:0 0 8px">{名前} {店名} {月日} {開始} {キャスト} {コース} {場所} {料金} {支払} {提案} {署名} は、その予約の内容になります（内勤みんな同じ文）。</p>
+    <textarea id="nr_text" rows="16" style="width:100%;font-family:inherit;font-size:13.5px">${esc(T[k].text)}</textarea>
+    <div style="display:flex;gap:6px;margin-top:8px"><button type="button" class="btn btn-primary" style="flex:1" onclick="nrSave('${k}')">保存</button>
+      <button type="button" class="btn btn-ghost" onclick="if(confirm('はじめの文にもどしますか？'))$('nr_text').value=NR_DEF['${k}'].text">はじめの文にもどす</button></div></div>`;
+  bg.classList.add("show");
+}
+async function nrSave(k){
+  const v = Object.assign({}, (M.set && M.set.net_reply_tpls) || {}, { [k]: $("nr_text").value });
+  try{ q(await sb.from("kb_settings").upsert({ key: "net_reply_tpls", value: v, note: "📩 お客さまへの返信のテンプレ（②〜⑦。受付で えらぶ）" }));
+    M.set.net_reply_tpls = v; $("nrEdBg").classList.remove("show"); toast("保存しました"); netReply(); }
+  catch(e){ toast("保存できませんでした：" + (e.message || e)); }
+}
+{ const __ofNR = openForm; openForm = function(){ NR_KIND = "kakunin"; const r = __ofNR.apply(this, arguments); try{ const b = $("nrBar"); if(b) b.remove(); }catch(e){} return r; }; }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .nrbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px;font-weight:800;font-size:13px}
+  .nrbar select{font-family:inherit;font-size:13px;font-weight:700;padding:5px 8px;border-radius:10px}
+</style>`);

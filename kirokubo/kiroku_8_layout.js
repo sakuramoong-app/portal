@@ -22,12 +22,8 @@
   // 左の列：メニュー
   const nav = document.getElementById("navArea");
   if(nav){
-    // 折りたためる（2026/11/18 店長）。開いている・閉じているは、この端末で覚えておく
-    const box = document.createElement("details"); box.className = "kbside-box kbside-nav"; box.id = "kbMenu";
-    let mo = "1"; try{ mo = localStorage.getItem("kbMenuOpen") ?? "1"; }catch(e){}
-    box.open = mo !== "0";
-    box.innerHTML = `<summary class="kbside-h">メニュー</summary>`;
-    box.addEventListener("toggle", () => { try{ localStorage.setItem("kbMenuOpen", box.open ? "1" : "0"); }catch(e){} });
+    const box = document.createElement("div"); box.className = "kbside-box kbside-nav"; box.id = "kbMenu";
+    box.innerHTML = `<div class="kbside-h">メニュー</div>`;
     nav.classList.remove("navinhead");
     box.appendChild(nav); side.appendChild(box);
   }
@@ -81,4 +77,26 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .kbside #staffPayGrid table.list td select,.kbside #staffPayGrid table.list td input{width:100% !important;box-sizing:border-box;max-width:100%}
   .kbside #staffPayGrid table.list td:nth-child(7) div{white-space:normal !important}
   .kbside #staffPayGrid table.list td:nth-child(9) .btn{width:100%}
+</style>`);
+/* ◀ 左の列（メニュー・今日の数字・内勤の日払い）ごと横にしまう → 右の列が広がる（2026/11/18 店長）
+   しまう・出すは、この端末で覚えておく（localStorage kbSideOpen） */
+(function kbSideToggle(){
+  const lay = document.getElementById("kbLayout"), side = document.getElementById("kbSide"); if(!lay || !side) return;
+  const btn = document.createElement("button"); btn.type = "button"; btn.id = "kbSideBtn"; btn.className = "kbsidebtn";
+  side.prepend(btn);
+  const set = open => {
+    lay.classList.toggle("kbside-off", !open);
+    btn.textContent = open ? "◀ しまう" : "▶";
+    btn.title = open ? "メニュー・今日の数字・日払いを横にしまう（右が広がります）" : "メニュー・今日の数字・日払いを出す";
+    try{ localStorage.setItem("kbSideOpen", open ? "1" : "0"); }catch(e){}
+  };
+  let o = "1"; try{ o = localStorage.getItem("kbSideOpen") ?? "1"; }catch(e){}
+  set(o !== "0");
+  btn.addEventListener("click", () => set(lay.classList.contains("kbside-off")));
+})();
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .kbsidebtn{align-self:flex-end;font-family:inherit;font-weight:800;font-size:12px;border:2px solid var(--line,#F3D6E0);background:#fff;border-radius:99px;padding:4px 12px;cursor:pointer;color:var(--ink,#4A3A40)}
+  .kblay.kbside-off .kbside{flex:0 0 auto;max-width:none;width:auto}
+  .kblay.kbside-off .kbside > :not(.kbsidebtn){display:none !important}
+  .kblay.kbside-off .kbsidebtn{align-self:flex-start;padding:8px 10px;font-size:14px}
 </style>`);
