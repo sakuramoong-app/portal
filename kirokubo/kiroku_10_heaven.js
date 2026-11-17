@@ -61,7 +61,7 @@ async function hvSkSync(all, dry){
         if(r.did && r.did.length) lines.push(`${HV_SK_STORES[k]} ${r.heaven}：${r.before} → ${dry ? "（ためし）" + r.did.join("・") : (r.after || r.did.join("・"))}${r.ok ? "" : " ⚠️うまくいかなかった"}`);
         else if(dry) lines.push(`${HV_SK_STORES[k]} ${r.heaven || r.name}：${r.why || "そのまま（" + r.before + "）"}`);
       });
-      if(dry && data.girls) lines.push(`（${HV_SK_STORES[k]}のヘブンの即ヒメ画面：${data.girls.length}人）`);
+      if(dry && data.girls) lines.push(`（${HV_SK_STORES[k]}のヘブンの即ヒメ画面：${data.girls.length}人・ヘブンのお店の記号 ${data.shopdir || "?"}）`);
     }catch(e){ err += `${HV_SK_STORES[k]}：${e.message || e}　`; }
   }
   if(!dry) hvSkMemSet(mem);
