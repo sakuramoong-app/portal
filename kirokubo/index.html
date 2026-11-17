@@ -4370,6 +4370,45 @@ function ieInsertCode(id, code){
 }
 function ieImgAt(id){ openFreeUp(no => ieInsertCode(id, `%MJPGFREE${no}-W%`), tplCur && tplCur.mk); }
 function ieVidAt(id){ openVideoUp(no => ieInsertCode(id, `%MP4FREE${no}-W%`), tplCur && tplCur.mk); }
+// 🔁 紹介文の中の画像を押す →「この画像を差しかえ」：同じ番号のまま、公式HPのFreeJPGの画像だけ入れかえる（2026/11/18 店長）
+//   紹介文のコード（%MJPGFREE番号-W%）は変えない。同じ番号をほかのキャスト・ほかの場所で使っていたら、そこも新しい画像になる
+let ieRepNo = 0;
+function ieRepOffer(img, n){
+  let m = document.getElementById("ieRepMenu");
+  if(!m){ m = document.createElement("div"); m.id = "ieRepMenu"; m.className = "ieRepMenu"; document.body.appendChild(m); }
+  ieRepNo = n;
+  m.innerHTML = `<b>🖼 画像 ${n}番</b><button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('ieRepFile').click()">🔁 この画像を差しかえ</button>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="fuCopy('%MJPGFREE${n}-W%')">📋 コード</button><button type="button" class="btn btn-ghost btn-sm" onclick="ieRepClose()">×</button>
+    <input type="file" id="ieRepFile" accept="image/*" style="display:none" onchange="ieRepGo(this.files[0]);this.value=''">`;
+  const r = img.getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(window.innerWidth - 330, r.left)) + "px"; m.style.top = (window.scrollY + r.bottom + 4) + "px"; m.style.display = "flex";
+}
+function ieRepClose(){ const m = document.getElementById("ieRepMenu"); if(m) m.style.display = "none"; }
+async function ieRepGo(file){
+  const n = ieRepNo; if(!file || !n || !tplCur || !CAN_EDIT) return;
+  const label = tplStoreOf(tplCur.mk).label;
+  if(!confirm(`${label} の公式HPの「FreeJPG画像」${n}番 を、選んだ画像に差しかえます。\nもとの ${n}番 の画像は消えます。紹介文はそのまま（${n}番のまま）で、新しい画像が出ます。\n※ ${n}番をほかのキャスト・ほかの場所でも使っていたら、そこも新しい画像になります。いいですか？`)) return;
+  ieRepClose(); toast(`⏳ ${n}番を差しかえています…（30秒くらい）`);
+  try{
+    const f = await fuPrepare(file);
+    const r = await hpFn({ action: "free_jpg_upload", store: tplCur.mk, mode: "replace", no: n, file: { b64: await fuB64(f), type: f.type, name: f.name || "" } });
+    if(!(r && (r.ok || /確かめられません/.test(r.error || "")))) throw new Error((r && r.error) || "うまくいきませんでした");
+    // 画面の画像を読みなおす（コードは data-code のままなので、保存には出ない）
+    document.querySelectorAll("#ieBox img").forEach(im => { const s = im.getAttribute("src") || ""; if(new RegExp("FreePIC/Free" + n + "\\.jpg").test(s)) im.src = s.replace(/[?#].*$/, "") + "?t=" + Date.now(); });
+    toast(r.ok ? `✅ ${n}番を差しかえました` : "⚠ " + r.error);
+  }catch(e){ toast("⚠ " + (e.message || e)); }
+}
+document.addEventListener("click", e => {
+  const img = e.target && e.target.closest && e.target.closest("#ieBox img");
+  if(!img){ if(!(e.target.closest && e.target.closest("#ieRepMenu"))) ieRepClose(); return; }
+  const m = (img.getAttribute("src") || "").match(/FreePIC\/Free(\d+)\.jpg/i);
+  if(!m || !CAN_EDIT) return;
+  ieRepOffer(img, Number(m[1]));
+});
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .ieRepMenu{position:absolute;z-index:400;display:none;gap:6px;align-items:center;flex-wrap:wrap;background:#fff;border:2px solid #C2185B;border-radius:12px;padding:6px 8px;box-shadow:0 6px 18px rgba(0,0,0,.18);max-width:320px}
+  #ieBox img[src*="FreePIC/Free"]{cursor:pointer}
+</style>`);
 function ieLinkAt(id){
   const u = prompt(SNIP_ASK.linkUrl, ""); if(u == null) return;
   if(!tplUrl(u)){ toast("https:// ではじまるURLを入れてください"); return; }

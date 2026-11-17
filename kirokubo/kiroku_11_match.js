@@ -64,10 +64,15 @@ fsAskPaint = function(){
   const el = $("fsAsk"); if(!el) return;
   const q0 = FS_Q.find(x => x[0] === fsQOpen);
   const cur = q0 ? (FS_CONDS.find(x => x.q === q0[0]) || {}).s : "";
+  // ① 何について？（種類のタブ）→ ② 答え（ラジオの形・別の箱）で、見た目を分ける（2026/11/18 店長：同じ形でわかりづらい）
+  const curOf = k => (FS_CONDS.find(x => x.q === k) || {}).s;
   el.innerHTML = `<div class="fsask"><b>🤔 お客様の希望（押すと条件が足されていきます）</b>
-    <div class="chips">${FS_Q.map(([k, l]) => `<button type="button" class="chip ${fsQOpen === k ? "on" : ""} ${FS_CONDS.some(x => x.q === k) || (k === "play" && fsPlay.size) ? "has" : ""}" onclick="fsAskPick('${k}')">${l}</button>`).join("")}</div>
-    ${q0 && q0[2].length ? `<div class="chips fsasks">${q0[2].map(([k, l]) => `<button type="button" class="chip ${cur === k ? "on" : ""}" onclick="fsAskSub('${k}')">${l}</button>`).join("")}
-      ${FS_LINE[q0[0] + "." + (cur || q0[2][0][0])] ? `<span class="hint2 fsline">目安：${esc(FS_LINE[q0[0] + "." + (cur || q0[2][0][0])][2])}</span>` : ""}</div>` : ""}
+    <div class="fsqstep">① 何について？</div>
+    <div class="fsqtabs">${FS_Q.map(([k, l]) => { const s = curOf(k), q1 = FS_Q.find(x => x[0] === k), s0 = s && q1[2].find(x => x[0] === s);
+      return `<button type="button" class="fsqtab ${fsQOpen === k ? "open" : ""} ${s || (k === "play" && fsPlay.size) ? "has" : ""}" onclick="fsAskPick('${k}')">${l}${s0 ? `<small>${esc(s0[1])}</small>` : k === "play" && fsPlay.size ? `<small>${fsPlay.size}こ</small>` : ""}<span class="fsqarr">${fsQOpen === k ? "▲" : "▼"}</span></button>`; }).join("")}</div>
+    ${q0 && q0[2].length ? `<div class="fsqans"><div class="fsqstep">② ${esc(q0[1])} の答えをえらぶ</div><div class="fsqopts">${q0[2].map(([k, l]) => `<button type="button" class="fsopt ${cur === k ? "on" : ""}" onclick="fsAskSub('${k}')"><span class="fsradio">${cur === k ? "●" : "○"}</span>${l}</button>`).join("")}</div>
+      ${FS_LINE[q0[0] + "." + (cur || q0[2][0][0])] ? `<div class="hint2 fsline">目安：${esc(FS_LINE[q0[0] + "." + (cur || q0[2][0][0])][2])}</div>` : ""}</div>`
+      : q0 && q0[0] === "play" ? `<div class="fsqans"><div class="fsqstep">② 下の「🎯 希望プレイで絞る」から えらぶ（いくつでも）</div></div>` : ""}
     ${FS_CONDS.length || fsPlay.size ? `<div class="fsconds">${FS_CONDS.map((x, i) => `<span class="fscond">${esc(fsLab(x.q, x.s))}<button type="button" onclick="fsCondDel(${i})" aria-label="外す">×</button></span>`).join("")}${[...fsPlay].map(k => `<span class="fscond play">🎯 ${esc((PLAYS.find(p => p[0] === k) || [k, k])[1])}<button type="button" onclick="fsTogglePlay('${k}')" aria-label="外す">×</button></span>`).join("")}</div>` : ""}</div>`;
 };
 fsAskPick = function(k){
@@ -134,7 +139,16 @@ function fsCtlAdd(){
   ctl.insertAdjacentHTML("beforeend", `<label class="fsnodate"><input type="checkbox" id="fs_nodate" onchange="fsPaint()" style="width:auto"> 日にち未定（タイプから出勤日をさがす）</label>`);
 }
 function fsDateSet(d){ if(!d) return; if($("fs_nodate")) $("fs_nodate").checked = false; fsGoDay(d); }
-let fsNdSeq = 0;
+let fsNdSeq = 0, FS_KANA = "";
+// あかさたな（日にち未定の一覧）：名前の読み（kana）→ なければ名前の1文字目
+const FS_KANA_ROWS = [["あ", "あいうえおぁぃぅぇぉ"], ["か", "かきくけこがぎぐげご"], ["さ", "さしすせそざじずぜぞ"], ["た", "たちつてとだぢづでどっ"], ["な", "なにぬねの"],
+  ["は", "はひふへほばびぶべぼぱぴぷぺぽ"], ["ま", "まみむめも"], ["や", "やゆよゃゅょ"], ["ら", "らりるれろ"], ["わ", "わをんゎ"]];
+function fsKanaRow(c){
+  const s = String((c && (c.kana || c.official_name || c.temp_name)) || "").normalize("NFKC").trim();
+  const ch = (s[0] || "").replace(/[ァ-ヶ]/, x => String.fromCharCode(x.charCodeAt(0) - 0x60));
+  const r = FS_KANA_ROWS.find(([, cs]) => cs.includes(ch)); return r ? r[0] : "他";
+}
+function fsKanaSet(r){ FS_KANA = r; fsNoDatePaint(); }
 async function fsNoDatePaint(){
   const out = $("fsOut"); if(!out) return;
   const seq = ++fsNdSeq;
@@ -150,8 +164,11 @@ async function fsNoDatePaint(){
     const ds = days.map(x => ({ d: x.d, s: x.sh[c.shift_name] || x.sh[c.official_name] })).filter(x => x.s);
     return { c, ds, sc: fsScore(c) };
   }).filter(x => x.ds.length).sort((a, b) => (b.sc.rate ?? 0) - (a.sc.rate ?? 0) || a.ds[0].d.localeCompare(b.ds[0].d));
-  const top = has ? L.filter(x => x.sc.rate > 0).slice(0, 30) : L.slice(0, 30);
+  const L2 = has ? L.filter(x => x.sc.rate > 0) : L;
+  const top = (FS_KANA ? L2.filter(x => fsKanaRow(x.c) === FS_KANA) : L2).slice(0, FS_KANA ? 200 : 30);
+  const rowsN = r => L2.filter(x => fsKanaRow(x.c) === r).length;
   out.innerHTML = `<div class="fshead">📅 日にち未定：${has ? "希望に合う子" : "この先2週間に出勤がある子"} <b>${top.length}人</b>${has ? ` <span class="fsask-n">条件 ${FS_CONDS.length + fsPlay.size}こ・マッチ率の高い順</span>` : `<span class="hint2">（上でお客様の希望を足すと、合う子にしぼれます）</span>`}</div>`
+    + `<div class="fskana"><button type="button" class="${FS_KANA ? "" : "on"}" onclick="fsKanaSet('')">ぜんぶ</button>${FS_KANA_ROWS.map(([r]) => { const n = rowsN(r); return `<button type="button" class="${FS_KANA === r ? "on" : ""}" ${n ? "" : "disabled"} onclick="fsKanaSet('${r}')">${r}${n ? `<small>${n}</small>` : ""}</button>`; }).join("")}</div>`
     + (top.length ? `<div class="fsgrid">${top.map((x, i) => `<div class="fsrow fscard ok" data-cid="${esc(x.c.id)}">${i === 0 && has ? `<span class="fsbest">👑 おすすめ</span>` : ""}
       <div class="fsc-top">${typeof KBF !== "undefined" ? KBF.img(x.c, 52, store) : ""}<div class="fsc-n"><b>${esc(castName(x.c.id))}</b>${x.sc.rate != null ? `<span class="fsrate2 ${x.sc.rate >= 80 ? "hi" : x.sc.rate < 50 ? "lo" : ""}">マッチ ${x.sc.rate}%</span>` : ""}</div></div>
       ${x.sc.parts.length ? fsPartsHtml(x.sc.parts) : ""}
@@ -173,8 +190,8 @@ function fsNdGo(d, cid){
     fsAskPaint(); return fsNoDatePaint(); }
   return __fsPaintM.apply(this, arguments);
 }; }
-{ const __fsClearM = fsClear; fsClear = function(){ FS_CONDS = []; fsQOpen = ""; if($("fs_nodate")) $("fs_nodate").checked = false; return __fsClearM.apply(this, arguments); }; }
-{ const __ofM = openForm; openForm = function(){ FS_CONDS = []; fsQOpen = ""; try{ FS_KEEP = []; }catch(e){} if($("fs_nodate")) $("fs_nodate").checked = false; return __ofM.apply(this, arguments); }; }
+{ const __fsClearM = fsClear; fsClear = function(){ FS_CONDS = []; fsQOpen = ""; FS_KANA = ""; if($("fs_nodate")) $("fs_nodate").checked = false; return __fsClearM.apply(this, arguments); }; }
+{ const __ofM = openForm; openForm = function(){ FS_CONDS = []; fsQOpen = ""; FS_KANA = ""; try{ FS_KEEP = []; }catch(e){} if($("fs_nodate")) $("fs_nodate").checked = false; return __ofM.apply(this, arguments); }; }
 document.head.insertAdjacentHTML("beforeend", `<style>
   .fsask .chip.has{box-shadow:inset 0 -3px 0 #6E5BD6}
   .fsline{margin-left:6px;font-size:12px}
@@ -189,5 +206,25 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .fsrate2.hi{background:#2E9E4A;color:#fff} .fsrate2.lo{background:#FFE8EC;color:#c0392b}
   .fscard{position:relative} .fsbest{position:absolute;top:-9px;left:8px;background:#F2C94C;color:#3a2a00;font-weight:900;font-size:12px;border-radius:99px;padding:1px 9px;z-index:1}
   .fsnodate{font-weight:800}
+  .fsqstep{font-size:12px;font-weight:900;color:#6E5BD6;margin:6px 0 3px}
+  .fsqtabs{display:flex;flex-wrap:wrap;gap:5px}
+  .fsqtab{font-family:inherit;font-size:13px;font-weight:800;border:1.5px solid #CFC7F5;background:#fff;color:#3B3480;border-radius:8px;padding:5px 8px;cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+  .fsqtab small{background:#6E5BD6;color:#fff;border-radius:99px;padding:0 7px;font-size:11px}
+  .fsqtab.has{border-color:#6E5BD6;background:#F0EDFF}
+  .fsqtab.open{background:#3B3480;border-color:#3B3480;color:#fff;border-radius:8px 8px 0 0;margin-bottom:-6px;padding-bottom:9px}
+  .fsqtab.open small{background:#fff;color:#3B3480}
+  .fsqarr{font-size:9px;opacity:.7}
+  .fsqans{background:#3B3480;border-radius:0 10px 10px 10px;padding:6px 10px 8px;margin-top:5px}
+  .fsqans .fsqstep{color:#DCD6FA;margin-top:0}
+  .fsqans .fsline{color:#DCD6FA;margin:4px 0 0}
+  .fsqopts{display:flex;flex-wrap:wrap;gap:6px}
+  .fsopt{font-family:inherit;font-size:13.5px;font-weight:800;border:none;background:#fff;color:#3B3480;border-radius:99px;padding:5px 14px 5px 10px;cursor:pointer}
+  .fsopt.on{background:#F2C94C;color:#3a2a00}
+  .fsradio{margin-right:5px}
+  .fskana{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+  .fskana button{font-family:inherit;font-weight:900;font-size:13px;border:1.5px solid #DCD6FA;background:#fff;color:#3B3480;border-radius:8px;padding:3px 9px;cursor:pointer}
+  .fskana button small{font-size:10px;margin-left:2px;color:#8a83b8}
+  .fskana button.on{background:#6E5BD6;border-color:#6E5BD6;color:#fff} .fskana button.on small{color:#fff}
+  .fskana button:disabled{opacity:.35;cursor:default}
   .fsnd-days{margin-top:4px}
 </style>`);
