@@ -4686,6 +4686,8 @@ function renderOnb(c){
   const sel = (id, list, v, emptyLabel) => `<select id="${id}">${list.map(x => `<option value="${x}" ${x === (v || "") ? "selected" : ""}>${x || emptyLabel}</option>`).join("")}</select>`;
   $("e_onb").innerHTML = `
     <div class="f"><label>👜 仕事ポーチ（在籍作成ルームで選んだもの）</label><div id="onb_kit" style="font-size:14px;padding:4px 2px">${c && (c.room_ids || []).length ? "読んでいます…" : "在籍作成ルームとつながっていません"}</div></div>
+    <div class="f" style="margin-top:6px"><label>📧 メールアドレス（写メ日記・姫デコの登録など）</label><input id="onb_email" type="email" maxlength="200" value="${esc(o.email || "")}" placeholder="在籍作成ルームでもらったアドレス"></div>
+    <div id="onb_room"></div>
     <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${ONB_STEPS.map(([k, l]) => `<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
       <input type="checkbox" id="onb_${k}" ${o[k] ? "checked" : ""} style="width:auto;transform:scale(1.25)"> ${l}
       ${o[k] ? `<small style="color:#1f9d6b;font-weight:800">✅ ${o[k].at ? esc(md2(o[k].at)) + " " + esc(o[k].by || "") : "エクセルから"}</small>` : `<small style="color:#c77700;font-weight:800">まだ</small>`}</label>`).join("")}</div>
@@ -4700,19 +4702,69 @@ function renderOnb(c){
     ${o.excel ? `<div style="margin-top:8px;background:#F3FAF4;border-radius:10px;padding:6px 10px;font-size:12.5px;line-height:1.7;color:#4a6b50">📗 <b>エクセル（バック一覧）に書いてあったこと</b>
       ${[["pouch", "仕事ポーチ"], ["docs", "説明・業務委託・印鑑"], ["ic", "IC"], ["tabako", "タバコ"]].filter(([k]) => o.excel[k]).map(([k, l]) => `<div><small style="color:#8aa08e">${l}：</small>${esc(o.excel[k])}</div>`).join("")}</div>` : ""}`;
   if(c && (c.room_ids || []).length){
-    sb.from("room_rooms").select("room_id,kit_choice,created_at").in("room_id", c.room_ids).then(res => {
+    sb.from("room_rooms").select("room_id,kit_choice,created_at,cast_name,email,wig_choice,talk_checklist,checklist,stores,back60,back90,back120,back_honshimei60,back_honshimei90").in("room_id", c.room_ids).then(res => {
       if(editingId !== c.id || !$("onb_kit")) return;
       const rs = (res.data || []).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+      ROOM_CUR = rs[0] || null; try{ roomPaint(c); }catch(e){}
       const k = rs.map(r => r.kit_choice && r.kit_choice.type).find(Boolean);
       $("onb_kit").innerHTML = k ? `<b>${esc(KIT_LABEL[k] || k)}</b>` : `<span style="color:#c77700;font-weight:800">まだ選んでいません</span>`;
     });
   }
 }
+/* 🚪 在籍作成ルーム → キャスト台帳（2026/11/17 店長：表OK）
+   ルームで入れた内容のうち、台帳と重なるものを見せて、「空いている欄だけ入れる」で入れる（入っている欄は上書きしない。保存は台帳の保存ボタンで）
+   ・メール → 📧 メールアドレス ／ ウィッグ・地毛 → 📝 備考 ／ 口頭説明 7つ全部 → 「面接で口頭の説明をした」
+   ・内勤チェックの「印鑑」「公的証明書コピー」→ 入店時の「印鑑」「公的証明書のコピー」
+   ・名前・在籍店舗・バックは、ちがうときに知らせるだけ（台帳は元データなので、自動では変えない） */
+let ROOM_CUR = null;
+const ROOM_WIG = r => { const w = (r && r.wig_choice) || {}; return w.type === "wig" ? "ウィッグを使う" : w.type === "jimoto" ? "地毛で出勤" + (w.hairMake === true ? "（ヘアメイクに行く）" : w.hairMake === false ? "（ヘアメイクに行かない）" : "") : ""; };
+const roomDone = (cl, k) => !!(cl && cl[k] && cl[k].done);
+const roomTalkAll = r => { const t = (r && r.talk_checklist) || {}; return Object.values(t).filter(v => v && v.done).length >= 7; };
+function roomFillPlan(r){
+  const a = [];
+  if(!r) return a;
+  if(r.email && $("onb_email") && !$("onb_email").value.trim()) a.push(["email", "📧 メール：" + r.email]);
+  const wig = ROOM_WIG(r); if(wig && $("onb_memo") && !/ウィッグ|地毛/.test($("onb_memo").value)) a.push(["wig", "📝 備考に「" + wig + "」"]);
+  if(roomTalkAll(r) && $("onb_explain") && !$("onb_explain").checked) a.push(["explain", "✅ 面接で口頭の説明をした"]);
+  if(roomDone(r.checklist, "inkanReceived") && $("onb_inkan") && !$("onb_inkan").checked) a.push(["inkan", "✅ 印鑑"]);
+  if(roomDone(r.checklist, "idCopyReceived") && $("onb_idcopy") && !$("onb_idcopy").checked) a.push(["idcopy", "✅ 公的証明書のコピー"]);
+  return a;
+}
+function roomPaint(c){
+  const el = $("onb_room"), r = ROOM_CUR; if(!el) return;
+  if(!r){ el.innerHTML = ""; return; }
+  const plan = roomFillPlan(r), nm = c ? (typeof nameOf === "function" ? nameOf(c) : (c.official_name || c.temp_name || c.name || "")) : "";
+  const warn = [];
+  if(r.cast_name && nm && r.cast_name !== nm) warn.push(`名前：ルームは「${esc(r.cast_name)}」・台帳は「${esc(nm)}」`);
+  el.innerHTML = `<div class="roombox"><b>🚪 在籍作成ルームの内容</b>
+    <div class="roomrows">${[["名前", r.cast_name], ["メール", r.email], ["ウィッグ・地毛", ROOM_WIG(r)], ["口頭説明", roomTalkAll(r) ? "7つ全部 説明ずみ" : "まだ"], ["印鑑", roomDone(r.checklist, "inkanReceived") ? "受け取りずみ" : "まだ"], ["公的証明書コピー", roomDone(r.checklist, "idCopyReceived") ? "受け取りずみ" : "まだ"],
+      ["バック（ルーム）", [r.back60, r.back90, r.back120].some(Boolean) ? `60分 ${esc(r.back60 || "—")}／90分 ${esc(r.back90 || "—")}／120分 ${esc(r.back120 || "—")}・本指名 60分 ${esc(r.back_honshimei60 || "—")}／90分〜 ${esc(r.back_honshimei90 || "—")}` : ""]].filter(x => x[1]).map(([k, v]) => `<div><small>${k}</small>${esc(v)}</div>`).join("")}</div>
+    ${warn.length ? `<div class="roomwarn">⚠️ ${warn.join("<br>")}（台帳は自動では変えません）</div>` : ""}
+    <div class="hint">バックは、台帳のランクの額とちがうときだけ「特例」で入れてください（自動では入れません）</div>
+    ${CAN_EDIT && plan.length ? `<button type="button" class="btn btn-primary btn-sm" onclick="roomFill()">🚪 空いている欄だけ入れる（${plan.length}つ）</button><div class="hint">${plan.map(p => esc(p[1])).join("　")}</div>` : `<div class="hint">台帳にもう入っています</div>`}</div>`;
+}
+function roomFill(){
+  const r = ROOM_CUR; if(!r) return;
+  const plan = roomFillPlan(r), fire = el => { try{ el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); }catch(e){} };
+  plan.forEach(([k]) => {
+    if(k === "email"){ $("onb_email").value = r.email; fire($("onb_email")); }
+    if(k === "wig"){ const m = $("onb_memo"); m.value = (m.value.trim() ? m.value.trim() + "\n" : "") + "ウィッグ・地毛：" + ROOM_WIG(r) + "（在籍作成ルーム）"; fire(m); }
+    if(["explain", "inkan", "idcopy"].includes(k)){ $("onb_" + k).checked = true; fire($("onb_" + k)); }
+  });
+  toast(plan.length ? `🚪 ${plan.length}つ入れました。下の「保存」を押してください` : "入れるものはありません");
+  roomPaint(casts.find(x => x.id === editingId));
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .roombox{margin-top:10px;border:2px solid #C9B6EA;border-radius:12px;background:#F8F4FF;padding:8px 10px;display:grid;gap:6px;font-size:13px}
+  .roombox .roomrows{display:grid;gap:3px} .roombox .roomrows small{display:inline-block;min-width:110px;color:#8a7f99;font-weight:800}
+  .roombox .roomwarn{color:#c0392b;font-weight:800}
+</style>`);
 function onbProfTabako(v){ const el = $("onb_tabakoProf"); if(el) el.textContent = v ? "プロフフォームの答え：" + v : ""; }
 function getOnb(c){
   const o = Object.assign({}, (c && c.onboarding) || {}), by = operatorName(), at = new Date().toISOString();
   ONB_STEPS.forEach(([k]) => { const on = $("onb_" + k).checked; if(on && !o[k]) o[k] = { at, by }; if(!on) delete o[k]; });
   o.ic = $("onb_ic").value; o.tabako = $("onb_tabako").value;
+  if($("onb_email")) o.email = $("onb_email").value.trim();   // 📧 在籍作成ルームでもらったメール（2026/11/17）
   // 💊 よく使う薬・📝 備考（2026/11/14 店長）
   if($("onb_memo")){ o.meds = [...document.querySelectorAll(".onb_med:checked")].map(x => x.value); o.meds_other = $("onb_medOther").value.trim(); o.memo = $("onb_memo").value.trim(); }
   return o;
