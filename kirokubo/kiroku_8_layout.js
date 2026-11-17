@@ -122,3 +122,32 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .kbdaywarn{background:#2F6FD0;color:#fff;font-weight:900;font-size:14px;border-radius:12px;padding:6px 12px;margin:0 0 6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
   .kbdaywarn .btn{background:#fff;color:#2F6FD0;border-color:#fff}
 </style>`);
+/* 🗺 今どこに誰が：手で動かした札を いちばんに（2026/11/18 店長：予約の終了時刻の前でも、動かした場所のまま）
+   前は、予約を「仕事中」にしていると、その予約に備考などを書いただけ（updated_at が新しくなる）で、札が仕事中にもどっていた
+   → 「仕事中」にした時刻（備考の「状態 →「仕事中」」の時刻。なければ予約の開始時刻）と、札を動かした時刻をくらべて、新しいほう */
+function workSince(r){
+  const l = Array.isArray(r && r.memo_log) ? r.memo_log : [];
+  let t = 0;
+  l.forEach(m => { if(/仕事中/.test(String(m && m.text || "")) && m.at){ const v = Date.parse(m.at) || 0; if(v > t) t = v; } });
+  return t || Date.parse(r && r.start_at || 0) || 0;
+}
+{ const __autoWorkM = autoWork; autoWork = function(x){
+  const a = __autoWorkM.apply(this, arguments);
+  if(a && a.r && a.r.status === "working") return Object.assign({}, a, { t: workSince(a.r) });
+  return a;
+}; }
+/* 🌸 背景にうすく文字をならべる（2026/11/18 店長：今日か今日以外かが、もっとわかるように。気持ち悪くない程度に）
+   今日：「本日のページ」（ピンク）／今日以外：「11/21(土) の画面」（青） */
+function kbDayMark(text, color){
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='420' height='220'><text x='30' y='120' transform='rotate(-18 210 110)' font-family='sans-serif' font-size='26' font-weight='800' fill='${color}' fill-opacity='0.07'>${text}</text></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+{ const __tintMark = kbDayTint; kbDayTint = function(){
+  __tintMark.apply(this, arguments);
+  try{
+    const today = KB.bizDateOf(), other = !!day && day !== today, d = new Date((day || today) + "T12:00:00Z");
+    const img = other ? kbDayMark(`${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) の画面`, "#2F6FD0") : kbDayMark("本日のページ", "#E5638C");
+    document.body.style.backgroundImage = img;
+    document.body.style.backgroundAttachment = "fixed";
+  }catch(e){}
+}; }

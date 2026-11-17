@@ -1480,7 +1480,7 @@ function buildMsg(c){
     地図行: hotelMapUrl() ? "\n【地図】" + hotelMapUrl() : "",
     バック有OP: backOps, バック無OP: noBackOps,
     特記事項行: $("f_castnote") && $("f_castnote").value.trim() ? "\n【特記事項】" + $("f_castnote").value.trim() : "",
-    お金: !c.pay ? "【お支払い】⚠️ まだ決まっていません（決まったら送りなおす）" : fillVars(T[c.pay === "split" ? "split" : c.pay === "cash" ? "cash" : "card"], money),   // 支払い方法を選んでいないのに「カード」の文が出ていた（2026/11/18 店長）
+    お金: !c.pay ? "【お支払い】⚠️ まだ決まっていません（決まったら送りなおす）" + fillVars(String(T.cash || "").replace(/^[^\n]*/, ""), money) : fillVars(T[c.pay === "split" ? "split" : c.pay === "cash" ? "cash" : "card"], money),   // 支払い方法を選んでいないのに「カード」の文が出ていた（2026/11/18 店長）
   };
   $("msg").value = fillVars(T.main, V);
 }
