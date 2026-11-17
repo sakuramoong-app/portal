@@ -4816,6 +4816,8 @@ function ncPaint(){
     if(!sl.addr) return sl.no === 3 && /ranking-deli/i.test(cur) ? ["ok", "✅ 駅チカが入っている"] : ["ng", cur ? "（今のまま）" : "⚠ アドレスがない"];
     const lp = a => String(a || "").toLowerCase(), same = sl.no === 7 ? lp(cur).split("@")[0] === lp(sl.addr).split("@")[0] && /manzoku/.test(lp(cur)) : lp(cur) === lp(sl.addr);   // マンゾクは @ の前が同じならOK
     if(same) return ["ok", "✅ 入っている"];
+    const dupAt = sl.addr ? now.findIndex((v, i) => i !== sl.no - 1 && lp(v) === lp(sl.addr)) : -1;   // 同じアドレスがほかの番号に入っている（2回届いてしまう）11/18
+    if(!cur && dupAt >= 0) return ["dup", "⚠ 同じアドレスが " + (dupAt + 1) + "番に入っている（入れない）"];
     if(!cur) return ["new", "🆕 入れる予定"];
     return ["diff", "⚠ ちがうものが入っている（さわらない）"]; };
   bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:900px;width:100%;max-height:90vh;overflow:auto;font-size:14px">
@@ -4844,7 +4846,7 @@ function ncPaint(){
     .nctbl th{background:#FFF0F5;font-size:12px} .nctbl small{display:block;color:#9C8B8F} .ncaddr{font-family:monospace;font-size:12px;word-break:break-all}
     .ncact{margin-top:10px;padding:10px;border:2px solid #F2A7C3;border-radius:12px;background:#FFF7FA} .ncmail{margin-top:12px;padding:10px;border:1.5px dashed #F3D6E0;border-radius:12px} .ncmail .btn{margin:4px 4px 0 0}
     .ncmsg{margin-top:10px;padding:8px 10px;border-radius:10px;background:#F6F4FF;font-size:13px;line-height:1.6}
-    .ncno{color:#9C8B8F} .nctbl tr.ok td:last-child{color:#1E7A3C} .nctbl tr.new td:last-child{color:#C2185B} .nctbl tr.diff td:last-child,.nctbl tr.ng td:last-child{color:#B7791F}</style>`);
+    .ncno{color:#9C8B8F} .nctbl tr.ok td:last-child{color:#1E7A3C} .nctbl tr.new td:last-child{color:#C2185B} .nctbl tr.diff td:last-child,.nctbl tr.ng td:last-child,.nctbl tr.dup td:last-child{color:#B7791F}</style>`);
 }
 // 台帳の「📧 メールアドレス」（画面に入れたばかりのものを先に）
 function ncEmail(){ const el = $("onb_email"), c = NC_CUR && casts.find(x => x.id === NC_CUR.cid); return String((el && el.value) || (c && c.onboarding && c.onboarding.email) || "").trim(); }
