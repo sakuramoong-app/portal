@@ -48,6 +48,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .kbside{flex:1 1 230px;max-width:280px;min-width:0;display:flex;flex-direction:column;gap:10px}
   .kbcol{flex:999 1 560px;min-width:0}
   @media (max-width:900px){ .kbside{max-width:none} }
+  /* 左の列は、スクロールしてもついてくる（2026/11/18 店長）。長いときは列の中だけスクロール。せまい画面（上下にならぶとき）はふつう */
+  @media (min-width:901px){ .kbside{position:sticky;top:8px;max-height:calc(100vh - 16px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin} }
   .kbside-box{background:#fff;border:2px solid var(--line,#F3D6E0);border-radius:16px;padding:8px 10px;margin:0 !important}
   .kbside-h{font-size:12px;font-weight:800;color:var(--sub,#7A6670);padding:2px 4px 6px;cursor:pointer} .kbside-nav:not([open]) .kbside-h{padding-bottom:2px}
   .kbside-nav .kbnav{display:flex !important;flex-direction:column;align-items:stretch;gap:6px;margin:0 !important}
