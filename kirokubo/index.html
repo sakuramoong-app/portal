@@ -3323,7 +3323,8 @@ function openFreeUp(onDone, store){
       <button class="btn btn-ghost" onclick="if(!fuBusy) document.getElementById('freeUpBg').remove()">閉じる</button></div>
     <div id="fu_msg" style="margin-top:8px"></div>
     <div id="fu_done"></div>
-    <div id="fu_lib"></div></div>`;
+    <div id="fu_lib"></div>
+    <details style="margin-top:12px"><summary class="hint" style="cursor:pointer">🔎 GIF・Free画像の画面を読む（ためし・読むだけ）</summary><div class="hint">FreeGIF画像一覧・Free画像一覧からもアップできるようにするための下しらべです。押して出てきた文を、ぜんぶコピーしてClaudeに貼ってください（パスワードなどは出ません）。</div><button type="button" class="btn btn-ghost btn-sm" onclick="fuPeek()">🔎 読む</button><textarea id="fu_peek" rows="6" readonly style="width:100%;margin-top:6px;display:none;font-size:11px"></textarea></details></div>`;
   const drop = $("fu_drop");
   drop.addEventListener("dragover", e => { e.preventDefault(); drop.style.background = "#FFE3EE"; });
   drop.addEventListener("dragleave", () => { drop.style.background = "#FFF7FA"; });
@@ -3375,6 +3376,13 @@ async function fuUpload(){
   fuBusy = false;
 }
 function fuCopy(t){ navigator.clipboard.writeText(t).then(() => toast("📋 コピーしました：" + t)); }
+// 🔎 GIF・Free画像の画面の形を読む（読むだけ）→ Claude に貼ってもらう（2026/11/18）
+async function fuPeek(){
+  const ta = $("fu_peek"); if(!ta) return; ta.style.display = ""; ta.value = "⏳ 読んでいます…（1分くらい）";
+  const store = $("fu_store").value, out = [];
+  for(const kind of ["FreeGIF画像一覧", "Free画像一覧"]){ try{ out.push(await hpFn({ action: "free_peek", store, kind })); }catch(e){ out.push({ kind, error: String(e.message || e) }); } }
+  ta.value = JSON.stringify(out); ta.select();
+}
 // 🔁 フリー画像：番号を決めて差しかえ（2026/11/18 店長：空いている番号だけでなく、今ある番号と入れかえたい）
 //   上で画像を選んで →「📚 アップずみの画像を見る」→ 差しかえたい番号の「🔁 この番号に差しかえ」。もとの画像は消える（紹介文のコードは同じ番号のまま）
 async function fuReplaceNo(n){
