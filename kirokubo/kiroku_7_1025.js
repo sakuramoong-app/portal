@@ -456,7 +456,7 @@ renderDummyMatch = async function(){
   if(!editing && sameOn.length && !sameOn.includes($("f_cast").value)){
     const cid = sameOn[0]; $("f_cast").value = cid;
     if($("f_cast").value !== cid && $("f_castAll")){ $("f_castAll").checked = true; fillCastSel(); $("f_cast").value = cid; }
-    if($("f_cast").value === cid){ onCast(); setVisit(visitFrom(custSeen || custPast, cid)); toast(`🎭 前に「${name}」で行った ${castName(cid)} にしました（${visit === "honshi" ? "本指名" : "キャストを確かめてください"}）`); }
+    if($("f_cast").value === cid){ onCast(); autoVisit(visitFrom(custSeen || custPast, cid)); toast(`🎭 前に「${name}」で行った ${castName(cid)} にしました（${visit === "honshi" ? "本指名" : "キャストを確かめてください"}）`); }
   }
   const foot = [...el.children].find(x => /％は身長/.test(x.textContent || "")); if(foot) el.appendChild(foot);   // 説明はいちばん下に
 };
@@ -738,7 +738,7 @@ function dmAutoApply(){
   const s = dmSuggest, store = $("f_store").value; if(!s || s.off) return;
   const { p, md, owner } = s;
   if(owner){
-    setDmMode("named"); $("f_named").value = owner.id; onNamedPick(); setVisit(visitFrom(custSeen, owner.id));
+    setDmMode("named"); $("f_named").value = owner.id; onNamedPick(); autoVisit(visitFrom(custSeen, owner.id));
     toast(`👤 前回（${md}）と同じ「${p.dummy_name}」（${castName(owner.id)}）にしました`);
   } else if(dmBlocked(store)[p.dummy_name]){
     toast(`🚫 「${p.dummy_name}」は、${dmBlocked(store)[p.dummy_name]}なので選べません`);
@@ -746,7 +746,7 @@ function dmAutoApply(){
     setDmMode("dummy");
     if(![...$("f_dummy").options].some(o => o.value === p.dummy_name)) $("f_dummy").insertAdjacentHTML("beforeend", `<option>${esc(p.dummy_name)}</option>`);
     $("f_dummy").value = p.dummy_name;
-    if(p.cast_id){ $("f_cast").value = p.cast_id; if($("f_cast").value !== p.cast_id && $("f_castAll")){ $("f_castAll").checked = true; fillCastSel(); $("f_cast").value = p.cast_id; } onCast(); setVisit(visitFrom(custSeen, p.cast_id)); }
+    if(p.cast_id){ $("f_cast").value = p.cast_id; if($("f_cast").value !== p.cast_id && $("f_castAll")){ $("f_castAll").checked = true; fillCastSel(); $("f_cast").value = p.cast_id; } onCast(); autoVisit(visitFrom(custSeen, p.cast_id)); }
     recalc(); renderDummyMatch();
     toast(`🎭 前回（${md}）と同じ「${p.dummy_name}」${p.cast_id ? "（" + castName(p.cast_id) + "）" : ""}にしました`);
   }

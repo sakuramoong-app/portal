@@ -158,7 +158,7 @@ const __openFormR = openForm;
 openForm = function(id){
   const r = id ? rows.find(x=>x.id === id) : null;
   guestFlags = new Set((r && r.guest_flags) || []);
-  backOvFor = -1; custPast = null;   // 新しく開いたら、手で直した報酬・お客さんの履歴は読みなおす
+  backOvFor = -1; custPast = null; custSeen = null;   // 新しく開いたら、手で直した報酬・お客さんの履歴は読みなおす
   $("castChecks").dataset.cast = "";
   __openFormR(id);
   renderGuestChips();

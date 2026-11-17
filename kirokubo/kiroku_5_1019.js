@@ -1114,12 +1114,14 @@ cycleGone = async function(cid){
 };
 
 /* ---------- キャストを変えたら、本指名・店リピを決めなおす（電話番号で調べたお客さんのとき） ---------- */
+// 自動の種別（新規・店リピ・本指名）：登録ずみの予約を開いたときは、キャストを変えないかぎり保存されている種別のまま（2026/11/17 近藤ムムの本指名が、開くと店リピに見えた）
+function autoVisit(v){ if(typeof editing !== "undefined" && editing && editing.visit_kind && $("f_cast").value === editing.cast_id) return; setVisit(v); }
 const __onCastV = onCast;
 onCast = function(){
   __onCastV.apply(this, arguments);
   if(!custPast) return;
   const cid = $("f_cast").value;
-  setVisit(visitFrom(custSeen || custPast, cid));
+  autoVisit(visitFrom(custSeen || custPast, cid));
 };
 
 /* ============================================================
