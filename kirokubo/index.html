@@ -3299,11 +3299,22 @@ if(location.hash === "#cmspeek") setTimeout(() => { if(CAN_EDIT) openCmsPeek(); 
 // 🖼 フリー画像をアップ（2026/11/9）：画像を選ぶ → 公式HPの「FreeJPG画像」の空いている番号に入れる → 紹介文に入れるコード（%MJPGFREE番号-W% など）を出す
 //   使っている番号は上書きしない（アプリと管理画面の両方で確かめる）
 let fuFile = null, fuBusy = false;
+// 🖼 どの一覧に入れるか（2026/11/18 店長：FreeGIF画像一覧・Free画像一覧からも）。テンプレ・紹介文から開いたときは JPG だけ
+let FU_KIND = "jpg";
+const FU_K = {
+  jpg: { label: "FreeJPG画像", ext: ".jpg", code: n => `%MJPGFREE${n}-W%`, hint: "ふつうの写真" },
+  gif: { label: "FreeGIF画像", ext: ".gif", code: n => `%MGIFFREE${n}-W%`, hint: "動くGIF・バナー" },
+  pic: { label: "Free画像", ext: "", code: n => `%MDISPFREE${n}%`, hint: "ボタンなど" },
+};
+const fuK = () => FU_K[FU_KIND] || FU_K.jpg;
+function fuKindSet(k){ if(fuBusy || !FU_K[k]) return; FU_KIND = k; fuFile = null; const b = document.getElementById("freeUpBg"); if(b) b.remove(); openFreeUp(null, fuStoreKeep); }
+let fuStoreKeep = "";
 const fuDone = [];   // この画面でアップしたもの（{ store, no, tags }）
 let fuOnDone = null;  // 🎨 テンプレの画像ブロックから開いたとき：アップした番号をそのブロックに入れる
 function openFreeUp(onDone, store){
   if(!CAN_EDIT) return;
   fuOnDone = typeof onDone === "function" ? onDone : null;
+  if(fuOnDone) FU_KIND = "jpg";   // テンプレ・紹介文の画像ブロックは JPG
   let bg = document.getElementById("freeUpBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "freeUpBg"; bg.className = "fuBg"; bg.style.cssText = "position:fixed;inset:0;z-index:330;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg);
     bg.addEventListener("click", e => { if(e.target === bg && !fuBusy) bg.remove(); }); }
@@ -3311,7 +3322,8 @@ function openFreeUp(onDone, store){
   const stores = Object.entries(PROF_STORE_OF).filter(([k]) => HP_SITE_OF[k]);
   bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:620px;width:100%;max-height:90vh;overflow:auto;font-size:14px">
     <div style="display:flex;align-items:center;gap:8px"><b style="font-size:17px">🖼 フリー画像をアップ</b><span style="margin-left:auto"></span><button class="btn btn-ghost btn-sm" onclick="openVideoUp(null, $('fu_store').value)">🎥 動画はこちら</button></div>
-    <div class="hint" style="margin:4px 0 10px">画像を選ぶと、公式HPの「FreeJPG画像」の <b>空いている番号</b> に入れて、紹介文に貼るコードを出します。使っている番号は上書きしません。</div>
+    ${fuOnDone ? "" : `<div class="fukinds">${Object.entries(FU_K).map(([k, x]) => `<button type="button" class="fukind ${FU_KIND === k ? "on" : ""}" onclick="fuStoreKeep=$('fu_store').value;fuKindSet('${k}')">${x.label}<small>${x.hint}</small></button>`).join("")}</div>`}
+    <div class="hint" style="margin:4px 0 10px">画像を選ぶと、公式HPの「${fuK().label}」の <b>空いている番号</b> に入れて、紹介文に貼るコード（${fuK().code("番号")}）を出します。使っている番号は上書きしません。${FU_KIND === "gif" ? "<b>GIFの画像だけ</b>入れられます。" : ""}</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">お店 <select id="fu_store">${stores.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select></div>
     <label id="fu_drop" style="display:block;border:2.5px dashed #F2A7C3;border-radius:14px;padding:18px;text-align:center;cursor:pointer;background:#FFF7FA">
       <input type="file" id="fu_input" accept="image/jpeg,image/png,image/gif" style="display:none" onchange="fuPick(this.files[0])">
@@ -3324,12 +3336,16 @@ function openFreeUp(onDone, store){
     <div id="fu_msg" style="margin-top:8px"></div>
     <div id="fu_done"></div>
     <div id="fu_lib"></div>
-    <details style="margin-top:12px"><summary class="hint" style="cursor:pointer">🔎 GIF・Free画像の画面を読む（ためし・読むだけ）</summary><div class="hint">FreeGIF画像一覧・Free画像一覧からもアップできるようにするための下しらべです。押して出てきた文を、ぜんぶコピーしてClaudeに貼ってください（パスワードなどは出ません）。</div><button type="button" class="btn btn-ghost btn-sm" onclick="fuPeek()">🔎 読む</button><textarea id="fu_peek" rows="6" readonly style="width:100%;margin-top:6px;display:none;font-size:11px"></textarea></details></div>`;
+    </div>`;
   const drop = $("fu_drop");
   drop.addEventListener("dragover", e => { e.preventDefault(); drop.style.background = "#FFE3EE"; });
   drop.addEventListener("dragleave", () => { drop.style.background = "#FFF7FA"; });
   drop.addEventListener("drop", e => { e.preventDefault(); drop.style.background = "#FFF7FA"; const f = e.dataTransfer.files[0]; if(f) fuPick(f); });
   if(store && $("fu_store")) $("fu_store").value = store;
+  if(!document.getElementById("fukindCss")) document.head.insertAdjacentHTML("beforeend", `<style id="fukindCss">
+    .fukinds{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 2px}
+    .fukind{font-family:inherit;font-weight:800;font-size:13px;border:2px solid #F2A7C3;background:#fff;color:#8A2950;border-radius:10px;padding:5px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;line-height:1.3}
+    .fukind small{font-weight:700;font-size:11px;color:#9C8B8F} .fukind.on{background:#C2185B;border-color:#C2185B;color:#fff} .fukind.on small{color:#FFE3EE}</style>`);
   fuPaintDone();
 }
 document.addEventListener("paste", e => {
@@ -3353,6 +3369,7 @@ async function fuPrepare(f){
 }
 async function fuPick(f){
   $("fu_msg").innerHTML = "";
+  if(FU_KIND === "gif" && f && f.type !== "image/gif"){ fuFile = null; $("fu_msg").innerHTML = `<span style="color:#C0392B">FreeGIF画像には、GIFの画像を選んでください</span>`; $("fu_go").disabled = true; return; }
   try{ fuFile = await fuPrepare(f); }catch(e){ fuFile = null; $("fu_msg").innerHTML = `<span style="color:#C0392B">${esc(e.message)}</span>`; $("fu_go").disabled = true; return; }
   const u = URL.createObjectURL(fuFile);
   $("fu_prev").innerHTML = `<img src="${u}" style="max-width:100%;max-height:260px;border-radius:10px"><div class="hint">${Math.round(fuFile.size / 1024)}KB・べつの画像にするときは、もう一度ここを押す</div>`;
@@ -3362,10 +3379,10 @@ const fuB64 = f => new Promise((ok, ng) => { const r = new FileReader(); r.onloa
 async function fuUpload(){
   if(!fuFile || fuBusy) return;
   const store = $("fu_store").value, label = PROF_STORE_OF[store] || store;
-  if(!confirm(`${label} の公式HPの「FreeJPG画像」に、空いている番号でアップします。いいですか？`)) return;
+  if(!confirm(`${label} の公式HPの「${fuK().label}」に、空いている番号でアップします。いいですか？`)) return;
   fuBusy = true; $("fu_go").disabled = true; $("fu_msg").innerHTML = "⏳ アップしています…（30秒くらいかかります。閉じないでね）";
   try{
-    const r = await hpFn({ action: "free_jpg_upload", store, file: { b64: await fuB64(fuFile), type: fuFile.type, name: fuFile.name || "" } });
+    const r = await hpFn({ action: "free_jpg_upload", kind: FU_KIND, store, file: { b64: await fuB64(fuFile), type: fuFile.type, name: fuFile.name || "" } });
     if(r && r.no && r.tags && (r.ok || /確かめられません/.test(r.error || ""))){
       fuDone.unshift({ sk: store, store: label, no: r.no, tags: r.tags, warn: r.ok ? "" : r.error, v: Date.now() });
       $("fu_msg").innerHTML = r.ok ? `<b style="color:#1E8E5A">✅ ${r.no}番にアップしました</b>` : `<span style="color:#B7791F">⚠ ${esc(r.error)}</span>`;
@@ -3389,10 +3406,10 @@ async function fuReplaceNo(n){
   if(!CAN_EDIT || fuBusy) return;
   if(!fuFile){ toast("先に上の「ここを押して画像を選ぶ」で、差しかえる画像を選んでください"); return; }
   const store = $("fu_store").value, label = PROF_STORE_OF[store] || store;
-  if(!confirm(`${label} の公式HPの「FreeJPG画像」の ${n}番 を、選んだ画像に差しかえます。\nもとの ${n}番 の画像は消えます（紹介文の %MJPGFREE${n}-W% はそのまま新しい画像になります）。いいですか？`)) return;
+  if(!confirm(`${label} の公式HPの「${fuK().label}」の ${n}番 を、選んだ画像に差しかえます。\nもとの ${n}番 の画像は消えます（紹介文の ${fuK().code(n)} はそのまま新しい画像になります）。いいですか？`)) return;
   fuBusy = true; $("fu_msg").innerHTML = `⏳ ${n}番を差しかえています…（30秒くらいかかります。閉じないでね）`;
   try{
-    const r = await hpFn({ action: "free_jpg_upload", store, mode: "replace", no: n, file: { b64: await fuB64(fuFile), type: fuFile.type, name: fuFile.name || "" } });
+    const r = await hpFn({ action: "free_jpg_upload", kind: FU_KIND, store, mode: "replace", no: n, file: { b64: await fuB64(fuFile), type: fuFile.type, name: fuFile.name || "" } });
     if(r && (r.ok || /確かめられません/.test(r.error || ""))){
       $("fu_msg").innerHTML = r.ok ? `<b style="color:#1E8E5A">✅ ${n}番を差しかえました</b>` : `<span style="color:#B7791F">⚠ ${esc(r.error)}</span>`;
       fuFile = null; $("fu_prev").innerHTML = "📁 ほかの画像もアップするときは、ここを押して選ぶ"; $("fu_go").disabled = true;
@@ -3406,16 +3423,16 @@ async function fuLib(){
   const el = $("fu_lib"); if(!el) return;
   const store = $("fu_store").value;
   el.innerHTML = `<div class="hint" style="margin-top:10px">⏳ ${esc(PROF_STORE_OF[store] || store)} のフリー画像を読んでいます…</div>`;
-  const r = await hpFn({ action: "free_jpg_upload", store, dry: true });
+  const r = await hpFn({ action: "free_jpg_upload", kind: FU_KIND, store, dry: true });
   if(!r || !r.ok || !Array.isArray(r.used)){ el.innerHTML = `<div style="color:#C0392B;margin-top:10px">⚠ ${esc((r && r.error) || "読めませんでした")}</div>`; return; }
-  const base = r.base || "";
-  el.innerHTML = `<div style="margin-top:12px;font-weight:800">📚 ${esc(r.store || "")} のフリー画像（${r.used.length}枚・新しい番号から）</div>
-    <div class="hint">画像を押すと <b>%MJPGFREE番号-W%</b> をコピーします。上で画像を選んでから「🔁 この番号に差しかえ」で、その番号に上書きできます${fuOnDone ? "（🎨 テンプレから開いたときは「これを使う」で画像ブロックに入ります）" : ""}。</div>
+  const base = r.base || "", K = fuK();
+  el.innerHTML = `<div style="margin-top:12px;font-weight:800">📚 ${esc(r.store || "")} の${K.label}（${r.used.length}枚・新しい番号から）</div>
+    <div class="hint">画像を押すと <b>${K.code("番号")}</b> をコピーします。上で画像を選んでから「🔁 この番号に差しかえ」で、その番号に上書きできます${fuOnDone ? "（🎨 テンプレから開いたときは「これを使う」で画像ブロックに入ります）" : ""}。</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:6px">${r.used.map(n => `<div style="border:1.5px solid var(--line);border-radius:10px;padding:4px;text-align:center;background:#fff">
-      <img loading="lazy" src="${esc(base)}/FreePIC/Free${n}.jpg" style="width:100%;height:110px;object-fit:cover;border-radius:6px;cursor:pointer;background:#f6f6f6" onclick="fuCopy('%MJPGFREE${n}-W%')" title="押すとコードをコピー">
+      <img loading="lazy" src="${esc(base)}/FreePIC/Free${n}${K.ext}" style="width:100%;height:110px;object-fit:cover;border-radius:6px;cursor:pointer;background:#f6f6f6" onclick="fuCopy('${K.code(n)}')" title="押すとコードをコピー">
       <div style="font-size:12px;font-weight:800">${n}番</div>
       ${CAN_EDIT ? `<button class="btn btn-sm btn-ghost" style="width:100%;margin-bottom:3px" onclick="fuReplaceNo(${n})" title="上で選んだ画像を、この番号に上書きします">🔁 この番号に差しかえ</button>` : ""}
-      ${fuOnDone ? `<button class="btn btn-sm btn-primary" style="width:100%" onclick="fuUse(${n})">これを使う</button>` : `<button class="btn btn-sm btn-ghost" style="width:100%" onclick="fuCopy('%MJPGFREE${n}-W%')">📋 コピー</button>`}</div>`).join("")}</div>`;
+      ${fuOnDone && FU_KIND === "jpg" ? `<button class="btn btn-sm btn-primary" style="width:100%" onclick="fuUse(${n})">これを使う</button>` : `<button class="btn btn-sm btn-ghost" style="width:100%" onclick="fuCopy('${K.code(n)}')">📋 コピー</button>`}</div>`).join("")}</div>`;
 }
 /* ---------- 🎥 Free動画（MP4ムービー）をアップ（2026/11/9）----------
    動画（MP4・40MBまで＝約2分）を選ぶ → 表紙は動画の1秒目を自動で作る（べつの画像も選べる）
