@@ -4812,6 +4812,7 @@ function ncPaint(){
   const r = x.res, now = r && r.sakura && r.sakura.now || [];
   const judge = sl => { const cur = now[sl.no - 1] || "";
     if(!r.sakura || !r.sakura.found || !now.length) return ["unk", "？"];
+    if(sl.manual) return cur ? ["ok", "✅ 入っている（手で入れたもの）"] : ["ng", "✋ 手で入れる"];   // 8 風俗じゃぱん（ロボットから開けない）
     if(!sl.addr) return sl.no === 3 && /ranking-deli/i.test(cur) ? ["ok", "✅ 駅チカが入っている"] : ["ng", cur ? "（今のまま）" : "⚠ アドレスがない"];
     const lp = a => String(a || "").toLowerCase(), same = sl.no === 7 ? lp(cur).split("@")[0] === lp(sl.addr).split("@")[0] && /manzoku/.test(lp(cur)) : lp(cur) === lp(sl.addr);   // マンゾクは @ の前が同じならOK
     if(same) return ["ok", "✅ 入っている"];
@@ -4825,7 +4826,7 @@ function ncPaint(){
     <table class="nctbl"><tr><th>番号</th><th>媒体</th><th>集めたアドレス</th><th>ヘブン（サクラ）の今</th><th></th></tr>
       ${(r.slots || []).map(sl => { const [k, t] = judge(sl); const cur = now[sl.no - 1] || "";
         return `<tr class="${k}"><td>${sl.no}</td><td>${esc(sl.label)}${sl.name ? `<small>（${esc(sl.name)}）</small>` : ""}</td>
-          <td>${sl.addr ? `<span class="ncaddr">${esc(sl.addr)}</span> <button class="btn btn-ghost btn-sm" onclick="fuCopy('${esc(sl.addr)}')">📋</button>` : `<span class="ncno">${esc(sl.error || sl.note || "なし")}</span>`}</td>
+          <td>${sl.addr ? `<span class="ncaddr">${esc(sl.addr)}</span> <button class="btn btn-ghost btn-sm" onclick="fuCopy('${esc(sl.addr)}')">📋</button>` : `<span class="ncno">${esc(sl.error || sl.note || "なし")}</span>${sl.manual ? ` <a class="btn btn-ghost btn-sm" href="https://fuzoku.jp/entry/" target="_blank" rel="noopener">風じゃを開く</a>` : ""}`}</td>
           <td>${cur ? `<span class="ncaddr">${esc(cur)}</span>` : `<span class="ncno">（空）</span>`}</td><td><b>${t}</b></td></tr>`; }).join("")}</table>
     <div class="hint" style="margin-top:6px">「🆕 入れる予定」の番号を、次の段階でヘブンに入れられるようにします。⚠ の番号は手で確かめてください。</div>` : ""}
   </div>`;
