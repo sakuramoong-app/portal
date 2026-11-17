@@ -4307,14 +4307,22 @@ function iePaint(){
   iePaintList();
   iePaintSum();
 }
+// ＋ ここに入れる の中身：系統ごとに分けて、同じ大きさでならべる（2026/11/18 店長）
+const IE_ADD_GROUPS = [
+  ["📝 文章", ["note", "card", "link"]],
+  ["🖼 画像・動画", ["image", "video", "banner", "heaven"]],
+  ["🔘 ボタン・そのほか", ["sns", "html"]],
+];
 function ieInsBar(p, i){
   const t = tplCur, on = t.adding === p && t.addAt === i, st = tplStoreOf(t.mk);
   if(!CAN_EDIT) return "";
   if(!on) return `<div class="ieIns" data-p="${p}" data-i="${i}" onclick="tplCur.adding='${p}';tplCur.addAt=${i};iePaintList()" title="ここに入れる（画像はここにドラッグ・貼りつけでもアップできます）"><span>＋ ここに入れる</span></div>`;
   const types = Object.entries(TPL_TYPES).filter(([k]) => k !== "text" && (!st.generic || TPL_GENERIC_TYPES.includes(k) || (k === "heaven" && st.heavenShopId)));
   return `<div class="tpAddBox ieAddBox" data-p="${p}" data-i="${i}"><div style="display:flex;align-items:center;gap:6px"><b style="font-size:13px;color:#8A6100">🆕 ここに入れる</b><span class="hint">（画像のファイルを、ここにドラッグしてもアップできます）</span><span style="margin-left:auto"></span><button type="button" class="btn btn-ghost btn-sm" onclick="tplCur.adding=null;tplCur.addAt=null;iePaintList()">やめる</button></div>
-    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px"><button type="button" class="btn btn-primary btn-sm" onclick="tplAdd('note','${p}')">📝 文章（そのまま書ける）</button>${types.map(([k, ty]) => `<button type="button" class="btn btn-ghost btn-sm" onclick="tplAdd('${k}','${p}')">${ty.label}</button>`).join("")}</div>
-    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${TPL_PRESETS.map(([l], k) => `<button type="button" class="btn btn-ghost btn-sm" onclick="tplPreset(${k},'${p}')">⭐ ${l}</button>`).join("")}</div></div>`;
+    ${IE_ADD_GROUPS.map(([gl, keys]) => { const bs = keys.map(k => k === "note" ? `<button type="button" class="ieAddBtn main" onclick="tplAdd('note','${p}')">📝 文章（そのまま書ける）</button>`
+        : types.some(([t]) => t === k) ? `<button type="button" class="ieAddBtn" onclick="tplAdd('${k}','${p}')">${TPL_TYPES[k].label}</button>` : "").filter(Boolean);
+      return bs.length ? `<div class="ieAddGrp"><div class="ieAddGl">${gl}</div><div class="ieAddGrid">${bs.join("")}</div></div>` : ""; }).join("")}
+    <div class="ieAddGrp"><div class="ieAddGl">⭐ よく使う組み合わせ</div><div class="ieAddGrid">${TPL_PRESETS.map(([l], k) => `<button type="button" class="ieAddBtn" onclick="tplPreset(${k},'${p}')">${l}</button>`).join("")}</div></div></div>`;
 }
 function iePaintList(){
   const el = $("tp_list"), t = tplCur; if(!el || !t || !t.inline) return;
@@ -4504,9 +4512,16 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   #ieBox .tpF{padding:6px 10px 10px;background:#FFF7FA;border-top:1px dashed #F8BBD0} #ieBox .tpF input,#ieBox .tpF textarea{width:100%}
   #ieBox .tpDel{border:1.5px dashed #EF9A9A;border-radius:10px;padding:6px 10px;margin:6px 0;color:#C62828;background:#FFF5F5;display:flex;gap:6px;align-items:center}
   #ieBox .tpAddBox{border:2.5px dashed #F2C94C;background:#FFFDF2;border-radius:12px;padding:8px;margin:4px 0}
-  #ieBox .ieIns{height:14px;margin:2px 0;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:8px;color:transparent;font-size:11.5px;font-weight:800;transition:all .12s}
-  #ieBox .ieIns:before{content:"";position:absolute;left:0;right:0}
-  #ieBox .ieIns:hover,#ieBox .ieIns.iedrop{height:26px;background:#FFF3C4;color:#8A6100;outline:2px dashed #F2C94C}
+  /* ＋ ここに入れる：いつも見えている（2026/11/18 店長：ぴょこっと出るのではなく） */
+  #ieBox .ieIns{height:24px;margin:4px 0;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:8px;background:#FFFBEA;color:#8A6100;outline:1.5px dashed #F2C94C;font-size:12px;font-weight:800;transition:background .12s}
+  #ieBox .ieIns:hover,#ieBox .ieIns.iedrop{background:#FFF0B3;outline:2px dashed #E0B020}
+  #ieBox .ieAddGrp{display:flex;gap:8px;align-items:flex-start;margin-top:8px;padding-top:6px;border-top:1px dashed #F2E2A8}
+  #ieBox .ieAddGl{flex:0 0 120px;font-size:12.5px;font-weight:900;color:#8A6100;padding-top:6px}
+  #ieBox .ieAddGrid{flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:5px}
+  #ieBox .ieAddBtn{font-family:inherit;font-size:12.5px;font-weight:800;text-align:left;border:1.5px solid #F2E2A8;background:#fff;color:#4A3A40;border-radius:10px;padding:6px 10px;cursor:pointer;min-height:34px}
+  #ieBox .ieAddBtn:hover{border-color:#E0B020;background:#FFF8DC}
+  #ieBox .ieAddBtn.main{background:#C2185B;border-color:#C2185B;color:#fff}
+  @media (max-width:600px){ #ieBox .ieAddGrp{flex-direction:column} #ieBox .ieAddGl{flex:none;padding-top:0} }
   #ieBox .ieIns span{pointer-events:none}
   #ieBox .iedrop{outline:3px dashed #C2185B !important;background:#FFF0F6 !important}
   #ieBox .ieWhite{margin-bottom:6px}
