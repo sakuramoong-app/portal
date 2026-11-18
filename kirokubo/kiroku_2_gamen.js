@@ -271,8 +271,9 @@ const HP_SHIFT_MEDIA = { sakuramoon: "サクラムーン", lana_uguisu: "ラナ�
 async function hpPushDay(cid, shiftName, d){
   const c = M.casts.find(x => x.id === cid); if(!c) return;
   const targets = Object.entries(c.stores || {}).filter(([k, s]) => HP_SHIFT_MEDIA[k] && s && Number(s.siteNo)).map(([k, s]) => ({ key: k, no: Number(s.siteNo) }));
-  if(!targets.length) return;
-  toast("🌐 公式HPに入れています…（1分ほど）");
+  const hvStores = ["sakuramoon", "lana_uguisu"].filter(k => c.stores && c.stores[k]);   // 📺 ヘブン（下で）
+  if(!targets.length && !hvStores.length) return;
+  toast("🌐 公式HP・ヘブンに入れています…（1分ほど）");
   const ok = [], ng = [];
   for(const t of targets){
     try{
@@ -283,8 +284,19 @@ async function hpPushDay(cid, shiftName, d){
     }catch(e){ ng.push(HP_SHIFT_MEDIA[t.key] + "（" + (e.message || e) + "）"); }
   }
   if(ok.length){ try{ await sb.rpc("kb_shift_check", { p_cast: shiftName, p_ds: day, p_media: ok.map(t => HP_SHIFT_MEDIA[t.key]).concat("記録簿"), p_by: KB.operatorName() }); }catch(e){} }
-  if(ng.length) alert("🌐 公式HPに入れられなかったお店があります：\n" + ng.join("\n") + "\n\nサクラシフトで入れなおしてください");
-  else toast("🌐 公式HPにも入れました（" + ok.map(t => HP_SHIFT_MEDIA[t.key]).join("・") + "）。媒体はシフトアプリで入れてください");
+  // 📺 ヘブンにも（2026/11/18 店長：かんなが休みになったのに、ヘブンが下がらなかった）。サクラ・ラナ鶯谷に在籍している子だけ。ヘブンにいない子はとばす
+  const hvOk = [], hvNg = [];
+  for(const k of hvStores){
+    try{
+      const { data, error } = await sb.functions.invoke("hp-shift-sync", { body: { action: "media_apply", media: "heaven", store: k, by: KB.operatorName(),
+        casts: [{ cast: shiftName, name: c.official_name || shiftName, names: [c.official_name, c.temp_name, shiftName].filter(Boolean), label: shiftName, days: [d] }] } });
+      let r = data; if(error){ try{ r = await error.context.json(); }catch(e){ r = { ok: false, error: error.message }; } }
+      if(r && r.ok) hvOk.push(HP_SHIFT_MEDIA[k]);
+      else if(!/いません/.test(String((r && (r.error || r.message)) || ""))) hvNg.push("ヘブン " + HP_SHIFT_MEDIA[k] + "（" + ((r && (r.error || r.message)) || "入れられませんでした") + "）");
+    }catch(e){ hvNg.push("ヘブン " + HP_SHIFT_MEDIA[k] + "（" + (e.message || e) + "）"); }
+  }
+  if(ng.length || hvNg.length) alert("🌐 入れられなかったところがあります：\n" + ng.concat(hvNg).join("\n") + "\n\nシフトアプリで入れなおしてください");
+  else toast("🌐 " + [ok.length ? "公式HP（" + ok.map(t => HP_SHIFT_MEDIA[t.key]).join("・") + "）" : "", hvOk.length ? "ヘブン（" + hvOk.join("・") + "）" : ""].filter(Boolean).join("・") + "にも入れました。ほかの媒体はシフトアプリで入れてください");
 }
 // 記録簿の欠勤・時間変更 → サクラシフトにも入れる（SQL 218。理由は入れない）2026/11/6 店長OK
 async function pushShiftChange(cid, kind, st, en){
@@ -588,7 +600,7 @@ function hpAskPush(kind, name){
   const m = hpPushMode();
   if(m === "always") return true;
   if(m === "never"){ toast("🌐 公式HPには反映していません（この端末は「いつも反映しない」）"); return false; }
-  const ok = confirm(`🌐 ${name} の${kind === "absent" ? "お休み" : "時間の変更"}を、公式HPの出勤にも反映しますか？\n\nOK：公式HPにも反映する\nキャンセル：サクラシフトだけ（公式HPはそのまま）`);
-  if(!ok) toast("🌐 公式HPには反映していません（サクラシフトだけ変えました）");
+  const ok = confirm(`🌐 ${name} の${kind === "absent" ? "お休み" : "時間の変更"}を、公式HP・ヘブンの出勤にも反映しますか？\n\nOK：公式HP・ヘブンにも反映する\nキャンセル：サクラシフトだけ（公式HP・ヘブンはそのまま）`);
+  if(!ok) toast("🌐 公式HP・ヘブンには反映していません（サクラシフトだけ変えました）");
   return ok;
 }

@@ -1,9 +1,10 @@
 /* 🩷 ヘブン 即ヒメ 連動（2026/11/18 店長）
    記録簿の「今どこに誰が」に合わせて、シティヘブンの即ヒメ登録（サクラムーン池袋・ラナ鶯谷）を自動で変える
    ・⏳ 待機中 → ヘブン「待機中」
-   ・💼 仕事中 → ヘブン「接客中」（次回 終わりの時刻〜）
+   ・💼 仕事中 → ヘブン「接客中」（次回 終わりの時刻＋インターバル〜）
+   ・▶️ 予約スタート・📞 出勤前連絡・🈵 満了 → 「接客中」（次回＝最初の予約の終わり＋インターバル／出勤時刻／退勤時刻）
    ・今いない（お茶・欠勤・不在・精算済・直帰・まだ来ていない）→ 待機中・接客中を解除
-   ・⏹ 仕事終了（振り分け待ち）・▶️ 予約スタート・📞 出勤前連絡 → さわらない
+   ・⏹ 仕事終了（振り分け待ち）→ さわらない
    ・変わったときだけ送る（その日・このPCで最後に送った形をおぼえておく）。ヘブンの画面にいない子（その日の出勤なし）はさわらない
    ・ON/OFF は内勤みんな共通（kb_settings 'heaven_sokuhime' = { on }）。今日のページで、編集できる人の画面からだけ送る
 */
@@ -14,17 +15,27 @@ const hvSkMemKey = () => "hvSk:" + day;
 function hvSkMem(){ try{ return JSON.parse(localStorage.getItem(hvSkMemKey()) || "{}") || {}; }catch(e){ return {}; } }
 function hvSkMemSet(o){ try{ localStorage.setItem(hvSkMemKey(), JSON.stringify(o)); }catch(e){} }
 // 1人分：この子をヘブンでどうしたいか（null ＝ さわらない）
+// 次回の時刻（2026/11/18 店長）：
+//   ・💼 仕事中 → 予約の終わり ＋ その子のインターバル（台帳。ない子は15分）
+//   ・▶️ 予約スタート → 最初の予約の終わり ＋ インターバル
+//   ・📞 出勤前連絡 → 出勤の時刻
+//   ・🈵 満了 → 退勤の時刻（ヘブンで受付終了になる）
+const hvSkGap = c => Number(c && c.interval_min) > 0 ? Number(c.interval_min) : 15;
+const hvSkLive = x => x.bks.filter(b => !["done", "cancel", "tobi", "flowed"].includes(b.r.status)).sort((a, b) => a.s - b.s);
 function hvSkWant(x){
   if(!x.c) return null;
-  const st = boardState(x);
+  const st = boardState(x), cd = x.cd || {}, sh = x.shift, gap = hvSkGap(x.c) / 60;
+  if(st === "gone") return { state: "off" };
+  if(cd.full_at && sh && sh.end != null) return { state: "work", end: fromHour(Number(sh.end)), why: "満了" };
   if(st === "wait") return { state: "wait" };
   if(st === "work"){
     const aw = autoWork(x);
-    const r = (aw && aw.r) || x.bks.find(b => b.r.status === "working")?.r;
-    const end = r && r.end_at ? hmRaw(r.end_at) : "";
-    return end ? { state: "work", end } : null;   // 終わりの時刻がわからない（手で仕事中にしただけ）ときは、さわらない
+    const r = (aw && aw.r) || (x.bks.find(b => b.r.status === "working") || {}).r;
+    const b = r && x.bks.find(z => z.r === r);
+    return b ? { state: "work", end: fromHour(b.e + gap) } : null;   // 予約がわからない（手で仕事中にしただけ）ときは、さわらない
   }
-  if(st === "gone") return { state: "off" };
+  if(st === "start"){ const b = hvSkLive(x)[0]; return b ? { state: "work", end: fromHour(b.e + gap), why: "予約スタート" } : null; }
+  if(st === "precall") return sh && sh.start != null ? { state: "work", end: fromHour(Number(sh.start)), why: "出勤前連絡" } : null;
   return null;
 }
 const hvSkSig = w => w.state + (w.end ? "@" + w.end : "");
