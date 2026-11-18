@@ -403,34 +403,34 @@
   <div class="modal tmodal">
     <!-- 🔁 バック・条件を変える（2026/11/19 作りなおし：左に今の設定・右に変える内容。ランク・条件を変えたら、ヒアリングの欄が出る） -->
     <style>
-      #termsBg .tmodal{max-width:1080px;width:100%;position:relative}
-      #termsBg .tmhead{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:4px;padding-right:36px}
-      #termsBg .tmwho{display:flex;align-items:center;gap:10px;flex:1;min-width:220px} #termsBg .tmwho b{font-size:20px}
-      #termsBg .tmmeta{display:flex;gap:10px;align-items:center;font-size:12.5px;color:var(--sub);margin-top:3px;flex-wrap:wrap}
-      #termsBg .tmst{background:#E5F6EC;color:#1E7A3C;font-weight:800;border-radius:99px;padding:1px 10px}
-      #termsBg .tmsteps{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800;color:#B8A9AE}
-      #termsBg .tmstep{display:flex;flex-direction:column;align-items:center;gap:3px} #termsBg .tmstep i{font-style:normal;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#F3ECEF;color:#9C8B8F}
-      #termsBg .tmstep.on{color:#C2185B} #termsBg .tmstep.on i{background:#C2185B;color:#fff} #termsBg .tmstep.done{color:#1E7A3C} #termsBg .tmstep.done i{background:#2E9E4A;color:#fff}
-      #termsBg .tmline{width:46px;height:2px;background:#EADDE2;margin-bottom:18px}
-      #termsBg .tmx{position:absolute;right:14px;top:12px;border:none;background:none;font-size:20px;cursor:pointer;color:#7A6670}
-      #termsBg .tmtitle{font-size:15px;margin:2px 0 10px;color:var(--sub)}
-      #termsBg .tmcols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.8fr);gap:14px;align-items:start}
-      @media (max-width:820px){ #termsBg .tmcols{grid-template-columns:1fr} }
-      #termsBg .tmcur{background:#FBF7F9;border:1.5px solid #F1E3E7;border-radius:14px;padding:10px 12px}
-      #termsBg .tmch{font-weight:900;font-size:15px;margin-bottom:8px}
-      #termsBg .tmedit{display:flex;flex-direction:column;gap:10px}
-      #termsBg .tmbox{border:1.5px solid #F3D6E0;border-radius:14px;padding:10px 12px;background:#fff}
-      #termsBg .tmbh{display:flex;align-items:center;gap:6px;font-weight:900;font-size:14px;margin-bottom:8px;background:#FFF0F5;margin:-10px -12px 10px;padding:8px 12px;border-radius:12px 12px 0 0}
-      #termsBg .tmbh small{font-weight:700;color:var(--sub)}
-      #termsBg .tmrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap} #termsBg .tmrow .tmbh{background:none;padding:0;margin:0} #termsBg .tmrow input{width:auto} #termsBg .tmrow small{color:var(--sub)}
-      #termsBg .tmrule{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px dashed #F1E3E7;padding:6px 2px;cursor:pointer}
-      #termsBg .tmrn{display:flex;flex-direction:column} #termsBg .tmrn small{color:var(--sub);font-size:12.5px}
-      #termsBg .tmend{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:800;color:#9C8B8F;white-space:nowrap} #termsBg .tmend input{width:auto;margin:0}
-      #termsBg .tmrule.ending .tmrn{text-decoration:line-through;color:#c0392b} #termsBg .tmrule.ending .tmend{color:#c0392b}
-      #termsBg .tmadd{margin-top:8px;padding:8px;border:1.5px dashed #F2C94C;border-radius:12px;background:#FFFDF2}
-      #termsBg .tmhear{border-color:#C2185B} #termsBg .tmreq{color:#C2185B}
-      #termsBg .tmradio{display:flex !important;align-items:center;gap:8px;font-size:14px;font-weight:700;padding:5px 2px;cursor:pointer} #termsBg .tmradio input{width:auto;margin:0;flex:none}
-      #termsBg .tmwait{border:2px dashed #EADDE2;border-radius:14px;padding:12px;text-align:center;color:#9C8B8F;font-weight:700;font-size:13px}
+      .tmodal{max-width:1080px;width:100%;position:relative}
+      .tmodal .tmhead{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:4px;padding-right:36px}
+      .tmodal .tmwho{display:flex;align-items:center;gap:10px;flex:1;min-width:220px} .tmodal .tmwho b{font-size:20px}
+      .tmodal .tmmeta{display:flex;gap:10px;align-items:center;font-size:12.5px;color:var(--sub);margin-top:3px;flex-wrap:wrap}
+      .tmodal .tmst{background:#E5F6EC;color:#1E7A3C;font-weight:800;border-radius:99px;padding:1px 10px}
+      .tmodal .tmsteps{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800;color:#B8A9AE}
+      .tmodal .tmstep{display:flex;flex-direction:column;align-items:center;gap:3px} .tmodal .tmstep i{font-style:normal;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#F3ECEF;color:#9C8B8F}
+      .tmodal .tmstep.on{color:#C2185B} .tmodal .tmstep.on i{background:#C2185B;color:#fff} .tmodal .tmstep.done{color:#1E7A3C} .tmodal .tmstep.done i{background:#2E9E4A;color:#fff}
+      .tmodal .tmline{width:46px;height:2px;background:#EADDE2;margin-bottom:18px}
+      .tmodal .tmx{position:absolute;right:14px;top:12px;border:none;background:none;font-size:20px;cursor:pointer;color:#7A6670}
+      .tmodal .tmtitle{font-size:15px;margin:2px 0 10px;color:var(--sub)}
+      .tmodal .tmcols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.8fr);gap:14px;align-items:start}
+      @media (max-width:820px){ .tmodal .tmcols{grid-template-columns:1fr} }
+      .tmodal .tmcur{background:#FBF7F9;border:1.5px solid #F1E3E7;border-radius:14px;padding:10px 12px}
+      .tmodal .tmch{font-weight:900;font-size:15px;margin-bottom:8px}
+      .tmodal .tmedit{display:flex;flex-direction:column;gap:10px}
+      .tmodal .tmbox{border:1.5px solid #F3D6E0;border-radius:14px;padding:10px 12px;background:#fff}
+      .tmodal .tmbh{display:flex;align-items:center;gap:6px;font-weight:900;font-size:14px;margin-bottom:8px;background:#FFF0F5;margin:-10px -12px 10px;padding:8px 12px;border-radius:12px 12px 0 0}
+      .tmodal .tmbh small{font-weight:700;color:var(--sub)}
+      .tmodal .tmrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap} .tmodal .tmrow .tmbh{background:none;padding:0;margin:0} .tmodal .tmrow input{width:auto} .tmodal .tmrow small{color:var(--sub)}
+      .tmodal .tmrule{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px dashed #F1E3E7;padding:6px 2px;cursor:pointer}
+      .tmodal .tmrn{display:flex;flex-direction:column} .tmodal .tmrn small{color:var(--sub);font-size:12.5px}
+      .tmodal .tmend{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:800;color:#9C8B8F;white-space:nowrap} .tmodal .tmend input{width:auto;margin:0}
+      .tmodal .tmrule.ending .tmrn{text-decoration:line-through;color:#c0392b} .tmodal .tmrule.ending .tmend{color:#c0392b}
+      .tmodal .tmadd{margin-top:8px;padding:8px;border:1.5px dashed #F2C94C;border-radius:12px;background:#FFFDF2}
+      .tmodal .tmhear{border-color:#C2185B} .tmodal .tmreq{color:#C2185B}
+      .tmodal .tmradio{display:flex !important;align-items:center;gap:8px;font-size:14px;font-weight:700;padding:5px 2px;cursor:pointer} .tmodal .tmradio input{width:auto;margin:0;flex:none}
+      .tmodal .tmwait{border:2px dashed #EADDE2;border-radius:14px;padding:12px;text-align:center;color:#9C8B8F;font-weight:700;font-size:13px}
     </style>
     <div class="tmhead">
       <div class="tmwho" id="t_who"></div>
@@ -5531,7 +5531,7 @@ async function removeCast(){
 
 load();
 </script>
-<script src="daicho_notify.js?v=1"></script><script src="daicho_room.js?v=1"></script><!-- 📝 台帳を更新したら内勤に通知（記録簿の 🔔） -->
+<script src="daicho_notify.js?v=1"></script><script src="daicho_room.js?v=1"></script><script src="daicho_terms_inline.js?v=1"></script><!-- 📝 台帳を更新したら内勤に通知（記録簿の 🔔） -->
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
 </html>

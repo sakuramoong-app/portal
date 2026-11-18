@@ -493,7 +493,7 @@ function todayDayHtml(d){
   const rows = rowsFor(d, D), t = totalsFor(d, D, rows), B3 = bag3Calc(rows, t.ex, t.staff, t.ho, t.kikiRet, { out: t.rfOut, ret: t.rfRet }), dt = new Date(d + "T12:00:00Z");
   const bag = t.ho && t.ho.bag_amount != null ? Number(t.ho.bag_amount) : null, bdf = bag == null ? null : bag - t.hand;
   const src = x => !x.paid ? `<b style="color:#c0392b">まだ取っていない</b>` : x.pay_source === "kikirara" ? "🪙 キキララから" : x.pay_source === "split" ? `💴 回収金 ${num(Number(x.day_paid) - kikiAmt(x))}＋🪙 キキララ ${num(kikiAmt(x))}` : "💴 回収金から";
-  return `<div class="tdcard"><div class="tdh"><b>${md(d)}(${DOW[dt.getUTCDay()]})</b><a class="j" href="javascript:void 0" onclick="openDay('${d}');envSel='day';setDayTab('env')">📮 この日の封筒・入力へ</a></div>
+  return `<div class="tdcard"><div class="tdh"><b>${md(d)}(${DOW[dt.getUTCDay()]})</b><a class="j" href="settle.html?d=${d}" target="_blank" rel="noopener" title="この日の精算画面を開く">💴 この日の精算画面へ</a></div>
     <div class="tdsec">✔ 当日回収（${B3.dayL.length}人）<b>${yen(B3.dayAmt)}</b></div>
     <div class="tdl">${B3.dayL.length ? B3.dayL.map(r => `<span class="tdck">${tdChkBox(d, "c", r.id)}${esc(names[r.id] || r.id)} ${num(r.amt)}</span>`).join("") : `<span class="none">なし</span>`}</div>
     <div class="tdsec">− 経費 <b>${yen(t.ex)}</b></div>
