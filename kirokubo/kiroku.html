@@ -307,6 +307,9 @@
   /* 本日のキャスト一覧（1キャスト1枠） */
   .cblock{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:8px 10px;margin-bottom:10px;}
   .cblock .ch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;} .cblock .ch b{font-size:16px;} .cblock .ch small{color:var(--sub);font-weight:700;}
+  /* 📌今日のこと・勤怠・精算・＋予約は、いつも右上（2026/11/19 店長：拡大すると場所が変わって見づらい） */
+  .cblock .ch.chfix{display:flex;align-items:flex-start;gap:10px;flex-wrap:nowrap} .cblock .chL{flex:1;min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap} .cblock .chL small{flex-basis:100%}
+  .cblock .cbtns{flex:none;display:flex;gap:6px;justify-content:flex-end} @media (max-width:760px){ .cblock .ch.chfix{flex-wrap:wrap} .cblock .cbtns{width:100%;flex-wrap:wrap} }
   .cblock .none{font-size:12.5px;color:var(--sub);padding:2px 4px;}
 /* 🔔 確認電話の通知 */  .callalert{background:#FFE8EC;border:2px solid #E5486C;border-radius:14px;padding:8px 12px;margin:8px 0;color:#B0213F;font-weight:800;font-size:15px;}  .callalert button{display:block;width:100%;text-align:left;margin-top:6px;font-family:inherit;font-size:14px;font-weight:700;color:#7a1328;background:#fff;border:1.5px solid #F09AAA;border-radius:10px;padding:6px 10px;cursor:pointer;}  /* 本日のキャスト一覧：今の状態 */  .daysel{font-family:inherit;font-size:13px;font-weight:800;padding:4px 8px;border:1.5px solid var(--line);border-radius:99px;background:#fff;}  .daysel.pre{background:#EEE8FB;border-color:#B9A6E8;} .daysel.tea{background:#E6F6E6;border-color:#9AD39A;} .daysel.absent{background:#FFE8EC;border-color:#F09AAA;}
   /* カード決済の進み具合・キャンセル/トビ・勤怠 */
@@ -879,8 +882,8 @@
 <script src="kiroku_3_seisan.js?v=3"></script>
 <script src="kiroku_4_ichiran.js?v=10"></script>
 <script src="kiroku_5_1019.js?v=13"></script>
-<script src="kiroku_6_1020.js?v=13"></script>
-<script src="kiroku_7_1025.js?v=36"></script>
+<script src="kiroku_6_1020.js?v=14"></script>
+<script src="kiroku_7_1025.js?v=37"></script>
 <script src="kiroku_8_layout.js?v=8"></script>
 <script src="kiroku_9_mail.js?v=5"></script>
 <script src="kiroku_10_heaven.js?v=3"></script>

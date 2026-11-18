@@ -216,7 +216,11 @@ async function paintCastNotes(){
   const hname = id => { const h = (M.hotels || []).find(x => x.hotel_id === id); return h ? h.hotel_name + (h.area ? "(" + h.area + ")" : "") : ""; };
   const hl = (ids) => (ids || []).map(hname).filter(Boolean).map(esc).join("、");
   const hotelLines = [];
-  if(hl(hp.ok)) hotelLines.push(`<div>◎ ${hl(hp.ok)}</div>`);
+  // ◎ 好き（メモも）2026/11/19：台帳のホテルは ◎好き ○普通 △微妙 ×NG。○ 普通でもメモがあれば出す
+  const hlm = ids => (ids || []).map(id => { const n = hname(id); return n ? esc(n) + ((hp.memo || {})[id] ? `<small>（${esc(hp.memo[id])}）</small>` : "") : ""; }).filter(Boolean).join("、");
+  if(hl(hp.ok)) hotelLines.push(`<div>◎ 好き：${hlm(hp.ok)}</div>`);
+  { const marked = new Set([...(hp.ok || []), ...(hp.conditional || []), ...(hp.ng || [])]); const plain = Object.keys(hp.memo || {}).filter(id => !marked.has(id) && String(hp.memo[id] || "").trim());
+    if(plain.length && hlm(plain)) hotelLines.push(`<div>○ メモ：${hlm(plain)}</div>`); }
   if((hp.conditional || []).length) hotelLines.push(`<div>△ ${(hp.conditional || []).map(id => { const n = hname(id); return n ? esc(n) + ((hp.memo || {})[id] ? `<small>（${esc(hp.memo[id])}）</small>` : "") : ""; }).filter(Boolean).join("、")}</div>`);   // △はメモ（条件）も 2026/11/12
   if((hp.ng || []).length) hotelLines.push(`<div style="color:#B0213F;font-weight:700">× ${(hp.ng || []).map(id => { const n = hname(id); return n ? esc(n) + ((hp.memo || {})[id] ? `<small>（${esc(hp.memo[id])}）</small>` : "") : ""; }).filter(Boolean).join("、")}</div>`);
   M.castChecks.filter(x => x.cast_id === c.id && String(x.text).startsWith("🏨")).forEach(x => hotelLines.push(`<div style="white-space:pre-wrap">${esc(String(x.text).replace(/^🏨\s*/, ""))}</div>`));
@@ -1759,6 +1763,7 @@ function paintHotelStatus(){
     else if(h.store_status === "far") out.push(`<div class="hst far">△ 「${esc(h.hotel_name)}」は店として<b>△（遠いから微妙）</b>${h.note ? "：" + esc(h.note) : ""}</div>`);
     if(c && (hp.ng || []).includes(h.hotel_id)) out.push(`<div class="hst ng">🙅 ${esc(castName(c.id))}さんは「${esc(h.hotel_name)}」が <b>×（NG）</b>${(hp.memo || {})[h.hotel_id] ? "：" + esc(hp.memo[h.hotel_id]) : ""}</div>`);
     else if(c && (hp.conditional || []).includes(h.hotel_id)) out.push(`<div class="hst far">△ ${esc(castName(c.id))}さんは「${esc(h.hotel_name)}」が △${(hp.memo || {})[h.hotel_id] ? "：" + esc(hp.memo[h.hotel_id]) : "（条件つき）"}</div>`);
+    else if(c && (hp.memo || {})[h.hotel_id]) out.push(`<div class="hst list">${(hp.ok || []).includes(h.hotel_id) ? "◎" : "○"} ${esc(castName(c.id))}さんの「${esc(h.hotel_name)}」のメモ：${esc(hp.memo[h.hotel_id])}</div>`);   // ◎好き・○普通でもメモがあれば（2026/11/19）
   }
   const bad = area ? (M.hotels || []).filter(x => hAreaOk(x, area) && x.area && (x.store_status === "ng" || x.store_status === "far")) : [];
   if(bad.length) out.push(`<details class="hst list"><summary>🏨 ${esc(area)}の 店NG・△ のホテル（${bad.length}）</summary>${bad.map(x => `<div>${x.store_status === "ng" ? "🚫" : "△"} <b>${esc(x.hotel_name)}</b>${hAliases(x).length ? `<small>（${esc(hAliases(x).join("・"))}）</small>` : ""}${x.note ? "：" + esc(x.note) : ""}</div>`).join("")}</details>`);
