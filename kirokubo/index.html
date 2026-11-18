@@ -337,28 +337,34 @@
       <div id="e_checks"></div>
     </div></details>
     <details class="pfPanel" data-p="pops"><summary class="pfHead">🎁 個人オプション <small style="font-weight:400;color:#9C8B8F">（個人コスプレ・撮影など。受付のオプションに出る）</small></summary><div class="pfBody"><div id="e_pops"></div></div></details>
-    <details class="pfPanel" data-p="etc"><summary class="pfHead">🗂 移動・コース・系統・メモ</summary><div class="pfBody">
-      <div class="subT">🚃 最寄り駅・移動</div>
-      <div class="areaGrid">
-        <div><small>最寄り駅</small><input id="e_station" maxlength="40" placeholder="例：東池袋"></div>
-        <div><small>池袋まで（分）</small><input type="number" id="e_tIke" min="0" max="300" step="5" placeholder="分"></div>
-        <div><small>鶯谷まで（分）</small><input type="number" id="e_tUgu" min="0" max="300" step="5" placeholder="分"></div>
-        <div><small>五反田まで（分）</small><input type="number" id="e_tGoh" min="0" max="300" step="5" placeholder="分"></div>
-      </div>
-      <small style="display:block;margin-top:6px">そのほか（移動のメモ。なければ空でOK）</small><textarea id="e_area" style="min-height:40px" placeholder="例：終電 0:30／タクシーOK"></textarea>
-      <div class="subT">⌚ コース制限・インターバル</div>
-      <div class="grid">
-        <div class="f"><label>長いコースは何分まで（空＝上限なし）</label><input type="number" id="e_longMax" min="30" max="1440" step="10"></div>
-        <div class="f"><label>それより長いと</label><select id="e_longOver"><option value="">（上限なし）</option><option value="ask">キャストに確認してから</option><option value="ng">受けない（NG）</option></select></div>
-        <div class="f"><label>予約と予約の間（インターバル・分） <small style="font-weight:400;color:#9C8B8F">… タイムラインで予約の前後がグレーに（0＝なし）</small></label><input type="number" id="e_interval" min="0" max="240" step="5"></div>
-      </div>
-      <div id="e_lookWrap" style="display:none"><div class="subT">👧 系統</div>
-        <div class="hint" style="margin:0 0 6px">18・極門のダミー名とのマッチ率に使います</div><div id="e_look"></div></div>
-      <div class="subT">📝 メモ</div>
-      <div class="f"><label>メモ <small style="font-weight:400;color:#9C8B8F">… そのほか（受付には出ません）</small></label><textarea id="e_note"></textarea></div>
-      <div class="hint" style="margin:10px 0 8px;background:#FFF6D6;border-radius:10px;padding:6px 10px">⚠️ 特記事項・NG は<b>「🖊 受付ルール」に移すまで</b>ここに残ります。受付には「まだ移していないメモ」として出ます。</div>
-      <div class="f"><label>特記事項 <small style="font-weight:400;color:#9C8B8F">… 内勤が理解しておくこと（お客さんには言わない）</small></label><textarea id="e_special"></textarea></div>
-      <div class="f" style="margin-top:10px"><label>NG <small style="font-weight:400;color:#9C8B8F">… キャストが受けないこと</small></label><textarea id="e_ng"></textarea></div>
+    <details class="pfPanel" data-p="etc"><summary class="pfHead">🗂 移動・コース・系統・メモ</summary><div class="pfBody etPanel">
+      <!-- 2026/11/19 店長：左に見出し・右に入れる欄の形に整理（欄の名前・保存は前と同じ） -->
+      <div class="hint" style="margin:0 0 8px">最寄り駅や移動時間、コース制限、系統、メモなど。下の「💾 保存する」で保存されます。</div>
+      <div class="etRow"><div class="etLab"><span class="etIc">🚃</span><b>最寄り駅・移動</b></div><div class="etBody">
+        <div class="areaGrid etGrid4">
+          <div><small>最寄り駅</small><input id="e_station" maxlength="40" placeholder="🔍 例：東池袋"></div>
+          <div><small>池袋まで</small><div class="etMin"><input type="number" id="e_tIke" min="0" max="300" step="5" placeholder="⏱"><span>分</span></div></div>
+          <div><small>鶯谷まで</small><div class="etMin"><input type="number" id="e_tUgu" min="0" max="300" step="5" placeholder="⏱"><span>分</span></div></div>
+          <div><small>五反田まで</small><div class="etMin"><input type="number" id="e_tGoh" min="0" max="300" step="5" placeholder="⏱"><span>分</span></div></div>
+        </div>
+        <small style="display:block;margin-top:8px">📝 移動のメモ（なければ空でOK）</small><textarea id="e_area" style="min-height:44px" maxlength="200" placeholder="例：終電 0:30／タクシーOK"></textarea>
+      </div></div>
+      <div class="etRow"><div class="etLab"><span class="etIc">👑</span><b>コース制限・インターバル</b></div><div class="etBody">
+        <div class="grid">
+          <div class="f"><label>最長コース（分） <small style="font-weight:400;color:#9C8B8F">※空欄＝上限なし</small></label><input type="number" id="e_longMax" min="30" max="1440" step="10"></div>
+          <div class="f"><label>それより長いと</label><select id="e_longOver"><option value="">（上限なし）</option><option value="ask">キャストに確認してから</option><option value="ng">受けない（NG）</option></select></div>
+          <div class="f"><label>予約と予約の間（インターバル・分）</label><input type="number" id="e_interval" min="0" max="240" step="5"></div>
+          <div class="f etNote"><small>※ タイムラインで予約の前後がグレーになる（0＝なし）。ヘブンの即ヒメの次回時刻にも使います（なしは15分）</small></div>
+        </div>
+      </div></div>
+      <div class="etRow" id="e_lookWrap" style="display:none"><div class="etLab"><span class="etIc">👗</span><b>系統</b><small>18・極門のダミー名とのマッチ率に使います</small></div><div class="etBody"><div id="e_look"></div></div></div>
+      <div class="etRow"><div class="etLab"><span class="etIc">📄</span><b>メモ</b><small>そのほか（受付には出ません）</small></div><div class="etBody">
+        <textarea id="e_note" maxlength="500" placeholder="例：〇〇はNG／服装の希望／接客の注意 など"></textarea></div></div>
+      <div class="etRow"><div class="etLab"><span class="etIc">⚠️</span><b>特記事項</b><small>内勤が理解しておくこと（お客さんには言わない）</small></div><div class="etBody">
+        <div class="etWarn">⚠️ 特記事項・NG は<b>「🖊 受付ルール」に移すまで</b>ここに残ります。受付には「まだ移していないメモ」として出ます。</div>
+        <textarea id="e_special" maxlength="500" placeholder="例：持病の配慮／連絡の優先方法 など"></textarea></div></div>
+      <div class="etRow"><div class="etLab"><span class="etIc">🚫</span><b>NG</b><small>キャストが受けないこと</small></div><div class="etBody">
+        <textarea id="e_ng" maxlength="500" placeholder="例：〇〇プレイ／△△系／特定のコース など"></textarea></div></div>
     </div></details>
     <details class="pfPanel" data-p="hotel"><summary class="pfHead">🏨 ホテル <small style="font-weight:400;color:#9C8B8F">（このキャストだけの◎△×。お店のホテル一覧は変わりません）</small></summary><div class="pfBody">
       <div id="e_hotel"></div>
@@ -5531,7 +5537,7 @@ async function removeCast(){
 
 load();
 </script>
-<script src="daicho_notify.js?v=1"></script><script src="daicho_room.js?v=1"></script><script src="daicho_terms_inline.js?v=1"></script><!-- 📝 台帳を更新したら内勤に通知（記録簿の 🔔） -->
+<script src="daicho_notify.js?v=1"></script><script src="daicho_room.js?v=1"></script><script src="daicho_terms_inline.js?v=1"></script><script src="daicho_layout.js?v=1"></script><!-- 📝 台帳を更新したら内勤に通知（記録簿の 🔔） -->
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
 </html>
