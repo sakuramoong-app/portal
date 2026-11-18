@@ -464,16 +464,41 @@ function tabBarHtml(){
   return `<div class="dtabs">${[["today", "① 当日回収（毎日）"], ["env", "📮 封筒（後日回収・待機場）"]].map(([k, l]) => `<button type="button" class="dtab ${dayTab === k ? "on" : ""}" onclick="setDayTab('${k}')">${l}</button>`).join("")}</div>`;
 }
 // ① 当日回収：日ごとに、当日回収した子・経費・内勤の日払い → ① ／社長に手渡し／袋の中身
+/* ✔ 当日回収・内勤の日払いを、1人ずつ確かめたしるし（2026/11/18 店長）
+   kb_settings 'kaishu_today_checks' = { "日付|c|キャスト" or "日付|s|内勤": { by, at } }（みんな同じ。70日より前は消す）。お金の計算にはかかわらない */
+let TDCHK = null, TDCHK_LOADING = false;
+async function tdChkLoad(){
+  if(TDCHK_LOADING) return; TDCHK_LOADING = true;
+  try{ const r = q(await sb.from("kb_settings").select("value").eq("key", "kaishu_today_checks").maybeSingle()); TDCHK = (r && r.value && typeof r.value === "object") ? r.value : {}; }
+  catch(e){ TDCHK = {}; }
+  TDCHK_LOADING = false; try{ paintDay(); }catch(e){}
+}
+function tdChkBox(d, k, id){
+  if(TDCHK == null){ tdChkLoad(); return `<input type="checkbox" disabled>`; }
+  const key = d + "|" + k + "|" + id, v = TDCHK[key];
+  return `<input type="checkbox" ${v ? "checked" : ""} title="${v ? esc((v.by || "") + " " + when(v.at)) : "確かめたら ✔"}" onchange="tdChkSet('${esc(key)}', this.checked)">`;
+}
+async function tdChkSet(key, on){
+  try{
+    const r = q(await sb.from("kb_settings").select("value").eq("key", "kaishu_today_checks").maybeSingle());
+    const v = Object.assign({}, (r && r.value) || {});
+    if(on) v[key] = { by: KB.operatorName() || "", at: new Date().toISOString() }; else delete v[key];
+    const old = prevDay(D.day, 70); Object.keys(v).forEach(k => { if(k.slice(0, 10) < old) delete v[k]; });
+    q(await sb.from("kb_settings").upsert({ key: "kaishu_today_checks", value: v, note: "✔ 回収明細の当日回収・日払いのチェック" }));
+    TDCHK = v;
+  }catch(e){ alert("✔ を保存できませんでした：" + (e.message || e)); }
+  paintDay();
+}
 function todayDayHtml(d){
   const rows = rowsFor(d, D), t = totalsFor(d, D, rows), B3 = bag3Calc(rows, t.ex, t.staff, t.ho, t.kikiRet, { out: t.rfOut, ret: t.rfRet }), dt = new Date(d + "T12:00:00Z");
   const bag = t.ho && t.ho.bag_amount != null ? Number(t.ho.bag_amount) : null, bdf = bag == null ? null : bag - t.hand;
   const src = x => !x.paid ? `<b style="color:#c0392b">まだ取っていない</b>` : x.pay_source === "kikirara" ? "🪙 キキララから" : x.pay_source === "split" ? `💴 回収金 ${num(Number(x.day_paid) - kikiAmt(x))}＋🪙 キキララ ${num(kikiAmt(x))}` : "💴 回収金から";
   return `<div class="tdcard"><div class="tdh"><b>${md(d)}(${DOW[dt.getUTCDay()]})</b><a class="j" href="javascript:void 0" onclick="openDay('${d}');envSel='day';setDayTab('env')">📮 この日の封筒・入力へ</a></div>
     <div class="tdsec">✔ 当日回収（${B3.dayL.length}人）<b>${yen(B3.dayAmt)}</b></div>
-    <div class="tdl">${B3.dayL.length ? B3.dayL.map(r => `<span>${esc(names[r.id] || r.id)} ${num(r.amt)}</span>`).join("") : `<span class="none">なし</span>`}</div>
+    <div class="tdl">${B3.dayL.length ? B3.dayL.map(r => `<span class="tdck">${tdChkBox(d, "c", r.id)}${esc(names[r.id] || r.id)} ${num(r.amt)}</span>`).join("") : `<span class="none">なし</span>`}</div>
     <div class="tdsec">− 経費 <b>${yen(t.ex)}</b></div>
     <div class="tdsec">👛 内勤の日払い <b>${yen(t.staffSum)}</b></div>
-    <div class="tdl">${t.staff.length ? t.staff.map(x => `<span>${esc(staffNames[x.staff_id] || x.staff_id)} ${num(x.day_paid)}（${src(x)}）</span>`).join("") : `<span class="none">なし</span>`}</div>
+    <div class="tdl">${t.staff.length ? t.staff.map(x => `<span class="tdck">${tdChkBox(d, "s", x.staff_id)}${esc(staffNames[x.staff_id] || x.staff_id)} ${num(x.day_paid)}（${src(x)}）</span>`).join("") : `<span class="none">なし</span>`}</div>
     <div class="tdsec">− 回収金から払った日払い <b>${yen(B3.paidCash)}</b></div>
     <div class="tdone">① 当日回収 − 経費 − 回収金から払った日払い ＝ <b>${yen(B3.one)}</b></div>
     <div class="tdsec">🤝 社長に手渡し（随時の回収合計）<b style="color:#E0001B">${yen(t.hand)}</b></div>
@@ -633,6 +658,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .tdcard .tdsec{display:flex;justify-content:space-between;gap:6px;font-weight:800;padding:3px 0;border-top:1px dashed #F1E3E7}
   .tdcard .tdsec.ok{color:#1E7A3C} .tdcard .tdsec.ng{color:#c0392b}
   .tdcard .tdl{display:flex;flex-wrap:wrap;gap:3px 10px;font-size:12px;color:#5C4B4F;padding:0 0 3px 8px} .tdcard .tdl .none{color:var(--sub)}
+  .tdcard .tdck{display:inline-flex;align-items:center;gap:3px} .tdcard .tdck input{width:16px;height:16px;margin:0;accent-color:#1E8E5A;cursor:pointer}
   .tdcard .tdone{background:#FFF3C4;border-radius:8px;padding:5px 8px;margin:4px 0;font-weight:800;text-align:right}
   .noenv{display:flex;flex-direction:column;gap:3px;font-size:13px;margin:4px 0 10px}
   @media (max-width:420px){ .tdgrid{grid-template-columns:1fr} }
