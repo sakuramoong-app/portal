@@ -1187,10 +1187,13 @@ function rfDueOf(id, c){
 // 合算してもお店から渡す額が残る精算は禁止（複数日の精算でお釣りを出すのと同じ。2026/11/15 店長）→ 返金だけは合算しないときだけ
 const rfMergedNeg = (id, c) => { const sel = unsSel[id]; return !!(sel && sel.size) && rfDueOf(id, c) < 0; };
 function isRefund(id, c){ c = c || calcCast(id); const sel = unsSel[id]; return !(sel && sel.size) && Number(c.drop) < 0 && (c.partNo || 1) === 1; }
+// 過去の売上日の返金（2026/11/18 店長）：その日の回収袋はもう閉じているので、今日の回収金から渡して、今日の袋に「○/○分の返金」とわかるように入れる（売上日はもとの日のまま）
+const rfPast = () => { try{ return day < KB.bizDateOf(); }catch(e){ return false; } };
+const rfToday = () => { try{ return unsMd(KB.bizDateOf()); }catch(e){ return "今日"; } };
 function rfBoxHtml(id, amt){
   const v = rfSrc[id] || "", ed = KB.CAN_EDIT ? "" : "disabled";
   return `<div class="rfbox ${v ? "" : "need"}" id="rf-${id}"><div class="rfh">💴 返金のしかた（キャストに ${yen(amt)} 渡す）</div>
-    <label><input type="radio" name="rf-${id}" ${v === "cash" ? "checked" : ""} ${ed} onchange="setRfSrc('${id}','cash')"> 💴 当日（${unsMd(day)}の売上営業日）の回収金から、内勤が渡した</label>
+    <label><input type="radio" name="rf-${id}" ${v === "cash" ? "checked" : ""} ${ed} onchange="setRfSrc('${id}','cash')"> ${rfPast() ? `💴 今日（${rfToday()}）の回収金から、内勤が渡した（${unsMd(day)}の売上の返金）` : `💴 当日（${unsMd(day)}の売上営業日）の回収金から、内勤が渡した`}</label>
     <label><input type="radio" name="rf-${id}" ${v === "kiki" ? "checked" : ""} ${ed} onchange="setRfSrc('${id}','kiki')"> 🪙 キキララから立て替えて渡した（別の日に会ったときなど）</label>
     <small>渡した日時・渡した人は、下の「🕒 精算（投函・回収）した日時」に入れてください。写真はいりません。<br>別の日の投函と合算して差し引くときは、ここではなく次の精算で（未精算を合算）</small></div>`;
 }
@@ -1208,7 +1211,8 @@ function setRfSrc(id, v){
   let memo = []; try{ memo = settleParts(id).memo; }catch(e){}
   const memoTxt = memo.length > 1 ? `精算メモ ${memo.length}枚（${memo.map(([bd, v]) => `${unsMd(bd)} ${v < 0 ? "¥-" : "¥"}${Math.abs(v).toLocaleString("ja-JP")}`).join("／")}・${esc(castName(id))}）` : `精算メモ（営業日 ${unsMd(day)}／${esc(castName(id))}／¥-${amt.toLocaleString("ja-JP")}）`;
   return [["rfgive", `💴 キャストに <b>${yen(amt)}</b> 渡した（${kiki ? "キキララ" : "当日の回収金"}から・数えて確認した）`],
-    ["rfmemo", kiki ? `📝 キキララのエクセルに書いた（${unsMd(day)} ${esc(castName(id))} 返金 ${yen(amt)}）` : `📝 ${memoTxt}を内勤が書いて、お金と透明封筒に同封し当日（${unsMd(day)}）の回収袋に入れた`]]
+    ["rfmemo", kiki ? `📝 キキララのエクセルに書いた（${unsMd(day)} ${esc(castName(id))} 返金 ${yen(amt)}）` : rfPast() ? `📝 ${memoTxt}を内勤が書いて（売上日は ${unsMd(day)} のまま）、今日（${rfToday()}）の回収袋に「${unsMd(day)}分の返金」とわかるように入れた`
+      : `📝 ${memoTxt}を内勤が書いて、お金と透明封筒に同封し当日（${unsMd(day)}）の回収袋に入れた`]]
     .concat(__phItems(id, c).filter(x => x[0] === "rcpt"));
 }; }
 { const __phHtml = phChkHtml; phChkHtml = function(id, c, done){

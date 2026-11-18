@@ -400,47 +400,88 @@
   </div>
 </div>
 <div class="modal-bg" id="termsBg">
-  <div class="modal">
-    <h2 id="termsTitle">🔁 バック・条件を変える</h2>
-    <div class="hint">ヒアリングとセットで変えます。<b>ヒアリング内容がないと保存できません。</b>変えたことは、だれが・いつ・どのヒアリングで、が残ります。</div>
-
-    <div class="sec">💬 ヒアリング<span id="t_hreq">（必須。前から決まっていたことは「📒 既存ルール」）</span></div>
-    <div id="t_setupBox" class="hint" style="margin:-2px 0 6px"></div>
-    <div class="f"><label><input type="radio" name="t_hmode" value="new" checked onchange="termsHMode()"> 新しく書く（キャストプロフの記録にも入ります）</label></div>
-    <div class="f" id="t_hnew_wrap"><textarea id="t_htext" placeholder="例：10/20 面談。指名が増えてきたのでランクアップ希望。交通費は全額バックで合意。"></textarea></div>
-    <div class="f" style="margin-top:6px"><label><input type="radio" name="t_hmode" value="pick" onchange="termsHMode()"> キャストプロフにあるヒアリングから選ぶ</label></div>
-    <div class="f" id="t_hpick_wrap" style="display:none"><select id="t_hpick"></select></div>
-    <div class="f" style="margin-top:6px"><label><input type="radio" name="t_hmode" value="existing" onchange="termsHMode()"> 📒 既存ルール（前から決まっていたことを入れるだけ・ヒアリングなし）</label></div>
-
-    <div class="sec">📅 いつから変わる？</div>
-    <div class="f"><label>適用開始日（この日の予約から新しいバック・条件で計算）</label><input type="date" id="t_eff"></div>
-
-    <div class="sec">⭐ ランク（変えるところだけ直す）</div>
-    <div class="grid" id="t_ranks"></div>
-
-    <div class="sec">🧮 今の条件（終わらせるものにチェック）</div>
-    <div id="t_rules"></div>
-
-    <div class="sec">＋ 条件を足す</div>
-    <div class="grid">
-      <div class="f"><label>種類</label>
-        <select id="t_kind" onchange="termsKindFields()">
-          <option value="transport_back">交通費をバック</option>
-          <option value="back_add">バックの上乗せ</option>
-          <option value="nomination_fee">指名料</option>
-          <option value="op_price">オプションの料金・バック</option>
-          <option value="zappi_exempt">雑費なし</option>
-          <option value="memo">そのほか（計算しない・受付で表示だけ）</option>
-        </select></div>
+  <div class="modal tmodal">
+    <!-- 🔁 バック・条件を変える（2026/11/19 作りなおし：左に今の設定・右に変える内容。ランク・条件を変えたら、ヒアリングの欄が出る） -->
+    <style>
+      #termsBg .tmodal{max-width:1080px;width:100%;position:relative}
+      #termsBg .tmhead{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:4px;padding-right:36px}
+      #termsBg .tmwho{display:flex;align-items:center;gap:10px;flex:1;min-width:220px} #termsBg .tmwho b{font-size:20px}
+      #termsBg .tmmeta{display:flex;gap:10px;align-items:center;font-size:12.5px;color:var(--sub);margin-top:3px;flex-wrap:wrap}
+      #termsBg .tmst{background:#E5F6EC;color:#1E7A3C;font-weight:800;border-radius:99px;padding:1px 10px}
+      #termsBg .tmsteps{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800;color:#B8A9AE}
+      #termsBg .tmstep{display:flex;flex-direction:column;align-items:center;gap:3px} #termsBg .tmstep i{font-style:normal;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#F3ECEF;color:#9C8B8F}
+      #termsBg .tmstep.on{color:#C2185B} #termsBg .tmstep.on i{background:#C2185B;color:#fff} #termsBg .tmstep.done{color:#1E7A3C} #termsBg .tmstep.done i{background:#2E9E4A;color:#fff}
+      #termsBg .tmline{width:46px;height:2px;background:#EADDE2;margin-bottom:18px}
+      #termsBg .tmx{position:absolute;right:14px;top:12px;border:none;background:none;font-size:20px;cursor:pointer;color:#7A6670}
+      #termsBg .tmtitle{font-size:15px;margin:2px 0 10px;color:var(--sub)}
+      #termsBg .tmcols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.8fr);gap:14px;align-items:start}
+      @media (max-width:820px){ #termsBg .tmcols{grid-template-columns:1fr} }
+      #termsBg .tmcur{background:#FBF7F9;border:1.5px solid #F1E3E7;border-radius:14px;padding:10px 12px}
+      #termsBg .tmch{font-weight:900;font-size:15px;margin-bottom:8px}
+      #termsBg .tmedit{display:flex;flex-direction:column;gap:10px}
+      #termsBg .tmbox{border:1.5px solid #F3D6E0;border-radius:14px;padding:10px 12px;background:#fff}
+      #termsBg .tmbh{display:flex;align-items:center;gap:6px;font-weight:900;font-size:14px;margin-bottom:8px;background:#FFF0F5;margin:-10px -12px 10px;padding:8px 12px;border-radius:12px 12px 0 0}
+      #termsBg .tmbh small{font-weight:700;color:var(--sub)}
+      #termsBg .tmrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap} #termsBg .tmrow .tmbh{background:none;padding:0;margin:0} #termsBg .tmrow input{width:auto} #termsBg .tmrow small{color:var(--sub)}
+      #termsBg .tmrule{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px dashed #F1E3E7;padding:6px 2px;cursor:pointer}
+      #termsBg .tmrn{display:flex;flex-direction:column} #termsBg .tmrn small{color:var(--sub);font-size:12.5px}
+      #termsBg .tmend{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:800;color:#9C8B8F;white-space:nowrap} #termsBg .tmend input{width:auto;margin:0}
+      #termsBg .tmrule.ending .tmrn{text-decoration:line-through;color:#c0392b} #termsBg .tmrule.ending .tmend{color:#c0392b}
+      #termsBg .tmadd{margin-top:8px;padding:8px;border:1.5px dashed #F2C94C;border-radius:12px;background:#FFFDF2}
+      #termsBg .tmhear{border-color:#C2185B} #termsBg .tmreq{color:#C2185B}
+      #termsBg .tmradio{display:flex !important;align-items:center;gap:8px;font-size:14px;font-weight:700;padding:5px 2px;cursor:pointer} #termsBg .tmradio input{width:auto;margin:0;flex:none}
+      #termsBg .tmwait{border:2px dashed #EADDE2;border-radius:14px;padding:12px;text-align:center;color:#9C8B8F;font-weight:700;font-size:13px}
+    </style>
+    <div class="tmhead">
+      <div class="tmwho" id="t_who"></div>
+      <div class="tmsteps" id="t_steps"></div>
+      <button type="button" class="tmx" onclick="closeTerms()" aria-label="閉じる">✕</button>
     </div>
-    <div id="t_kindFields" class="grid" style="margin-top:6px"></div>
-    <div class="f" style="margin-top:6px"><label>条件の説明（受付で表示されます）</label><input id="t_note" maxlength="300" placeholder="例：交通費は全額バック"></div>
-    <button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="termsAddRule()">＋ この条件を足す</button>
-    <div id="t_newRules" style="margin-top:6px"></div>
-
+    <h2 id="termsTitle" class="tmtitle">🔁 バック・条件を変える</h2>
+    <div class="tmcols">
+      <aside class="tmcur">
+        <div class="tmch">🕘 今の設定（変える前）</div>
+        <div id="t_cur"></div>
+      </aside>
+      <section class="tmedit">
+        <div class="tmch">✏️ 変える内容</div>
+        <div class="tmbox"><div class="tmbh">① ⭐ お店ごとのランク <small>（変えるところだけ）</small></div>
+          <div class="grid" id="t_ranks"></div></div>
+        <div class="tmbox"><div class="tmbh">② 🧮 条件 <button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="termsAddOpen()">＋ 条件を追加</button></div>
+          <div id="t_rules"></div>
+          <div id="t_newRules" style="margin-top:6px"></div>
+          <div id="t_addBox" class="tmadd" style="display:none">
+            <div class="grid">
+              <div class="f"><label>種類</label>
+                <select id="t_kind" onchange="termsKindFields()">
+                  <option value="transport_back">交通費をバック</option>
+                  <option value="back_add">バックの上乗せ</option>
+                  <option value="nomination_fee">指名料</option>
+                  <option value="op_price">オプションの料金・バック</option>
+                  <option value="zappi_exempt">雑費なし</option>
+                  <option value="memo">そのほか（計算しない・受付で表示だけ）</option>
+                </select></div>
+            </div>
+            <div id="t_kindFields" class="grid" style="margin-top:6px"></div>
+            <div class="f" style="margin-top:6px"><label>条件の説明（受付で表示されます）</label><input id="t_note" maxlength="300" placeholder="例：交通費は全額バック"></div>
+            <button class="btn btn-primary btn-sm" style="width:100%;margin-top:6px" onclick="termsAddRule()">＋ この条件を足す</button>
+          </div></div>
+        <div class="tmbox tmrow"><div class="tmbh" style="margin:0">📅 適用開始日</div><input type="date" id="t_eff" onchange="termsSync()"><small>この日の予約から新しいバック・条件で計算</small></div>
+        <div class="tmbox tmhear" id="t_hearBox">
+          <div class="tmbh">💬 ヒアリング <span id="t_hreq" class="tmreq">（必須）</span></div>
+          <div id="t_setupBox" class="hint" style="margin:-2px 0 6px"></div>
+          <label class="tmradio"><input type="radio" name="t_hmode" value="existing" onchange="termsHMode()"> 📒 既存ルール（前から決まっていたことを入れるだけ・ヒアリングなし）</label>
+          <label class="tmradio"><input type="radio" name="t_hmode" value="new" checked onchange="termsHMode()"> ✍️ 新しく書く（キャストプロフの記録にも入ります）</label>
+          <div class="f" id="t_hnew_wrap"><textarea id="t_htext" maxlength="500" placeholder="変えた理由・決まったこと（例：10/20 面談。指名が増えてきたのでランクアップ。交通費は全額バックで合意）"></textarea></div>
+          <label class="tmradio"><input type="radio" name="t_hmode" value="pick" onchange="termsHMode()"> 📋 キャストプロフにあるヒアリングから選ぶ</label>
+          <div class="f" id="t_hpick_wrap" style="display:none"><select id="t_hpick"></select></div>
+        </div>
+        <div class="tmwait" id="t_hearWait">ランクか条件を変えると、ここに 💬 ヒアリングの欄が出ます</div>
+      </section>
+    </div>
     <div class="actions">
       <button class="btn btn-ghost" onclick="closeTerms()">キャンセル</button>
-      <button class="btn btn-primary" id="t_save" onclick="saveTerms()">💾 ヒアリングとセットで保存</button>
+      <button class="btn btn-primary" id="t_save" onclick="saveTerms()">💾 確認して保存</button>
     </div>
   </div>
 </div>
@@ -663,6 +704,43 @@ async function openTerms(){
   $("termsBg").classList.add("show");
 }
 function closeTerms(){ $("termsBg").classList.remove("show"); }
+/* 🔁 バック・条件を変える の見た目（2026/11/19 店長：1枚目の画像のように整理。変えたらヒアリングの欄が出る）
+   中の欄・保存（saveTerms）はそのまま。ここでは 左の「今の設定」・上の名前と①②③・ヒアリングの出し入れ だけ */
+function termsDirty(){
+  const rk = [...document.querySelectorAll('#t_ranks select[id^="t_r_"]')].some(s => (s.value || "") !== (s.dataset.was || "") && s.value !== "__new");
+  const end = [...document.querySelectorAll("#t_rules .t_end")].some(x => x.checked);
+  return rk || end || termsNewRules.length > 0;
+}
+function termsSync(){
+  const dirty = termsDirty(), box = $("t_hearBox"), wait = $("t_hearWait"); if(!box) return;
+  box.style.display = dirty ? "" : "none"; if(wait) wait.style.display = dirty ? "none" : "";
+  const mode = (document.querySelector('input[name=t_hmode]:checked') || {}).value;
+  const heard = dirty && (mode === "existing" || (mode === "new" && $("t_htext").value.trim()) || (mode === "pick" && $("t_hpick").value));
+  const step = !dirty ? 1 : !heard ? 2 : 3;
+  $("t_steps").innerHTML = [["内容の変更", 1], ["ヒアリング", 2], ["確認・保存", 3]].map(([l, n]) => `<span class="tmstep ${n < step ? "done" : n === step ? "on" : ""}"><i>${n < step ? "✓" : n}</i>${l}</span>`).join(`<b class="tmline"></b>`);
+  document.querySelectorAll("#t_rules .tmrule").forEach(r => r.classList.toggle("ending", !!(r.querySelector(".t_end") || {}).checked));
+}
+function termsAddOpen(){ const b = $("t_addBox"); if(!b) return; b.style.display = b.style.display === "none" ? "" : "none"; if(b.style.display === "") { try{ $("t_kind").focus(); }catch(e){} } }
+{ const __ot = openTerms; openTerms = async function(){
+  const r = await __ot.apply(this, arguments);
+  const c = termsCast; if(!c) return r;
+  $("termsTitle").textContent = "🔁 バック・ランク・条件を変える";
+  const st = { active: "在籍中", interview: "面接", left: "退店", rest: "休み" }[c.status] || c.status || "";
+  $("t_who").innerHTML = `${typeof KBF !== "undefined" ? KBF.img(c, 56) : ""}<div><b>${esc(nameOf(c))}</b><div class="tmmeta">${st ? `<span class="tmst">${esc(st)}</span>` : ""}<span>ID：${esc(c.id)}</span>${c.join_date ? `<span>入店：${esc(String(c.join_date).replace(/-/g, "/"))}</span>` : ""}</div></div>`;
+  $("t_cur").innerHTML = termsHtml(c);
+  // 今の条件：1行ずつ（🗑 にチェック ＝ 終わらせる）
+  const day = todayYmd(), active = castRules.filter(x => x.cast_id === c.id && (ruleOn(x, day) || x.valid_from > day));
+  $("t_rules").innerHTML = active.length ? active.map(x => `<label class="tmrule"><span class="tmrn"><b>${KIND_LABEL[x.kind] || x.kind}</b><small>${esc(x.note)}</small></span>
+      <span class="tmend"><input type="checkbox" class="t_end" value="${x.id}" onchange="termsSync()"> 🗑 終わらせる</span></label>`).join("")
+    : `<div class="hint">今の条件はありません</div>`;
+  document.querySelectorAll('#t_ranks select[id^="t_r_"]').forEach(s => s.addEventListener("change", termsSync));
+  $("t_addBox").style.display = "none";
+  ["t_htext", "t_hpick"].forEach(id => { const el = $(id); if(el && !el.dataset.ts){ el.dataset.ts = "1"; el.addEventListener("input", termsSync); el.addEventListener("change", termsSync); } });
+  termsSync();
+  return r;
+}; }
+{ const __rnr = renderNewRules; renderNewRules = function(){ const r = __rnr.apply(this, arguments); try{ termsSync(); if(termsNewRules.length) $("t_addBox").style.display = "none"; }catch(e){} return r; }; }
+{ const __thm = termsHMode; termsHMode = function(){ const r = __thm.apply(this, arguments); try{ termsSync(); }catch(e){} return r; }; }
 /* ---------- 🎁 個人オプション（キャストごと。kb_personal_ops・SQL 236）2026/11/10 ----------
    ここで登録 → 記録簿の受付で、そのキャストを選ぶとオプションの一覧に出る（料金・バックはそのまま入る。受付でその場で直せる）
    「📋 公式HP用の文」で、店長から一言に貼る文を作る */
