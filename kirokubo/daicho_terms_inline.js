@@ -54,3 +54,11 @@ function tmPending(){ try{ return !!termsCast && (termsDirty() || !!(($("t_note"
     }
     return __sc.apply(this, arguments);
   }; }
+/* 📅 適用開始日は「営業日」（朝6時まで前の日）。夜中に入れると次の日からになって、今夜の予約に効かなかった（2026/11/20 りぃの指名料） */
+const tmBizYmd = () => new Date(Date.now() + 9 * 3600 * 1000 - 6 * 3600 * 1000).toISOString().slice(0, 10);
+{ const __ot3 = openTerms; openTerms = async function(){ const r = await __ot3.apply(this, arguments); try{ const e = $("t_eff"); if(e && e.value === todayYmd()) e.value = tmBizYmd(); }catch(x){} return r; }; }
+/* ✨ バック・条件をさわったら、下の「保存する」ではなく「💾 バック・条件を保存」を光らせる */
+{ const __ka = kbAreaOf; kbAreaOf = function(el){ if(el && el.closest && el.closest("#t_inline")) return ""; return __ka.apply(this, arguments); }; }
+function tmGlow(){ const b = $("t_save"); if(b) b.classList.toggle("kbGlow", TM_INLINE && tmPending()); }
+{ const __ts = termsSync; termsSync = function(){ const r = __ts.apply(this, arguments); try{ tmGlow(); }catch(e){} return r; }; }
+["input", "change"].forEach(ev => document.addEventListener(ev, e => { if(e.target && e.target.closest && e.target.closest("#t_inline")) setTimeout(tmGlow, 0); }, true));
