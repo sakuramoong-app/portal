@@ -1412,7 +1412,7 @@ function recalc(){
     <h3>💴 お客さんの料金</h3>
     <div class="row"><span>基本額（${esc(c.course)}）</span><b>${yen(c.price)}</b></div>
     ${c.admission?`<div class="row"><span>入会金</span><b>${yen(c.admission)}</b></div>`:""}
-    <div class="row"><span>指名料</span><b>${yen(c.nomination)}</b></div>${nomiWhy()}
+    <div class="row"><span>指名料</span><b>${yen(c.nomination)}</b></div>
     ${c.extFee?`<div class="row"><span>延長</span><b>${yen(c.extFee)}</b></div>`:""}
     ${c.dateFee?`<div class="row"><span>デート</span><b>${yen(c.dateFee)}</b></div>`:""}
     ${c.optionTotal?`<div class="row"><span>オプション</span><b>${yen(c.optionTotal)}</b></div>`:""}
@@ -1430,7 +1430,7 @@ function recalc(){
       <div style="font-size:11.5px;color:#a35a00;line-height:1.7">保存すると、次からは「${esc(bm.rank)}・${esc(bm.key)}」は自動でこの金額になります。<br>
         ⚠️ <b>新しく入れたときは、店長に報告してください。</b><br>
         キャストには「過去にないコース内容だったので、バックを手で入れました。万が一直しが必要な場合は、店長から連絡が来ます」とお伝えください。</div></div>` : "") + `
-    <div class="row back"><span>コースのバック</span><b>${yen(c.courseBack)}</b></div>
+    <div class="row back"><span>コースのバック${c.nomiBack ? "（本指名の加算こみ）" : ""}</span><b>${yen(c.courseBack)}</b></div>${nomiBackRow(c)}
     <div class="row back"><span>OPのバック</span><b>${yen(c.optionBack)}</b></div>
     <div class="row back"><span>延長・入会金・特例</span><b>${yen(c.extra)}</b></div>
     <div class="row total"><span>報酬${ov !== "" ? "（自動の計算）" : ""}</span><b ${ov !== "" ? 'style="text-decoration:line-through;opacity:.5"' : ""}>${yen(back)}</b></div>
@@ -1771,12 +1771,5 @@ async function loadLog(id){
 }
 
 
-// 🔎 指名料のわけ（2026/11/20 りぃの指名料 5,000円が出ない原因を見るため。わかったら消す）
-function nomiWhy(){
-  try{
-    const cid = $("f_cast").value; if(!cid) return "";
-    const all = (M.rules || []).filter(r => r.cast_id === cid), nf = all.filter(r => r.kind === "nomination_fee"), d = resDayOf();
-    const on = rulesOn(cid, d).find(r => r.kind === "nomination_fee");
-    return `<div style="font-size:11px;color:#9C8B8F;text-align:right">🔎 ${esc(cid)}・予約の日 ${esc(d)}・画面の日 ${esc(day)}・条件 ${all.length}件・指名料の条件 ${nf.map(r => (r.params || {}).amount + "円/" + r.valid_from).join("、") || "なし"}${on ? "・効いている" : "・効いていない"}${$("f_free").value ? "・フリー（" + esc($("f_free").value) + "）" : ""}</div>`;
-  }catch(e){ return `<div style="font-size:11px;color:#c0392b">🔎 ${esc(e.message || e)}</div>`; }
-}
+// 💗 本指名の加算（コースのバックのうち本指名の分）を、報酬の中に1行で（2026/11/20 店長）
+function nomiBackRow(c){ return c && c.nomiBack ? `<div class="row back" style="font-size:.92em;opacity:.85"><span>　└ うち 💗 本指名の加算</span><b>＋${yen(c.nomiBack)}</b></div>` : ""; }

@@ -85,3 +85,41 @@ async function checkStaffPayUnsaved(){
     `$('day').value='${miss[0]}';loadDay()`);
 }
 setTimeout(checkStaffPayUnsaved, 7000); setInterval(checkStaffPayUnsaved, 60000);
+/* ③ 👛 退勤5分前：内勤の日払い（金額・どこから）がまだなら、声つきのお知らせ＋画面の上に帯（2026/11/20 店長）
+   ・片方だけのときも出す。入れて保存したら消える
+   ・残業するときは「内勤カレンダーで退勤時刻を変えて、記録簿を更新（F5）」と出す */
+NTF_KINDS.staffend = { label: "👛 退勤5分前の日払い", def: "triple", voice: true, text: "👛 {時間}　{内容}", say: "{名前}さん、退勤5分前です。日払いを入れてください" };
+const spHm = h => { const x = h >= 24 ? h - 24 : h; return (h >= 24 ? "翌" : "") + Math.floor(x) + ":" + String(Math.round((x % 1) * 60)).padStart(2, "0"); };
+async function checkStaffEnd(){
+  try{
+    if(!M.casts || KB.PRACTICE) return;
+    const me = SP_ME(); if(!me){ spEndBar(""); return; }
+    const bd = KB.bizDateOf(), r = (await staffRowsOf(bd)).find(x => x.id === me);
+    if(!r || r.out == null || r.in == null){ spEndBar(""); return; }
+    const done = Number(r.amount) > 0 && !!r.src, now = nowHour();
+    if(done || now < r.out - 5 / 60 || now > r.out + 3){ spEndBar(""); return; }   // 退勤5分前から（退勤の3時間あとまで）
+    const miss = !(Number(r.amount) > 0) && !r.src ? "金額・どこから払ったか" : !(Number(r.amount) > 0) ? "金額" : "どこから払ったか";
+    spEndBar(`👛 ${esc(KB.operatorName())}さん、退勤（${spHm(r.out)}）5分前です。内勤の日払いの<b>${miss}</b>を入れて保存してください。<small>残業するときは、内勤カレンダーで退勤時刻を変えてから、記録簿を更新（F5）してください</small>`);
+    const key = bd + "|spend|" + me + "|" + r.out, fired = lsGet("kbFired");
+    if(fired[key]) return;
+    fired[key] = 1; lsSet("kbFired", fired);
+    notify("staffend", { 名前: KB.operatorName(), 時間: "退勤 " + spHm(r.out), 内容: `日払いの${miss}がまだです。入れて保存してください（残業するときは内勤カレンダーで退勤時刻を変えて、記録簿を更新）` }, "spEndGo()");
+  }catch(e){ console.warn("checkStaffEnd", e); }
+}
+function spEndBar(html){
+  let b = document.getElementById("spEndBar");
+  if(!html){ if(b) b.remove(); return; }
+  if(!b){ b = document.createElement("div"); b.id = "spEndBar"; document.body.appendChild(b); }
+  b.innerHTML = `<div>${html}</div><button type="button" onclick="spEndGo()">👛 日払いを入れる</button>`;
+}
+function spEndGo(){
+  if(day !== KB.bizDateOf()){ $("day").value = KB.bizDateOf(); loadDay(); }
+  setTimeout(() => { const d = document.getElementById("staffPayBox"); if(d){ d.open = true; d.scrollIntoView({ block: "center", behavior: "smooth" }); } }, 400);
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  #spEndBar{position:fixed;top:0;left:0;right:0;z-index:9400;display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;background:#FFE8EC;border-bottom:3px solid #E5486C;color:#B0213F;padding:10px 14px;font-size:15px;font-weight:800;box-shadow:0 6px 18px rgba(0,0,0,.18);animation:needGlow 1.3s ease-in-out infinite}
+  #spEndBar small{display:block;font-size:12.5px;color:#7a2a3a;font-weight:700;margin-top:2px}
+  #spEndBar button{font-family:inherit;font-weight:900;font-size:14px;background:#E5486C;color:#fff;border:none;border-radius:99px;padding:8px 16px;cursor:pointer}
+</style>`);
+setTimeout(checkStaffEnd, 8000); setInterval(checkStaffEnd, 60000);
+{ const __lsp = loadStaffPay; loadStaffPay = async function(){ const r = await __lsp.apply(this, arguments); try{ checkStaffEnd(); }catch(e){} return r; }; }   // 日払いを保存したら、すぐ帯を消す
