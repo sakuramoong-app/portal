@@ -88,7 +88,9 @@ setTimeout(checkStaffPayUnsaved, 7000); setInterval(checkStaffPayUnsaved, 60000)
 /* ③ 👛 退勤5分前：内勤の日払い（金額・どこから）がまだなら、声つきのお知らせ＋画面の上に帯（2026/11/20 店長）
    ・片方だけのときも出す。入れて保存したら消える
    ・残業するときは「内勤カレンダーで退勤時刻を変えて、記録簿を更新（F5）」と出す */
-NTF_KINDS.staffend = { label: "👛 退勤5分前の日払い", def: "triple", voice: true, text: "👛 {時間}　{内容}", say: "{名前}さん、退勤5分前です。日払いを入れてください" };
+NTF_KINDS.staffend = { label: "👛 退勤5分前の日払い", def: "triple", voice: true, text: "👛 {時間}　{内容}", say: "{名前}さん、退勤5分前です。{方法}" };
+// 足りないほうで、読む文を変える（2026/11/20 店長）
+const spMissSay = r => { const a = Number(r.amount) > 0, s = !!r.src; return !a && !s ? "日払いの金額と、どこから払ったかが未入力です" : !a ? "日払いの金額が未入力です" : !s ? "日払いを、どこから払ったかが未選択です" : ""; };
 const spHm = h => { const x = h >= 24 ? h - 24 : h; return (h >= 24 ? "翌" : "") + Math.floor(x) + ":" + String(Math.round((x % 1) * 60)).padStart(2, "0"); };
 async function checkStaffEnd(){
   try{
@@ -99,11 +101,11 @@ async function checkStaffEnd(){
     const done = Number(r.amount) > 0 && !!r.src, now = nowHour();
     if(done || now < r.out - 5 / 60 || now > r.out + 3){ spEndBar(""); return; }   // 退勤5分前から（退勤の3時間あとまで）
     const miss = !(Number(r.amount) > 0) && !r.src ? "金額・どこから払ったか" : !(Number(r.amount) > 0) ? "金額" : "どこから払ったか";
-    spEndBar(`👛 ${esc(KB.operatorName())}さん、退勤（${spHm(r.out)}）5分前です。内勤の日払いの<b>${miss}</b>を入れて保存してください。<small>残業するときは、内勤カレンダーで退勤時刻を変えてから、記録簿を更新（F5）してください</small>`);
+    spEndBar(`👛 ${esc(KB.operatorName())}さん、退勤（${spHm(r.out)}）5分前です。<b>${spMissSay(r)}</b>。入れて保存してください。<small>残業するときは、内勤カレンダーで退勤時刻を変えてから、記録簿を更新（F5）してください</small>`);
     const key = bd + "|spend|" + me + "|" + r.out, fired = lsGet("kbFired");
     if(fired[key]) return;
     fired[key] = 1; lsSet("kbFired", fired);
-    notify("staffend", { 名前: KB.operatorName(), 時間: "退勤 " + spHm(r.out), 内容: `日払いの${miss}がまだです。入れて保存してください（残業するときは内勤カレンダーで退勤時刻を変えて、記録簿を更新）` }, "spEndGo()");
+    notify("staffend", { 名前: KB.operatorName(), 時間: "退勤 " + spHm(r.out), 方法: spMissSay(r), 内容: `${spMissSay(r)}。入れて保存してください（残業するときは内勤カレンダーで退勤時刻を変えて、記録簿を更新）` }, "spEndGo()");
   }catch(e){ console.warn("checkStaffEnd", e); }
 }
 function spEndBar(html){
@@ -123,3 +125,30 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 setTimeout(checkStaffEnd, 8000); setInterval(checkStaffEnd, 60000);
 { const __lsp = loadStaffPay; loadStaffPay = async function(){ const r = await __lsp.apply(this, arguments); try{ checkStaffEnd(); }catch(e){} return r; }; }   // 日払いを保存したら、すぐ帯を消す
+/* ④ 👛 次の営業日：朝（12時までに出勤）の内勤がログインしたら、前の営業日の内勤の日払いがまだ・片方だけの人を声でお知らせ（2026/11/20 店長）
+   「○○さんの日払い入力がまだです。社長への日報報告に誤差が生じる可能性があります。○○さんへ連絡をして修正後に日報報告をお願いします」（1日1回） */
+NTF_KINDS.staffprev = { label: "👛 前の日の内勤の日払いがまだ（朝の内勤に）", def: "triple", voice: true, text: "👛 {時間}の日払い：{内容}", say: "{内容}" };
+const SP_NICK = { kya: "きゃ", suya: "すや", ran: "らん", kami: "かみ", waka: "わか" };
+async function checkStaffPrevDay(){
+  try{
+    if(!M.casts || KB.PRACTICE) return;
+    const me = SP_ME(); if(!me) return;
+    const bd = KB.bizDateOf(), key = bd + "|spprev|" + me, fired = lsGet("kbFired");
+    if(fired[key]) return;
+    const mine = (await staffRowsOf(bd)).find(x => x.id === me);
+    if(!mine || mine.in == null || mine.in > 12){ return; }   // 朝（11:30 など、12時まで）に出勤の内勤だけ
+    const prev = addDays(bd, -1);
+    if(typeof SP_MISS_FROM !== "undefined" && prev < SP_MISS_FROM) return;
+    const miss = (await staffRowsOf(prev)).filter(r => r.in != null && (!(Number(r.amount) > 0) || !r.src));
+    fired[key] = 1; lsSet("kbFired", fired);
+    if(!miss.length) return;
+    const nm = r => SP_NICK[r.id] || r.name || r.id;
+    const who = miss.map(nm).join("さん・");
+    const detail = miss.map(r => `${nm(r)}さん：${spMissSay(r)}`).join("／");
+    const md = d => Number(String(d).slice(5, 7)) + "月" + Number(String(d).slice(8)) + "日";
+    notify("staffprev", { 時間: md(prev), 名前: who,
+      内容: `${who}さんの日払い入力がまだです（${detail}）。社長への日報報告に誤差が生じる可能性があります。${who}さんへ連絡をして、修正後に日報報告をお願いします` },
+      `$('day').value='${prev}';loadDay();setTimeout(()=>{const d=document.getElementById('staffPayBox');if(d){d.open=true;d.scrollIntoView({block:'center'});}},800)`);
+  }catch(e){ console.warn("checkStaffPrevDay", e); }
+}
+setTimeout(checkStaffPrevDay, 9000); setInterval(checkStaffPrevDay, 60000);
