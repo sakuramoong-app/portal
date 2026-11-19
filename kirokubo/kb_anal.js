@@ -182,5 +182,65 @@
   // 前とくらべて（%）
   const change = (now, before) => before == null || now == null || !before ? null : (now - before) / Math.abs(before);
 
-  window.KBA = { build, summary, daily, heat, groupBy, rating, keep, casts, range, prev, lastYear, change, addDays, diffDays, weekKeyOfYmd, DEAD, DEAD_LABEL, KEEP_DAYS, SHIFT_OK };
+  /* ⚠ 要確認（アラート）2026/11/19
+     ・くらべるのは「直近4週」と「その前の4週」（終わり＝きのう。今日は途中なので入れない）
+     ・言いすぎないための決まり：本数が少ないとき（10本未満・出勤20時間未満）は出さない
+       1週だけの変化では出さない（直近4週を2週ずつに分けて、どちらも前より悪いときだけ）
+       理由は「〜かもしれません」（決めつけない）
+     ・1件＝{ who, castId, what, since, vs, nums, why, look, try, level } */
+  function alerts(M, end, liveFrom){
+    const W = 28, r1 = { kind: "custom", from: addDays(end, -W + 1), to: end }, r0 = { kind: "custom", from: addDays(end, -2 * W + 1), to: addDays(end, -W) };
+    // くらべる前の4週が 新しい記録簿の前にかかるときは出さない（数字が足りなくて、まちがった知らせになる）
+    if(liveFrom && r0.from < liveFrom) return { list: [], r1, r0, tooEarly: true, readyOn: addDays(liveFrom, 2 * W) };
+    const hA = { kind: "custom", from: r1.from, to: addDays(r1.from, 13) }, hB = { kind: "custom", from: addDays(r1.from, 14), to: end };
+    const md = d => Number(d.slice(5, 7)) + "/" + Number(d.slice(8, 10));
+    const since = md(r1.from) + "〜" + md(r1.to), vs = "その前の4週（" + md(r0.from) + "〜" + md(r0.to) + "）";
+    const pt = v => Math.round(v * 1000) / 10;
+    const out = [];
+    const byId = rg => { const m = {}; casts(M, rg, null, end).forEach(x => { m[x.cast_id] = x; }); return m; };
+    const c1 = byId(r1), c0 = byId(r0), cA = byId(hA), cB = byId(hB);
+    Object.values(c1).forEach(a => {
+      const b = c0[a.cast_id], x = cA[a.cast_id], y = cB[a.cast_id];
+      if(!b) return;
+      const enough = a.cnt >= 10 && b.cnt >= 10 && a.hours >= 20 && b.hours >= 20;
+      // ① 出勤時間あたりの本数がへった（出勤がへっただけでは出さない）
+      if(enough && a.cntPer10h != null && b.cntPer10h && a.cntPer10h <= b.cntPer10h * 0.75 && x && y && x.cntPer10h != null && y.cntPer10h != null && x.cntPer10h < b.cntPer10h && y.cntPer10h < b.cntPer10h)
+        out.push({ level: 2, who: a.cast, castId: a.cast_id, what: "出勤時間あたりの本数がへっています", since, vs,
+          nums: `10時間あたり ${Math.round(b.cntPer10h * 10) / 10}本 → ${Math.round(a.cntPer10h * 10) / 10}本（${pt(a.cntPer10h / b.cntPer10h - 1)}%）`,
+          why: "出勤の時間帯が変わった・写メ日記や出勤情報が少なくなった・指名のお客さんの来る間かくがあいた、かもしれません",
+          look: "キャスト個別の 日ごとのグラフ・コース・お店ごと", try: "よく売れていた曜日・時間に出勤できるか相談する／写メ日記や出勤アピールをふやす" });
+      // ② 本指名率がさがった（15ポイント以上）
+      if(enough && a.honRate != null && b.honRate != null && b.honRate - a.honRate >= 0.15 && x && y && x.cnt >= 3 && y.cnt >= 3 && x.honRate < b.honRate && y.honRate < b.honRate)
+        out.push({ level: 2, who: a.cast, castId: a.cast_id, what: "本指名率がさがっています", since, vs,
+          nums: `本指名率 ${pt(b.honRate)}% → ${pt(a.honRate)}%（評価 ${b.mark} → ${a.mark}）`,
+          why: "新規がふえて割合がさがっただけ、または指名のお客さんがもどってきていない、かもしれません",
+          look: "新規・店リピ・本指名の本数、指名定着", try: "新規がふえたなら問題ないことも。指名が減ったなら、お礼メッセージ・次回の予約のお願いを話す" });
+      // ③ 欠勤がふえた
+      if(a.absent >= 3 && a.absent > b.absent)
+        out.push({ level: a.absent >= 5 ? 3 : 1, who: a.cast, castId: a.cast_id, what: "欠勤がふえています", since, vs,
+          nums: `欠勤 ${b.absent}日 → ${a.absent}日`, why: "体調・生活の変化があった、かもしれません",
+          look: "キャスト個別の 出勤時間・記録簿の勤怠の理由", try: "様子をきいてみる／シフトの出し方を相談する" });
+    });
+    // お店ぜんたい
+    const s1 = summary(M, r1, null), s0 = summary(M, r0, null), sA = summary(M, hA, null), sB = summary(M, hB, null);
+    const lr = s => s.cnt + s.lostN ? s.lostN / (s.cnt + s.lostN) : null;
+    if(s1.lostN >= 5 && s0.cnt >= 10 && lr(s1) != null && lr(s0) != null && lr(s1) - lr(s0) >= 0.05 && lr(sA) > lr(s0) && lr(sB) > lr(s0))
+      out.push({ level: 2, who: "お店ぜんたい", castId: "", what: "失注（キャンセル・トビ・流れた）の割合がふえています", since, vs,
+        nums: `失注 ${pt(lr(s0))}% → ${pt(lr(s1))}%（${Object.entries(s1.lostBy).map(([k, v]) => k + " " + v).join("・")}）`,
+        why: "案内できるキャストが足りない時間がある・確認電話がとどいていない、かもしれません",
+        look: "お店の 曜日×時間・失注の内訳", try: "失注の多い時間帯のシフトをふやす／前日・1時間前の確認電話をきちんと" });
+    const ph = s => s.hours ? s.drop / s.hours : null;
+    if(s1.cnt >= 30 && s0.cnt >= 30 && ph(s1) != null && ph(s0) && ph(s1) <= ph(s0) * 0.8 && ph(sA) < ph(s0) && ph(sB) < ph(s0))
+      out.push({ level: 2, who: "お店ぜんたい", castId: "", what: "出勤時間あたりの店落ちがへっています", since, vs,
+        nums: `1時間あたり ${Math.round(ph(s0)).toLocaleString("ja-JP")}円 → ${Math.round(ph(s1)).toLocaleString("ja-JP")}円`,
+        why: "お客さんにくらべて出勤が多すぎる時間がある、かもしれません",
+        look: "お店の 曜日×時間・ランキングの 10時間あたりの本数", try: "本数の少ない時間帯の出勤を見なおす" });
+    if(s0.n_new >= 5 && s1.n_new <= s0.n_new * 0.7 && sA.n_new * 2 < s0.n_new && sB.n_new * 2 < s0.n_new)
+      out.push({ level: 1, who: "お店ぜんたい", castId: "", what: "新規のお客さんがへっています", since, vs,
+        nums: `新規 ${s0.n_new}本 → ${s1.n_new}本`, why: "媒体の掲載・順位が変わった、かもしれません",
+        look: "集計の 媒体タブ", try: "媒体の上位表示・写メ日記・新人の告知を見なおす" });
+    return { list: out.sort((a, b) => b.level - a.level), r1, r0 };
+  }
+
+  window.KBA = { alerts, build, summary, daily, heat, groupBy, rating, keep, casts, range, prev, lastYear, change, addDays, diffDays, weekKeyOfYmd, DEAD, DEAD_LABEL, KEEP_DAYS, SHIFT_OK };
 })();

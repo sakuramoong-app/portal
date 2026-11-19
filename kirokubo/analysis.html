@@ -10,7 +10,7 @@
 <script src="/portal/session_guard.js"></script>
 <script src="kb_common.js?v=26"></script>
 <script src="kb_money.js?v=3"></script>
-<script src="kb_anal.js?v=1"></script>
+<script src="kb_anal.js?v=2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   body{font-size:14.5px;}
@@ -73,10 +73,12 @@
       <button type="button" data-t="store" class="on" onclick="tab('store')">🏪 お店</button>
       <button type="button" data-t="cast" onclick="tab('cast')">💗 キャスト個別</button>
       <button type="button" data-t="rank" onclick="tab('rank')">🏆 くらべる・ランキング</button>
+      <button type="button" data-t="alert" onclick="tab('alert')">⚠ 要確認</button>
     </div>
     <div id="v_store"></div>
     <div id="v_cast" style="display:none"></div>
     <div id="v_rank" style="display:none"></div>
+    <div id="v_alert" style="display:none"></div>
   </div>
 </div>
 <script>
@@ -171,13 +173,13 @@ function step(k){
   else $("fromD").value = (Number(rg.from.slice(0, 4)) + k) + "-01-01";
   render();
 }
-function tab(t){ curTab = t; [...$("tabs").children].forEach(b => b.classList.toggle("on", b.dataset.t === t)); ["store", "cast", "rank"].forEach(x => $("v_" + x).style.display = x === t ? "" : "none"); render(); }
+function tab(t){ curTab = t; [...$("tabs").children].forEach(b => b.classList.toggle("on", b.dataset.t === t)); ["store", "cast", "rank", "alert"].forEach(x => $("v_" + x).style.display = x === t ? "" : "none"); render(); }
 function rgText(rg){ return rg.from === rg.to ? rg.from.replace(/-/g, "/") : rg.from.replace(/-/g, "/") + "〜" + rg.to.replace(/-/g, "/"); }
 function render(){
   if(!M) return;
   const rg = curRange();
   $("rgLabel").textContent = rgText(rg) + (rg.to < LIVE_FROM ? "（新しい記録簿の前なので、ほぼ数字がありません）" : "");
-  if(curTab === "store") renderStore(rg); else if(curTab === "cast") renderCast(rg); else renderRank(rg);
+  if(curTab === "store") renderStore(rg); else if(curTab === "cast") renderCast(rg); else if(curTab === "alert") renderAlert(); else renderRank(rg);
 }
 // 前の年の店落ち（新しい記録簿の前は、売上管理.xlsx の日ごとの数字）
 function histDrop(rg){ let s = 0, any = false; for(let d = rg.from; d <= rg.to; d = KBA.addDays(d, 1)) if(HIST[d] != null){ s += HIST[d]; any = true; } return any ? s : null; }
@@ -281,6 +283,29 @@ function renderRank(rg){
     <div class="tw"><table class="t"><tr><th>#</th><th class="l">キャスト</th><th>評価</th>${RANK_COLS.map(([k, l]) => `<th class="sort ${k === rankSort ? "on" : ""}" onclick="rankSort='${k}';render()">${l}${k === rankSort ? " ▼" : ""}</th>`).join("")}</tr>
     ${list.map((x, i) => `<tr><td>${i + 1}</td><td class="l"><a onclick="castSel='${esc(x.cast_id)}';tab('cast')">${esc(x.cast)}</a></td><td><span class="mk ${x.mark === "−" ? "x" : x.mark}">${x.mark}</span></td>${RANK_COLS.map(([k]) => `<td>${f(k, x[k])}</td>`).join("")}</tr>`).join("")}
     </table></div></div>`;
+}
+
+/* ---------- ⚠ 要確認（アラート）：直近4週 と その前の4週。期間・お店のしぼりこみには関係なし ---------- */
+function goAlert(castId, from, to){
+  kind = "custom"; [...$("kindSeg").children].forEach(b => b.classList.toggle("on", b.dataset.k === "custom")); $("toWrap").style.display = "";
+  $("fromD").value = from; $("toD").value = to; pick = null; paintStores();
+  if(castId){ castSel = castId; tab("cast"); } else tab("store");
+}
+function renderAlert(){
+  const A = KBA.alerts(M, KBA.addDays(KB.bizDateOf(), -1), LIVE_FROM);
+  const lv = l => l >= 3 ? ["#FFE8EC", "#D9304F", "🔴 すぐ見る"] : l === 2 ? ["#FFF6E0", "#D98A00", "🟠 見ておく"] : ["#EEF4FF", "#2b7bd6", "🔵 参考"];
+  const rules = `<div class="hint">出すときの決まり：直近4週（きのうまで）と その前の4週 をくらべます。本数10本未満・出勤20時間未満の人は出しません。2週ずつに分けて、どちらも前より悪いときだけ出します（1週だけの変化では出さない）。理由は「かもしれません」の仮説です。<br>期間・お店のしぼりこみには関係ありません。</div>`;
+  if(A.tooEarly){ $("v_alert").innerHTML = `<div class="box"><h3>⚠ 要確認</h3><div style="line-height:1.8">くらべるための数字（新しい記録簿の8週間ぶん）がまだたまっていません。<br><b>${A.readyOn.replace(/-/g, "/")}</b> から出るようになります。</div>${rules}</div>`; return; }
+  $("v_alert").innerHTML = (A.list.length ? A.list.map(a => { const [bg, col, lab] = lv(a.level); return `
+    <div class="box" style="background:${bg};border-color:${col}">
+      <h3 style="color:${col}">${lab}　${esc(a.who)}：${esc(a.what)}</h3>
+      <table class="t" style="white-space:normal"><tr><td class="l" style="width:140px"><b>いつから</b></td><td class="l">${esc(a.since)}</td></tr>
+      <tr><td class="l"><b>何とくらべて</b></td><td class="l">${esc(a.vs)}</td></tr>
+      <tr><td class="l"><b>数字</b></td><td class="l"><b>${esc(a.nums)}</b></td></tr>
+      <tr><td class="l"><b>考えられる理由</b></td><td class="l">${esc(a.why)}</td></tr>
+      <tr><td class="l"><b>見るとよいデータ</b></td><td class="l">${esc(a.look)}　<a onclick="goAlert('${esc(a.castId)}','${A.r0.from}','${A.r1.to}')">→ ${a.castId ? "キャスト個別" : "お店"}で見る</a></td></tr>
+      <tr><td class="l"><b>やってみること</b></td><td class="l">${esc(a.try)}</td></tr></table>
+    </div>`; }).join("") : `<div class="box"><h3>⚠ 要確認</h3><div>✅ いま気になるところはありません</div></div>`) + rules;
 }
 init();
 </script>
