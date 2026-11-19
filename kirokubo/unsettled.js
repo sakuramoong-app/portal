@@ -240,15 +240,14 @@ settle = async function(id, stay){   // stay：精算して、そのあとも待
     return;
   }
   // 📹 ポスティングは、監視カメラで投函を確認するのも必須
-  if(place0 && place0 !== "回収" && ((unsCD()[id] || {}).camera_check || "") !== "ok"){
-    toast("📹 ポスティングは、監視カメラで投函を確認して「◎ 確認した」を押してから精算済にしてください");
+  if(place0 && place0 !== "回収" && !["ok", "ng"].includes((unsCD()[id] || {}).camera_check || "")){
+    toast("📹 ポスティングは、監視カメラを見て「◎ 確認した」か「× 写っていない」を押してから精算済にしてください");
     const w = document.getElementById("camw-" + id); if(w) w.scrollIntoView({ block: "center", behavior: "smooth" });
     return;
   }
   // 📋 写真の指さし確認：全部 ✓ しないと精算済にできない（写真なしのときはなし）2026/11/15 店長
-  if(!noPhoto[id] && phBad[id] && phBad[id].size){ toast("📋 ✖ まちがっているところがあります。キャストに直してもらってから、もう一度 ✓ してください"); const w = document.getElementById("phchk-" + id); if(w) w.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
   if(!noPhoto[id] && !phChkOk(id)){
-    toast("📋 写真を見て、精算メモの枚数・日付と金額・お金・領収書を1つずつ確認して ✓ してから精算済にしてください");
+    toast("📋 写真を見て、精算メモの枚数・日付と金額・お金・領収書を1つずつ見て「✓」か「✖ まちがっている」を選んでから精算済にしてください");
     const w = document.getElementById("phchk-" + id); if(w) w.scrollIntoView({ block: "center", behavior: "smooth" });
     return;
   }
@@ -1013,7 +1012,7 @@ function sgSteps(id, c, cd){
     { k: "ph", l: "お金の写真", ok: !!(ph && ph.length) || !!noPhoto[id] },
     { k: "chk", l: "📋 指さし確認", ok: !!noPhoto[id] || (typeof phChkOk === "function" && phChkOk(id)) },
   ];
-  if(place && place !== "回収") s.push({ k: "cam", l: "📹 カメラ確認", ok: (cd.camera_check || "") === "ok" });
+  if(place && place !== "回収") s.push({ k: "cam", l: "📹 カメラ確認", ok: ["ok", "ng"].includes(cd.camera_check || "") });
   s.push({ k: "done", l: "精算済", ok: !!cd.settled });
   return s;
 }
@@ -1149,14 +1148,15 @@ function phChkItems(id, c){
     return [["rcpt", `🧾 領収書 <b>${a.length}枚</b> が入っている：${a.map(x => `${unsMd(x[0])} ${esc(x[1])} ${x[2] ? yen(x[2]) : "（金額なし）"}`).join("／")}${a.length > 1 ? `　合計 <b>${yen(sum)}</b>` : ""}`]];
   })());
 }
-function phChkOk(id){ const s = phChk[id] || new Set(); return phChkItems(id).every(([k]) => s.has(k)); }
+// 1つずつ「✓ 合っている」か「✖ まちがっている」のどちらかを選んでいればOK（2026/11/19 店長）
+function phChkOk(id){ const s = phChk[id] || new Set(), b = phBad[id] || new Set(); return phChkItems(id).every(([k]) => s.has(k) || b.has(k)); }
 function phChkHtml(id, c, done){
   if(done || noPhoto[id]) return "";
-  const s = phChk[id] || new Set(), it = phChkItems(id, c), all = it.every(([k]) => s.has(k));
-  return `<div class="phchk ${all ? "ok" : ""}" id="phchk-${id}"><div class="phchkh">📋 写真の指さし確認（全部 ✓ しないと精算済にできません）</div>
+  const s = phChk[id] || new Set(), it = phChkItems(id, c), all = it.every(([k]) => s.has(k) || (phBad[id] || new Set()).has(k));
+  return `<div class="phchk ${all ? "ok" : ""}" id="phchk-${id}"><div class="phchkh">📋 写真の指さし確認（1つずつ ✓ か ✖ を選ばないと精算済にできません）</div>
     ${it.map(([k, l]) => { const bad = (phBad[id] || new Set()).has(k);
       return `<div class="phrow ${bad ? "bad" : ""}"><label><input type="checkbox" ${s.has(k) ? "checked" : ""} ${KB.CAN_EDIT ? "" : "disabled"} onchange="phChkSet('${id}','${k}',this.checked)"> ${l}</label><button type="button" class="phbad ${bad ? "on" : ""}" ${KB.CAN_EDIT ? "" : "disabled"} onclick="phBadSet('${id}','${k}',${!bad})">✖ まちがっている</button></div>`; }).join("")}
-    ${(phBad[id] || new Set()).size ? `<div class="phbadmsg">✖ まちがっているところがあります。キャストに直してもらってから、もう一度 ✓ してください</div>` : ""}
+    ${(phBad[id] || new Set()).size ? `<div class="phbadmsg">✖ まちがっているところがあります。キャストに伝えてください（✖ のままでも精算済にできます）</div>` : ""}
     <small>キャストが投函する内容をまちがえていたら（メモが足りない・金額がちがう等）「✖ まちがっている」を押して、キャストに直してもらう</small></div>`;
 }
 function phChkSet(id, k, on){
@@ -1232,7 +1232,7 @@ function setRfSrc(id, v){
 }; }
 { const __phHtml = phChkHtml; phChkHtml = function(id, c, done){
   const h = __phHtml(id, c, done);
-  return !done && isRefund(id, c) ? h.replace("📋 写真の指さし確認（全部 ✓ しないと精算済にできません）", "📋 返金の確認（全部 ✓ しないと精算済にできません）") : h;
+  return !done && isRefund(id, c) ? h.replace("📋 写真の指さし確認（1つずつ ✓ か ✖ を選ばないと精算済にできません）", "📋 返金の確認（全部 ✓ しないと精算済にできません）") : h;
 }; }
 { const __settleRf = settle; settle = async function(id, stay){
   const c = calcCast(id);
