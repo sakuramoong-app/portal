@@ -888,7 +888,7 @@ cardHtml = function(id, c){
            <button class="btn btn-ghost btn-sm" onclick="settle('${id}',true)" title="精算して、このあとも待機（あとで予約が入ったら②として精算）">✅ 精算して待機中のまま</button>
            <button class="btn btn-ghost btn-sm homebtn" onclick="setDirectHome('${id}',true)">🏠 直帰</button>`) : ""}
     </div>
-    ${KB.CAN_EDIT && !done ? `<div class="ptime">🕒 精算（投函・回収）した日時 <input type="date" value="${ptDay[id] || ptToday()}" onchange="ptDay['${id}']=this.value"><input type="time" value="${ptVal[id] || ""}" onchange="ptVal['${id}']=this.value">
+    ${KB.CAN_EDIT && !done ? `<div class="ptime">🕒 精算（投函・回収）した日時 <input type="date" value="${ptDay[id] || ptToday()}" onchange="ptDay['${id}']=this.value"><input type="time" id="ptt-${id}" value="${ptVal[id] || ""}" onchange="ptVal['${id}']=this.value; needGlow('${id}')">
       <span class="ptby">👤 精算した人 <select onchange="ptBy['${id}']=this.value">${ptStaff().map(n => `<option ${(ptBy[id] || KB.operatorName()) === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></span>
       <small>あとから入れるときに（例：11/2 に らん が回収した）。時刻が空なら「精算済にする」を押した時刻、人は今ログインしている人。ポスティングはカメラのアーカイブで見た時刻</small></div>` : ""}
     <div id="camw-${id}" style="${plNow === "回収" || !plNow ? "display:none" : ""}">   <!-- 回収場所が待機場（池袋・鶯谷・五反田）のときだけ -->
@@ -1034,6 +1034,8 @@ function needGlow(id){
   const place = pl ? pl.value : "", ph = phCache[phKey(id)];
   const set = (el, need) => { if(el) el.classList.toggle("needglow", !!(on && need)); };
   set(pl, !place);
+  const dep = document.getElementById("dep-" + id); set(dep, !!dep && dep.value === "");   // 実際に投函した額
+  const pt = document.getElementById("ptt-" + id); set(pt, !!pt && !pt.value);   // 精算した時刻
   set(document.getElementById("ph-" + id), !!place && !noPhoto[id] && !(ph && ph.length));
   set(document.getElementById("phchk-" + id), !noPhoto[id] && !phChkOk(id));
   set(document.getElementById("camc-" + id), !!place && place !== "回収" && !["ok", "ng"].includes(cd.camera_check || ""));
