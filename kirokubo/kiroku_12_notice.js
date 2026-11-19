@@ -147,7 +147,7 @@ async function checkStaffPrevDay(){
     const detail = miss.map(r => `${nm(r)}さん：${spMissSay(r)}`).join("／");
     const md = d => Number(String(d).slice(5, 7)) + "月" + Number(String(d).slice(8)) + "日";
     notify("staffprev", { 時間: md(prev), 名前: who,
-      内容: `${who}さんの日払い入力がまだです（${detail}）。社長への日報報告に誤差が生じる可能性があります。${who}さんへ連絡をして、修正後に日報報告をお願いします` },
+      内容: `${who}さんの日払い入力がまだです（${detail}）。社長への日報報告に誤差が生じる可能性があります。修正後に、日報報告を修正者がしてください。また、その旨を引継ぎに残してください` },
       `$('day').value='${prev}';loadDay();setTimeout(()=>{const d=document.getElementById('staffPayBox');if(d){d.open=true;d.scrollIntoView({block:'center'});}},800)`);
   }catch(e){ console.warn("checkStaffPrevDay", e); }
 }
