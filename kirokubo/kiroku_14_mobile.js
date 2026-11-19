@@ -30,7 +30,6 @@ function mobShell(){
   m.innerHTML = `
     <div class="mtop">
       <div class="mhead"><span class="mic">📅</span><b>予約</b><small>（タイムライン）</small><span style="flex:1"></span>
-        <a class="mbtn" href="customers.html" title="お客さんを探す">🔍</a>
         <button type="button" class="mbtn" onclick="mobBell()" title="お知らせ">🔔<i id="mobBellN"></i></button></div>
       <div class="mtabs" id="mobTabs"></div>
       <div class="mday"><button type="button" onclick="moveDay(-1,this)">‹</button>
@@ -39,8 +38,7 @@ function mobShell(){
       <div class="mopts" id="mobOpts"></div>
     </div>
     <div id="mobBody"></div>
-    <nav class="mnav" id="mobNav"></nav>
-    <div id="mobSheet"></div>`;
+    `;
   document.body.appendChild(m);
   return m;
 }
@@ -52,7 +50,7 @@ function mobRender(){
   const bd = KB.bizDateOf(), dl = $("dayLabel") ? $("dayLabel").textContent : day;
   $("mobDay").textContent = (dl || day) + (day === bd ? "【営業日】" : "");
   const nK = mobKari().length;
-  $("mobTabs").innerHTML = [["tl", "🗓 タイムライン"], ["list", "📋 リスト"], ["kari", "未確定" + (nK ? `<i>${nK}</i>` : "")], ["drop", "💴 店落ち"]]
+  $("mobTabs").innerHTML = [["tl", "🗓 タイムライン"], ["list", "📋 リスト"], ["kari", "未確定" + (nK ? `<i>${nK}</i>` : "")]]
     .map(([k, l]) => `<button type="button" class="${mobTab === k && mobPage === "res" ? "on" : ""}" onclick="mobGo('res','${k}')">${l}</button>`).join("");
   const sortSel = $("s_sort");
   $("mobOpts").innerHTML = mobPage === "res" && mobTab === "tl" ? `
@@ -61,32 +59,18 @@ function mobRender(){
     : "";
   const ntfN = (typeof ntfLog !== "undefined" ? ntfLog.filter(n => !n.st).length : 0);
   $("mobBellN").textContent = ntfN ? (ntfN > 99 ? "99+" : ntfN) : "";
-  $("mobNav").innerHTML = [["res", "📅", "予約"], ["shift", "👥", "出勤・シフト"], ["cast", "👤", "キャスト"], ["pc", "📈", "全体を見る"], ["more", "☰", "その他"]]
-    .map(([k, i, l]) => `<button type="button" class="${mobPage === k ? "on" : ""}" onclick="mobGo('${k}')"><span>${i}</span>${l}</button>`).join("");
   const body = $("mobBody");
-  if(mobPage === "shift") body.innerHTML = mobShiftHtml();
-  else if(mobTab === "list") body.innerHTML = mobListHtml(rows.filter(r => r.start_at).slice().sort((a, b) => String(a.start_at).localeCompare(String(b.start_at))), "この日の予約はありません");
-  else if(mobTab === "kari") body.innerHTML = mobListHtml(mobKari(), "未確定の予約はありません") + `<div class="mhint">📌 仮予約・キャストや時間がまだの予約です。開いて、ぜんぶ入れて「💾 登録する」を押すと消えます</div>`;
-  else if(mobTab === "drop") body.innerHTML = mobDropHtml();
-  else { body.innerHTML = mobTlHtml(); mobScrollNow(); }
-  body.insertAdjacentHTML("beforeend", mobPage === "res" && KB.CAN_EDIT ? `<button type="button" class="madd" onclick="openForm()">＋ 予約を追加</button>` : "");
+  let html;
+  if(mobTab === "list") html = mobListHtml(rows.filter(r => r.start_at).slice().sort((a, b) => String(a.start_at).localeCompare(String(b.start_at))), "この日の予約はありません");
+  else if(mobTab === "kari") html = mobListHtml(mobKari(), "未確定の予約はありません") + `<div class="mhint">📌 仮予約・キャストや時間がまだの予約です。開いて、ぜんぶ入れて「💾 登録する」を押すと消えます</div>`;
+  else html = mobTlHtml();
+  html += KB.CAN_EDIT ? `<button type="button" class="madd" onclick="openForm()">＋ 予約を追加</button>` : "";
+  // 中身が変わったときだけ描きなおす（描きなおしでスクロールが動くと「さわった」になって、1分のロックがかからなくなるので）
+  if(body.dataset.h !== html){ const sl = $("mobTl") ? $("mobTl").scrollLeft : 0; body.innerHTML = html; body.dataset.h = html; if(sl && $("mobTl")) $("mobTl").scrollLeft = sl; }
+  mobNowPaint();
 }
-function mobGo(page, tab){
-  if(page === "pc"){ mobLsSet("kbMobPC", "1"); mobApply(); try{ showView("tl"); }catch(e){} window.scrollTo(0, 0); return; }
-  if(page === "cast"){ location.href = "index.html"; return; }
-  if(page === "more"){ mobMore(); return; }
-  mobPage = page; if(tab) mobTab = tab; mobRender(); window.scrollTo(0, 0);
-}
+function mobGo(page, tab){ mobPage = "res"; if(tab) mobTab = tab; mobRender(); window.scrollTo(0, 0); }
 function mobBell(){ const b = document.querySelector("#ntfBox .ntfopen"); if(b) b.click(); else { const box = $("ntfBox"); if(box) box.scrollIntoView(); } }
-function mobMore(){
-  const s = $("mobSheet");
-  const links = [["settle.html", "💴 精算"], ["kaishu.html", "📦 回収明細"], ["customers.html", "👥 顧客台帳"], ["index.html", "📒 キャスト台帳"], ["stats.html", "📈 集計"], ["backup.html", "💾 バックアップ"]];
-  s.innerHTML = `<div class="msheet-bg" onclick="$('mobSheet').innerHTML=''"></div><div class="msheet"><b>その他</b>
-    ${links.map(([h, l]) => `<a href="${h}">${l}</a>`).join("")}
-    <button type="button" onclick="reloadShifts && reloadShifts();$('mobSheet').innerHTML=''">🔄 シフトを読みなおす</button>
-    <button type="button" onclick="$('mobSheet').innerHTML='';mobGo('pc')">💻 PCの画面にする</button>
-    <button type="button" class="mclose" onclick="$('mobSheet').innerHTML=''">閉じる</button></div>`;
-}
 // ---------- タイムライン ----------
 function mobHours(list){
   const now = nowHour();
@@ -108,7 +92,7 @@ function mobTlHtml(){
   const hrs = []; for(let h = h0; h <= h1; h++) hrs.push(h);
   const head = `<div class="mrow mhd"><div class="mname">キャスト<small>（出勤時間）</small></div><div class="mtrack" style="width:${W}px">
     ${hrs.map(h => `<span class="mhr" style="left:${X(h)}px">${h >= 24 ? "翌" + (h - 24) : h}:00</span>`).join("")}
-    ${isToday && now >= h0 && now <= h1 ? `<span class="mnowlab" style="left:${X(now)}px">現在<br>${tlLabel(now)}</span>` : ""}</div></div>`;
+    ${isToday ? `<span class="mnowlab" data-h0="${h0}" data-h1="${h1}"></span>` : ""}</div></div>`;
   const body = list.map(x => {
     const cd = x.cd || {}, off = ["お茶", "欠勤"].includes(cd.status), g = gapOf(x);
     const sh = x.shift ? `${tlLabel(x.shift.start)}〜${tlLabel(x.shift.end)}${x.shift.confirmed ? "" : "（未確定）"}` : "シフトなし";
@@ -125,17 +109,12 @@ function mobTlHtml(){
       tr += `<button type="button" class="mbk ${kari ? "kari" : done ? "done" : ""}" style="left:${X(s)}px;width:${Math.max(28, X(e) - X(s))}px" onclick="openForm(${Number(r.id)})">
         <b>${tlLabel(k.s)} - ${tlLabel(k.e)}</b><span>${esc([area, cu ? cu + "様" : ""].filter(Boolean).join("／") || (kari ? "📌 仮予約" : ""))}</span></button>`;
     });
-    if(isToday && now >= h0 && now <= h1) tr += `<div class="mnow" style="left:${X(now)}px"></div>`;
+    if(isToday) tr += `<div class="mnow" data-h0="${h0}" data-h1="${h1}"></div>`;   // 位置は mobNowPaint（毎分、描きなおさずに動かす）
     return `<div class="mrow ${off ? "off" : ""}"><div class="mname" onclick="${x.c ? `openCast('${x.c.id}')` : ""}">${x.c && typeof KBF !== "undefined" ? KBF.img(x.c, 36) : ""}<div><b>${esc(castLabel(x))}</b>${off ? `<em>${esc(cd.status)}</em>` : ""}<small>${esc(sh)}${g ? `<br>（間${x.c.interval_min}分）` : ""}</small></div></div>
       <div class="mtrack" style="width:${W}px">${hrs.map(h => `<i class="mgl" style="left:${X(h)}px"></i>`).join("")}${tr}</div></div>`;
   }).join("");
   return `<div class="mleg"><span><i class="lg-r"></i>予約</span><span><i class="lg-k"></i>確認待ち（仮予約）</span><span><i class="lg-b"></i>インターバル</span><span><i class="lg-o"></i>出勤外</span></div>
     <div class="mtl" id="mobTl">${head}${body}</div>`;
-}
-function mobScrollNow(){
-  const el = $("mobTl"); if(!el || day !== KB.bizDateOf() || mobRange !== "all") return;
-  const list = sortRows(tlRows()).filter(x => x.shift || x.bks.length), [h0] = mobHours(list);
-  el.scrollLeft = Math.max(0, (nowHour() - 1 - h0) * MOB_PPH);
 }
 // ---------- リスト・未確定 ----------
 function mobListHtml(list, none){
@@ -149,34 +128,16 @@ function mobListHtml(list, none){
       ${r.total ? `<span class="my">${yen(r.total)}</span>` : ""}</button>`;
   }).join("")}</div>`;
 }
-// ---------- 店落ち ----------
-function mobDropHtml(){
-  try{ renderToday(); }catch(e){}
-  const g = $("todayGrid");
-  return `<div class="mdrop">${g && g.innerHTML.trim() ? g.innerHTML : `<div class="mempty">読み込み中…</div>`}</div>
-    <a class="mlink" href="settle.html">💴 精算のページへ</a>`;
-}
-// ---------- 出勤・シフト ----------
-function mobShiftHtml(){
-  const list = sortRows(tlRows()).filter(x => x.shift || x.bks.length);
-  if(!list.length) return `<div class="mempty">この日の出勤はありません</div>`;
-  return `<div class="mlist">${list.map(x => {
-    const cd = x.cd || {}, st = cd.status || "", sb = cd.standby || "";
-    return `<button type="button" class="mli" onclick="${x.c ? `openCast('${x.c.id}')` : ""}"><span class="mc">${x.c && typeof KBF !== "undefined" ? KBF.img(x.c, 32) : ""}<b>${esc(castLabel(x))}</b></span>
-      <span class="mu">${x.shift ? esc(tlLabel(x.shift.start) + "〜" + tlLabel(x.shift.end)) + (x.shift.confirmed ? "" : "（未確定）") : "シフトなし"}${sb ? "・📍" + esc(sb) : ""}</span>
-      <span class="my">${esc(st || "—")}・予約 ${x.bks.length}件</span></button>`;
-  }).join("")}</div><div class="mhint">名前を押すと、その子の状態・待機場所を変えられます</div>`;
-}
 // ---------- つなぐ ----------
 { const __ld = loadDay; loadDay = async function(){ const r = await __ld.apply(this, arguments); try{ mobRender(); }catch(e){ console.warn("mob", e); } return r; }; }
 { const __rl = renderList; renderList = function(){ const r = __rl.apply(this, arguments); try{ mobRender(); }catch(e){} return r; }; }
 if(MOB_Q.addEventListener) MOB_Q.addEventListener("change", mobApply);
-setInterval(() => { try{ if(mobOn() && mobPage === "res" && mobTab === "tl") mobRender(); }catch(e){} }, 60000);
+setInterval(() => { try{ if(mobOn()) mobNowPaint(); }catch(e){} }, 60000);
 setTimeout(mobApply, 0);
 document.head.insertAdjacentHTML("beforeend", `<style>
   #mob{display:none}
-  body.mob #mob{display:block;padding:0 10px 92px}
-  body.mob header.kbh, body.mob #spBar, body.mob #main{display:none !important}
+  body.mob #mob{display:block;padding:0 10px 24px}
+  body.mob #spBar, body.mob #main{display:none !important}   /* 上の「記録簿・精算・キャスト台帳」は前のまま出す */
   body.mob #ntfBox{bottom:84px} body.mob #dcBox{bottom:84px}
   body.mob a[title="ポータルに戻る"]{display:none}
   #mobBackBtn{position:fixed;right:10px;bottom:10px;z-index:960;font-family:inherit;font-weight:900;font-size:13px;background:#E5638C;color:#fff;border:none;border-radius:99px;padding:9px 14px;box-shadow:0 4px 14px rgba(0,0,0,.2)}
@@ -219,11 +180,14 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   #mob .mli.cx{opacity:.55} #mob .mli.kari{background:#FFFBEA;border-color:#F2C94C}
   #mob .mdrop .todaygrid,#mob .mdrop{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px} #mob .mdrop > *{min-width:0}
   #mob .mlink{display:block;text-align:center;margin:10px 0;font-weight:800;color:#E5638C}
-  #mob .mnav{position:fixed;left:0;right:0;bottom:0;z-index:940;display:flex;gap:4px;background:rgba(255,255,255,.97);border-top:1.5px solid #F3D3DE;padding:6px 6px calc(6px + env(safe-area-inset-bottom))}
-  #mob .mnav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;font-family:inherit;font-weight:800;font-size:10.5px;background:#fff;border:1.5px solid #F3D3DE;border-radius:12px;padding:5px 2px;color:#5C4B4F}
-  #mob .mnav button span{font-size:19px} #mob .mnav button.on{background:linear-gradient(135deg,#FF8FAB,#E5638C);color:#fff;border-color:transparent}
-  #mob .msheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:970}
-  #mob .msheet{position:fixed;left:0;right:0;bottom:0;z-index:971;background:#fff;border-radius:18px 18px 0 0;padding:14px 14px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:6px}
-  #mob .msheet a,#mob .msheet button{display:block;text-align:left;font-family:inherit;font-weight:800;font-size:15px;color:#5C4B4F;text-decoration:none;border:1.5px solid #F3D3DE;background:#fff;border-radius:12px;padding:11px 14px}
-  #mob .msheet .mclose{text-align:center;background:#F4EEF0}
 </style>`);
+// 今の時刻の線・札：描きなおさずに位置だけ動かす（2026/11/20）
+function mobNowPaint(){
+  const now = nowHour();
+  document.querySelectorAll("#mob .mnow, #mob .mnowlab").forEach(el => {
+    const h0 = Number(el.dataset.h0), h1 = Number(el.dataset.h1), inR = now >= h0 && now <= h1;
+    el.style.display = inR ? "" : "none"; if(!inR) return;
+    el.style.left = Math.round((now - h0) * MOB_PPH) + "px";
+    if(el.classList.contains("mnowlab")) el.innerHTML = "現在<br>" + tlLabel(now);
+  });
+}
