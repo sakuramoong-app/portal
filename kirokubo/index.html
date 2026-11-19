@@ -827,111 +827,6 @@ function popCopyHp(){
   navigator.clipboard.writeText(t).then(() => toast("📋 コピーしました。プロフの「店長から一言」に貼って保存してください"));
 }
 let backRanks = null;   // バック表（kb_back）にあるランク
-/* ---------- 💴 バック表（ランク × コース → キャストのバック。kb_back）を直す（2026/11/10 店長：まちがいを現場ですぐ直せるように）----------
-   ・ランクを選ぶと、コースごとに「ふつう・本指・フリー・特別フリー・イベフリー」のバックが出る。直して「💾 保存」
-   ・保存の前に「何円 → 何円」を確かめる。変えた記録（いつ・だれが・何円から何円に）は kb_settings の back_edit_log に残す
-   ・入っている予約の報酬は変わらない（記録簿は開きなおすと新しいバック。まだ精算していない予約は、開いて保存しなおすと新しいバックになる） */
-const BT_SUF = [["", "ふつう"], ["本指", "本指名"], ["フリー", "フリー"], ["特別フリー", "特別フリー"], ["イベフリー", "イベフリー"]];
-let btRows = [], btRank = "", btEdit = {}, btLog = [];
-function btSplit(course){   // "60本指" → ["60","本指"]（長い言葉から先に見る）
-  for(const s of ["特別フリー", "イベフリー", "本指", "フリー"]) if(course.endsWith(s) && course.length > s.length) return [course.slice(0, -s.length), s];
-  return [course, ""];
-}
-const btNum = s => { const m = String(s).match(/\d+/); return m ? Number(m[0]) : 99999; };
-async function openBackTable(rank){
-  try{
-    btRows = q(await sb.from("kb_back").select("rank,course,amount")) || [];
-    const lg = q(await sb.from("kb_settings").select("value").eq("key", "back_edit_log").maybeSingle());
-    btLog = lg && Array.isArray(lg.value) ? lg.value : [];
-  }catch(e){ toast("バック表が読めませんでした：" + (e.message || e)); return; }
-  const ranks = [...new Set(btRows.map(r => r.rank))].sort((a, b) => a.localeCompare(b, "ja"));
-  btRank = rank && ranks.includes(rank) ? rank : (btRank && ranks.includes(btRank) ? btRank : ranks[0] || "");
-  btEdit = {};
-  let bg = document.getElementById("btBg");
-  if(!bg){ bg = document.createElement("div"); bg.id = "btBg"; bg.style.cssText = "position:fixed;inset:0;z-index:330;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg);
-    bg.addEventListener("click", e => { if(e.target === bg) btClose(); }); }
-  bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:900px;width:100%;max-height:92vh;overflow:auto;font-size:14px">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:17px">💴 バック表（ランク × コース）</b>
-      <span style="margin-left:auto"></span><button class="btn btn-ghost btn-sm" onclick="btClose()">閉じる</button></div>
-    <div class="hint" style="margin:4px 0 8px">受付で予約を入れると、この表からキャストのバックが入ります。まちがいに気づいたら、ここで直して「💾 保存」。<b>もう入っている予約の報酬は変わりません</b>（まだ精算していない予約は、記録簿を開きなおして（F5）、予約を開いて保存しなおすと新しいバックになります）。</div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">ランク <select id="bt_rank" onchange="btSwitch(this.value)">${ranks.map(r => `<option ${r === btRank ? "selected" : ""}>${esc(r)}</option>`).join("")}</select>
-      コースで探す <input id="bt_q" placeholder="例：60" oninput="btPaint()" style="width:120px"></div>
-    <div id="bt_tbl" style="margin-top:8px"></div>
-    ${CAN_EDIT ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px;border:2px dashed #F2C94C;background:#FFFDF2;border-radius:12px;padding:8px">
-      <b style="font-size:13px">＋ このランクにコースを足す</b> コース <input id="bt_newc" placeholder="例：75" style="width:100px"> <select id="bt_news">${BT_SUF.map(([s, l]) => `<option value="${s}">${l}</option>`).join("")}</select>
-      バック <input id="bt_newa" type="number" min="0" step="500" placeholder="円" style="width:110px"> <button class="btn btn-ghost btn-sm" onclick="btAdd()">足す</button></div>` : ""}
-    <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:12px;flex-wrap:wrap;position:sticky;bottom:-16px;background:#fff;padding:8px 0">
-      <span id="bt_sum" class="hint" style="margin-right:auto"></span>
-      ${CAN_EDIT ? `<button class="btn btn-primary" id="bt_save" onclick="btSave()">💾 保存</button>` : `<span class="hint">見るだけです</span>`}</div>
-    <details style="margin-top:8px"><summary class="hint" style="cursor:pointer">🕘 バック表を変えた記録（新しい順）</summary><div id="bt_log"></div></details></div>`;
-  btPaint();
-}
-function btClose(){ if(btChanges().length && !confirm("直したバックが保存されていません。閉じますか？")) return; const bg = document.getElementById("btBg"); if(bg) bg.remove(); }
-function btSwitch(r){
-  if(btChanges().length && !confirm("直したバックが保存されていません。ほかのランクにしますか？（直した分は消えます）")){ $("bt_rank").value = btRank; return; }
-  btRank = r; btEdit = {}; btPaint();
-}
-const btCur = course => { const r = btRows.find(x => x.rank === btRank && x.course === course); return r ? r.amount : null; };
-function btOnInput(inp){
-  const c = inp.dataset.c; btEdit[c] = inp.value;
-  inp.parentElement.style.background = String(inp.value) !== String(btCur(c) == null ? "" : btCur(c)) ? "#FFF3C4" : "";
-  btSumPaint();
-}
-function btPaint(){
-  const el = $("bt_tbl"); if(!el) return;
-  const qv = ($("bt_q") && $("bt_q").value || "").trim();
-  const mine = btRows.filter(r => r.rank === btRank).map(r => r.course).concat(Object.keys(btEdit).filter(c => btCur(c) == null));
-  const bases = [...new Set(mine.map(c => btSplit(c)[0]))].filter(b => !qv || b.includes(qv)).sort((a, b) => btNum(a) - btNum(b) || a.localeCompare(b, "ja"));
-  const cols = BT_SUF.filter(([s]) => mine.some(c => btSplit(c)[1] === s));
-  const cell = (base, s) => {
-    const course = base + s, cur = btCur(course), ed = course in btEdit, v = ed ? btEdit[course] : cur;
-    if(cur == null && !ed) return `<td style="color:#ccc;text-align:center">—</td>`;
-    const changed = ed && String(btEdit[course]) !== String(cur == null ? "" : cur);
-    return `<td style="${changed ? "background:#FFF3C4" : ""};padding:3px 6px"><input type="number" min="0" step="500" value="${v == null ? "" : esc(String(v))}" ${CAN_EDIT ? "" : "disabled"} data-c="${esc(course)}" oninput="btOnInput(this)" style="width:96px;text-align:right">${cur != null ? `<div style="font-size:11px;color:#9C8B8F">いま：${Number(cur).toLocaleString()}</div>` : `<div style="font-size:11px;color:#8A6100">🆕 新しく足す</div>`}</td>`;
-  };
-  el.innerHTML = bases.length ? `<table style="border-collapse:collapse;width:100%"><tr style="background:#FCE4EC"><th style="text-align:left;padding:4px 6px">コース</th>${cols.map(([, l]) => `<th style="padding:4px 6px">${l}</th>`).join("")}</tr>
-    ${bases.map(b => `<tr style="border-top:1px solid #f3e3e8"><td style="padding:4px 6px;font-weight:800">${esc(b)}</td>${cols.map(([s]) => cell(b, s)).join("")}</tr>`).join("")}</table>`
-    : `<div class="hint">このランクのコースがありません</div>`;
-  btSumPaint();
-  const lg = $("bt_log");
-  if(lg) lg.innerHTML = btLog.length ? btLog.slice(0, 40).map(x => `<div style="font-size:12.5px;border-bottom:1px dashed #eee;padding:3px 0">${esc(String(x.at || "").slice(0, 16).replace("T", " "))} ${esc(x.by || "")}${x.from ? `（${esc(x.from)}で）` : ""}：<b>${esc(x.rank)}・${esc(x.course)}</b> ${x.before == null ? "なし" : Number(x.before).toLocaleString()} → ${x.after == null ? "なし（消した）" : Number(x.after).toLocaleString()}</div>`).join("") : `<div class="hint">まだありません</div>`;
-}
-function btChanges(){
-  return Object.entries(btEdit).map(([course, v]) => ({ course, before: btCur(course), after: String(v).trim() === "" ? null : Math.round(Number(v)) }))
-    .filter(x => x.after !== x.before && !(x.after == null && x.before == null));
-}
-function btSumPaint(){ const n = btChanges().length; if($("bt_sum")) $("bt_sum").textContent = n ? `✏️ 直したところ：${n}か所（まだ保存していません）` : ""; const b = $("bt_save"); if(b) b.classList.toggle("kbGlow", !!n); }
-function btAdd(){
-  const c = ($("bt_newc").value || "").trim(), s = $("bt_news").value, a = $("bt_newa").value;
-  if(!c || a === ""){ toast("コースとバックを入れてください"); return; }
-  const course = c + s;
-  if(btCur(course) != null){ toast("そのコースはもうあります。表の中で直してください"); return; }
-  btEdit[course] = a; $("bt_newc").value = ""; $("bt_newa").value = ""; btPaint();
-}
-async function btSave(){
-  if(!CAN_EDIT) return;
-  const ch = btChanges();
-  if(!ch.length){ toast("直したところがありません"); return; }
-  if(ch.some(x => x.after != null && !(x.after >= 0 && x.after <= 300000))){ toast("バックは0〜300,000円で入れてください"); return; }
-  const msg = ch.map(x => `・${btRank}・${x.course}：${x.before == null ? "なし" : x.before.toLocaleString() + "円"} → ${x.after == null ? "消す" : x.after.toLocaleString() + "円"}`).join("\n");
-  if(!confirm(`バック表をこう変えます。いいですか？\n\n${msg}\n\nこれから入れる予約から、このバックになります（もう入っている予約は変わりません）。`)) return;
-  try{
-    const up = ch.filter(x => x.after != null).map(x => ({ rank: btRank, course: x.course, amount: x.after }));
-    if(up.length) q(await sb.from("kb_back").upsert(up, { onConflict: "rank,course" }));
-    for(const x of ch.filter(x => x.after == null)) q(await sb.from("kb_back").delete().eq("rank", btRank).eq("course", x.course));
-    // 変えた記録（新しい順・300件まで）
-    const by = typeof operatorName === "function" ? operatorName() : "", at = new Date().toISOString();
-    try{
-      const lg = q(await sb.from("kb_settings").select("value").eq("key", "back_edit_log").maybeSingle());
-      const old = lg && Array.isArray(lg.value) ? lg.value : [];
-      btLog = ch.map(x => ({ at, by, rank: btRank, course: x.course, before: x.before, after: x.after })).concat(old).slice(0, 300);
-      q(await sb.from("kb_settings").upsert({ key: "back_edit_log", value: btLog, note: "バック表を変えた記録（キャスト台帳の 💴 バック表）" }));
-    }catch(e){ /* 記録が残せなくても、バックは保存できている */ }
-    toast(`💾 バック表を保存しました（${ch.length}か所）。記録簿は開きなおすと新しいバックになります`);
-    backRanks = null; btEdit = {};
-    await openBackTable(btRank);
-  }catch(e){ toast("保存できませんでした：" + (e.message || e)); }
-}
 function rankPick(sel){
   if(sel.value !== "__new") return;
   const v = (prompt("新しいランクの名前（例：S）") || "").trim().slice(0, 20);
@@ -2494,7 +2389,7 @@ function pfPhotoJpeg(file, w, h){
 }
 /* ---------- ✂️ トリミング＋お店のロゴ（ロゴはプロフ用①〜⑧だけ。一覧用のサムネにはのせない） ----------
    pfPhotoPend[k].c = { z: 大きさ(1＝ぴったり), ox, oy: 写真のどこを真ん中にするか(0〜1), logo: { on, x, y: ロゴの真ん中(0〜1), w: 幅(写真の幅に対して), a: 濃さ } } */
-const LOGO_DEF = { on: true, x: 0.5, y: 0.63, w: 0.55, a: 0.85 };   // 真ん中より少し下・幅5.5割・透明度15%（2026/11/6 大きく・薄く）
+const LOGO_DEF = { on: true, x: 0.5, y: 0.8, w: 0.7, a: 0.5 };   // 下から2割のところ・幅7割・濃さ5割（2026/11/20 店長：サクラムーンの公式HPの写真と同じくらいに）
 const pfLogos = {};   // お店（mk）→ Image（読みこみずみ）。null＝ロゴなし
 async function pfLogoOf(mk){
   if(mk in pfLogos) return pfLogos[mk];
@@ -2641,6 +2536,38 @@ async function pfPhotoSaveOrder(){
   }catch(e){ toast("並べかえられませんでした：" + (e.message || e)); }
   finally{ pfPhotoBusy = false; }
 }
+/* 🏷 チェックした枠の写真に、まとめてお店のロゴを入れる（2026/11/20 店長）
+   公式HPに出ている写真をロボットで読む（galpic_get）→ 新しい写真として枠に入れる（ロゴつき・✂️ で直せる）→ 「💾 新しい写真を入れる」で公式HPへ
+   ・一覧用の写真にはロゴをのせない（今までと同じ）。もうロゴが入っている写真に入れると2重になる */
+async function pfLogoBulk(){
+  if(pfPhotoBusy || !pf) return;
+  const sel = [...document.querySelectorAll(".phSel:checked")].map(b => Number(b.value)).filter(k => k >= 1);
+  if(!sel.length){ toast("ロゴを入れる写真の枠（プロフ用①〜⑧）にチェックしてください"); return; }
+  const { mk, no } = hpNoOf(pf.c, pf.sk), site = HP_SITE_OF[mk];
+  if(!site || !no){ toast("このお店の在籍番号が入っていません"); return; }
+  if(!(await pfLogoOf(mk))){ toast(`${STORE_LABEL_OF(pf.sk)}のロゴが登録されていません`); return; }
+  if(!confirm(`${sel.map(k => PF_SLOT_LABEL[k]).join("・")} に${STORE_LABEL_OF(pf.sk)}のロゴを入れます。\nもうロゴが入っている写真は2重になるので、チェックをはずしてください。\n（できあがりを見てから「💾 新しい写真を入れる」で公式HPに入ります）`)) return;
+  pfPhotoBusy = true; let n = 0; const bad = [];
+  try{
+    for(const k of sel){
+      if($("phMsg")) $("phMsg").textContent = `${PF_SLOT_LABEL[k]} を読んでいます…`;
+      const file = k === 0 ? `gal180x240-${no}.jpg` : `gal390x520-${no}${k === 1 ? "" : "-" + (k - 1)}.jpg`;
+      try{
+        const r = await hpFn({ action: "galpic_get", site, file });
+        if(!r || !r.b64) throw new Error((r && r.error) || "読めませんでした");
+        const bin = atob(r.b64), u8 = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        if(pfPhotoPendSk !== pf.sk){ pfPhotoPend = {}; pfPhotoPendSk = pf.sk; }
+        if(pfPhotoPend[k]) URL.revokeObjectURL(pfPhotoPend[k].url);
+        const f = new File([u8], file, { type: r.type || "image/jpeg" });
+        pfPhotoPend[k] = { file: f, url: URL.createObjectURL(f), c: { z: 1, ox: 0.5, oy: 0.5, logo: Object.assign({}, LOGO_DEF) } };
+        n++;
+      }catch(e){ bad.push(PF_SLOT_LABEL[k] + "：" + (e.message || e)); }
+    }
+  } finally { pfPhotoBusy = false; }
+  pfCollect(); paintProf(); pfPrevAll();
+  toast(n ? `🏷 ${n}枚にロゴをのせました。できあがりを見て「💾 新しい写真を入れる」を押してください` : "読めませんでした");
+  if(bad.length && $("phMsg")) $("phMsg").innerHTML = `<span style="color:#d9534f">❌ ${esc(bad.join("／"))}</span>`;
+}
 function pfPhotoUrl(site, no, k){ return `https://www.${site}.com/galpic/` + (k === 0 ? `gal180x240-${no}.jpg` : `gal390x520-${no}${k === 1 ? "" : "-" + (k - 1)}.jpg`) + "?v=" + pfPhotoBust; }
 function pfPhotoHtml(){
   const { mk, no } = hpNoOf(pf.c, pf.sk), site = HP_SITE_OF[mk];
@@ -2671,7 +2598,8 @@ function pfPhotoHtml(){
       <a href="javascript:void(0)" onclick="$('phFile').click()">ファイルを選ぶ</a><input type="file" id="phFile" accept="image/*" multiple style="display:none" onchange="pfPhotoPick(this.files);this.value=''"></div>` : ""}
     ${CAN_EDIT ? `<div class="phTools">
       <span style="font-size:12px;color:#9C8B8F">チェックした枠を</span>
-      ${srcs.length ? `<select id="phSrc">${srcs.map(x => `<option value="${esc(x.s)}">${esc(STORE_LABEL_OF(x.s))}（${x.no}番）</option>`).join("")}</select>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="pfLogoBulk()" title="公式HPに出ている写真を読んで、お店のロゴをのせた新しい写真にします（✂️ で確かめてから 💾 で入れる）">🏷 ロゴを入れる</button>
+      ${srcs.length ?`<select id="phSrc">${srcs.map(x => `<option value="${esc(x.s)}">${esc(STORE_LABEL_OF(x.s))}（${x.no}番）</option>`).join("")}</select>
         <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoRun('copy')">📷 の同じ枠からコピー</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoPushOpen()" title="このお店の写真を、ほかのお店の同じ枠へ（画像だけ）">📤 ほかのお店へ写す</button>` : ""}
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoRun('ng')">🖼 撮影準備中にする</button>
@@ -5537,7 +5465,7 @@ async function removeCast(){
 
 load();
 </script>
-<script src="daicho_notify.js?v=1"></script><script src="daicho_room.js?v=1"></script><script src="daicho_terms_inline.js?v=1"></script><script src="daicho_layout.js?v=2"></script><!-- 📝 台帳を更新したら内勤に通知（記録簿の 🔔） -->
+<script src="daicho_notify.js?v=1"></script><script src="daicho_room.js?v=1"></script><script src="daicho_terms_inline.js?v=1"></script><script src="daicho_layout.js?v=2"></script><script src="kb_backtable.js?v=1"></script><!-- 📝 台帳を更新したら内勤に通知（記録簿の 🔔） -->
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
 </html>

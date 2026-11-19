@@ -1144,8 +1144,29 @@ function livePaint(){
 })();
 
 /* ---------- ✏️ コース・料金を直す（だれでも。kb_prices：店舗×コース→基本額）2026/11/4 ---------- */
+// 🔀 コースの並び順（2026/11/20 店長）：kb_settings の course_order＝{ お店: [コース…] }。入っていないコースは うしろに今までの順で
+function coursesSorted(store){
+  const list = M.prices.filter(p => p.store_key === store), ord = ((M.set.course_order || {})[store]) || [];
+  const at = c => { const i = ord.indexOf(c); return i < 0 ? 1e6 : i; };
+  return list.map((p, i) => [p, i]).sort((a, b) => at(a[0].course) - at(b[0].course) || a[1] - b[1]).map(x => x[0]);
+}
+async function courseMove(store, i, d){
+  const list = coursesSorted(store).map(p => p.course), j = i + d;
+  if(j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  const all = Object.assign({}, M.set.course_order || {}, { [store]: list });
+  try{
+    q(await sb.from("kb_settings").upsert({ key: "course_order", value: all, note: "受付のコースの並び順（お店ごと）" }));
+    M.set.course_order = all; refreshCourses(); openPriceEdit(store);
+  }catch(e){ toast("並びを保存できませんでした：" + (e.message || e)); }
+}
+// 💴 バック表を保存したら、受付のバックもすぐ新しくする（kb_backtable.js から）
+function btAfterSave(ch){
+  (ch || []).forEach(x => { const k = btRank + "|" + x.course; if(x.after == null) delete M.back[k]; else M.back[k] = x.after; });
+  try{ if($("formBg").classList.contains("show")) recalc(); }catch(e){}
+}
 function refreshCourses(){
-  const store = $("f_store").value, keep = $("f_course").value, list = M.prices.filter(p=>p.store_key === store);
+  const store = $("f_store").value, keep = $("f_course").value, list = coursesSorted(store);
   $("f_course").innerHTML = `<option value="">（コースを選ぶ）</option>` + list.map(p=>`<option value="${esc(p.course)}">${esc(p.course)}${/^\d+$/.test(p.course)?"分" + (Number(p.course) >= 60 ? "（" + (Math.round(Number(p.course) / 6) / 10) + "時間）" : ""):""}　${yen(p.price)}${p.note?"（"+esc(p.note)+"）":""}</option>`).join("");
   if(keep && list.some(p=>p.course === keep)) $("f_course").value = keep;
 }
@@ -1154,8 +1175,9 @@ function openPriceEdit(store){
   store = store || $("f_store").value || (M.stores[0] || {}).key;
   let bg = $("priceBg");
   if(!bg){ bg = document.createElement("div"); bg.id = "priceBg"; bg.className = "modal-bg"; document.body.appendChild(bg); KB.closeOnBackdrop(bg, () => bg.classList.remove("show")); }
-  const list = M.prices.filter(p=>p.store_key === store);
-  const row = p => `<tr data-old="${esc(p ? p.course : "")}">
+  const list = coursesSorted(store);
+  const row = (p, i) => `<tr data-old="${esc(p ? p.course : "")}">
+    <td style="white-space:nowrap">${p ? `<button type="button" class="btn btn-ghost btn-sm" style="padding:1px 7px" title="上へ" ${i === 0 ? "disabled" : ""} onclick="courseMove('${esc(store)}',${i},-1)">▲</button><button type="button" class="btn btn-ghost btn-sm" style="padding:1px 7px" title="下へ" ${i === list.length - 1 ? "disabled" : ""} onclick="courseMove('${esc(store)}',${i},1)">▼</button>` : ""}</td>
     <td><input class="pe-c" value="${esc(p ? p.course : "")}" placeholder="例：90 / 女レ80 / 泊21-5" style="width:120px"></td>
     <td><input class="pe-p" type="number" min="0" step="500" value="${p ? p.price : ""}" placeholder="13000" style="width:100px"></td>
     <td><input class="pe-n" value="${esc(p ? p.note : "")}" placeholder="例：90分（終了時刻に使う）" style="width:180px"></td>
@@ -1165,7 +1187,8 @@ function openPriceEdit(store){
     <h2>✏️ コース・料金を直す</h2>
     <div class="f" style="margin:8px 0"><label>お店</label><select id="pe_store" onchange="openPriceEdit(this.value)">${M.stores.map(s=>`<option value="${s.key}" ${s.key === store ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select></div>
     <p style="font-size:12.5px;color:var(--sub);line-height:1.6;margin:0 0 8px">コースは分だけなら数字（例：90）。<b>専用コースなど名前に時間がないときは、名前か説明に「90分」のように書くと、終了時刻が自動になります。</b>料金は基本額（指名料・延長・オプションは別）。<br>新しいコースは、キャストのバックがまだないので、はじめの受付で「キャストの報酬」にバックを入れてください（次から自動）。</p>
-    <div style="overflow-x:auto"><table class="list"><tr><th>コース</th><th>料金（円）</th><th>説明</th><th></th></tr>${list.map(p => row(p)).join("")}${row(null)}</table></div></div>`;
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 8px"><button type="button" class="btn btn-ghost btn-sm" onclick="$('priceBg').classList.remove('show');openBackTable()">💴 キャストのバック（ランク × コース）を直す</button><span style="font-size:12px;color:var(--sub)">▲▼ で、受付のコースの並び順を変えられます</span></div>
+    <div style="overflow-x:auto"><table class="list"><tr><th>順番</th><th>コース</th><th>料金（円）</th><th>説明</th><th></th></tr>${list.map((p, i) => row(p, i)).join("")}${row(null)}</table></div></div>`;
   bg.classList.add("show");
 }
 async function savePriceRow(btn, store){

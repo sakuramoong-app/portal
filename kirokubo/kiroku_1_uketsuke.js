@@ -223,7 +223,7 @@ function onStore(r){
   // 🏪 受付のお店の欄を、お店の色に（2026/11/11）
   { const sel = $("f_store"), col = typeof KBF !== "undefined" && sel.value ? KBF.storeColor(sel.value) : ""; sel.style.boxShadow = col ? "inset 8px 0 0 " + col : ""; sel.style.borderColor = col || ""; }
   const store = $("f_store").value, g = storeGroup(store);
-  const list = M.prices.filter(p=>p.store_key===store);
+  const list = typeof coursesSorted === "function" ? coursesSorted(store) : M.prices.filter(p=>p.store_key===store);   // 🔀 並び順（kiroku_7）
   const keep = (r && r.course) || $("f_course").value;
   $("f_course").innerHTML = `<option value="">（コースを選ぶ）</option>` + list.map(p=>`<option value="${esc(p.course)}">${esc(p.course)}${/^\d+$/.test(p.course)?"分" + (Number(p.course) >= 60 ? "（" + (Math.round(Number(p.course) / 6) / 10) + "時間）" : ""):""}　${yen(p.price)}${p.note?"（"+esc(p.note)+"）":""}</option>`).join("");
   if(keep && list.some(p=>p.course===keep)) $("f_course").value = keep;
