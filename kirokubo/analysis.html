@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>分析│サクラG</title>
+<link rel="icon" type="image/png" href="../favicon.png?v=3">
+<link rel="stylesheet" href="kb.css"><link rel="stylesheet" href="kb_theme.css?v=1">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/portal/session_guard.js"></script>
+<script src="kb_common.js?v=26"></script>
+<script src="kb_money.js?v=3"></script>
+<script src="kb_anal.js?v=1"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  body{font-size:14.5px;}
+  .wrap.wide{max-width:1280px;}
+  header.kbh .navinhead{flex:1;} header.kbh .navinhead .kbnav{margin:0;}
+  .ctrl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:10px;}
+  .ctrl input,.ctrl select{font-family:inherit;font-size:14px;padding:6px 10px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);}
+  .ctrl .lab{font-weight:800;font-size:13px;color:var(--sub);}
+  .seg button{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:5px 13px;font-family:inherit;font-size:13px;font-weight:800;color:var(--sub);cursor:pointer;}
+  .seg button.on{background:var(--lav);border-color:var(--lav);color:#fff;}
+  .chips{display:flex;gap:5px;flex-wrap:wrap;}
+  .chips button{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:3px 11px;font-family:inherit;font-size:12.5px;font-weight:800;color:var(--sub);cursor:pointer;}
+  .chips button.on{background:var(--pink);border-color:var(--pink);color:#fff;}
+  .tabs{display:flex;gap:6px;margin:6px 0 12px;flex-wrap:wrap;}
+  .tabs button{flex:1;min-width:120px;border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:10px;font-family:inherit;font-size:14.5px;font-weight:800;color:var(--sub);cursor:pointer;}
+  .tabs button.on{background:var(--pink);border-color:var(--pink);color:#fff;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-bottom:12px;}
+  .cards .c{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;}
+  .cards .k{font-size:12px;color:var(--sub);font-weight:800;}
+  .cards .v{font-size:20px;font-weight:800;margin-top:2px;}
+  .cards .s{font-size:11.5px;color:var(--sub);margin-top:3px;line-height:1.5;}
+  .up{color:#1f9d6b;font-weight:800;} .down{color:var(--red);font-weight:800;}
+  .box{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:12px;}
+  .box h3{font-size:15px;color:var(--pink-deep);margin-bottom:8px;}
+  .box h3 small{font-size:12px;color:var(--sub);font-weight:700;margin-left:6px;}
+  .chartwrap{position:relative;height:300px;}
+  .tw{overflow:auto;max-height:620px;}
+  table.t{border-collapse:collapse;width:100%;font-size:13px;white-space:nowrap;}
+  table.t th,table.t td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:right;}
+  table.t th{background:#FBF3F6;color:var(--sub);font-size:12px;position:sticky;top:0;z-index:1;}
+  table.t th.sort{cursor:pointer;} table.t th.sort:hover,table.t th.on{color:var(--pink-deep);}
+  table.t td.l,table.t th.l{text-align:left;}
+  table.t td a{color:var(--pink-deep);font-weight:800;cursor:pointer;}
+  .mk{display:inline-block;min-width:26px;text-align:center;border-radius:8px;font-weight:900;padding:1px 6px;color:#fff;}
+  .mk.A{background:#1f9d6b;} .mk.B{background:#2b7bd6;} .mk.C{background:#d98a00;} .mk.x{background:#bbb;}
+  table.heat td{padding:3px 0;text-align:center;font-size:11.5px;min-width:26px;}
+  .hint{font-size:12px;color:var(--sub);margin-top:6px;line-height:1.7;}
+  .grid2x{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media (max-width:800px){ .grid2x{grid-template-columns:1fr;} }
+  .bar{height:10px;border-radius:5px;background:var(--pink);display:inline-block;vertical-align:middle;}
+</style>
+</head>
+<body>
+<div class="wrap wide">
+  <header class="kbh"><h1>🔬 分析</h1><div id="navArea" class="navinhead"></div></header>
+  <div id="gate" class="gate">読み込み中…</div>
+  <div id="main" style="display:none">
+    <div class="ctrl">
+      <span class="lab">期間</span>
+      <span class="seg" id="kindSeg">
+        <button type="button" data-k="day" onclick="setKind('day')">日</button><button type="button" data-k="month" class="on" onclick="setKind('month')">月</button>
+        <button type="button" data-k="year" onclick="setKind('year')">年</button><button type="button" data-k="custom" onclick="setKind('custom')">好きな期間</button>
+      </span>
+      <input type="date" id="fromD" onchange="render()"><span id="toWrap" style="display:none">〜 <input type="date" id="toD" onchange="render()"></span>
+      <button type="button" class="btn btn-sm" onclick="step(-1)">◀ 前</button><button type="button" class="btn btn-sm" onclick="step(1)">次 ▶</button>
+      <span class="lab" id="rgLabel"></span>
+    </div>
+    <div class="ctrl"><span class="lab">お店</span><div class="chips" id="storeChips"></div></div>
+    <div class="tabs" id="tabs">
+      <button type="button" data-t="store" class="on" onclick="tab('store')">🏪 お店</button>
+      <button type="button" data-t="cast" onclick="tab('cast')">💗 キャスト個別</button>
+      <button type="button" data-t="rank" onclick="tab('rank')">🏆 くらべる・ランキング</button>
+    </div>
+    <div id="v_store"></div>
+    <div id="v_cast" style="display:none"></div>
+    <div id="v_rank" style="display:none"></div>
+  </div>
+</div>
+<script>
+/* ============================================================
+   🔬 分析（2026/11/19。店長・社長だけ）
+   ・計算は kb_anal.js（数字の決めごとも そちらに書いてある）
+   ・数字は新しい記録簿（2026年10月〜）。前の年とくらべる店落ちだけは、売上管理.xlsx から入れた日ごとの数字（kb_hist_daily）
+   ・見るだけ（なにも書きかえない）
+   ============================================================ */
+const { sb, q, esc, toast } = KB;
+const $ = id => document.getElementById(id);
+const LIVE_FROM = "2026-10-01";
+const STORE_SHORT = { sakuramoon: "サクラムーン", lana_uguisu: "ラナ鶯谷", lana_kinshi: "ラナ錦糸町", dressgarden: "ドレスガーデン", peachmoon: "ピーチムーン",
+  gyakuanal: "逆AF倶楽部", cutie: "キューティー", eighteen: "18", gokumon: "極門" };
+const VISIT = { new: "新規", repeat: "店リピ", honshi: "本指名" };
+const DOW = ["日", "月", "火", "水", "木", "金", "土"];
+let M = null, HIST = {}, STORES = [], pick = null, kind = "month", curTab = "store", castSel = "", rankSort = "sales";
+const charts = {};
+const n0 = v => Number(v) || 0;
+const yen = v => Math.round(n0(v)).toLocaleString("ja-JP") + "円";
+const num = (v, k) => v == null ? "−" : (Math.round(v * (k || 1)) / (k || 1)).toLocaleString("ja-JP");
+const pc = v => v == null ? "−" : Math.round(v * 1000) / 10 + "%";
+const md = d => Number(d.slice(5, 7)) + "/" + Number(d.slice(8, 10));
+function chg(now, before){ const c = KBA.change(now, before); return c == null ? "−" : `<span class="${c >= 0 ? "up" : "down"}">${c >= 0 ? "▲" : "▼"}${Math.abs(Math.round(c * 1000) / 10)}%</span>`; }
+async function fetchAll(table, cols, orderCol, build){
+  let out = [], from = 0;
+  for(;;){
+    let qy = sb.from(table).select(cols).order(orderCol).range(from, from + 999);
+    if(build) qy = build(qy);
+    const d = q(await qy) || [];
+    out = out.concat(d);
+    if(d.length < 1000) break;
+    from += 1000;
+  }
+  return out;
+}
+function chart(id, cfg){
+  if(charts[id]) charts[id].destroy();
+  const el = $(id); if(!el || !window.Chart) return;
+  cfg.options = Object.assign({ responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false } }, cfg.options || {});
+  charts[id] = new Chart(el, cfg);
+}
+
+async function init(){
+  $("navArea").innerHTML = KB.nav("analysis.html");
+  if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
+  if(!KB.IS_BOSS){ $("gate").textContent = "このページは店長・社長だけです"; return; }
+  if(await KB.passGate("分析")) start();
+}
+async function load(){
+  const today = KB.bizDateOf();
+  const [res, cds, shifts, casts, rules, pay, hist, stores] = await Promise.all([
+    fetchAll("kb_reservations", "id,biz_date,cast_id,customer_id,store_key,dummy_name,course,start_at,end_at,status,visit_kind,total,course_back,option_back,extra_back,back_override", "id", x => x.gte("biz_date", LIVE_FROM).eq("deleted", false)),
+    fetchAll("kb_cast_days", "*", "biz_date", x => x.gte("biz_date", LIVE_FROM)),
+    fetchAll("shift_weeks", "cast_name,wk,data", "wk", x => x.gte("wk", KBA.weekKeyOfYmd(LIVE_FROM))),
+    fetchAll("master_casts", "id,official_name,temp_name,shift_name", "id"),
+    fetchAll("kb_cast_rules", "*", "id", x => x.eq("active", true)),
+    fetchAll("kb_staff_work", "biz_date,day_paid,paid", "biz_date", x => x.gte("biz_date", LIVE_FROM).eq("paid", true)).catch(() => []),
+    fetchAll("kb_hist_daily", "d,sales", "d").catch(() => []),
+    fetchAll("master_stores", "key,label,sort", "key").catch(() => []),
+  ]);
+  const payOf = {}; (pay || []).forEach(w => { payOf[w.biz_date] = (payOf[w.biz_date] || 0) + n0(w.day_paid); });
+  HIST = {}; (hist || []).forEach(h => { HIST[String(h.d).slice(0, 10)] = n0(h.sales); });
+  M = KBA.build({ res, cds, shifts, casts, rules, pay: payOf, today, from: LIVE_FROM });
+  const used = new Set(M.R.map(r => r.store).filter(Boolean));
+  STORES = (stores || []).filter(s => used.has(s.key)).sort((a, b) => n0(a.sort) - n0(b.sort)).map(s => s.key);
+  used.forEach(k => { if(!STORES.includes(k)) STORES.push(k); });
+}
+async function start(){
+  $("gate").textContent = "数字を読みこみ中…";
+  try{ await load(); }catch(e){ $("gate").textContent = "読みこめませんでした：" + (e.message || e); return; }
+  $("gate").style.display = "none"; $("main").style.display = "";
+  $("fromD").value = KB.bizDateOf(); $("toD").value = KB.bizDateOf();
+  paintStores(); render();
+}
+function paintStores(){
+  $("storeChips").innerHTML = `<button type="button" class="${pick ? "" : "on"}" onclick="pickStore('')">全部</button>` +
+    STORES.map(k => `<button type="button" class="${pick && pick.includes(k) ? "on" : ""}" onclick="pickStore('${k}')">${esc(STORE_SHORT[k] || k)}</button>`).join("");
+}
+function pickStore(k){
+  if(!k) pick = null;
+  else { pick = pick ? pick.slice() : []; pick = pick.includes(k) ? pick.filter(x => x !== k) : pick.concat([k]); if(!pick.length) pick = null; }
+  paintStores(); render();
+}
+function setKind(k){ kind = k; [...$("kindSeg").children].forEach(b => b.classList.toggle("on", b.dataset.k === k)); $("toWrap").style.display = k === "custom" ? "" : "none"; render(); }
+function curRange(){ return KBA.range(kind, $("fromD").value || KB.bizDateOf(), $("toD").value); }
+function step(k){
+  const rg = curRange();
+  if(kind === "custom"){ const len = KBA.diffDays(rg.from, rg.to) + 1; $("fromD").value = KBA.addDays(rg.from, k * len); $("toD").value = KBA.addDays(rg.to, k * len); }
+  else if(kind === "day") $("fromD").value = KBA.addDays(rg.from, k);
+  else if(kind === "month"){ const t = new Date(rg.from + "T12:00:00Z"); t.setUTCMonth(t.getUTCMonth() + k); $("fromD").value = t.toISOString().slice(0, 10); }
+  else $("fromD").value = (Number(rg.from.slice(0, 4)) + k) + "-01-01";
+  render();
+}
+function tab(t){ curTab = t; [...$("tabs").children].forEach(b => b.classList.toggle("on", b.dataset.t === t)); ["store", "cast", "rank"].forEach(x => $("v_" + x).style.display = x === t ? "" : "none"); render(); }
+function rgText(rg){ return rg.from === rg.to ? rg.from.replace(/-/g, "/") : rg.from.replace(/-/g, "/") + "〜" + rg.to.replace(/-/g, "/"); }
+function render(){
+  if(!M) return;
+  const rg = curRange();
+  $("rgLabel").textContent = rgText(rg) + (rg.to < LIVE_FROM ? "（新しい記録簿の前なので、ほぼ数字がありません）" : "");
+  if(curTab === "store") renderStore(rg); else if(curTab === "cast") renderCast(rg); else renderRank(rg);
+}
+// 前の年の店落ち（新しい記録簿の前は、売上管理.xlsx の日ごとの数字）
+function histDrop(rg){ let s = 0, any = false; for(let d = rg.from; d <= rg.to; d = KBA.addDays(d, 1)) if(HIST[d] != null){ s += HIST[d]; any = true; } return any ? s : null; }
+
+/* ---------- 🏪 お店 ---------- */
+function renderStore(rg){
+  const S = KBA.summary(M, rg, pick), P = KBA.summary(M, KBA.prev(rg), pick), ly = KBA.lastYear(rg), Y = KBA.summary(M, ly, pick);
+  const yDrop = Y.cnt ? Y.drop : (!pick ? histDrop(ly) : null);
+  const card = (k, v, now, p, y, sub) => `<div class="c"><div class="k">${k}</div><div class="v">${v}</div><div class="s">前の期間 ${chg(now, p)}　前の年 ${chg(now, y)}${sub ? "<br>" + sub : ""}</div></div>`;
+  const vis = S.n_new + S.n_repeat + S.n_honshi;
+  const H = KBA.heat(M, rg, pick), hmax = Math.max(1, ...H.flat());
+  const hours = [...Array(24).keys()].map(i => (i + 10) % 24);   // 10時はじまり
+  const courses = KBA.groupBy(M, rg, pick, r => r.course || "（コースなし）").slice(0, 15);
+  const byStore = KBA.groupBy(M, rg, null, r => r.store || "（店なし）");
+  const days = KBA.daily(M, rg, pick);
+  $("v_store").innerHTML = `
+    <div class="cards">
+      ${card("💴 売上（交通費こみ）", yen(S.sales), S.sales, P.cnt ? P.sales : null, Y.cnt ? Y.sales : null)}
+      ${card("🏠 店落ち", yen(S.drop), S.drop, P.cnt ? P.drop : null, yDrop, pick ? "店をしぼると内勤の日払いは引きません" : "内勤の日払い " + yen(S.staffPay) + " を引いたあと")}
+      ${card("🔢 本数", num(S.cnt) + "本", S.cnt, P.cnt || null, Y.cnt || null, "1本あたり " + (S.perCnt ? yen(S.perCnt) : "−"))}
+      ${card("💗 キャストの報酬", yen(S.reward), S.reward, P.cnt ? P.reward : null, Y.cnt ? Y.reward : null)}
+      ${card("❌ 失注（キャンセル・トビ・流れた）", num(S.lostN) + "件", S.lostN, P.cnt ? P.lostN : null, Y.cnt ? Y.lostN : null, Object.entries(S.lostBy).map(([k, v]) => k + " " + v).join("・") + (S.lostYen ? "<br>失った額 " + yen(S.lostYen) : ""))}
+      ${S.hours != null ? card("⏰ キャストの出勤時間", num(S.hours, 10) + "時間", S.hours, P.cnt ? P.hours : null, Y.cnt ? Y.hours : null, "のべ " + S.castDays + "人・日") : ""}
+    </div>
+    <div class="box"><h3>📈 日ごと<small>棒＝売上・線＝店落ち</small></h3><div class="chartwrap"><canvas id="cDaily"></canvas></div></div>
+    <div class="grid2x">
+      <div class="box"><h3>👥 新規・店リピ・本指名</h3>
+        <table class="t"><tr><th class="l">種類</th><th>本数</th><th>わりあい</th><th class="l"></th></tr>
+        ${["new", "repeat", "honshi"].map(k => { const v = S["n_" + k]; return `<tr><td class="l">${VISIT[k]}</td><td>${v}</td><td>${pc(vis ? v / vis : null)}</td><td class="l"><span class="bar" style="width:${vis ? Math.round(v / vis * 140) : 0}px"></span></td></tr>`; }).join("")}
+        </table><div class="hint">種類の入っていない予約は入れていません</div></div>
+      <div class="box"><h3>🏪 お店ごと<small>（お店のしぼりこみに関係なく全部）</small></h3><div class="tw" style="max-height:300px">
+        <table class="t"><tr><th class="l">お店</th><th>本数</th><th>売上</th><th>店落ち</th><th>新規</th><th>店リピ</th><th>本指名</th></tr>
+        ${byStore.map(s => `<tr><td class="l">${esc(STORE_SHORT[s.key] || s.key)}</td><td>${s.cnt}</td><td>${yen(s.sales)}</td><td>${yen(s.drop)}</td><td>${s.n_new}</td><td>${s.n_repeat}</td><td>${s.n_honshi}</td></tr>`).join("")}
+        </table></div><div class="hint">お店ごとの店落ちは、内勤の日払いを引く前</div></div>
+    </div>
+    <div class="box"><h3>🗓 曜日 × 時間<small>予約の始まる時刻・本数（色が濃いほど多い）</small></h3><div class="tw">
+      <table class="t heat"><tr><th class="l"></th>${hours.map(h => `<th>${h}</th>`).join("")}<th>計</th></tr>
+      ${[1, 2, 3, 4, 5, 6, 0].map(w => `<tr><td class="l"><b>${DOW[w]}</b></td>${hours.map(h => { const v = H[w][h]; return `<td style="background:rgba(229,99,140,${(v / hmax * 0.85).toFixed(2)});color:${v / hmax > 0.5 ? "#fff" : "inherit"}">${v || ""}</td>`; }).join("")}<td><b>${H[w].reduce((a, b) => a + b, 0)}</b></td></tr>`).join("")}
+      </table></div><div class="hint">曜日は営業日（朝6時で切りかえ）</div></div>
+    <div class="box"><h3>📋 コース<small>多い順・15こまで</small></h3><div class="tw" style="max-height:420px">
+      <table class="t"><tr><th class="l">コース</th><th>本数</th><th>売上</th><th>1本あたり</th><th>店落ち</th></tr>
+      ${courses.map(c => `<tr><td class="l">${esc(c.key)}</td><td>${c.cnt}</td><td>${yen(c.sales)}</td><td>${yen(c.sales / c.cnt)}</td><td>${yen(c.drop)}</td></tr>`).join("")}
+      </table></div></div>`;
+  chart("cDaily", { data: { labels: days.map(x => md(x.d)), datasets: [
+    { type: "bar", label: "売上", data: days.map(x => x.sales), backgroundColor: "rgba(229,99,140,.55)" },
+    { type: "line", label: "店落ち", data: days.map(x => Math.round(x.drop)), borderColor: "#7a5bd6", backgroundColor: "#7a5bd6", tension: .25 } ] },
+    options: { scales: { y: { ticks: { callback: v => Math.abs(v) >= 10000 ? (v / 10000) + "万" : v } } } } });
+}
+
+/* ---------- 💗 キャスト個別 ---------- */
+function renderCast(rg){
+  const all = KBA.casts(M, rg, pick, KB.bizDateOf()).sort((a, b) => b.sales - a.sales);
+  const names = [...new Map(M.R.filter(r => r.cast_id).map(r => [r.cast_id, r.cast])).entries()].sort((a, b) => a[1].localeCompare(b[1], "ja"));
+  if(!castSel && all[0]) castSel = all[0].cast_id;
+  const c = all.find(x => x.cast_id === castSel) || { cast: (names.find(n => n[0] === castSel) || [])[1] || "", cnt: 0, sales: 0, reward: 0, drop: 0, n_new: 0, n_repeat: 0, n_honshi: 0, hours: 0, days: 0, absent: 0, ocha: 0, mark: "−", keep: { base: 0, kept: 0, waiting: 0, rate: null } };
+  const p = KBA.casts(M, KBA.prev(rg), pick, KB.bizDateOf()).find(x => x.cast_id === castSel) || null;
+  const card = (k, v, now, before, sub) => `<div class="c"><div class="k">${k}</div><div class="v">${v}</div><div class="s">前の期間 ${before == null ? "−" : chg(now, before)}${sub ? "<br>" + sub : ""}</div></div>`;
+  const rs = M.R.filter(r => r.live && r.cast_id === castSel && r.d >= rg.from && r.d <= rg.to && (!pick || pick.includes(r.store)));
+  const lost = M.R.filter(r => !r.live && r.cast_id === castSel && r.d >= rg.from && r.d <= rg.to && (!pick || pick.includes(r.store)));
+  const days = {}; for(let d = rg.from; d <= rg.to; d = KBA.addDays(d, 1)) days[d] = { cnt: 0, reward: 0, hours: 0 };
+  rs.forEach(r => { if(days[r.d]){ days[r.d].cnt++; days[r.d].reward += r.back; } });
+  M.D.forEach(x => { if(x.cast_id === castSel && days[x.d]) days[x.d].hours = x.hours; });
+  const courses = KBA.groupBy({ R: rs }, rg, null, r => r.course || "（コースなし）").slice(0, 10);
+  const stores = KBA.groupBy({ R: rs }, rg, null, r => r.store);
+  const k = c.keep || {};
+  $("v_cast").innerHTML = `
+    <div class="ctrl"><span class="lab">キャスト</span><select id="castPick" onchange="castSel=this.value;render()">${names.map(([id, nm]) => `<option value="${esc(id)}" ${id === castSel ? "selected" : ""}>${esc(nm)}</option>`).join("")}</select>
+      <span class="lab">評価</span><span class="mk ${c.mark === "−" ? "x" : c.mark}" style="font-size:16px">${c.mark}</span><span class="hint" style="margin:0">本指名率 ${pc(c.honRate)}（A 70%以上・B 50%以上・C 50%未満）</span></div>
+    <div class="cards">
+      ${card("🔢 本数", num(c.cnt) + "本", c.cnt, p ? p.cnt : null, "新規 " + c.n_new + "・店リピ " + c.n_repeat + "・本指名 " + c.n_honshi)}
+      ${card("💴 売上", yen(c.sales), c.sales, p ? p.sales : null)}
+      ${card("💗 報酬", yen(c.reward), c.reward, p ? p.reward : null, "1本あたり " + (c.perCnt ? yen(c.perCnt) : "−"))}
+      ${card("🏠 店落ち", yen(c.drop), c.drop, p ? p.drop : null, "雑費こみ・内勤の日払いは引かない")}
+      ${pick ? "" : card("⏰ 出勤時間", num(c.hours, 10) + "時間", c.hours, p ? p.hours : null, "出勤 " + c.days + "日（お茶 " + c.ocha + "）・欠勤 " + c.absent + "日")}
+      ${pick ? "" : card("⏱ 1時間あたりの報酬", c.perHour ? yen(c.perHour) : "−", c.perHour, p ? p.perHour : null, "10時間あたり " + num(c.cntPer10h, 10) + "本")}
+      ${card("🔁 指名定着（半年）", k.base ? pc(k.rate) : "−", k.rate, p && p.keep ? p.keep.rate : null, `新規・店リピ ${k.base}人 → また指名 ${k.kept}人${k.waiting ? `<br>まだ途中（半年たっていない）${k.waiting}人` : ""}`)}
+      ${card("❌ 失注", lost.length + "件", lost.length, null, Object.entries(lost.reduce((a, r) => { const l = KBA.DEAD_LABEL[r.status] || r.status; a[l] = (a[l] || 0) + 1; return a; }, {})).map(([a, b]) => a + " " + b).join("・"))}
+    </div>
+    <div class="box"><h3>📈 日ごと<small>棒＝本数・線＝出勤時間</small></h3><div class="chartwrap"><canvas id="cCast"></canvas></div></div>
+    <div class="grid2x">
+      <div class="box"><h3>📋 コース</h3><table class="t"><tr><th class="l">コース</th><th>本数</th><th>売上</th></tr>${courses.map(x => `<tr><td class="l">${esc(x.key)}</td><td>${x.cnt}</td><td>${yen(x.sales)}</td></tr>`).join("") || `<tr><td class="l" colspan="3">なし</td></tr>`}</table></div>
+      <div class="box"><h3>🏪 お店</h3><table class="t"><tr><th class="l">お店</th><th>本数</th><th>新規</th><th>店リピ</th><th>本指名</th></tr>${stores.map(x => `<tr><td class="l">${esc(STORE_SHORT[x.key] || x.key || "（店なし）")}</td><td>${x.cnt}</td><td>${x.n_new}</td><td>${x.n_repeat}</td><td>${x.n_honshi}</td></tr>`).join("") || `<tr><td class="l" colspan="5">なし</td></tr>`}</table></div>
+    </div>
+    <div class="hint">指名定着：期間の中で「新規」か「店リピ」で はじめてこのキャストについたお客さんのうち、半年（180日）以内にまた このキャストを予約した人のわりあい。お客さんの記録は 2026年10月から</div>`;
+  const dl = Object.keys(days);
+  chart("cCast", { data: { labels: dl.map(md), datasets: [
+    { type: "bar", label: "本数", data: dl.map(d => days[d].cnt), backgroundColor: "rgba(229,99,140,.6)", yAxisID: "y" },
+    { type: "line", label: "出勤時間", data: dl.map(d => days[d].hours || null), borderColor: "#7a5bd6", backgroundColor: "#7a5bd6", yAxisID: "y1", spanGaps: true } ] },
+    options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, y1: { beginAtZero: true, position: "right", grid: { drawOnChartArea: false } } } } });
+}
+
+/* ---------- 🏆 くらべる・ランキング ---------- */
+const RANK_COLS = [["cnt", "本数"], ["sales", "売上"], ["reward", "報酬"], ["drop", "店落ち"], ["hours", "出勤時間"], ["perHour", "1時間の報酬"], ["cntPer10h", "10時間の本数"], ["perCnt", "1本の報酬"], ["n_new", "新規"], ["n_repeat", "店リピ"], ["n_honshi", "本指名"], ["honRate", "本指名率"], ["keepRate", "指名定着"]];
+function renderRank(rg){
+  const list = KBA.casts(M, rg, pick, KB.bizDateOf()).filter(x => x.cnt || x.hours).map(x => Object.assign(x, { keepRate: x.keep.base ? x.keep.rate : null }));
+  list.sort((a, b) => (b[rankSort] == null ? -1e15 : b[rankSort]) - (a[rankSort] == null ? -1e15 : a[rankSort]));
+  const f = (k, v) => v == null ? "−" : ["sales", "reward", "drop", "perHour", "perCnt"].includes(k) ? yen(v) : ["honRate", "keepRate"].includes(k) ? pc(v) : ["hours", "cntPer10h"].includes(k) ? num(v, 10) : num(v);
+  const marks = { A: 0, B: 0, C: 0 }; list.forEach(x => { if(marks[x.mark] != null) marks[x.mark]++; });
+  $("v_rank").innerHTML = `<div class="box"><h3>🏆 キャストのランキング<small>見出しを押すと並べかえ。名前を押すとキャスト個別へ</small></h3>
+    <div class="hint" style="margin:0 0 6px">評価：A ${marks.A}人・B ${marks.B}人・C ${marks.C}人（本指名率 A 70%以上・B 50%以上・C 50%未満）${pick ? "　※お店をしぼると、出勤時間は出しません" : ""}</div>
+    <div class="tw"><table class="t"><tr><th>#</th><th class="l">キャスト</th><th>評価</th>${RANK_COLS.map(([k, l]) => `<th class="sort ${k === rankSort ? "on" : ""}" onclick="rankSort='${k}';render()">${l}${k === rankSort ? " ▼" : ""}</th>`).join("")}</tr>
+    ${list.map((x, i) => `<tr><td>${i + 1}</td><td class="l"><a onclick="castSel='${esc(x.cast_id)}';tab('cast')">${esc(x.cast)}</a></td><td><span class="mk ${x.mark === "−" ? "x" : x.mark}">${x.mark}</span></td>${RANK_COLS.map(([k]) => `<td>${f(k, x[k])}</td>`).join("")}</tr>`).join("")}
+    </table></div></div>`;
+}
+init();
+</script>
+</body>
+</html>

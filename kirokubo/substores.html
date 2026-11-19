@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>極門・五反田│サクラG</title>
+<link rel="icon" type="image/png" href="../favicon.png?v=3">
+<link rel="stylesheet" href="kb.css"><link rel="stylesheet" href="kb_theme.css?v=1">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/portal/session_guard.js"></script>
+<script src="kb_common.js?v=26"></script>
+<script src="kb_money.js?v=3"></script>
+<script src="kb_anal.js?v=1"></script>
+<style>
+  body{font-size:14.5px;}
+  .wrap.wide{max-width:1280px;}
+  header.kbh .navinhead{flex:1;} header.kbh .navinhead .kbnav{margin:0;}
+  .ctrl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:10px;}
+  .ctrl input{font-family:inherit;font-size:14px;padding:6px 10px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);}
+  .ctrl .lab{font-weight:800;font-size:13px;color:var(--sub);}
+  .seg button{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:5px 13px;font-family:inherit;font-size:13px;font-weight:800;color:var(--sub);cursor:pointer;}
+  .seg button.on{background:var(--lav);border-color:var(--lav);color:#fff;}
+  .tabs{display:flex;gap:6px;margin:6px 0 12px;flex-wrap:wrap;}
+  .tabs button{flex:1;min-width:140px;border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:10px;font-family:inherit;font-size:15px;font-weight:800;color:var(--sub);cursor:pointer;}
+  .tabs button.on{background:#37474F;border-color:#37474F;color:#fff;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:12px;}
+  .cards .c{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;}
+  .cards .k{font-size:12px;color:var(--sub);font-weight:800;}
+  .cards .v{font-size:20px;font-weight:800;margin-top:2px;}
+  .cards .s{font-size:11.5px;color:var(--sub);margin-top:3px;line-height:1.5;}
+  .up{color:#1f9d6b;font-weight:800;} .down{color:var(--red);font-weight:800;}
+  .box{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:12px;}
+  .box h3{font-size:15px;color:var(--pink-deep);margin-bottom:8px;}
+  .box h3 small{font-size:12px;color:var(--sub);font-weight:700;margin-left:6px;}
+  .tw{overflow:auto;max-height:560px;}
+  table.t{border-collapse:collapse;width:100%;font-size:13px;white-space:nowrap;}
+  table.t th,table.t td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:right;}
+  table.t th{background:#F3F4F6;color:var(--sub);font-size:12px;position:sticky;top:0;z-index:1;}
+  table.t td.l,table.t th.l{text-align:left;}
+  table.t tr.lost td{color:#aaa;text-decoration:line-through;}
+  .grid2x{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media (max-width:800px){ .grid2x{grid-template-columns:1fr;} }
+  .vk{display:inline-block;border-radius:8px;padding:0 7px;font-size:12px;font-weight:800;}
+  .vk.new{background:#E3F6EE;color:#1f7a55;} .vk.repeat{background:#E8EEFC;color:#2b5bb6;} .vk.honshi{background:#FDE7EF;color:#B2456B;}
+  .medal{font-size:15px;}
+  .hint{font-size:12px;color:var(--sub);margin-top:6px;line-height:1.7;}
+</style>
+</head>
+<body>
+<div class="wrap wide">
+  <header class="kbh"><h1>⛓ 極門・五反田</h1><div id="navArea" class="navinhead"></div></header>
+  <div id="gate" class="gate">読み込み中…</div>
+  <div id="main" style="display:none">
+    <div class="tabs" id="tabs"></div>
+    <div class="ctrl">
+      <span class="lab">期間</span>
+      <span class="seg" id="kindSeg">
+        <button type="button" data-k="day" onclick="setKind('day')">日</button><button type="button" data-k="month" class="on" onclick="setKind('month')">月</button>
+        <button type="button" data-k="year" onclick="setKind('year')">年</button><button type="button" data-k="custom" onclick="setKind('custom')">好きな期間</button>
+      </span>
+      <input type="date" id="fromD" onchange="render()"><span id="toWrap" style="display:none">〜 <input type="date" id="toD" onchange="render()"></span>
+      <button type="button" class="btn btn-sm" onclick="step(-1)">◀ 前</button><button type="button" class="btn btn-sm" onclick="step(1)">次 ▶</button>
+      <span class="lab" id="rgLabel"></span>
+    </div>
+    <div id="view"></div>
+  </div>
+</div>
+<script>
+/* ============================================================
+   ⛓ 極門・五反田の売上（2026/11/19）
+   ・見られる人：店長・社長（極門・五反田とも）／すや（極門だけ）。kb_common.js の NAMED_PAGES
+   ・五反田＝ピーチムーン＋逆AF倶楽部
+   ・だれがどのダミー名で行ったか・コース・新規/店リピ/本指名・極門の仕事に行っているキャストのランキング
+   ・店落ちは雑費こみ・内勤の日払いは引かない（どの店のぶんか分からないので）
+   ・計算は kb_anal.js。見るだけ（なにも書きかえない）
+   ============================================================ */
+const { sb, q, esc } = KB;
+const $ = id => document.getElementById(id);
+const LIVE_FROM = "2026-10-01";
+const GROUPS = { gokumon: { label: "⛓ 極門", stores: ["gokumon"] }, gotanda: { label: "🍑 五反田（ピーチ・逆AF）", stores: ["peachmoon", "gyakuanal"] } };
+const STORE_SHORT = { peachmoon: "ピーチムーン", gyakuanal: "逆AF倶楽部", gokumon: "極門" };
+const VISIT = { new: "新規", repeat: "店リピ", honshi: "本指名" };
+let M = null, kind = "month", grp = "gokumon", ALLOWED = [];
+const n0 = v => Number(v) || 0;
+const yen = v => Math.round(n0(v)).toLocaleString("ja-JP") + "円";
+const pc = v => v == null ? "−" : Math.round(v * 1000) / 10 + "%";
+const hm = iso => { if(!iso) return ""; const t = new Date(new Date(iso).getTime() + 9 * 3600 * 1000); return t.getUTCHours() + ":" + String(t.getUTCMinutes()).padStart(2, "0"); };
+function chg(now, before){ const c = KBA.change(now, before); return c == null ? "−" : `<span class="${c >= 0 ? "up" : "down"}">${c >= 0 ? "▲" : "▼"}${Math.abs(Math.round(c * 1000) / 10)}%</span>`; }
+async function fetchAll(table, cols, orderCol, build){
+  let out = [], from = 0;
+  for(;;){
+    let qy = sb.from(table).select(cols).order(orderCol).range(from, from + 999);
+    if(build) qy = build(qy);
+    const d = q(await qy) || [];
+    out = out.concat(d);
+    if(d.length < 1000) break;
+    from += 1000;
+  }
+  return out;
+}
+// だれが見られるか：店長・社長は両方、すやは極門だけ
+function allowedGroups(isBoss, name){ return isBoss ? ["gokumon", "gotanda"] : name === "すや" ? ["gokumon"] : []; }
+
+async function init(){
+  $("navArea").innerHTML = KB.nav("substores.html");
+  if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
+  ALLOWED = allowedGroups(KB.IS_BOSS, KB.operatorName());
+  if(!ALLOWED.length){ $("gate").textContent = "このページは店長・社長・すやだけです"; return; }
+  if(KB.IS_BOSS && !(await KB.passGate("極門・五反田"))) return;
+  start();
+}
+async function start(){
+  $("gate").textContent = "数字を読みこみ中…";
+  try{
+    const today = KB.bizDateOf();
+    // 雑費は、そのキャストのその日の予約ぜんぶ（ほかの店も）で決まるので、予約は全部の店を読む
+    const [res, cds, casts, rules] = await Promise.all([
+      fetchAll("kb_reservations", "id,biz_date,cast_id,customer_id,store_key,dummy_name,course,start_at,end_at,status,visit_kind,total,course_back,option_back,extra_back,back_override", "id", x => x.gte("biz_date", LIVE_FROM).eq("deleted", false)),
+      fetchAll("kb_cast_days", "biz_date,cast_id,status,attend_log,zappi_override,settle_snapshot", "biz_date", x => x.gte("biz_date", LIVE_FROM)),
+      fetchAll("master_casts", "id,official_name,temp_name,shift_name", "id"),
+      fetchAll("kb_cast_rules", "*", "id", x => x.eq("active", true)).catch(() => []),
+    ]);
+    M = KBA.build({ res, cds, shifts: [], casts, rules, pay: {}, today, from: LIVE_FROM });
+  }catch(e){ $("gate").textContent = "読みこめませんでした：" + (e.message || e); return; }
+  $("gate").style.display = "none"; $("main").style.display = "";
+  $("fromD").value = KB.bizDateOf(); $("toD").value = KB.bizDateOf();
+  grp = ALLOWED[0]; paintTabs(); render();
+}
+function paintTabs(){ $("tabs").innerHTML = ALLOWED.map(g => `<button type="button" class="${g === grp ? "on" : ""}" onclick="grp='${g}';paintTabs();render()">${GROUPS[g].label}</button>`).join(""); }
+function setKind(k){ kind = k; [...$("kindSeg").children].forEach(b => b.classList.toggle("on", b.dataset.k === k)); $("toWrap").style.display = k === "custom" ? "" : "none"; render(); }
+function curRange(){ return KBA.range(kind, $("fromD").value || KB.bizDateOf(), $("toD").value); }
+function step(k){
+  const rg = curRange();
+  if(kind === "custom"){ const len = KBA.diffDays(rg.from, rg.to) + 1; $("fromD").value = KBA.addDays(rg.from, k * len); $("toD").value = KBA.addDays(rg.to, k * len); }
+  else if(kind === "day") $("fromD").value = KBA.addDays(rg.from, k);
+  else if(kind === "month"){ const t = new Date(rg.from + "T12:00:00Z"); t.setUTCMonth(t.getUTCMonth() + k); $("fromD").value = t.toISOString().slice(0, 10); }
+  else $("fromD").value = (Number(rg.from.slice(0, 4)) + k) + "-01-01";
+  render();
+}
+function render(){
+  if(!M || !ALLOWED.includes(grp)) return;
+  const rg = curRange(), stores = GROUPS[grp].stores;
+  $("rgLabel").textContent = rg.from === rg.to ? rg.from.replace(/-/g, "/") : rg.from.replace(/-/g, "/") + "〜" + rg.to.replace(/-/g, "/");
+  const S = KBA.summary(M, rg, stores), P = KBA.summary(M, KBA.prev(rg), stores);
+  const card = (k, v, now, before, sub) => `<div class="c"><div class="k">${k}</div><div class="v">${v}</div><div class="s">前の期間 ${P.cnt ? chg(now, before) : "−"}${sub ? "<br>" + sub : ""}</div></div>`;
+  const vis = S.n_new + S.n_repeat + S.n_honshi;
+  const casts = KBA.groupBy(M, rg, stores, r => r.cast_id ? r.cast : null);
+  const dummies = KBA.groupBy(M, rg, stores, r => r.dummy || "（ダミー名なし）");
+  const whoOf = {}; M.R.forEach(r => { if(r.live && r.d >= rg.from && r.d <= rg.to && stores.includes(r.store)){ const k = r.dummy || "（ダミー名なし）"; (whoOf[k] = whoOf[k] || {})[r.cast] = ((whoOf[k] || {})[r.cast] || 0) + 1; } });
+  const courses = KBA.groupBy(M, rg, stores, r => r.course || "（コースなし）");
+  const list = M.R.filter(r => r.d >= rg.from && r.d <= rg.to && stores.includes(r.store)).sort((a, b) => (b.d + b.start_at).localeCompare(a.d + a.start_at));
+  const medal = i => i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1;
+  const two = stores.length > 1;
+  $("view").innerHTML = `
+    <div class="cards">
+      ${card("💴 売上（交通費こみ）", yen(S.sales), S.sales, P.sales)}
+      ${card("🔢 本数", S.cnt + "本", S.cnt, P.cnt, "1本あたり " + (S.perCnt ? yen(S.perCnt) : "−"))}
+      ${card("💗 キャストの報酬", yen(S.reward), S.reward, P.reward)}
+      ${card("🏠 店落ち", yen(S.drop), S.drop, P.drop, "雑費こみ・内勤の日払いは引かない")}
+      ${card("👥 新規・店リピ・本指名", `${S.n_new}・${S.n_repeat}・${S.n_honshi}`, S.n_honshi, P.n_honshi, `本指名率 ${pc(vis ? S.n_honshi / vis : null)}`)}
+      ${card("❌ 失注", S.lostN + "件", S.lostN, P.lostN, Object.entries(S.lostBy).map(([k, v]) => k + " " + v).join("・"))}
+    </div>
+    ${two ? `<div class="box"><h3>🏪 お店ごと</h3><table class="t"><tr><th class="l">お店</th><th>本数</th><th>売上</th><th>報酬</th><th>店落ち</th><th>新規</th><th>店リピ</th><th>本指名</th></tr>
+      ${stores.map(k => { const x = KBA.summary(M, rg, [k]); return `<tr><td class="l">${STORE_SHORT[k]}</td><td>${x.cnt}</td><td>${yen(x.sales)}</td><td>${yen(x.reward)}</td><td>${yen(x.drop)}</td><td>${x.n_new}</td><td>${x.n_repeat}</td><td>${x.n_honshi}</td></tr>`; }).join("")}</table></div>` : ""}
+    <div class="grid2x">
+      <div class="box"><h3>🏆 ${grp === "gokumon" ? "極門の仕事に行っている" : "よく行っている"}キャスト<small>本数の多い順</small></h3><div class="tw" style="max-height:420px">
+        <table class="t"><tr><th>#</th><th class="l">キャスト</th><th>本数</th><th>売上</th><th>新規</th><th>店リピ</th><th>本指名</th></tr>
+        ${casts.map((c, i) => `<tr><td class="medal">${medal(i)}</td><td class="l"><b>${esc(c.key)}</b></td><td>${c.cnt}</td><td>${yen(c.sales)}</td><td>${c.n_new}</td><td>${c.n_repeat}</td><td>${c.n_honshi}</td></tr>`).join("") || `<tr><td class="l" colspan="7">この期間はありません</td></tr>`}
+        </table></div></div>
+      <div class="box"><h3>🎭 ダミー名<small>だれが行ったか</small></h3><div class="tw" style="max-height:420px">
+        <table class="t"><tr><th class="l">ダミー名</th><th>本数</th><th>売上</th><th class="l">行ったキャスト（回数）</th></tr>
+        ${dummies.map(d => `<tr><td class="l"><b>${esc(d.key)}</b></td><td>${d.cnt}</td><td>${yen(d.sales)}</td><td class="l">${Object.entries(whoOf[d.key] || {}).sort((a, b) => b[1] - a[1]).map(([n, v]) => esc(n) + "（" + v + "）").join("、")}</td></tr>`).join("") || `<tr><td class="l" colspan="4">この期間はありません</td></tr>`}
+        </table></div></div>
+    </div>
+    <div class="box"><h3>📋 コース</h3><div class="tw" style="max-height:320px"><table class="t"><tr><th class="l">コース</th><th>本数</th><th>売上</th><th>1本あたり</th><th>新規</th><th>店リピ</th><th>本指名</th></tr>
+      ${courses.map(c => `<tr><td class="l">${esc(c.key)}</td><td>${c.cnt}</td><td>${yen(c.sales)}</td><td>${yen(c.sales / c.cnt)}</td><td>${c.n_new}</td><td>${c.n_repeat}</td><td>${c.n_honshi}</td></tr>`).join("") || `<tr><td class="l" colspan="7">なし</td></tr>`}</table></div></div>
+    <div class="box"><h3>📜 予約の一覧<small>新しい順・取り消し線＝キャンセル・トビ・流れた</small></h3><div class="tw">
+      <table class="t"><tr><th class="l">日</th><th class="l">時間</th>${two ? `<th class="l">お店</th>` : ""}<th class="l">ダミー名 → キャスト</th><th class="l">コース</th><th class="l">種類</th><th>総額</th><th>報酬</th><th>店落ち</th></tr>
+      ${list.map(r => `<tr class="${r.live ? "" : "lost"}"><td class="l">${r.d.slice(5).replace("-", "/")}</td><td class="l">${hm(r.start_at)}〜${hm(r.end_at)}</td>${two ? `<td class="l">${STORE_SHORT[r.store] || ""}</td>` : ""}
+        <td class="l">${r.dummy ? `<small style="color:#6c5896">🎭${esc(r.dummy)} →</small> ` : ""}<b>${esc(r.cast)}</b></td><td class="l">${esc(r.course)}</td>
+        <td class="l">${r.visit ? `<span class="vk ${r.visit}">${VISIT[r.visit] || esc(r.visit)}</span>` : ""}${r.live ? "" : " " + (KBA.DEAD_LABEL[r.status] || "")}</td>
+        <td>${yen(r.live ? r.total : r.lostYen)}</td><td>${r.live ? yen(r.back) : ""}</td><td>${r.live ? yen(r.drop) : ""}</td></tr>`).join("") || `<tr><td class="l" colspan="9">この期間はありません</td></tr>`}
+      </table></div></div>`;
+}
+init();
+</script>
+</body>
+</html>
