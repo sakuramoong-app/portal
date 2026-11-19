@@ -688,7 +688,7 @@ async function openTerms(){
   $("t_ranks").innerHTML = RANK_KEYS.map(([g])=>{
     const r = rankRowOn(c.id, g, day), cur = r ? r.rank : "";
     const used = new Set(rankHist.filter(h => h.grp === g && h.rank).map(h => h.rank).concat(casts.map(x => (x.ranks || {})[g]).filter(Boolean)));
-    if(g === "cutie") backRanks.filter(x => !/\+NH/.test(x)).forEach(x => used.add(x)); else if(g === "sakurana") backRanks.filter(x => /^[A-Z][A-Z+]*$/.test(x)).forEach(x => used.add(x));
+    if(g === "cutie") backRanks.filter(x => !/\+NH/.test(x)).forEach(x => used.add(x)); else if(g === "sakurana" || g === "gokumon") backRanks.filter(x => /^[A-Z][A-Z+]*$/.test(x)).forEach(x => used.add(x));   // 極門も S・SS などをえらべる（2026/11/20）
     if(cur) used.add(cur);
     const opts = [...used].sort((a, b) => a.localeCompare(b, "ja"));
     return `<div class="f"><label>${GRP_LABEL[g]}</label><select id="t_r_${g}" data-was="${esc(cur)}" onchange="rankPick(this)">
@@ -5468,7 +5468,7 @@ async function removeCast(){
 
 load();
 </script>
-<script src="daicho_notify.js?v=1"></script><script src="daicho_room.js?v=1"></script><script src="daicho_terms_inline.js?v=2"></script><script src="daicho_layout.js?v=2"></script><script src="kb_backtable.js?v=1"></script><!-- 📝 台帳を更新したら内勤に通知（記録簿の 🔔） -->
+<script src="daicho_notify.js?v=1"></script><script src="daicho_room.js?v=1"></script><script src="daicho_terms_inline.js?v=2"></script><script src="daicho_layout.js?v=2"></script><script src="kb_backtable.js?v=2"></script><!-- 📝 台帳を更新したら内勤に通知（記録簿の 🔔） -->
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
 </html>
