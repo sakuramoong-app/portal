@@ -136,11 +136,11 @@
     finally { busy = false; }
   }
   /* ---------- 📱 スマホのとき（2026/11/02）
-     ・開けるのは：ポータル・記録簿の受付（kiroku）・精算・キャスト台帳・端末の登録・内勤カレンダー・在籍ルーム。ほかは「スマホでは開けません」
+     ・開けるのは：ポータル・記録簿の受付（kiroku）・精算・キャスト台帳・顧客台帳（2026/11/20）・端末の登録・内勤カレンダー・在籍ルーム。ほかは「スマホでは開けません」
      ・回収明細は、店長・社長だけスマホでも開ける
      ・1分さわらないと画面をロック → ロックの合言葉（SQL 189。まだなら端末の合言葉）で解除（ページを開きなおしてもロックのまま） ---------- */
   const IS_PHONE = /iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent) || (matchMedia("(max-width:640px)").matches && matchMedia("(pointer:coarse)").matches);
-  const PHONE_OK = [/^\/portal\/?$/, /^\/portal\/index\.html$/, /^\/portal\/kirokubo\/(kiroku|settle|index|device)\.html$/, /^\/portal\/kirokubo\/?$/, /^\/naikin-shift\//, /^\/sakura-newcast\//];
+  const PHONE_OK = [/^\/portal\/?$/, /^\/portal\/index\.html$/, /^\/portal\/kirokubo\/(kiroku|settle|index|device|customers)\.html$/, /^\/portal\/kirokubo\/?$/, /^\/naikin-shift\//, /^\/sakura-newcast\//];
   const LOCK_KEY = "phoneLockAt", LOCK_MIN = 1;
   const BOSS_OK = /^\/portal\/(kirokubo\/kaishu|worklog)\.html$/;   // 店長・社長だけ（店長作業ログもスマホで開ける。2026/11/6）
   const overlay = (html) => {

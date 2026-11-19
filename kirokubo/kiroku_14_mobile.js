@@ -36,6 +36,7 @@ function mobShell(){
   m.innerHTML = `
     <div class="mtop">
       <div class="mhead"><span class="mic">📅</span><b>予約</b><small>（タイムライン）</small><span style="flex:1"></span>
+        <a class="mcust" href="customers.html" target="_blank" rel="opener">👥 顧客台帳</a>
         <button type="button" class="mbtn" onclick="mobBell()" title="お知らせ">🔔<i id="mobBellN"></i></button></div>
       <div class="mtabs" id="mobTabs"></div>
       <div class="mday"><button type="button" onclick="moveDay(-1,this)">‹</button>
@@ -268,3 +269,4 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   body.mob:has(.modal-bg.show) #mob{display:none}
   #mob .mhead #kbDarkBtn{position:static;width:36px;height:36px;box-shadow:none;font-size:18px}
 </style>`);
+document.head.insertAdjacentHTML("beforeend", `<style>#mob .mcust{font-size:13px;font-weight:900;color:#E5638C;text-decoration:none;border:1.5px solid #FFC2D1;background:#fff;border-radius:99px;padding:6px 11px;white-space:nowrap}</style>`);
