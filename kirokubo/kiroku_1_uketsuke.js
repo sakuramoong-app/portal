@@ -1412,7 +1412,7 @@ function recalc(){
     <h3>💴 お客さんの料金</h3>
     <div class="row"><span>基本額（${esc(c.course)}）</span><b>${yen(c.price)}</b></div>
     ${c.admission?`<div class="row"><span>入会金</span><b>${yen(c.admission)}</b></div>`:""}
-    <div class="row"><span>指名料</span><b>${yen(c.nomination)}</b></div>
+    <div class="row"><span>指名料</span><b>${yen(c.nomination)}</b></div>${nomiWhy()}
     ${c.extFee?`<div class="row"><span>延長</span><b>${yen(c.extFee)}</b></div>`:""}
     ${c.dateFee?`<div class="row"><span>デート</span><b>${yen(c.dateFee)}</b></div>`:""}
     ${c.optionTotal?`<div class="row"><span>オプション</span><b>${yen(c.optionTotal)}</b></div>`:""}
@@ -1771,3 +1771,12 @@ async function loadLog(id){
 }
 
 
+// 🔎 指名料のわけ（2026/11/20 りぃの指名料 5,000円が出ない原因を見るため。わかったら消す）
+function nomiWhy(){
+  try{
+    const cid = $("f_cast").value; if(!cid) return "";
+    const all = (M.rules || []).filter(r => r.cast_id === cid), nf = all.filter(r => r.kind === "nomination_fee"), d = resDayOf();
+    const on = rulesOn(cid, d).find(r => r.kind === "nomination_fee");
+    return `<div style="font-size:11px;color:#9C8B8F;text-align:right">🔎 ${esc(cid)}・予約の日 ${esc(d)}・画面の日 ${esc(day)}・条件 ${all.length}件・指名料の条件 ${nf.map(r => (r.params || {}).amount + "円/" + r.valid_from).join("、") || "なし"}${on ? "・効いている" : "・効いていない"}${$("f_free").value ? "・フリー（" + esc($("f_free").value) + "）" : ""}</div>`;
+  }catch(e){ return `<div style="font-size:11px;color:#c0392b">🔎 ${esc(e.message || e)}</div>`; }
+}
