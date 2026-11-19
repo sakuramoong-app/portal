@@ -15,7 +15,9 @@ function btSplit(course){   // "60本指" → ["60","本指"]（長い言葉か�
   return [course, ""];
 }
 const btNum = s => { const m = String(s).match(/\d+/); return m ? Number(m[0]) : 99999; };
-async function openBackTable(rank){
+let btGrp = "";   // お店でしぼる（台帳の「極門 … 💴 バック表」から開いたら極門のコースだけ）2026/11/20
+async function openBackTable(rank, grp){
+  btGrp = grp || "";
   try{
     btRows = q(await sb.from("kb_back").select("rank,course,amount")) || [];
     try{ btPrices = q(await sb.from("kb_prices").select("store_key,course")) || []; }catch(e){ btPrices = []; }
@@ -33,6 +35,7 @@ async function openBackTable(rank){
       <span style="margin-left:auto"></span><button class="btn btn-ghost btn-sm" onclick="btClose()">閉じる</button></div>
     <div class="hint" style="margin:4px 0 8px">受付で予約を入れると、この表からキャストのバックが入ります。まちがいに気づいたら、ここで直して「💾 保存」。<b>もう入っている予約の報酬は変わりません</b>（まだ精算していない予約は、記録簿を開きなおして（F5）、予約を開いて保存しなおすと新しいバックになります）。</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">ランク <select id="bt_rank" onchange="btSwitch(this.value)">${ranks.map(r => `<option ${r === btRank ? "selected" : ""}>${esc(r)}</option>`).join("")}${BT_EDIT() ? `<option value="__new">＋ 新しいランクを作る…</option>` : ""}</select>
+      お店 <select id="bt_grp" onchange="btGrp=this.value;btPaint()">${BT_GRP.map(([k, l]) => `<option value="${k}" ${k === btGrp ? "selected" : ""}>${l}</option>`).join("")}</select>
       コースで探す <input id="bt_q" placeholder="例：60" oninput="btPaint()" style="width:120px"></div>
     <div id="bt_tbl" style="margin-top:8px"></div>
     ${BT_EDIT() ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px;border:2px dashed #F2C94C;background:#FFFDF2;border-radius:12px;padding:8px">
@@ -41,7 +44,7 @@ async function openBackTable(rank){
     ${BT_EDIT() ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px;border:2px dashed #8FB8E8;background:#F3F8FF;border-radius:12px;padding:8px">
       <b style="font-size:13px">📋 ほかのランクからまとめて作る</b>
       <select id="bt_cpfrom">${ranks.map(r => `<option ${r === "S" ? "selected" : ""}>${esc(r)}</option>`).join("")}</select> の
-      <select id="bt_cpgrp">${BT_GRP.map(([k, l]) => `<option value="${k}" ${k === "gokumon" ? "selected" : ""}>${l}</option>`).join("")}</select> のコースを、
+      <select id="bt_cpgrp">${BT_GRP.map(([k, l]) => `<option value="${k}" ${k === (btGrp || "gokumon") ? "selected" : ""}>${l}</option>`).join("")}</select> のコースを、
       ＋<input id="bt_cpadd" type="number" step="500" value="1000" style="width:90px">円 で <button class="btn btn-ghost btn-sm" onclick="btCopy()">このランクに入れる</button>
       <small class="hint" style="flex-basis:100%">例：極門の SS ＝ S の極門のコース ＋1,000円。入れたあと表で直せます。「💾 保存」を押すまで入りません</small></div>` : ""}
     <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:12px;flex-wrap:wrap;position:sticky;bottom:-16px;background:#fff;padding:8px 0">
@@ -65,7 +68,7 @@ function btPaint(){
   const el = $("bt_tbl"); if(!el) return;
   const qv = ($("bt_q") && $("bt_q").value || "").trim();
   const mine = btRows.filter(r => r.rank === btRank).map(r => r.course).concat(Object.keys(btEdit).filter(c => btCur(c) == null));
-  const bases = [...new Set(mine.map(c => btSplit(c)[0]))].filter(b => !qv || b.includes(qv)).sort((a, b) => btNum(a) - btNum(b) || a.localeCompare(b, "ja"));
+  const bases = [...new Set(mine.map(c => btSplit(c)[0]))].filter(b => (!qv || b.includes(qv)) && (!btGrp || btGrpOf(b) === btGrp || (btGrp === "sakurana" && !btGrpOf(b)))).sort((a, b) => btNum(a) - btNum(b) || a.localeCompare(b, "ja"));
   const cols = BT_SUF.filter(([s]) => mine.some(c => btSplit(c)[1] === s));
   const cell = (base, s) => {
     const course = base + s, cur = btCur(course), ed = course in btEdit, v = ed ? btEdit[course] : cur;
@@ -75,7 +78,7 @@ function btPaint(){
   };
   el.innerHTML = bases.length ? `<table style="border-collapse:collapse;width:100%"><tr style="background:#FCE4EC"><th style="text-align:left;padding:4px 6px">コース</th>${cols.map(([, l]) => `<th style="padding:4px 6px">${l}</th>`).join("")}</tr>
     ${bases.map(b => `<tr style="border-top:1px solid #f3e3e8"><td style="padding:4px 6px;font-weight:800">${esc(b)}</td>${cols.map(([s]) => cell(b, s)).join("")}</tr>`).join("")}</table>`
-    : `<div class="hint">このランクのコースがありません</div>`;
+    : `<div class="hint">このランクに${btGrp ? (BT_GRP.find(g => g[0] === btGrp) || [])[1] + "の" : ""}コースがありません${BT_EDIT() ? "（下の「📋 ほかのランクからまとめて作る」で入れられます）" : ""}</div>`;
   btSumPaint();
   const lg = $("bt_log");
   if(lg) lg.innerHTML = btLog.length ? btLog.slice(0, 40).map(x => `<div style="font-size:12.5px;border-bottom:1px dashed #eee;padding:3px 0">${esc(String(x.at || "").slice(0, 16).replace("T", " "))} ${esc(x.by || "")}${x.from ? `（${esc(x.from)}で）` : ""}：<b>${esc(x.rank)}・${esc(x.course)}</b> ${x.before == null ? "なし" : Number(x.before).toLocaleString()} → ${x.after == null ? "なし（消した）" : Number(x.after).toLocaleString()}</div>`).join("") : `<div class="hint">まだありません</div>`;
@@ -125,7 +128,7 @@ btSwitch = function(r){
   if(!nm){ $("bt_rank").value = btRank; return; }
   if(!btRows.some(x => x.rank === nm) && !btNewRanks.includes(nm)) btNewRanks.push(nm);
   if(btChanges().length && !confirm("直したバックが保存されていません。ほかのランクにしますか？（直した分は消えます）")){ $("bt_rank").value = btRank; return; }
-  btRank = nm; btEdit = {}; openBackTable(nm);
+  btRank = nm; btEdit = {}; openBackTable(nm, btGrp);
 };
 // 📋 ほかのランクの（そのお店の）コースを、＋何円 で今のランクに入れる（保存の前に表で見られる）
 function btCopy(){

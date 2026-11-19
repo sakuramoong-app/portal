@@ -651,7 +651,7 @@ function termsHtml(c){
     const r = rankRowOn(c.id, g, day);
     const future = rankHist.filter(x=>x.cast_id === c.id && x.grp === g && x.valid_from > day);
     if(!r && !future.length) return;
-    h += `<div>⭐ <b>${l}</b>：${r && r.rank ? esc(r.rank) + ` <a href="javascript:void(0)" style="font-size:12px" onclick="openBackTable('${esc(r.rank).replace(/'/g, "")}')" title="このランクのバック表を見る・直す">💴 バック表</a>` : "なし"}`;
+    h += `<div>⭐ <b>${l}</b>：${r && r.rank ? esc(r.rank) + ` <a href="javascript:void(0)" style="font-size:12px" onclick="openBackTable('${esc(r.rank).replace(/'/g, "")}','${g === "event" ? "" : g}')" title="このランクのバック表を見る・直す">💴 バック表</a>` : "なし"}`;
     if(r) h += `　<span style="color:#9C8B8F;font-size:12px">${md(r.valid_from) ? md(r.valid_from) + "から" : ""}</span> ` + hearLink(r.hearing_text, r.by_name, r.at);
     future.forEach(f=>{ h += `<br><span style="color:#e5638c;font-size:12px">　→ ${md(f.valid_from)}から「${esc(f.rank || "なし")}」の予定</span> ` + hearLink(f.hearing_text, f.by_name, f.at); });
     h += `</div>`;
@@ -5468,7 +5468,7 @@ async function removeCast(){
 
 load();
 </script>
-<script src="daicho_notify.js?v=1"></script><script src="daicho_room.js?v=1"></script><script src="daicho_terms_inline.js?v=3"></script><script src="daicho_layout.js?v=2"></script><script src="kb_backtable.js?v=2"></script><!-- 📝 台帳を更新したら内勤に通知（記録簿の 🔔） -->
+<script src="daicho_notify.js?v=1"></script><script src="daicho_room.js?v=1"></script><script src="daicho_terms_inline.js?v=3"></script><script src="daicho_layout.js?v=2"></script><script src="kb_backtable.js?v=3"></script><!-- 📝 台帳を更新したら内勤に通知（記録簿の 🔔） -->
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
 </html>
