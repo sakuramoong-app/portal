@@ -845,8 +845,9 @@ function termsKindFields(){
   const days = ["日","月","火","水","木","金","土"];
   const opts = [...new Map(kbOptions.map(o=>[o.code, o.label])).entries()];
   const F = {
-    transport_back: `<div class="f"><label>どれだけバック？</label><select id="tk_rate" onchange="$('tk_tamt_wrap').style.display=this.value==='amount'?'':'none'">
-                       <option value="1">全額</option><option value="0.5">半額</option><option value="amount">金額を決める</option></select></div>
+    transport_back: `<div class="f"><label>どれだけバック？</label><select id="tk_rate" onchange="$('tk_tamt_wrap').style.display=['amount','daily'].includes(this.value)?'':'none';$('tk_sb_wrap').style.display=this.value==='daily'?'':'none'">
+                       <option value="1">全額</option><option value="0.5">半額</option><option value="amount">金額を決める</option><option value="daily">出勤日ごとに決まった額（待機場所に着いたら記録簿にボタン）</option></select></div>
+                     <div class="f" id="tk_sb_wrap" style="display:none"><label>どこの待機場所に着いたら？</label><select id="tk_sb"><option>鶯谷</option><option>池袋</option><option>五反田</option><option value="">どこでも</option></select></div>
                      <div class="f" id="tk_tamt_wrap" style="display:none"><label>バックする金額（円）</label><input id="tk_tamt" type="number" min="0" step="100"></div>
                      <div class="f"><label>交通費が何円以上のときだけ？（空ならいつでも）</label><input id="tk_tmin" type="number" min="0" step="500"></div>`,
     back_add: `<div class="f"><label>上乗せの金額（円）</label><input id="tk_amount" type="number" min="0" step="500"></div>
@@ -869,6 +870,7 @@ function termsAddRule(){
   if(k === "transport_back"){
     // 全額（rate 1）・半額（rate 0.5）・金額を決める（amount 円）
     if($("tk_rate").value === "amount"){ if(!num("tk_tamt")){ toast("バックする金額を入れてください"); return; } params = { amount: num("tk_tamt") }; }
+    else if($("tk_rate").value === "daily"){ if(!num("tk_tamt")){ toast("バックする金額を入れてください"); return; } params = { daily: num("tk_tamt"), standby: $("tk_sb").value }; }   // 🚃 出勤日ごと（2026/11/20 りぃ：鶯谷に着いたら1万円）
     else params = { rate: Number($("tk_rate").value) };
     if(num("tk_tmin")) params.min_transport = num("tk_tmin");   // 交通費が○円以上のときだけ（受付・精算で見る）
   }

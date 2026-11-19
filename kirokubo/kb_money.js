@@ -44,7 +44,7 @@
     // 交通費バック（台帳の条件）
     let transportBack = 0; const why = [];
     //   条件がいくつあっても、1つの予約の交通費バックは「いちばん多い条件の額」だけ（足し算しない。交通費より多くならない）2026/11/12
-    const tbRules = (rules || []).filter(x => x.kind === "transport_back"), tbUsed = new Set();
+    const tbRules = (rules || []).filter(x => x.kind === "transport_back" && !(x.params && x.params.daily)), tbUsed = new Set();   // 🚃 出勤日ごと（daily）は記録簿のボタンでプラスに入れる
     live.forEach(r => {
       const t = r.transport || 0; if(!t) return;
       let best = 0, bestRule = null;

@@ -2501,5 +2501,47 @@ renderFormLog = function(){
 };
 (function(){ const st = document.createElement("style"); st.textContent = ".bkedit{text-decoration:none;font-size:12px;margin-left:4px;cursor:pointer}.bked{color:#9C8B8F;font-weight:400}"; document.head.appendChild(st); })();
 
+/* 🚃 出勤日ごとの交通費（2026/11/20 店長：りぃ）
+   台帳の条件「交通費をバック → 出勤日ごとに決まった額」があって、その待機場所（例：鶯谷）で待機中・仕事中になったら、
+   キャストの枠に「🚃 交通費 1万円を足す」ボタン。押すと、その日のプラス（交通費（出勤日））に入る＝手取りに足される。1日1回 */
+const TB_DAILY_LABEL = "交通費（出勤日）";
+function tbDailyRule(castId, cd){
+  const r = (rulesOn(castId) || []).find(x => x.kind === "transport_back" && x.params && Number(x.params.daily) > 0);
+  if(!r) return null;
+  const sb = r.params.standby || "";
+  return !sb || ((cd && cd.standby) || "") === sb ? r : null;
+}
+function tbDailyHtml(castId){
+  const x = (typeof tlRows === "function" ? tlRows() : []).find(y => y.c && y.c.id === castId), cd = castDays[castId] || {};
+  const r = tbDailyRule(castId, cd); if(!r || !KB.CAN_EDIT) return "";
+  const amt = Number(r.params.daily), done = curItems(castId, "plus").some(i => i.label === TB_DAILY_LABEL);
+  if(done) return `<div class="tbdaily done">🚃 ${TB_DAILY_LABEL} ${yen(amt)} は足してあります（精算のプラス）</div>`;
+  const st = x ? boardState(x) : "";
+  if(!["wait", "work"].includes(st) && !["待機中", "仕事中"].includes(cd.status)) return `<div class="tbdaily wait">🚃 ${esc(r.params.standby || "待機場所")}に着いたら、交通費 ${yen(amt)} のボタンが出ます</div>`;
+  return `<button type="button" class="tbdaily go" onclick="tbDailyAdd('${castId}')">🚃 ${esc(r.params.standby || "")}に着いた → 交通費 ${yen(amt)} を足す<small>${esc(r.note || "")}</small></button>`;
+}
+async function tbDailyAdd(castId){
+  const r = tbDailyRule(castId, castDays[castId]); if(!r) return;
+  const l = curItems(castId, "plus"); if(l.some(i => i.label === TB_DAILY_LABEL)){ toast("もう足してあります"); return; }
+  l.push({ label: TB_DAILY_LABEL, amount: Number(r.params.daily) });
+  await saveDay(castId, { plus_items: l });
+  toast(`🚃 ${typeof castName === "function" ? castName(castId) : ""} の交通費 ${yen(Number(r.params.daily))} を足しました`);
+  try{ if(castOpen && castOpen.c && castOpen.c.id === castId) openCast(castId); }catch(e){}
+}
+const __openCastTB = openCast;
+openCast = function(castId, name){
+  __openCastTB.apply(this, arguments);
+  try{
+    const h = tbDailyHtml(castId); if(!h) return;
+    const meta = document.querySelector("#castBody .castmeta"); if(meta) meta.insertAdjacentHTML("afterend", h);
+  }catch(e){ console.warn("tbDaily", e); }
+};
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .tbdaily{display:block;width:100%;margin:6px 0;border-radius:14px;padding:10px 14px;font-family:inherit;font-weight:900;font-size:15px;text-align:left}
+  .tbdaily.go{background:#FFF3C4;border:2.5px solid #F2A900;color:#8A6100;cursor:pointer;animation:needGlow 1.3s ease-in-out infinite} .tbdaily.go small{display:block;font-size:11.5px;font-weight:700}
+  .tbdaily.done{background:#E5F6EC;border:1.5px solid #8FD3A0;color:#1E7A3C;font-size:13px} .tbdaily.wait{background:#F4EEF0;color:#9C8B8F;font-size:12.5px}
+  @keyframes needGlow{0%,100%{box-shadow:0 0 0 2px #F2C94C}50%{box-shadow:0 0 0 3px #F2A900,0 0 16px 4px rgba(242,169,0,.5)}}
+</style>`);
+
 // ▶ 起動（2026/11/10 ファイルを分けたので、ぜんぶ読みこんだあとのここで）
 init();
