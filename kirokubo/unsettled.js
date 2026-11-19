@@ -222,10 +222,12 @@ async function unsLogOther(date, cid, text, extra, meta){
 
 // 🕒 実際に投函した時刻（カメラのアーカイブで見た時刻）。入れてあれば、精算の時刻はこちらで残す。朝6時より前は営業日の次の日
 const ptVal = {}, ptDay = {}, ptBy = {};   // 精算した時刻・日付・人（あとから入れるとき。2026/11/5）
+function ptToday(){ return KB.PRACTICE && KB.startDay ? KB.startDay() : KB.bizDateOf(); }
 function ptAt(id){
-  const v = ptVal[id], d = ptDay[id] || day;
-  if(d === day || !/^\d{2}:\d{2}$/.test(v || "")) return bizTimeAt(v);   // 営業日の日なら、朝6時より前は次の日
-  return new Date(d + "T" + v + ":00+09:00").toISOString();
+  const v = ptVal[id], d = ptDay[id] || ptToday();   // 日付は いつも今日から（2026/11/20 店長：未精算の子を見に行くと過去の日になっていた）
+  if(!/^\d{2}:\d{2}$/.test(v || "")) return "";   // 時刻が空 → 押した時刻
+  const t = new Date(d + "T" + v + ":00+09:00"); if(Number(v.slice(0, 2)) < 6) t.setUTCDate(t.getUTCDate() + 1);   // 朝6時より前は次の日
+  return t.toISOString();
 }
 // 精算した人のえらぶ一覧（内勤）。今ログインしている人がいちばん上
 function ptStaff(){ const me = KB.operatorName(); return [...new Set([me].concat(["きゃ", "すや", "らん", "かみ", "わか"]).filter(Boolean))]; }
@@ -233,6 +235,7 @@ function ptStaff(){ const me = KB.operatorName(); return [...new Set([me].concat
 settle = async function(id, stay){   // stay：精算して、そのあとも待機中のまま（1本だけ先に精算。2026/11/6）
   // 📷 ポスティング（池袋・鶯谷・五反田）は、写真を入れるか「写真なし（キャストがくれなかった）」を選ばないと精算済にできない（2026/11/4 店長の希望）
   const pl0 = document.getElementById("pl-" + id), place0 = pl0 ? pl0.value : "", phList = phCache[phKey(id)];
+  if(pl0 && !place0){ toast("🏪 精算場所（池袋・鶯谷・五反田・回収）をえらんでから精算済にしてください"); pl0.scrollIntoView({ block: "center", behavior: "smooth" }); try{ needGlow(id); }catch(e){} return; }
   if(place0 && !noPhoto[id] && !(phList && phList.length)){   // 写真は回収も必須（2026/11/6）
     toast(phList === null ? "📷 写真を読みこみ中です。少し待ってから、もう一度押してください"
       : "📷 お金・領収書の写真を入れるか、「写真なし（キャストがくれなかった）」にチェックしてから精算済にしてください");
@@ -265,7 +268,7 @@ settle = async function(id, stay){   // stay：精算して、そのあとも待
     + (picked.length ? "\n＋ 未精算 " + picked.length + "件（" + yen(add) + "）→ 合計 " + yen(due) : "")
     + (diff ? "\n投函した額 " + yen(c.deposited) + " → " + (diff < 0 ? "未精算 " + yen(-diff) : "お釣り " + yen(diff)) + " を未精算に入れます" : "");
   if(!confirm(msg)) return;
-  if(ptDay[id] && ptDay[id] !== day && !ptVal[id]){ toast("🕒 ちがう日に精算したときは、時刻も入れてください"); return; }
+  if(ptDay[id] && ptDay[id] !== ptToday() && !ptVal[id]){ toast("🕒 ちがう日に精算したときは、時刻も入れてください"); return; }
   const by = ptBy[id] || KB.operatorName(), at = ptAt(id) || new Date().toISOString(), pl = document.getElementById("pl-" + id), place = pl ? pl.value : "";
   const camNow = (unsCD()[id] || {}).camera_check || "";
   const labels = picked.map(x => unsLine(x, open.indexOf(x), id));
@@ -843,7 +846,7 @@ cardHtml = function(id, c){
   // キャンセル・トビだけ（お金も報酬もない）の子は「精算なし」（11/1 ゆい：欠勤でキャンセル2件なのに未精算と出ていた）
   const nothing = !done && !(c.all || []).some(r => r.status !== "cancel" && r.status !== "tobi" && r.status !== "flowed") && !c.total && !c.reward && !c.option && !c.plus && !c.minus;
   const need = KB.CAN_EDIT && !done && !home && !off && !nothing;
-  const cam = cd.camera_check || "", plNow = (done ? cd.settle_place : plSel[id]) || cd.settle_place || PLACES[0];   // 選んだ回収場所は、描きなおしても（カメラ・写真を押しても）そのまま
+  const cam = cd.camera_check || "", plNow = (done ? cd.settle_place : plSel[id]) || cd.settle_place || "";   // 精算場所は空から（2026/11/20 店長）   // 選んだ回収場所は、描きなおしても（カメラ・写真を押しても）そのまま
   return `<div class="card svc ${done ? "done" : ""} ${!done && home ? "home" : ""} ${cd.status === "お茶" ? "tea" : cd.status === "欠勤" ? "absent" : ""}" id="card-${id}">
     <h2>${typeof KBF !== "undefined" ? KBF.img(id, 40) : ""}${esc(castName(id))}${cd.status === "お茶" ? `<span class="st tea">🟩 お茶</span>` : cd.status === "欠勤" ? `<span class="st absent">🟥 欠勤</span>` : ""}<span class="st">${done ? "精算済" + (cd.settle_place ? "（" + esc(cd.settle_place) + "）" : "") : home ? "🏠 直帰" : nothing ? "精算なし（キャンセル・トビだけ）" : "未精算"}</span>${done && (UNS || []).some(x => x.cast_id === id && x.biz_date === day && !x.done_on) ? `<span class="st" style="background:#FDE7E7;color:#c0392b;margin-left:4px">⚠️ 未精算あり</span>` : ""}
       ${done && cd.settled_at ? (() => { const s = cd.settle_snapshot || {}, later = s.paidOn && s.paidOn !== day;   // いつ・どこで・だれが（後日の合算・個別の精算も）2026/11/5
@@ -876,7 +879,7 @@ cardHtml = function(id, c){
     ${unsBoxHtml(id, c)}
     <div class="acts">
       ${KB.CAN_EDIT ? `<select id="pl-${id}" class="plsel" style="background-color:${PLACE_COLOR[plNow] || "#fff"}" ${done ? "disabled" : ""}
-          onchange="plSel['${id}'] = this.value; this.style.backgroundColor = PLACE_COLOR[this.value] || '#fff'; const w = document.getElementById('camw-${id}'); if(w) w.style.display = this.value === '回収' ? 'none' : ''">${PLACES.map(p=>`<option ${plNow === p ? "selected" : ""} style="background:${PLACE_COLOR[p] || "#fff"}">${p}</option>`).join("")}</select>` : ""}
+          onchange="plSel['${id}'] = this.value; this.style.backgroundColor = PLACE_COLOR[this.value] || '#fff'; const w = document.getElementById('camw-${id}'); if(w) w.style.display = (this.value === '回収' || !this.value) ? 'none' : ''; sgRepaint('${id}')">${done ? "" : `<option value="" ${plNow ? "" : "selected"}>精算場所をえらぶ</option>`}${PLACES.map(p=>`<option ${plNow === p ? "selected" : ""} style="background:${PLACE_COLOR[p] || "#fff"}">${p}</option>`).join("")}</select>` : ""}
       <button class="linecopy" onclick="copyDetailImg('${id}')"><span>🖼 明細コピー</span><small>LINEで貼付 📷</small></button>
       ${KB.CAN_EDIT ? (done
         ? `<button class="btn btn-ghost btn-sm" onclick="unsettle('${id}')">↩ 精算済をもどす</button>`
@@ -885,11 +888,11 @@ cardHtml = function(id, c){
            <button class="btn btn-ghost btn-sm" onclick="settle('${id}',true)" title="精算して、このあとも待機（あとで予約が入ったら②として精算）">✅ 精算して待機中のまま</button>
            <button class="btn btn-ghost btn-sm homebtn" onclick="setDirectHome('${id}',true)">🏠 直帰</button>`) : ""}
     </div>
-    ${KB.CAN_EDIT && !done ? `<div class="ptime">🕒 精算（投函・回収）した日時 <input type="date" value="${ptDay[id] || day}" onchange="ptDay['${id}']=this.value"><input type="time" value="${ptVal[id] || ""}" onchange="ptVal['${id}']=this.value">
+    ${KB.CAN_EDIT && !done ? `<div class="ptime">🕒 精算（投函・回収）した日時 <input type="date" value="${ptDay[id] || ptToday()}" onchange="ptDay['${id}']=this.value"><input type="time" value="${ptVal[id] || ""}" onchange="ptVal['${id}']=this.value">
       <span class="ptby">👤 精算した人 <select onchange="ptBy['${id}']=this.value">${ptStaff().map(n => `<option ${(ptBy[id] || KB.operatorName()) === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></span>
       <small>あとから入れるときに（例：11/2 に らん が回収した）。時刻が空なら「精算済にする」を押した時刻、人は今ログインしている人。ポスティングはカメラのアーカイブで見た時刻</small></div>` : ""}
-    <div id="camw-${id}" style="${plNow === "回収" ? "display:none" : ""}">   <!-- 回収場所が待機場（池袋・鶯谷・五反田）のときだけ -->
-    <div class="camchk"><span>📹 投函を監視カメラで確認した？<b style="color:#c0392b">（ポスティングは必須）</b></span>
+    <div id="camw-${id}" style="${plNow === "回収" || !plNow ? "display:none" : ""}">   <!-- 回収場所が待機場（池袋・鶯谷・五反田）のときだけ -->
+    <div class="camchk" id="camc-${id}"><span>📹 投函を監視カメラで確認した？<b style="color:#c0392b">（ポスティングは必須）</b></span>
       ${[["ok", "◎ 確認した"], ["ng", "× 写っていない"]].map(([v, l]) => `<button type="button" class="cb ${v} ${cam === v ? "on" : ""}" ${KB.CAN_EDIT ? "" : "disabled"} onclick="setCamera('${id}','${cam === v ? "" : v}')">${l}</button>`).join("")}</div>
     </div>
     ${V.dep}
@@ -979,6 +982,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .unalert{font-family:inherit;font-size:13px;font-weight:700;padding:6px 8px;border:1.5px solid var(--line,#F1E3E7);border-radius:10px;background:#fff;color:inherit} .unalert.sm{font-size:11.5px;padding:2px 4px;border-radius:8px}
   .prevparts{background:#EEF9F0;border:1.5px solid #9AD3A8;border-radius:12px;padding:6px 10px;margin:6px 0;font-size:13px;font-weight:800;color:#2e6b3c} .prevparts small{display:block;font-weight:700;color:#557;font-size:11.5px;margin-top:2px}
   .sdwho{font-size:12.5px !important;font-weight:700;margin-left:6px}
+  .needglow{animation:needGlow 1.3s ease-in-out infinite;border-radius:14px} select.needglow{border-color:#F2A900 !important}
+  @keyframes needGlow{0%,100%{box-shadow:0 0 0 2px #F2C94C,0 0 6px 2px rgba(242,169,0,.35)}50%{box-shadow:0 0 0 3px #F2A900,0 0 18px 6px rgba(242,169,0,.6)}}
   .camchk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:800;font-size:13px;margin:6px 0} .camchk > span{flex-basis:100%}
   .camchk .cb{font-family:inherit;font-weight:800;font-size:13px;border:2px solid #ddd;background:#fff;border-radius:99px;padding:4px 12px;cursor:pointer;color:#5C4B4F}
   .camchk .cb.ok.on{background:#E5F6EC;border-color:#2e8b57;color:#2e8b57} .camchk .cb.ng.on{background:#FDE7E7;border-color:#c0392b;color:#c0392b}
@@ -1005,9 +1010,10 @@ const noPhoto = {};   // 📷 写真なし（キャストがくれなかった�
 function sgSteps(id, c, cd){
   c = c || calcCast(id); cd = cd || unsCD()[id] || {};
   const live = (c.live || []).filter(r => !["cancel", "tobi", "flowed"].includes(r.status));
-  const ph = phCache[phKey(id)], place = plSel[id] || cd.settle_place || PLACES[0];
+  const ph = phCache[phKey(id)], place = plSel[id] || cd.settle_place || "";
   const s = [
     { k: "res", l: "予約が終わった", ok: live.length > 0 && live.every(r => r.status === "done") },
+    { k: "pl", l: "精算場所", ok: !!place || !!cd.settled },
     { k: "dep", l: "投函の額", ok: c.deposited != null },
     { k: "ph", l: "お金の写真", ok: !!(ph && ph.length) || !!noPhoto[id] },
     { k: "chk", l: "📋 指さし確認", ok: !!noPhoto[id] || (typeof phChkOk === "function" && phChkOk(id)) },
@@ -1017,10 +1023,21 @@ function sgSteps(id, c, cd){
   return s;
 }
 function sgHtml(id, c, cd){
-  const s = sgSteps(id, c, cd), next = s.findIndex(x => !x.ok);
+  const s = sgSteps(id, c, cd), next = s.findIndex(x => !x.ok); setTimeout(() => { try{ needGlow(id); }catch(e){} }, 0);
   return `<div class="sg" id="sg-${id}">${s.map((x, i) => `<span class="sgs ${x.ok ? "ok" : i === next ? "now" : ""}"><b>${x.ok ? "✓" : "①②③④⑤⑥"[i]}</b>${esc(x.l)}</span>${i < s.length - 1 ? `<span class="sga ${x.ok ? "ok" : ""}"></span>` : ""}`).join("")}</div>`;
 }
-function sgRepaint(id){ const el = document.getElementById("sg-" + id); if(el){ try{ el.outerHTML = sgHtml(id); }catch(e){} } }
+function sgRepaint(id){ const el = document.getElementById("sg-" + id); if(el){ try{ el.outerHTML = sgHtml(id); }catch(e){} } try{ needGlow(id); }catch(e){} }
+// ✨ まだやっていない必須のところを光らせる（精算場所・写真・指さし確認・カメラ）2026/11/20 店長
+function needGlow(id){
+  const card = document.getElementById("card-" + id); if(!card) return;
+  const cd = unsCD()[id] || {}, pl = document.getElementById("pl-" + id), on = !!pl && !pl.disabled && !cd.settled && !cd.direct_home;
+  const place = pl ? pl.value : "", ph = phCache[phKey(id)];
+  const set = (el, need) => { if(el) el.classList.toggle("needglow", !!(on && need)); };
+  set(pl, !place);
+  set(document.getElementById("ph-" + id), !!place && !noPhoto[id] && !(ph && ph.length));
+  set(document.getElementById("phchk-" + id), !noPhoto[id] && !phChkOk(id));
+  set(document.getElementById("camc-" + id), !!place && place !== "回収" && !["ok", "ng"].includes(cd.camera_check || ""));
+}
 document.head.insertAdjacentHTML("beforeend", `<style>
   .sg{display:flex;align-items:center;flex-wrap:wrap;gap:2px;margin:4px 0 8px;font-size:12px;font-weight:800}
   .sg .sgs{display:inline-flex;align-items:center;gap:4px;padding:3px 9px 3px 4px;border-radius:99px;background:#F4EEF0;color:#9C8B8F;border:1.5px solid #E6DADE}

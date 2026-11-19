@@ -2540,12 +2540,13 @@ async function pfPhotoSaveOrder(){
    公式HPに出ている写真をロボットで読む（galpic_get）→ 新しい写真として枠に入れる（ロゴつき・✂️ で直せる）→ 「💾 新しい写真を入れる」で公式HPへ
    ・一覧用の写真にはロゴをのせない（今までと同じ）。もうロゴが入っている写真に入れると2重になる */
 async function pfLogoBulk(){
-  if(pfPhotoBusy || !pf) return;
+  if(!pf) return; if(pfPhotoBusy){ toast("ほかの写真の作業中です。終わってからもう一度押してください"); return; }
+  const say = (t, bad) => { toast(t); if($("phMsg")) $("phMsg").innerHTML = `<span style="color:${bad ? "#d9534f" : "#2e8b57"};font-weight:800">${esc(t)}</span>`; };   // 結果は写真の下にも残す（2026/11/20 押しても入らなかった）
   const sel = [...document.querySelectorAll(".phSel:checked")].map(b => Number(b.value)).filter(k => k >= 1);
-  if(!sel.length){ toast("ロゴを入れる写真の枠（プロフ用①〜⑧）にチェックしてください"); return; }
+  if(!sel.length){ say("🏷 ロゴを入れる写真の枠（プロフ用①〜⑧）にチェックしてから押してください", true); return; }
   const { mk, no } = hpNoOf(pf.c, pf.sk), site = HP_SITE_OF[mk];
-  if(!site || !no){ toast("このお店の在籍番号が入っていません"); return; }
-  if(!(await pfLogoOf(mk))){ toast(`${STORE_LABEL_OF(pf.sk)}のロゴが登録されていません`); return; }
+  if(!site || !no){ say("🏷 このお店の在籍番号が入っていません", true); return; }
+  if(!(await pfLogoOf(mk))){ say(`🏷 ${STORE_LABEL_OF(pf.sk)}のロゴが登録されていません（写真の ✂️ トリミング → 「ロゴを登録する」で入れてください）`, true); return; }
   if(!confirm(`${sel.map(k => PF_SLOT_LABEL[k]).join("・")} に${STORE_LABEL_OF(pf.sk)}のロゴを入れます。\nもうロゴが入っている写真は2重になるので、チェックをはずしてください。\n（できあがりを見てから「💾 新しい写真を入れる」で公式HPに入ります）`)) return;
   pfPhotoBusy = true; let n = 0; const bad = [];
   try{
@@ -2565,7 +2566,7 @@ async function pfLogoBulk(){
     }
   } finally { pfPhotoBusy = false; }
   pfCollect(); paintProf(); pfPrevAll();
-  toast(n ? `🏷 ${n}枚にロゴをのせました。できあがりを見て「💾 新しい写真を入れる」を押してください` : "読めませんでした");
+  say(n ? `🏷 ${n}枚にロゴをのせました。できあがりを見て「💾 新しい写真を入れる」を押してください` : "🏷 写真が読めませんでした", !n);
   if(bad.length && $("phMsg")) $("phMsg").innerHTML = `<span style="color:#d9534f">❌ ${esc(bad.join("／"))}</span>`;
 }
 function pfPhotoUrl(site, no, k){ return `https://www.${site}.com/galpic/` + (k === 0 ? `gal180x240-${no}.jpg` : `gal390x520-${no}${k === 1 ? "" : "-" + (k - 1)}.jpg`) + "?v=" + pfPhotoBust; }
