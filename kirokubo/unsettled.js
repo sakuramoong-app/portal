@@ -246,6 +246,7 @@ settle = async function(id, stay){   // stay：精算して、そのあとも待
     return;
   }
   // 📋 写真の指さし確認：全部 ✓ しないと精算済にできない（写真なしのときはなし）2026/11/15 店長
+  if(!noPhoto[id] && phBad[id] && phBad[id].size){ toast("📋 ✖ まちがっているところがあります。キャストに直してもらってから、もう一度 ✓ してください"); const w = document.getElementById("phchk-" + id); if(w) w.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
   if(!noPhoto[id] && !phChkOk(id)){
     toast("📋 写真を見て、精算メモの枚数・日付と金額・お金・領収書を1つずつ確認して ✓ してから精算済にしてください");
     const w = document.getElementById("phchk-" + id); if(w) w.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -392,7 +393,7 @@ function unsOnlyFoot(cid, l){
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px">
       <select id="uo_pl_${cid}">${(typeof PLACES !== "undefined" ? PLACES : ["池袋", "鶯谷", "五反田", "回収"]).map(p => `<option>${p}</option>`).join("")}</select>
       <input type="number" id="uo_dep_${cid}" placeholder="投函した額" style="width:150px">
-      <select id="uo_cam_${cid}"><option value="">📹 カメラ</option><option value="ok">◎ 確認した</option><option value="ng">× 確認していない</option></select>
+      <select id="uo_cam_${cid}"><option value="">📹 カメラ</option><option value="ok">◎ 確認した</option><option value="ng">× 写っていない</option></select>
       <label style="font-size:12.5px;font-weight:700">🕒 実際の時刻 <input type="time" id="uo_t_${cid}"></label>
       <button type="button" class="btn btn-primary btn-sm" onclick="unsOnlySettle('${cid}')">✅ 未精算だけ精算済にする</button></div></div>`;
 }
@@ -890,7 +891,7 @@ cardHtml = function(id, c){
       <small>あとから入れるときに（例：11/2 に らん が回収した）。時刻が空なら「精算済にする」を押した時刻、人は今ログインしている人。ポスティングはカメラのアーカイブで見た時刻</small></div>` : ""}
     <div id="camw-${id}" style="${plNow === "回収" ? "display:none" : ""}">   <!-- 回収場所が待機場（池袋・鶯谷・五反田）のときだけ -->
     <div class="camchk"><span>📹 投函を監視カメラで確認した？<b style="color:#c0392b">（ポスティングは必須）</b></span>
-      ${[["ok", "◎ 確認した"], ["ng", "× 確認していない"]].map(([v, l]) => `<button type="button" class="cb ${v} ${cam === v ? "on" : ""}" ${KB.CAN_EDIT ? "" : "disabled"} onclick="setCamera('${id}','${cam === v ? "" : v}')">${l}</button>`).join("")}</div>
+      ${[["ok", "◎ 確認した"], ["ng", "× 写っていない"]].map(([v, l]) => `<button type="button" class="cb ${v} ${cam === v ? "on" : ""}" ${KB.CAN_EDIT ? "" : "disabled"} onclick="setCamera('${id}','${cam === v ? "" : v}')">${l}</button>`).join("")}</div>
     </div>
     ${V.dep}
     ${photoBox(id)}
@@ -1127,6 +1128,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
    ・「写真なし（キャストがくれなかった）」のときは出さない
    ・✓ は精算済にしたとき、精算の履歴に残る ---------- */
 const phChk = {};   // cast_id → Set（✓ した項目）
+const phBad = {};   // cast_id → Set（✖ まちがっている項目）2026/11/19 店長：まちがいにもしるしを
 function phChkItems(id, c){
   let P; try{ P = settleParts(id); }catch(e){ P = { memo: [], due: 0 }; }
   const due = P.due;
@@ -1152,12 +1154,21 @@ function phChkHtml(id, c, done){
   if(done || noPhoto[id]) return "";
   const s = phChk[id] || new Set(), it = phChkItems(id, c), all = it.every(([k]) => s.has(k));
   return `<div class="phchk ${all ? "ok" : ""}" id="phchk-${id}"><div class="phchkh">📋 写真の指さし確認（全部 ✓ しないと精算済にできません）</div>
-    ${it.map(([k, l]) => `<label><input type="checkbox" ${s.has(k) ? "checked" : ""} ${KB.CAN_EDIT ? "" : "disabled"} onchange="phChkSet('${id}','${k}',this.checked)"> ${l}</label>`).join("")}
-    <small>キャストが投函する内容をまちがえていたら（メモが足りない・金額がちがう等）✓ しないで、キャストに直してもらう</small></div>`;
+    ${it.map(([k, l]) => { const bad = (phBad[id] || new Set()).has(k);
+      return `<div class="phrow ${bad ? "bad" : ""}"><label><input type="checkbox" ${s.has(k) ? "checked" : ""} ${KB.CAN_EDIT ? "" : "disabled"} onchange="phChkSet('${id}','${k}',this.checked)"> ${l}</label><button type="button" class="phbad ${bad ? "on" : ""}" ${KB.CAN_EDIT ? "" : "disabled"} onclick="phBadSet('${id}','${k}',${!bad})">✖ まちがっている</button></div>`; }).join("")}
+    ${(phBad[id] || new Set()).size ? `<div class="phbadmsg">✖ まちがっているところがあります。キャストに直してもらってから、もう一度 ✓ してください</div>` : ""}
+    <small>キャストが投函する内容をまちがえていたら（メモが足りない・金額がちがう等）「✖ まちがっている」を押して、キャストに直してもらう</small></div>`;
 }
 function phChkSet(id, k, on){
   const s = phChk[id] = phChk[id] || new Set();
-  if(on) s.add(k); else s.delete(k);
+  if(on){ s.add(k); if(phBad[id]) phBad[id].delete(k); } else s.delete(k);
+  const el = document.getElementById("phchk-" + id); if(el){ try{ el.outerHTML = phChkHtml(id, null, false); }catch(e){} }
+  try{ sgRepaint(id); }catch(e){}
+}
+// ✖ まちがっている：押すと ✓ ははずれる（直してもらって ✓ を押すと ✖ は消える）
+function phBadSet(id, k, on){
+  const b = phBad[id] = phBad[id] || new Set();
+  if(on){ b.add(k); if(phChk[id]) phChk[id].delete(k); } else b.delete(k);
   const el = document.getElementById("phchk-" + id); if(el){ try{ el.outerHTML = phChkHtml(id, null, false); }catch(e){} }
   try{ sgRepaint(id); }catch(e){}
 }
@@ -1165,7 +1176,11 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .phchk{border:2.5px solid #E5484D;border-radius:14px;padding:8px 10px;margin:8px 0;background:#FFF5F5;font-size:13px;font-weight:700}
   .phchk.ok{border-color:#2E9E4A;background:#EEFAF1}
   .phchk .phchkh{font-weight:900;color:#c0392b;margin-bottom:4px} .phchk.ok .phchkh{color:#1E7A3C}
-  .phchk label{display:block;padding:3px 0;cursor:pointer} .phchk small{color:#8a7f99;font-weight:600}
+  .phchk label{display:block;padding:3px 0;cursor:pointer;flex:1} .phchk small{color:#8a7f99;font-weight:600}
+  .phchk .phrow{display:flex;align-items:center;gap:6px;border-radius:8px} .phchk .phrow.bad{background:#FFE3E3}
+  .phchk .phbad{flex:none;border:1.5px solid #E5484D;background:#fff;color:#c0392b;border-radius:99px;padding:1px 9px;font:inherit;font-size:11.5px;font-weight:800;cursor:pointer}
+  .phchk .phbad.on{background:#E5484D;color:#fff}
+  .phchk .phbadmsg{color:#c0392b;font-weight:900;margin:4px 0}
 </style>`);
 // 投函した額を直したら、「お金」の ✓ ははずす（もう一度、写真と見くらべる）
 if(typeof setDeposit === "function"){ const __sdChk = setDeposit; setDeposit = function(id){ if(phChk[id]) phChk[id].delete("cash"); return __sdChk.apply(this, arguments); }; }

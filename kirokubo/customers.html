@@ -344,7 +344,7 @@ function histCard(r){
   const memoRed = r.marks && Object.keys(r.marks).some(k => /^font:#FF0000/i.test(k) && (r.marks[k] || []).includes("AB"));
   return `<div class="hc ${r.status} ${r.castng ? "castng" : ""}">
     <div class="hh"><b>${md(r.date) || "日付なし"}</b>${r.src === "inquiry" ? `<span class="tag" style="background:#E3F2FD;color:#1565C0">📞 問い合わせの記録${r.by ? "（" + esc(r.by) + "）" : ""}</span>${KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11.5px;color:#C0392B" onclick="delInquiry(${r.hid})">🗑 消す</button>` : ""}` : r.src === "excel" ? `<span class="tag">台帳${r.row ? " " + r.row + "行目" : ""}</span>` : ""}${r.dupNote ? `<span class="tag">記録簿の予約と同じ利用（数えない）</span>` : ""}
-      ${st ? `<span class="badge ${r.status}">${esc(st)}</span>` : ""}${r.castng ? `<span class="badge tobi">🙅 キャストNG</span>${KB.CAN_EDIT && r.hid ? `<button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11.5px" onclick="histNgOff(${r.hid})">NGではない</button>` : ""}` : ""}${r.card ? '<span class="tag">💳 カード</span>' : ""}${colorDots(r.marks)}</div>
+      ${st ? `<span class="badge ${r.status}">${esc(st)}</span>` : ""}${KB.CAN_EDIT && r.hid && r.src === "excel" && ["tobi", "cancel", "flowed"].includes(r.status) ? `<button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11.5px" onclick="histStatusFix(${r.hid},'${r.status}')">✏️ ${esc(st)}ではない</button>` : ""}${r.castng ?`<span class="badge tobi">🙅 キャストNG</span>${KB.CAN_EDIT && r.hid ? `<button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11.5px" onclick="histNgOff(${r.hid})">NGではない</button>` : ""}` : ""}${r.card ? '<span class="tag">💳 カード</span>' : ""}${colorDots(r.marks)}</div>
     <div class="hm">${r.cast_id && typeof KBF !== "undefined" ? KBF.img(r.cast_id, 28) : ""}${[r.store, r.cast, r.course, r.place].filter(Boolean).map(esc).join("　・　")}${r.total ? "　・　" + yen(r.total) : ""}</div>
     ${r.memo ? `<div class="hmemo ${memoRed ? "red" : ""}">${hl(r.memo)}</div>` : ""}</div>`;
 }
@@ -525,6 +525,14 @@ async function delCastNg(id){
   }catch(e){ toast("消せませんでした：" + (e.message || e)); }
 }
 // 過去の利用の1行だけ「キャストNGではない」に
+// ✏️ 台帳エクセルの行の「トビ・キャンセル・流れた」を直す（エクセルで背景が赤＝トビ として取りこんだが、ちがった行など）2026/11/19 店長
+async function histStatusFix(hid, now){
+  const opts = [["done", "ふつうに利用した"], ["tobi", "トビ"], ["cancel", "キャンセル"], ["flowed", "流れた"]].filter(([k]) => k !== now);
+  const a = prompt(`この回は、ほんとうはどれですか？（番号を入れてください）\n${opts.map(([, l], i) => `${i + 1}：${l}`).join("\n")}`, "1");
+  if(a == null) return;
+  const o = opts[Number(a) - 1]; if(!o){ toast("番号がちがいます"); return; }
+  try{ q(await sb.from("kb_cust_history").update({ status: o[0] }).eq("id", hid)); toast(`「${o[1]}」に直しました`); openCustomer(cur.id); }catch(e){ toast("できませんでした：" + (e.message || e)); }
+}
 async function histNgOff(hid){
   if(!confirm("この回の「🙅 キャストNG」の印を外しますか？")) return;
   try{ q(await sb.from("kb_cust_history").update({ cast_ng: false }).eq("id", hid)); toast("印を外しました"); openCustomer(cur.id); }catch(e){ toast("できませんでした：" + (e.message || e)); }

@@ -1482,7 +1482,14 @@ function buildMsg(c){
     特記事項行: $("f_castnote") && $("f_castnote").value.trim() ? "\n【特記事項】" + $("f_castnote").value.trim() : "",
     お金: !c.pay ? "【お支払い】⚠️ まだ決まっていません（決まったら送りなおす）" + fillVars(String(T.cash || "").replace(/^[^\n]*/, ""), money) : fillVars(T[c.pay === "split" ? "split" : c.pay === "cash" ? "cash" : "card"], money),   // 支払い方法を選んでいないのに「カード」の文が出ていた（2026/11/18 店長）
   };
-  $("msg").value = fillVars(T.main, V);
+  let msg = fillVars(T.main, V);
+  // 🎟 割引があるときは、金額と理由を【料金総額】（または【お支払い】）の下に1行（2026/11/19 店長）
+  if(c.discount > 0){
+    const dn = ($("f_discnote") && $("f_discnote").value.trim()) || "";
+    const line = `【割引】${yen0(c.discount)}円引き${dn ? "（" + dn + "）" : ""}`;
+    msg = /^【(料金総額|お支払い)】.*$/m.test(msg) ? msg.replace(/^【(料金総額|お支払い)】.*$/m, m => m + "\n" + line) : msg + "\n" + line;
+  }
+  $("msg").value = msg;
 }
 function fillVars(t, V){ return String(t || "").replace(/\{([^{}\s]+)\}/g, (m, k) => (k in V ? V[k] : m)); }
 const CAST_MSG_DEF = {

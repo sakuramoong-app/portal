@@ -185,6 +185,8 @@ function render(){
 function histDrop(rg){ let s = 0, any = false; for(let d = rg.from; d <= rg.to; d = KBA.addDays(d, 1)) if(HIST[d] != null){ s += HIST[d]; any = true; } return any ? s : null; }
 
 /* ---------- 🏪 お店 ---------- */
+// 日平均で割る日数：期間のうち、新しい記録簿の始まり（10/1）から今日まで
+function dayCount(rg){ const a = rg.from < LIVE_FROM ? LIVE_FROM : rg.from, t = KB.bizDateOf(), b = rg.to > t ? t : rg.to; return a > b ? 0 : KBA.diffDays(a, b) + 1; }
 function renderStore(rg){
   const S = KBA.summary(M, rg, pick), P = KBA.summary(M, KBA.prev(rg), pick), ly = KBA.lastYear(rg), Y = KBA.summary(M, ly, pick);
   const yDrop = Y.cnt ? Y.drop : (!pick ? histDrop(ly) : null);
@@ -195,12 +197,14 @@ function renderStore(rg){
   const courses = KBA.groupBy(M, rg, pick, r => r.course || "（コースなし）").slice(0, 15);
   const byStore = KBA.groupBy(M, rg, null, r => r.store || "（店なし）");
   const days = KBA.daily(M, rg, pick);
+  const nd = dayCount(rg), avg = v => nd ? `<b>1日平均 ${yen(v / nd)}</b>` : "";
   $("v_store").innerHTML = `
+    <div class="hint" style="margin:0 0 6px">📅 日平均は ${nd}日 で割っています（新しい記録簿の10/1から・今日まで）</div>
     <div class="cards">
-      ${card("💴 売上（交通費こみ）", yen(S.sales), S.sales, P.cnt ? P.sales : null, Y.cnt ? Y.sales : null)}
-      ${card("🏠 店落ち", yen(S.drop), S.drop, P.cnt ? P.drop : null, yDrop, pick ? "店をしぼると内勤の日払いは引きません" : "内勤の日払い " + yen(S.staffPay) + " を引いたあと")}
-      ${card("🔢 本数", num(S.cnt) + "本", S.cnt, P.cnt || null, Y.cnt || null, "1本あたり " + (S.perCnt ? yen(S.perCnt) : "−"))}
-      ${card("💗 キャストの報酬", yen(S.reward), S.reward, P.cnt ? P.reward : null, Y.cnt ? Y.reward : null)}
+      ${card("💴 売上（交通費こみ）", yen(S.sales), S.sales, P.cnt ? P.sales : null, Y.cnt ? Y.sales : null, avg(S.sales))}
+      ${card("🏠 店落ち", yen(S.drop), S.drop, P.cnt ? P.drop : null, yDrop, [avg(S.drop), pick ? "店をしぼると内勤の日払いは引きません" : "内勤の日払い " + yen(S.staffPay) + " を引いたあと"].filter(Boolean).join("<br>"))}
+      ${card("🔢 本数", num(S.cnt) + "本", S.cnt, P.cnt || null, Y.cnt || null, (nd ? `<b>1日平均 ${num(S.cnt / nd, 10)}本</b><br>` : "") + "1本あたり " + (S.perCnt ? yen(S.perCnt) : "−"))}
+      ${card("💗 キャストの報酬", yen(S.reward), S.reward, P.cnt ? P.reward : null, Y.cnt ? Y.reward : null, avg(S.reward))}
       ${card("❌ 失注（キャンセル・トビ・流れた）", num(S.lostN) + "件", S.lostN, P.cnt ? P.lostN : null, Y.cnt ? Y.lostN : null, Object.entries(S.lostBy).map(([k, v]) => k + " " + v).join("・") + (S.lostYen ? "<br>失った額 " + yen(S.lostYen) : ""))}
       ${S.hours != null ? card("⏰ キャストの出勤時間", num(S.hours, 10) + "時間", S.hours, P.cnt ? P.hours : null, Y.cnt ? Y.hours : null, "のべ " + S.castDays + "人・日") : ""}
     </div>
@@ -245,13 +249,15 @@ function renderCast(rg){
   const courses = KBA.groupBy({ R: rs }, rg, null, r => r.course || "（コースなし）").slice(0, 10);
   const stores = KBA.groupBy({ R: rs }, rg, null, r => r.store);
   const k = c.keep || {};
+  // 出勤1日平均：出勤した日（欠勤は入れない）。お店をしぼったときは、そのお店の予約があった日
+  const wd = pick ? new Set(rs.map(r => r.d)).size : c.days;
   $("v_cast").innerHTML = `
     <div class="ctrl"><span class="lab">キャスト</span><select id="castPick" onchange="castSel=this.value;render()">${names.map(([id, nm]) => `<option value="${esc(id)}" ${id === castSel ? "selected" : ""}>${esc(nm)}</option>`).join("")}</select>
       <span class="lab">評価</span><span class="mk ${c.mark === "−" ? "x" : c.mark}" style="font-size:16px">${c.mark}</span><span class="hint" style="margin:0">本指名率 ${pc(c.honRate)}（A 70%以上・B 50%以上・C 50%未満）</span></div>
     <div class="cards">
       ${card("🔢 本数", num(c.cnt) + "本", c.cnt, p ? p.cnt : null, "新規 " + c.n_new + "・店リピ " + c.n_repeat + "・本指名 " + c.n_honshi)}
-      ${card("💴 売上", yen(c.sales), c.sales, p ? p.sales : null)}
-      ${card("💗 報酬", yen(c.reward), c.reward, p ? p.reward : null, "1本あたり " + (c.perCnt ? yen(c.perCnt) : "−"))}
+      ${card("💴 売上", yen(c.sales), c.sales, p ? p.sales : null, wd ? `<b>出勤1日平均 ${yen(c.sales / wd)}</b>` : "")}
+      ${card("💗 報酬", yen(c.reward), c.reward, p ? p.reward : null, (wd ? `<b>出勤1日平均 ${yen(c.reward / wd)}・${num(c.cnt / wd, 10)}本</b><br>` : "") + "1本あたり " + (c.perCnt ? yen(c.perCnt) : "−"))}
       ${card("🏠 店落ち", yen(c.drop), c.drop, p ? p.drop : null, "雑費こみ・内勤の日払いは引かない")}
       ${pick ? "" : card("⏰ 出勤時間", num(c.hours, 10) + "時間", c.hours, p ? p.hours : null, "出勤 " + c.days + "日（お茶 " + c.ocha + "）・欠勤 " + c.absent + "日")}
       ${pick ? "" : card("⏱ 1時間あたりの報酬", c.perHour ? yen(c.perHour) : "−", c.perHour, p ? p.perHour : null, "10時間あたり " + num(c.cntPer10h, 10) + "本")}

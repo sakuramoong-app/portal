@@ -1951,7 +1951,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   #tl2Detail .tl2t{font-weight:900;font-size:13.5px;color:#3B3480;margin-bottom:6px}
   #tl2Detail .tljobs{display:flex;flex-direction:column;gap:3px;margin:0;max-height:none;overflow:visible}
   #tl2Detail .tljob{font-size:13px;color:#2A2650;background:#fff;border:1.5px solid #E2DDF7;border-left:6px solid #7FD796;border-radius:10px;padding:4px 8px;display:flex;gap:4px 6px;align-items:center;flex-wrap:wrap;outline:none}
-  #tl2Detail .tljob.wait{border-left-color:#F2B705} #tl2Detail .tljob.cur{border-left-color:#FF9F43;background:#FFF5EA} #tl2Detail .tljob.free{border-left-color:#8E87E0;border-style:dashed;border-left-style:solid;color:#4B4590;background:#FBFAFF}
+  #tl2Detail .tljob.wait{border-left-color:#F2B705} #tl2Detail .tljob.cur{border-left-color:#FF9F43;background:#FFF5EA} #tl2Detail .tljob.free{border-left-color:#C9C9CF;border-style:dashed;border-left-style:solid;color:#9A9AA2;background:#F1F1F3}
   #tl2Detail .tljob.now{box-shadow:0 0 0 2px #FF4D8D} #tl2Detail .tljob.none{border-left-color:#ccc;color:#888}
   #tl2Detail .tl2gap{font-size:12px;font-weight:800;color:#5B54A8;padding-left:14px} #tl2Detail .tl2gap.bad{color:#C0392B}
   #tl2Detail .tl2cs{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px}

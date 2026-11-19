@@ -559,6 +559,7 @@ const envKey = r => r.day + "|" + r.id;
 function envStatusOf(r){
   if(!r.cd.settled) return r.kind === "home" ? "home" : "none";
   if(envMerged(r)) return "merged";
+  if(r.state === "day" && countPerfect(r)) return "done";   // ✔ 当日回収は、① 当日回収のカードで確かめたので完璧回収（2026/11/19）
   const st = envState(r);
   return st.perfect ? "done" : (st.counted != null && !r.s.refund) || st.dn.length ? "doing" : "wait";
 }
@@ -1006,7 +1007,8 @@ const pendingOf = r => -((r.R && r.R.unsMade) || []).filter(u => u.cast_id === r
 // 移したあと（0 なら、この日の袋は「はず」どおり）
 const afterOf = r => { const v = countVal(r); return v == null ? null : v + moveNet(r) - r.amt; };
 // 💯 完璧回収：移したあと ±0・精算ミスなし・領収書の回収待ちなし
-const countPerfect = r => { const af = afterOf(r); return af === 0 && !Number((r.s || {}).diff || 0) && !hasReceipt(r); };
+// ✔ 当日回収（その日に内勤が受け取った）は、① 当日回収のカードで確かめているので、精算ミス・領収書待ちがなければ 💯 完璧回収（2026/11/19 店長）
+const countPerfect = r => { const af = afterOf(r); return (af === 0 || (r.state === "day" && af != null)) && !Number((r.s || {}).diff || 0) && !hasReceipt(r); };
 function moveHtml(r, diff){
   const m = movesOf(r); if(diff == null) return "";   // いつも出す：移すものがなくても「移したあと」（2026/11/15 店長：どこを見ればいいか）
   const after = diff + moveNet(r);
