@@ -793,8 +793,10 @@ function ranksOn(cast){
   Object.keys(rows).forEach(g=>{ if(rows[g].rank) o[g] = rows[g].rank; });
   return o;
 }
-function rulesOn(castId){
-  return M.rules.filter(r=>r.cast_id === castId && (r.valid_from || "2000-01-01") <= day && (!r.valid_to || r.valid_to > day));
+const resDayOf = () => ($("f_day") && $("f_day").value) || day;   // 受付の予約の日
+function rulesOn(castId, d){   // d：予約の日（受付の計算は予約の日で見る。2026/11/20 りぃの指名料が効かなかった）
+  const dd = d || day;
+  return M.rules.filter(r=>r.cast_id === castId && (r.valid_from || "2000-01-01") <= dd && (!r.valid_to || r.valid_to > dd));
 }
 // ヒアリングを見る
 let hearings = [];
@@ -1291,7 +1293,7 @@ function calc(){
   let nomination = 0;
   if(!free){
     nomination = (M.set.nomination || {}).default || 2000;
-    const nr = cast && rulesOn(cast.id).find(r=>r.kind==="nomination_fee");
+    const nr = cast && rulesOn(cast.id, resDayOf()).find(r=>r.kind==="nomination_fee");
     if(nr){ nomination = nr.params.amount; why.push(`指名料：特例 ${yen(nomination)}`); }
     // ダミー（エイティーンなど）は子ごとの指名料（公式HPの★）
     const dm = isDummyStore(store) && $("f_dummy") && M.dummies.find(x => x.store_key === store && x.name === $("f_dummy").value);
@@ -1308,7 +1310,7 @@ function calc(){
     if(!$("o_"+o.code) || !$("o_"+o.code).checked) return;
     if(courseIncludesOp(store, course, o.label)){ why.push(`${o.label}：コース（${course}）のプレイ内容にふくまれるので 0円`); return; }
     let p = +$("op_"+o.code).value||0, b = +$("ob_"+o.code).value||0;
-    const special = cast && rulesOn(cast.id).find(r=>r.kind==="op_price" && r.params.op===o.code && (!r.params.group || r.params.group===g));
+    const special = cast && rulesOn(cast.id, resDayOf()).find(r=>r.kind==="op_price" && r.params.op===o.code && (!r.params.group || r.params.group===g));
     if(special){ p = special.params.price; b = special.params.back; why.push(`${o.label}：特例 ${yen(p)}（バック${yen(b)}）`); }
     const qty = o.unit === "once" ? 1 : Math.max(1, +$("oq_"+o.code).value||1);
     // サクラナの「AF・逆AF」1つのOPは、希望したほうだけの名前に（どちらかだけなら、どちらかだけ出す）
@@ -1386,7 +1388,7 @@ function calc(){
   if(date) why.push(`デート ${date}回：バック ${yen(date*dateSet.back)}`);
   if(admission){ extra += admSet.back_add; why.push(`入会金あり：報酬＋${yen(admSet.back_add)}`); }
   if(cast){
-    rulesOn(cast.id).filter(r=>r.kind==="back_add").forEach(r=>{
+    rulesOn(cast.id, resDayOf()).filter(r=>r.kind==="back_add").forEach(r=>{
       const p = r.params || {};
       const okStore = !p.store || p.store === store, okCourse = !p.course || p.course === course;
       const okMin = !p.min_minutes || minutesOf(course) >= p.min_minutes;
