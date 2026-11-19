@@ -106,12 +106,12 @@ function mobTlHtml(){
       if(g && k.e < h1) tr += `<div class="mgap" style="left:${X(k.e)}px;width:${Math.max(2, X(Math.min(k.e + g, h1)) - X(k.e))}px" title="インターバル"></div>`;
       const kari = !!r.kari_at, done = ["done", "working"].includes(r.status);
       const cu = (r.kb_customers || {}).name || "", area = r.area || "";
-      tr += `<button type="button" class="mbk ${kari ? "kari" : done ? "done" : ""}" style="left:${X(s)}px;width:${Math.max(28, X(e) - X(s))}px" onclick="openForm(${Number(r.id)})">
+      tr += `<button type="button" class="mbk ${kari ? "kari" : done ? "done" : ""}" style="left:${X(s)}px;width:${Math.max(28, X(e) - X(s))}px" onclick="mobResPop(${Number(r.id)})">
         <b>${tlLabel(k.s)} - ${tlLabel(k.e)}</b><span>${esc([area, cu ? cu + "様" : ""].filter(Boolean).join("／") || (kari ? "📌 仮予約" : ""))}</span></button>`;
     });
     if(isToday) tr += `<div class="mnow" data-h0="${h0}" data-h1="${h1}"></div>`;   // 位置は mobNowPaint（毎分、描きなおさずに動かす）
     return `<div class="mrow ${off ? "off" : ""}"><div class="mname" onclick="${x.c ? `openCast('${x.c.id}')` : ""}">${x.c && typeof KBF !== "undefined" ? KBF.img(x.c, 36) : ""}<div><b>${esc(castLabel(x))}</b>${off ? `<em>${esc(cd.status)}</em>` : ""}<small>${esc(sh)}${g ? `<br>（間${x.c.interval_min}分）` : ""}</small></div></div>
-      <div class="mtrack" style="width:${W}px">${hrs.map(h => `<i class="mgl" style="left:${X(h)}px"></i>`).join("")}${tr}</div></div>`;
+      <div class="mtrack" ${x.c ? `data-cid="${x.c.id}" data-h0="${h0}"` : ""} style="width:${W}px">${hrs.map(h => `<i class="mgl" style="left:${X(h)}px"></i>`).join("")}${tr}</div></div>`;
   }).join("");
   return `<div class="mleg"><span><i class="lg-r"></i>予約</span><span><i class="lg-k"></i>確認待ち（仮予約）</span><span><i class="lg-b"></i>インターバル</span><span><i class="lg-o"></i>出勤外</span></div>
     <div class="mtl" id="mobTl">${head}${body}</div>`;
@@ -122,7 +122,7 @@ function mobListHtml(list, none){
   return `<div class="mlist">${list.map(r => {
     const cx = !mobLive(r), c = r.cast_id ? M.casts.find(x => x.id === r.cast_id) : null, cu = (r.kb_customers || {}).name || "名前なし";
     const t = r.start_at ? hm(r.start_at) + (r.end_at ? "〜" + hm(r.end_at) : "") : "時間まだ";
-    return `<button type="button" class="mli ${cx ? "cx" : ""} ${r.kari_at ? "kari" : ""}" onclick="openForm(${Number(r.id)})">
+    return `<button type="button" class="mli ${cx ? "cx" : ""} ${r.kari_at ? "kari" : ""}" onclick="mobResPop(${Number(r.id)})">
       <span class="mt">${esc(t)}</span><span class="mc">${c && typeof KBF !== "undefined" ? KBF.img(c, 28) : ""}<b>${esc(c ? (c.official_name || c.temp_name) : "キャスト未定")}</b></span>
       <span class="mu">${r.kari_at ? "📌 仮予約　" : ""}${esc(cu)}様${r.course ? "・" + esc(r.course) : ""}${r.area ? "・" + esc(r.area) : ""}${cx ? `<em>${({ cancel: "キャンセル", tobi: "トビ", flowed: "流れた" })[r.status] || r.status}</em>` : ""}</span>
       ${r.total ? `<span class="my">${yen(r.total)}</span>` : ""}</button>`;
@@ -191,3 +191,68 @@ function mobNowPaint(){
     if(el.classList.contains("mnowlab")) el.innerHTML = "現在<br>" + tlLabel(now);
   });
 }
+/* タイムラインの空いているところ：タップ＝「○○:○○から」を出す／長押し＝その子・その時刻で新しい受付（前の「全体を見たい」と同じ。2026/11/20 店長） */
+(function(){
+  let tm = null, fired = false, sx = 0, sy = 0;
+  const trackOf = e => { const t = e.target; if(!t.closest || !t.closest("#mob") || t.closest(".mbk")) return null; const k = t.closest(".mtrack[data-cid]"); return k; };
+  const hourAt = (k, x) => { const r = k.getBoundingClientRect(), h = Number(k.dataset.h0) + Math.max(0, x - r.left) / MOB_PPH; return Math.floor(h * 6) / 6; };   // 10分きざみ
+  document.addEventListener("pointerdown", e => {
+    const k = trackOf(e); if(!k) return;
+    fired = false; sx = e.clientX; sy = e.clientY; clearTimeout(tm);
+    const h = hourAt(k, e.clientX);
+    tm = setTimeout(() => { fired = true; tm = null; if(navigator.vibrate) navigator.vibrate(30); tlCell(k.dataset.cid, h); }, 500);
+  }, true);
+  document.addEventListener("pointermove", e => { if(tm && Math.hypot(e.clientX - sx, e.clientY - sy) > 10){ clearTimeout(tm); tm = null; } }, true);
+  ["pointerup", "pointercancel"].forEach(ev => document.addEventListener(ev, () => { clearTimeout(tm); tm = null; }, true));
+  document.addEventListener("contextmenu", e => { if(trackOf(e)) e.preventDefault(); }, true);
+  document.addEventListener("click", e => {
+    const k = trackOf(e); if(!k) return;
+    if(fired){ fired = false; return; }
+    document.querySelectorAll("#mob .mtap").forEach(x => x.remove());
+    const h = hourAt(k, e.clientX), r = k.getBoundingClientRect();
+    const t = document.createElement("span"); t.className = "mtap"; t.style.left = Math.round(e.clientX - r.left) + "px"; t.textContent = tlLabel(h) + " から（長押しで受付）";
+    k.appendChild(t); setTimeout(() => t.remove(), 3000);
+  }, true);
+})();
+document.head.insertAdjacentHTML("beforeend", `<style>
+  #mob .mtrack{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+  #mob .mtap{position:absolute;top:4px;z-index:6;background:#E5638C;color:#fff;font-size:11.5px;font-weight:800;border-radius:6px;padding:2px 7px;white-space:nowrap;pointer-events:none;transform:translateX(-10%)}
+</style>`);
+/* 予約をタップ → 小窓で予約のまとめ（見るだけ）。右上の「✏️ 編集」を押して、はじめて受付（編集）を開く（2026/11/20 店長） */
+function mobResPop(id){
+  const r = rows.find(x => x.id === id); if(!r) return;
+  const c = r.kb_customers || {}, cx = ["cancel", "tobi", "flowed"].includes(r.status);
+  const ops = (r.options || []).filter(o => !["af", "gyakuaf"].includes(o.code)).map(o => o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・");
+  const afw = [r.af_wish === "yes" ? "AF" : "", r.rev_af_wish === "yes" ? "逆AF" : ""].filter(Boolean).join("・");
+  const st = typeof STATUS !== "undefined" ? (STATUS[r.status] || r.status) : r.status;
+  const pay = typeof PAY_LABEL !== "undefined" ? (PAY_LABEL[r.payment] || r.payment || "") : (r.payment || "");
+  const vk = typeof VISIT !== "undefined" ? ((VISIT.find(v => v[0] === r.visit_kind) || [])[1] || "") : "";
+  const logs = (typeof logOf === "function" ? logOf(r) : []).filter(x => x.text && String(x.text).trim()).slice(-3).reverse();
+  const row = (k, v) => v ? `<div class="mprow"><span>${k}</span><b>${v}</b></div>` : "";
+  let bg = document.getElementById("mobPop"); if(!bg){ bg = document.createElement("div"); bg.id = "mobPop"; document.body.appendChild(bg); }
+  bg.innerHTML = `<div class="mpbg" onclick="mobPopClose()"></div><div class="mpbox">
+    <div class="mphd"><b>${r.start_at ? esc(hm(r.start_at)) + (r.end_at ? "〜" + esc(hm(r.end_at)) : "") : "時間まだ"}</b><span class="mpst ${cx ? "cx" : ""}">${esc(st)}</span>
+      <span style="flex:1"></span>${KB.CAN_EDIT ? `<button type="button" class="mpedit" onclick="mobPopClose();openForm(${Number(r.id)})">✏️ 編集</button>` : ""}<button type="button" class="mpx" onclick="mobPopClose()">✕</button></div>
+    ${r.kari_at ? `<div class="mpkari">📌 仮予約（まだぜんぶ入っていません）</div>` : ""}
+    ${row("キャスト", r.cast_id ? esc(castName(r.cast_id)) : "未定")}
+    ${row("お店", typeof KBF !== "undefined" && r.store_key ? KBF.storeChip(r.store_key) : esc(r.store_key || ""))}
+    ${row("お客さん", (c.ng ? "⚠️ " : "") + esc(c.name || "名前なし") + (vk ? `<small>（${esc(vk)}）</small>` : ""))}
+    ${row("コース", esc(r.course || "") + (/^\d+$/.test(r.course || "") ? "分" : "") + (r.extension_count ? "＋延長" + r.extension_count : ""))}
+    ${row("場所", esc([r.area, r.address].filter(Boolean).join("　")))}
+    ${row("総額", r.total ? yen(r.total) + `<small>（${esc(pay)}）</small>` : "")}
+    ${row("OP", esc(ops))}${row("希望", esc(afw))}${row("キャストへ", esc(r.cast_note || ""))}
+    ${logs.length ? `<div class="mplog">${logs.map(l => `<div>📝 ${esc(String(l.text).trim())}<small> ${esc(l.by || "")} ${typeof whenShort === "function" ? esc(whenShort(l.at)) : ""}</small></div>`).join("")}</div>` : ""}
+  </div>`;
+}
+function mobPopClose(){ const bg = document.getElementById("mobPop"); if(bg) bg.innerHTML = ""; }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  #mobPop .mpbg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:980}
+  #mobPop .mpbox{position:fixed;left:10px;right:10px;top:12vh;max-height:76vh;overflow:auto;z-index:981;background:#fff;border-radius:18px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.25);color:#5C4B4F;font-size:14px}
+  #mobPop .mphd{display:flex;align-items:center;gap:8px;margin-bottom:6px} #mobPop .mphd b{font-size:18px;color:#B0213F}
+  #mobPop .mpst{font-size:12px;font-weight:800;background:#FFE3EC;border-radius:99px;padding:2px 9px} #mobPop .mpst.cx{background:#ECE9EA}
+  #mobPop .mpedit{font-family:inherit;font-weight:900;font-size:14px;background:linear-gradient(135deg,#FF8FAB,#E5638C);color:#fff;border:none;border-radius:99px;padding:7px 14px}
+  #mobPop .mpx{font-family:inherit;font-size:16px;background:#F4EEF0;border:none;border-radius:99px;width:34px;height:34px}
+  #mobPop .mprow{display:flex;gap:10px;padding:6px 0;border-bottom:1px dashed #F3E6EB} #mobPop .mprow span{flex:0 0 72px;font-size:12.5px;color:#9C8B8F;font-weight:800} #mobPop .mprow b{font-weight:800} #mobPop .mprow small{color:#9C8B8F;margin-left:4px}
+  #mobPop .mpkari{background:#FFF6CC;border-radius:10px;padding:5px 9px;font-weight:800;font-size:13px;margin-bottom:4px}
+  #mobPop .mplog{margin-top:8px;font-size:13px;display:flex;flex-direction:column;gap:3px} #mobPop .mplog small{color:#9C8B8F}
+</style>`);
