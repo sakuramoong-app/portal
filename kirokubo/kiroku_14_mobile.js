@@ -22,6 +22,12 @@ function mobApply(){
     if(!pcBack){ pcBack = document.createElement("button"); pcBack.id = "mobBackBtn"; pcBack.type = "button"; pcBack.textContent = "📱 スマホの画面にもどる"; pcBack.onclick = () => { mobLsSet("kbMobPC", ""); mobApply(); }; document.body.appendChild(pcBack); }
   } else if(pcBack) pcBack.remove();
   if(on) mobRender();
+  // 🌙 ダークモードのボタンは、スマホでは上（前の 🔍 のところ）に（2026/11/20 店長）
+  mobDark(on);
+}
+function mobDark(on){
+  const dk = document.getElementById("kbDarkBtn"), hd = document.querySelector("#mob .mhead");
+  if(dk){ if(on && hd && dk.parentNode !== hd) hd.insertBefore(dk, hd.querySelector(".mbtn")); else if(!on && dk.parentNode !== document.body) document.body.appendChild(dk); }
 }
 function mobShell(){
   let m = document.getElementById("mob");
@@ -67,7 +73,7 @@ function mobRender(){
   html += KB.CAN_EDIT ? `<button type="button" class="madd" onclick="openForm()">＋ 予約を追加</button>` : "";
   // 中身が変わったときだけ描きなおす（描きなおしでスクロールが動くと「さわった」になって、1分のロックがかからなくなるので）
   if(body.dataset.h !== html){ const sl = $("mobTl") ? $("mobTl").scrollLeft : 0; body.innerHTML = html; body.dataset.h = html; if(sl && $("mobTl")) $("mobTl").scrollLeft = sl; }
-  mobNowPaint();
+  mobNowPaint(); mobDark(true);
 }
 function mobGo(page, tab){ mobPage = "res"; if(tab) mobTab = tab; mobRender(); window.scrollTo(0, 0); }
 function mobBell(){ const b = document.querySelector("#ntfBox .ntfopen"); if(b) b.click(); else { const box = $("ntfBox"); if(box) box.scrollIntoView(); } }
@@ -255,4 +261,10 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   #mobPop .mprow{display:flex;gap:10px;padding:6px 0;border-bottom:1px dashed #F3E6EB} #mobPop .mprow span{flex:0 0 72px;font-size:12.5px;color:#9C8B8F;font-weight:800} #mobPop .mprow b{font-weight:800} #mobPop .mprow small{color:#9C8B8F;margin-left:4px}
   #mobPop .mpkari{background:#FFF6CC;border-radius:10px;padding:5px 9px;font-weight:800;font-size:13px;margin-bottom:4px}
   #mobPop .mplog{margin-top:8px;font-size:13px;display:flex;flex-direction:column;gap:3px} #mobPop .mplog small{color:#9C8B8F}
+</style>`);
+document.head.insertAdjacentHTML("beforeend", `<style>
+  /* 左下の 🔔 は出さない（上の 🔔 で開く。開いたときだけ出す）・受付などの小窓を開いたら、スマホの上の固定の欄はかくす（2026/11/20 店長） */
+  body.mob #ntfBox:not(.open){display:none !important}
+  body.mob:has(.modal-bg.show) #mob{display:none}
+  #mob .mhead #kbDarkBtn{position:static;width:36px;height:36px;box-shadow:none;font-size:18px}
 </style>`);
