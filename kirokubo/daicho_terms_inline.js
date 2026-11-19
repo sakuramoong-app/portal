@@ -37,3 +37,20 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   #t_inline .tminline .tmhead{justify-content:flex-end;padding-right:0;margin-bottom:8px}
   #t_inline .tminline .actions{position:static}
 </style>`);
+/* 🧮 条件が消えないように（2026/11/20 店長：りぃの条件を入れて「保存する」を押したのに消えていた）
+   ① 「＋ この条件を足す」を押さずに 💾 を押しても、書いた条件を足してから保存する
+   ② バック・条件を変えたまま、下の「保存する」を押したら止める（バック・条件は 💾 バック・条件を保存 でしか保存されない） */
+{ const __st2 = saveTerms; saveTerms = async function(){
+    const n = $("t_note"), box = $("t_addBox");
+    if(n && n.value.trim() && box && box.style.display !== "none"){ termsAddRule(); if(n.value.trim()) return; toast("書いた条件を足しました。ヒアリング（または 📒 既存ルール）を選んで、もう一度 💾 を押してください"); const hb = $("t_hearBox"); if(hb) hb.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
+    return __st2.apply(this, arguments);
+  }; }
+function tmPending(){ try{ return !!termsCast && (termsDirty() || !!(($("t_note") || {}).value || "").trim()); }catch(e){ return false; } }
+{ const __sc = saveCast; saveCast = async function(){
+    if(TM_INLINE && tmPending()){
+      alert("⭐ バック・条件の変更が、まだ保存されていません。\n\n「バック（ランク）・条件」の中の\n① 「＋ この条件を足す」\n② ヒアリング（または 📒 既存ルール）を選ぶ\n③ 「💾 バック・条件を保存（ヒアリングとセット）」\nの順に押してください。");
+      const s = $("t_save") || document.getElementById("t_inline"); if(s) s.scrollIntoView({ block: "center", behavior: "smooth" });
+      return;
+    }
+    return __sc.apply(this, arguments);
+  }; }
