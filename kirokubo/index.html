@@ -215,6 +215,7 @@
   .pfGrid input,.pfOpt select,.pfOpt input,#e_prof textarea,#e_prof select,#e_prof input[type=date],#e_prof input[id^="pf_new"]{width:100%;font-family:inherit;font-size:13.5px;color:var(--ink);padding:7px 10px;border:1.5px solid var(--line);border-radius:10px;background:#FFF5F8;}
   .pfGrid input:focus,.pfOpt select:focus,.pfOpt input:focus,#e_prof textarea:focus{outline:none;border-color:var(--pink);background:#fff;}
   @media (max-width:560px){ .pfOpt{grid-template-columns:1fr 64px} .pfOpt input{grid-column:1/-1} }
+  .rptag{display:inline-block;margin:0 4px;padding:1px 8px;border-radius:99px;background:#FFF3C4;color:#8A6100;font-size:12.5px;font-weight:900;border:1px solid #F2C94C}
 </style>
 <script src="https://sakuramoong-app.github.io/cast-sakura-profile/pq_questions.js"></script>
 <link rel="stylesheet" href="kb_theme.css?v=1"></head>
@@ -619,6 +620,19 @@ function gyouOf(c){ const ch = key(c.kana || nameOf(c)).charAt(0); const g = GYO
 function kanaJump(g){ const r = document.querySelector(`#list .row[data-g="${g}"]`); if(r) r.scrollIntoView({ block: "start", behavior: "smooth" }); }
 
 /* ---------- バック（ランク）・条件（ヒアリングとセットで変える） ---------- */
+// 条件の中身（金額など）を短く（2026/11/20 店長：説明だけで中身が書かれていない）
+function ruleParamText(r){
+  const p = (r && r.params) || {}, y = v => Number(v || 0).toLocaleString() + "円";
+  try{
+    if(r.kind === "nomination_fee") return y(p.amount);
+    if(r.kind === "transport_back") return p.daily ? `出勤日ごとに ${y(p.daily)}${p.standby ? "（" + p.standby + "に着いたら）" : ""}` : p.amount != null ? `交通費から ${y(p.amount)} まで` + (p.min_transport ? `（交通費 ${y(p.min_transport)} 以上のとき）` : "") : (Number(p.rate) === 1 ? "全額" : Number(p.rate) === 0.5 ? "半額" : Math.round(Number(p.rate || 0) * 100) + "%") + (p.min_transport ? `（交通費 ${y(p.min_transport)} 以上のとき）` : "");
+    if(r.kind === "back_add") return `＋${y(p.amount)}` + (p.min_minutes ? `（${p.min_minutes}分以上）` : "") + (p.store ? `（${p.store}）` : "");
+    if(r.kind === "op_price") return `${p.op || ""}：料金 ${y(p.price)}・バック ${y(p.back)}`;
+    if(r.kind === "zappi_exempt") return (p.days || []).map(d => "日月火水木金土"[d]).join("・") + "曜";
+  }catch(e){}
+  return "";
+}
+const rpTag = r => { const t = ruleParamText(r); return t ? `<span class="rptag">${esc(t)}</span>` : ""; };
 const KIND_LABEL = { nomination_fee:"指名料", op_price:"オプション", back_add:"バック上乗せ", zappi_exempt:"雑費なし", transport_back:"交通費バック", memo:"そのほか" };
 const GRP_LABEL = { sakurana:"サクラナ通常", cutie:"CC（キューティ）", gokumon:"極門", event:"イベ（特別フリー）" };
 function todayYmd(){ const d = new Date(Date.now() + 9*3600*1000); return d.toISOString().slice(0, 10); }
@@ -658,7 +672,7 @@ function termsHtml(c){
   });
   const rules = castRules.filter(r=>r.cast_id === c.id);
   const now = rules.filter(r=>ruleOn(r, day) || r.valid_from > day);
-  if(now.length) h += now.map(r=>`<div>🧮 <b>${KIND_LABEL[r.kind] || r.kind}</b>：${esc(r.note)}　<span style="color:#9C8B8F;font-size:12px">${r.valid_from > day ? md(r.valid_from) + "から（予定）" : (md(r.valid_from) ? md(r.valid_from) + "から" : "")}${r.valid_to ? "・" + md(r.valid_to) + "で終わり" : ""}</span> ${hearLink(r.hearing_text, r.by_name, r.created_at)}</div>`).join("");
+  if(now.length) h += now.map(r=>`<div>🧮 <b>${KIND_LABEL[r.kind] || r.kind}</b>${rpTag(r)}：${esc(r.note)}　<span style="color:#9C8B8F;font-size:12px">${r.valid_from > day ? md(r.valid_from) + "から（予定）" : (md(r.valid_from) ? md(r.valid_from) + "から" : "")}${r.valid_to ? "・" + md(r.valid_to) + "で終わり" : ""}</span> ${hearLink(r.hearing_text, r.by_name, r.created_at)}</div>`).join("");
   else h += `<div style="color:#9C8B8F">🧮 キャストごとの条件：なし</div>`;
   // 変更の履歴
   const ev = rankHist.filter(r=>r.cast_id === c.id).map(r=>({ at: r.at, by: r.by_name, text: `ランク（${GRP_LABEL[r.grp] || r.grp}）→ ${r.rank || "なし"}${md(r.valid_from) ? "（" + md(r.valid_from) + "から）" : ""}`, h: r.hearing_text }))
@@ -736,7 +750,7 @@ function termsAddOpen(){ const b = $("t_addBox"); if(!b) return; b.style.display
   $("t_cur").innerHTML = termsHtml(c);
   // 今の条件：1行ずつ（🗑 にチェック ＝ 終わらせる）
   const day = todayYmd(), active = castRules.filter(x => x.cast_id === c.id && (ruleOn(x, day) || x.valid_from > day));
-  $("t_rules").innerHTML = active.length ? active.map(x => `<label class="tmrule"><span class="tmrn"><b>${KIND_LABEL[x.kind] || x.kind}</b><small>${esc(x.note)}</small></span>
+  $("t_rules").innerHTML = active.length ? active.map(x => `<label class="tmrule"><span class="tmrn"><b>${KIND_LABEL[x.kind] || x.kind}${rpTag(x)}</b><small>${esc(x.note)}</small></span>
       <span class="tmend"><input type="checkbox" class="t_end" value="${x.id}" onchange="termsSync()"> 🗑 終わらせる</span></label>`).join("")
     : `<div class="hint">今の条件はありません</div>`;
   document.querySelectorAll('#t_ranks select[id^="t_r_"]').forEach(s => s.addEventListener("change", termsSync));
@@ -885,7 +899,7 @@ function termsAddRule(){
 }
 function renderNewRules(){
   $("t_newRules").innerHTML = termsNewRules.map((r, i)=>`<div style="font-size:13px;background:#F0FBF5;border-radius:10px;padding:6px 10px;margin-bottom:4px">
-    ＋ <b>${KIND_LABEL[r.kind]}</b>：${esc(r.note)} <a href="javascript:void(0)" onclick="termsNewRules.splice(${i},1);renderNewRules()" style="color:#c9556a;font-size:12px">取り消す</a></div>`).join("");
+    ＋ <b>${KIND_LABEL[r.kind]}</b>${rpTag(r)}：${esc(r.note)} <a href="javascript:void(0)" onclick="termsNewRules.splice(${i},1);renderNewRules()" style="color:#c9556a;font-size:12px">取り消す</a></div>`).join("");
 }
 // 📒 初期設定中（2026/11/12 店長）：kb_settings の terms_setup_mode が true のあいだは、ヒアリングなしでもバック・条件を保存できる（SQL 239）
 let termsSetup = false;
