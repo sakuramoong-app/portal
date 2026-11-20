@@ -365,7 +365,8 @@ function totalsFor(day, R, rows){
   const kikiRet = (R.kikiRet || []).filter(x => x.kiki_returned_on === day), kikiRetSum = sum(kikiRet, kikiAmt);
   const unpaid = staff.filter(x => !x.paid), unpaidSum = sum(unpaid, x => Number(x.day_paid) || 0);   // まだ払っていない日払いは、回収金に残っている
   const rfOut = rfOutOf(R, day), rfRet = rfRetOf(R, day), rfOutSum = sum(rfOut, rfAmt), rfRetSum = sum(rfRet, rfAmt);   // 💴 キキララから立て替えた返金：その日は回収金に残っている（＋）／返金完了の日に回収金から（−）
-  const hand = fin - A.notCol + kikiPaidSum - kikiRetSum + unpaidSum - advOpen + rfOutSum - rfRetSum;   // 随時の回収合計（未回収 ■ を引いた、今渡す額・実際のお金）
+  // 🪙 キキララから払った日払いは、かならずキキララへ返すお金なので、社長には渡さない（足しもどさない）。返金した日も引かない（2026/11/21 店長）
+  const hand = fin - A.notCol + unpaidSum - advOpen + rfOutSum - rfRetSum;   // 随時の回収合計（未回収 ■ を引いた、今渡す額・実際のお金）
   return { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand, all, kikiPaid, kikiPaidSum, kikiRet, kikiRetSum, unpaid, unpaidSum, adv, advOpen, rfOut, rfRet, rfOutSum, rfRetSum };
 }
 
@@ -423,14 +424,15 @@ function bag3Calc(rows, ex, staff, ho, kret, rf){   // kret：この日に「返
   const sum = l => l.reduce((a, r) => a + (Number(r.amt) || 0), 0);
   const dayL = rows.filter(r => r.state === "day"), laterL = rows.filter(r => r.state === "later" || r.state === "me");
   const paidCash = (staff || []).filter(x => x.paid).reduce((a, x) => a + Number(x.day_paid || 0) - kikiAmt(x), 0);
+  const kikiOut = (staff || []).filter(x => x.paid).reduce((a, x) => a + kikiAmt(x), 0);   // 🪙 キキララから払った日払い：かならずキキララへ返すお金なので、袋から分けておく（社長には渡さない）2026/11/21
   const items = (ho && Array.isArray(ho.expenses) ? ho.expenses : []).map((x, i) => Object.assign({ i }, x)).filter(x => x.type === "bagin");
   const inSum = items.reduce((a, x) => a + (Number(x.amount) || 0), 0);
-  const kikiIn = (kret || []).reduce((a, x) => a + kikiAmt(x), 0);
+  const kikiIn = 0;   // 返金した日は、分けておいたお金から返すので、袋には足さない（2026/11/21）
   // 💴 キキララから立て替えた返金：そのキャストの行（−の額）は袋から出ていない → その行と同じところに足す。返金完了した日は ② に（キキララへ返す分）
   const rfOut = rf.out || [], rfRetL = rf.ret || [], rfIn = l => rfOut.filter(c => l.some(r => r.id === c.cast_id && r.day === c.biz_date)).reduce((a, c) => a + rfAmt(c), 0);
   const rfOne = rfIn(dayL), rfTwo = rfIn(laterL), rfBack = rfRetL.reduce((a, c) => a + rfAmt(c), 0);
   const one = sum(dayL) - (Number(ex) || 0) - paidCash + rfOne, two = sum(laterL) + inSum + kikiIn + rfTwo + rfBack;
-  return { rfOne, rfTwo, rfBack, rfRetL, dayL, laterL, paidCash, items, inSum, kikiIn, kret: kret || [], dayAmt: sum(dayL), laterAmt: sum(laterL), one, two, three: one + two };
+  return { rfOne, rfTwo, rfBack, rfRetL, dayL, laterL, paidCash, kikiOut, items, inSum, kikiIn, kret: kret || [], dayAmt: sum(dayL), laterAmt: sum(laterL), one, two, three: one + two - kikiOut };
 }
 function bag3Html(rows, ex, staff, ho, ed, kret, rf){
   const B = bag3Calc(rows, ex, staff, ho, kret, rf);
@@ -445,11 +447,11 @@ function bag3Html(rows, ex, staff, ho, ed, kret, rf){
         <td>＋ ${ed ? `<input type="number" value="${Number(x.amount) || ""}" placeholder="金額" style="width:100px;text-align:right" onchange="setExp(${x.i},'amount',this.value)">` : num(x.amount)}</td>
         <td class="l">${ed ? `<a class="j" href="javascript:void 0" onclick="delExp(${x.i})">🗑</a>` : ""}</td></tr>`).join("")}
         ${ed ? `<tr><td class="l" colspan="3"><button class="btn btn-ghost btn-sm" onclick="addExp('bagin')">＋ 袋に入れたお金を足す（キキララへの返金は自動）</button></td></tr>` : ""}</table>` : ""}
-      ${B.kret.length ? `<div class="b3l">${B.kret.map(x => `<span class="b3c">🪙 キキララへ返金 ${md(x.biz_date)}の${esc(staffNames[x.staff_id] || x.staff_id)} <b>${num(kikiAmt(x))}</b><small>（返金完了で自動）</small></span>`).join("")}</div>` : ""}
+      ${B.kret.length ? `<div class="b3l">${B.kret.map(x => `<span class="b3c">🪙 キキララへ返金 ${md(x.biz_date)}の${esc(staffNames[x.staff_id] || x.staff_id)} ${num(kikiAmt(x))}<small>（${md(x.biz_date)}に分けておいたお金から。この袋には入れない）</small></span>`).join("")}</div>` : ""}
       ${B.rfOne || B.rfTwo || B.rfBack ? `<div class="b3l">${B.rfOne || B.rfTwo ? `<span class="b3c">💴 キキララから立て替えた返金（袋から出ていない）<b>＋${num(B.rfOne + B.rfTwo)}</b></span>` : ""}${B.rfRetL.map(c => `<span class="b3c">🪙 返金の立て替えをキキララへ返した ${md(c.biz_date)}の${esc(names[c.cast_id] || c.cast_id)} <b>${num(rfAmt(c))}</b><small>（返金完了で自動）</small></span>`).join("")}</div>` : ""}
       <div class="b3f">後日内勤回収・店長回収 ${yen(B.laterAmt)}${B.kikiIn ? " ＋ キキララへ返金 " + yen(B.kikiIn) : ""}${B.inSum ? " ＋ 手で足したお金 " + yen(B.inSum) : ""} ＝ <b>${yen(B.two)}</b></div></div>
-    <div class="b3 b3three"><div class="b3h">③ 袋の中身の総額（① ＋ ②）<b>${yen(B.three)}</b></div>
-      <div class="b3f">${yen(B.one)} ＋ ${yen(B.two)} ＝ <b>${yen(B.three)}</b></div></div></div>`;
+    <div class="b3 b3three"><div class="b3h">③ 袋の中身の総額（① ＋ ②${B.kikiOut ? " − 🪙 キキララへ返す分" : ""}）<b>${yen(B.three)}</b></div>
+      <div class="b3f">${yen(B.one)} ＋ ${yen(B.two)}${B.kikiOut ? ` − 🪙 キキララへ返す分 ${yen(B.kikiOut)}<small>（キキララから払った日払い。袋から分けておく）</small>` : ""} ＝ <b>${yen(B.three)}</b></div></div></div>`;
 }
 /* ---------- 🗂 見るときごとのタブ（2026/11/15 店長：情報が多くて、いつどれを見ればいいかわからない）
    ① 当日回収（毎日・翌日に）：当日回収と内勤の日払いだけ。何日分かならべる（休み明けの火曜に3日分など）
@@ -794,11 +796,10 @@ function paintDay(){
       <span>− 経費（E：キャッシュフローに補充）</span><span class="v">−${yen(ex)}</span>
       <span class="eq">＝ 全部回収したときに社長に渡す額</span><span class="v eq">${yen(fin)}</span>
       ${notColRows.map(r => `<span>− 未回収 <b class="mk none">■</b> ${esc(names[r.id] || r.id)}${r.state ? "" : "（まだチェックしていない）"}</span><span class="v">−${yen(r.amt)}</span>`).join("")}
-      ${kikiPaid.map(x => `<span>＋ 🪙 キキララから払った日払い ${esc(staffNames[x.staff_id] || x.staff_id)}（回収金には残っている）</span><span class="v">＋${yen(kikiAmt(x))}</span>`).join("")}
       ${unpaid.map(x => `<span style="color:#c0392b">＋ ⚠️ まだ払っていない日払い ${esc(staffNames[x.staff_id] || x.staff_id)}（回収金に残っている）</span><span class="v" style="color:#c0392b">＋${yen(x.day_paid)}</span>`).join("")}
-      ${kikiRet.map(x => `<span>− 🪙 キキララへ返金 ${md(x.biz_date)}の ${esc(staffNames[x.staff_id] || x.staff_id)}</span><span class="v">−${yen(kikiAmt(x))}</span>`).join("")}
       ${adv.filter(x => !x.settled && Number(x.amount)).map(x => `<span style="color:#c0392b">− 🪙 キキララへ立て替え（まだ精算していない）${esc(x.memo || "")}</span><span class="v" style="color:#c0392b">−${yen(x.amount)}</span>`).join("")}
       <div class="handrow"><span>＝ 🤝 随時の回収合計（今、社長に渡す額）</span><span style="color:#E0001B;font-size:18px">${yen(hand)}</span></div>
+      ${kikiPaidSum ? `<div class="leg" style="margin-top:4px">🪙 キキララから払った日払い ${kikiPaid.map(x => esc(staffNames[x.staff_id] || x.staff_id) + " " + yen(kikiAmt(x))).join("・")} は、キキララへ返すお金なので社長には渡しません（袋から分けておく）</div>` : ""}
     </div>
     <div class="flow" style="margin-top:12px">
       ${(() => { const cash = staffSum - kikiPaidSum - unpaidSum + kikiRetSum;   // 回収金から出ていったお金：回収金から払った日払い＋キキララへの返金
@@ -813,7 +814,7 @@ function paintDay(){
     <table class="ex">${itemRows(ex2.filter(x => x.type === "transfer"), "transfer")}
       ${ed ? `<tr><td class="l" colspan="3"><button class="btn btn-ghost btn-sm" onclick="addExp('transfer')">＋ 振込を足す</button></td></tr>` : ""}</table>
     <h2 style="margin-top:12px">🪙 キキララ（内勤日払いを両替金から払った分）</h2>
-    <div class="leg" style="margin:0 0 6px">記録簿の内勤日払いで「キキララ」にした分です。店落ち（F）からはもう引いてあります。どの日の分でも、ここで「返金完了」を押すと、<b>今開いている日（${md(D.day)}）の回収金からキキララへ返した</b>ことになり、この日の ② に自動で入ります（② に手で入れなくてOK）。</div>
+    <div class="leg" style="margin:0 0 6px">記録簿の内勤日払いで「キキララ」にした分です。店落ち（F）からはもう引いてあります。<b>かならずキキララへ返すお金なので、社長に渡す額には入れません</b>（その日の売上金から分けておく）。キキララへ返したら「返金完了」を押してください（押した日の記録になります）。</div>
     ${D.no185 ? `<div class="warn">⚠️ 返金を記録するには、SQL 185 の実行が必要です。</div>` : `<table class="ex">
       ${(D.kikiOpen || []).map(x => `<tr><td class="l">${md(x.biz_date)} ${esc(staffNames[x.staff_id] || x.staff_id)}<small style="color:#c0392b">（まだ返していない）</small></td><td>${num(kikiAmt(x))}</td>
         <td class="l" style="white-space:nowrap">${ed ? `<button class="btn btn-primary btn-sm" onclick="kikiReturn('${x.biz_date}','${esc(x.staff_id)}',true)">返金完了</button>` : ""}</td></tr>`).join("")}
