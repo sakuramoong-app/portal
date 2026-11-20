@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="kb.css"><link rel="stylesheet" href="kb_theme.css?v=1">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
-<script src="kb_common.js?v=27"></script>
+<script src="kb_common.js?v=28"></script>
 <script src="kb_money.js?v=4"></script><!-- 💴 お金の計算はここ1か所 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -67,7 +67,7 @@
 </head>
 <body>
 <div class="wrap wide">
-  <header class="kbh"><h1>📈 集計</h1><div id="navArea" class="navinhead"></div></header>
+  <header class="kbh"><h1>📈 集計・分析</h1><div id="navArea" class="navinhead"></div></header>
   <div id="gate" class="gate">読み込み中…</div>
 
   <!-- 合言葉 -->
@@ -94,14 +94,21 @@
     </div>
     <div class="tabs" id="tabs">
       <button type="button" data-t="sales" class="on" onclick="tab('sales')">💴 店落ち</button>
-      <button type="button" data-t="cast" onclick="tab('cast')">💗 キャスト</button>
+      <button type="button" data-t="daily" onclick="tab('daily')">📅 日ごと</button>
+      <button type="button" data-t="a_store" onclick="tab('a_store')">🏪 お店の分析</button>
+      <button type="button" data-t="cast" onclick="tab('cast')">💗 キャスト（月ごと）</button>
+      <button type="button" data-t="a_cast" onclick="tab('a_cast')">🔎 キャスト個別</button>
+      <button type="button" data-t="a_rank" onclick="tab('a_rank')">🏆 くらべる・ランキング</button>
       <button type="button" data-t="area" onclick="tab('area')">📍 エリア</button>
       <button type="button" data-t="media" onclick="tab('media')">📣 媒体</button>
+      <button type="button" data-t="a_alert" onclick="tab('a_alert')">⚠ 要確認</button>
     </div>
     <div id="v_sales"></div>
     <div id="v_cast" style="display:none"></div>
     <div id="v_area" style="display:none"></div>
     <div id="v_media" style="display:none"></div>
+    <div id="v_daily" style="display:none"></div>
+    <div id="v_anal" style="display:none"><iframe id="analFrame" title="分析" style="width:100%;border:none;min-height:600px;display:block"></iframe></div>
   </div>
 </div>
 
@@ -280,6 +287,7 @@ async function loadLive(){
         plan_shift: p ? hourTxt(p.start) + "-" + hourTxt(p.end) : "", real_shift: real && !absent ? hourTxt(real.start) + "-" + hourTxt(real.end) : "",
         status: absent ? "欠勤" : (!rs.length ? "お茶" : ""),
         late_h: p && real && real.start > p.start ? real.start - p.start : null, early_h: p && real && real.end < p.end ? p.end - real.end : null,
+        early_in_h: p && real && real.start < p.start ? p.start - real.start : null, ext_h: p && real && real.end > p.end ? real.end - p.end : null,   // 早出・延長（2026/11/20）
         drop_yen: drop, reward: reward + option, total, zappi,
         n_new: rs.filter(r=>r.visit_kind === "new").length, n_repeat: rs.filter(r=>r.visit_kind === "repeat").length, n_honshi: rs.filter(r=>r.visit_kind === "honshi").length, cnt: rs.length });
       // 1予約ずつ（雑費は、その日の予約で同じだけ分ける）
@@ -360,7 +368,10 @@ function sumBy(rows, keyFn, valFn){ const o = {}; rows.forEach(r=>{ const k = ke
 function tab(t){
   curTab = t;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.t === t));
-  ["sales", "cast", "area", "media"].forEach(k=>{ $("v_" + k).style.display = k === t ? "" : "none"; });
+  const anal = t.startsWith("a_");
+  ["sales", "cast", "area", "media", "daily"].forEach(k=>{ $("v_" + k).style.display = k === t ? "" : "none"; });
+  $("v_anal").style.display = anal ? "" : "none";
+  if(anal){ const src = "analysis.html?embed=1&t=" + t.slice(2); if($("analFrame").dataset.src !== src){ $("analFrame").dataset.src = src; $("analFrame").src = src; } return; }   // 🔬 分析のタブは、分析のページをこの中に出す（2026/11/20 合体）
   render();
 }
 /* 📥 お金のデータをエクセルで（2026/11/7 店長・社長：売上・税金などのお金の数字を取り出したい。アプリのデータは変わらない）
@@ -529,7 +540,57 @@ function render(){
   if(curTab === "cast") renderCast();
   if(curTab === "area") renderArea();
   if(curTab === "media") renderMedia();
+  if(curTab === "daily") renderDaily();
 }
+/* ---------- 📅 日ごと：月を選ぶと、1日〜月末の 売上総額・店落ち を1日ずつ（2026/11/20 店長） ----------
+   新しい記録簿の月：本数・売上総額・カード・キャスト報酬・店落ち（暫定＋雑費）・内勤の日払い・店落ち（日払いを引いた額）
+   それより前（エクセルの数字）：店落ちだけ（売上総額は記録がない） */
+let dailyYm = "";
+function dailyMonths(){
+  const s = new Set(H.daily.map(x => ymOf(x.d)));
+  L.res.forEach(r => s.add(r.ym)); Object.keys(L.pay || {}).forEach(d => s.add(d.slice(0, 7)));
+  return [...s].filter(Boolean).sort().reverse();
+}
+function dailyRows(ym){
+  const [y, m] = ym.split("-").map(Number), last = new Date(Date.UTC(y, m, 0)).getUTCDate(), live = isLive(ym), today = KB.bizDateOf();
+  const out = [];
+  for(let i = 1; i <= last; i++){
+    const d = ym + "-" + String(i).padStart(2, "0");
+    if(live){
+      const rs = L.res.filter(r => r.d === d), pay = n0((L.pay || {})[d]);
+      const total = rs.reduce((a, r) => a + r.total, 0), drop = rs.reduce((a, r) => a + r.drop, 0);
+      out.push({ d, future: d > today, cnt: rs.length, total, card: rs.reduce((a, r) => a + r.card, 0), back: rs.reduce((a, r) => a + r.back, 0), drop: Math.round(drop), pay, net: Math.round(drop - pay) });
+    } else {
+      const h = H.daily.find(x => x.d === d);
+      out.push({ d, future: false, cnt: null, total: null, card: null, back: null, drop: null, pay: null, net: h ? n0(h.sales) : null });
+    }
+  }
+  return { rows: out, live };
+}
+function renderDaily(){
+  const ms = dailyMonths(); if(!ms.length){ $("v_daily").innerHTML = `<div class="box">数字がありません</div>`; return; }
+  if(!dailyYm || !ms.includes(dailyYm)) dailyYm = ms.includes(KB.bizDateOf().slice(0, 7)) ? KB.bizDateOf().slice(0, 7) : ms[0];
+  const { rows, live } = dailyRows(dailyYm), DOW = "日月火水木金土";
+  const Y = v => v == null ? "−" : yen(v);
+  const sum = k => rows.reduce((a, r) => a + (r[k] || 0), 0), has = rows.filter(r => r.net != null && !r.future && (r.cnt || r.net));
+  const head = live ? ["日", "本数", "売上総額", "カード", "キャスト報酬", "店落ち（暫定＋雑費）", "内勤の日払い", "店落ち（日払いを引いた額）"] : ["日", "店落ち"];
+  const line = r => { const dt = new Date(r.d + "T12:00:00Z"), w = dt.getUTCDay(), cls = w === 0 ? "sun" : w === 6 ? "sat" : "";
+    const lab = `<td class="l ${cls}">${Number(r.d.slice(8))}日（${DOW[w]}）</td>`;
+    if(r.future) return `<tr class="fut">${lab}${head.slice(1).map(() => `<td>−</td>`).join("")}</tr>`;
+    return live ? `<tr>${lab}<td>${r.cnt}</td><td><b>${Y(r.total)}</b></td><td>${Y(r.card)}</td><td>${Y(r.back)}</td><td>${Y(r.drop)}</td><td>${Y(r.pay)}</td><td><b>${Y(r.net)}</b></td></tr>`
+      : `<tr>${lab}<td><b>${Y(r.net)}</b></td></tr>`; };
+  const tot = live ? `<tr class="tot"><td class="l">合計</td><td>${sum("cnt")}</td><td><b>${yen(sum("total"))}</b></td><td>${yen(sum("card"))}</td><td>${yen(sum("back"))}</td><td>${yen(sum("drop"))}</td><td>${yen(sum("pay"))}</td><td><b>${yen(sum("net"))}</b></td></tr>`
+    : `<tr class="tot"><td class="l">合計</td><td><b>${yen(sum("net"))}</b></td></tr>`;
+  const avg = has.length ? (live ? `1日平均（数字のある${has.length}日）：売上総額 <b>${yen(Math.round(has.reduce((a, r) => a + r.total, 0) / has.length))}</b>・店落ち <b>${yen(Math.round(has.reduce((a, r) => a + r.net, 0) / has.length))}</b>`
+    : `1日平均（${has.length}日）：店落ち <b>${yen(Math.round(has.reduce((a, r) => a + r.net, 0) / has.length))}</b>`) : "";
+  $("v_daily").innerHTML = `<div class="box"><h3>📅 日ごとの売上総額・店落ち
+      <select id="dailyYm" onchange="dailyYm=this.value;renderDaily()" style="margin-left:8px">${ms.map(m => `<option value="${m}" ${m === dailyYm ? "selected" : ""}>${ymLabel(m)}</option>`).join("")}</select></h3>
+    <div class="hint" style="margin:2px 0 8px">${live ? "新しい記録簿の数字。店落ち＝総額−キャスト報酬＋雑費、いちばん右は内勤の日払いを引いた額（記録簿・集計の店落ちと同じ）" : "エクセル（売上管理）の数字です。この月は店落ちだけ記録があります（売上総額はありません）"}</div>
+    <div style="font-size:13.5px;margin-bottom:6px">${avg}</div>
+    <div class="tw"><table class="t daily"><tr>${head.map((h, i) => `<th class="${i ? "" : "l"}">${h}</th>`).join("")}</tr>${rows.map(line).join("")}${tot}</table></div></div>`;
+}
+window.addEventListener("message", e => { if(e.origin === location.origin && e.data && e.data.kbAnalH){ const fr = $("analFrame"); if(fr) fr.style.height = Math.max(600, Number(e.data.kbAnalH) + 20) + "px"; } });   // 分析のタブの高さ
+document.head.insertAdjacentHTML("beforeend", `<style>.t.daily td.sun{color:#d9534f}.t.daily td.sat{color:#2f6fd0}.t.daily tr.fut td{color:#bbb}.t.daily tr.tot td{border-top:2px solid var(--line);font-weight:800}</style>`);
 function liveNote(){ return liveYm ? `<span class="livebadge">${ymLabel(liveYm)}からは新しい記録簿の数字</span>` : ""; }
 
 /* ---------- 💴 売上 ---------- */
@@ -657,6 +718,38 @@ function renderCast(){
 }
 function sortCast(f){ castSort = { k: f, dir: castSort.k === f ? -castSort.dir : (f === "cast_name" ? 1 : -1) }; renderCast(); }
 function pickCast(i){ castSel = castNames[i]; castDayYm = ""; renderCastDetail(); $("castDetail").scrollIntoView({ behavior: "smooth", block: "start" }); }
+/* 👤 キャストの日ごと：エクセルの【名前】のシートと同じ形（2026/11/20 店長）
+   1日〜月末を全部（出勤のない日も1行）・合計／月・勤怠集計（欠勤・お茶・遅刻・早出・早退・延長の回数と時間）・割合（新規・店リピ・本指名） */
+function castDayTable(ym, days){
+  const [y, m] = ym.split("-").map(Number), last = new Date(Date.UTC(y, m, 0)).getUTCDate(), DOW = "日月火水木金土";
+  const by = {}; days.forEach(x => { by[String(x.d).slice(0, 10)] = x; });
+  const hh = v => (Math.round(n0(v) * 10) / 10).toFixed(1) + "h";
+  const rows = [];
+  for(let i = 1; i <= last; i++){
+    const d = ym + "-" + String(i).padStart(2, "0"), x = by[d], w = new Date(d + "T12:00:00Z").getUTCDay(), cls = w === 0 ? "sun" : w === 6 ? "sat" : "";
+    const lab = `<td class="l ${cls}">${i}日(${DOW[w]})</td>`;
+    if(!x){ rows.push(`<tr class="none">${lab}<td></td><td></td><td></td><td class="l"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`); continue; }
+    const st = x.status || "";
+    const inZ = x.late_h ? `<span class="late">遅刻${hh(x.late_h)}</span>` : x.early_in_h ? `早出${hh(x.early_in_h)}` : "";
+    const outZ = x.early_h ? `<span class="late">早退${hh(x.early_h)}</span>` : x.ext_h ? `延長${hh(x.ext_h)}` : "";
+    const moved = x.plan_shift && x.real_shift && x.plan_shift !== x.real_shift;
+    rows.push(`<tr class="${st === "欠勤" ? "absent" : st === "お茶" ? "ocha" : ""}">${lab}<td>${fmtH(x.work_hours)}</td><td>${esc(x.plan_shift || "")}</td><td class="${moved ? "late" : ""}">${esc(x.real_shift || "")}</td><td class="l ${st === "欠勤" ? "late" : ""}">${esc(st)}</td>
+      <td>${inZ}</td><td>${outZ}</td><td>${yen0(x.drop_yen)}</td><td>${yen0(x.reward)}</td><td>${n0(x.n_new)}</td><td>${n0(x.n_repeat)}</td><td>${n0(x.n_honshi)}</td><td>${n0(x.cnt)}</td></tr>`);
+  }
+  const S = f => days.reduce((a, x) => a + n0(x[f]), 0), C = f => days.filter(x => n0(x[f]) > 0).length;
+  const cnt = S("cnt"), pct = v => cnt ? (Math.round(v / cnt * 1000) / 10).toFixed(1) + "%" : "−";
+  const kin = [["欠勤（回）", days.filter(x => x.status === "欠勤").length], ["お茶（回）", days.filter(x => x.status === "お茶").length],
+    ["遅刻（回）", C("late_h")], ["遅刻（h）", hh(S("late_h"))], ["早出（回）", C("early_in_h")], ["早出（h）", hh(S("early_in_h"))],
+    ["早退（回）", C("early_h")], ["早退（h）", hh(S("early_h"))], ["延長（回）", C("ext_h")], ["延長（h）", hh(S("ext_h"))]];
+  return `<div class="cdwrap"><div class="tw"><table class="t cday"><tr><th class="l">日付</th><th>出勤時間</th><th>元シフト</th><th>実シフト</th><th class="l">状態</th><th>出勤ずれ</th><th>退勤ずれ</th><th>店落ち</th><th>報酬</th><th>新規</th><th>店リピ</th><th>本指名</th><th>本数</th></tr>
+      ${rows.join("")}
+      <tr class="tot"><td class="l">合計／月</td><td>${fmtH(S("work_hours"))}</td><td></td><td></td><td class="l"></td><td></td><td></td><td>${yen(S("drop_yen"))}</td><td>${yen(S("reward"))}</td><td>${S("n_new")}</td><td>${S("n_repeat")}</td><td>${S("n_honshi")}</td><td>${cnt}</td></tr></table></div>
+    <div class="cdside"><table class="t"><tr><th class="l" colspan="2">勤怠集計</th></tr>${kin.map(([k, v]) => `<tr><td class="l">${k}</td><td>${v}</td></tr>`).join("")}</table>
+      <table class="t" style="margin-top:8px"><tr><th class="l" colspan="2">割合</th></tr><tr><td class="l">新規率</td><td>${pct(S("n_new"))}</td></tr><tr><td class="l">店リピ率</td><td>${pct(S("n_repeat"))}</td></tr><tr><td class="l">本指名率</td><td>${pct(S("n_honshi"))}</td></tr></table></div></div>
+    <div class="hint">出勤ずれ＝元のシフトより遅く来た（遅刻）・早く来た（早出）、退勤ずれ＝早く帰った（早退）・遅くまでいた（延長）。過去の日ごとの数字は2026年1月から（エクセルの月は 早出・延長 がありません）</div>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>.cdwrap{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}.cdwrap > .tw{flex:1 1 640px;min-width:0}.cdside{flex:0 0 180px}
+  .t.cday td.sun{color:#d9534f}.t.cday td.sat{color:#2f6fd0}.t.cday .late{color:#d9534f;font-weight:800}.t.cday tr.none td{background:#FAF7F8}.t.cday tr.tot td{border-top:2px solid var(--line);font-weight:800}</style>`);
 function renderCastDetail(){
   const R = range(), nm = castSel;
   const cm = castMonths(R.months).filter(x=>x.cast_name === nm);
@@ -680,11 +773,7 @@ function renderCastDetail(){
       </div>
       <div style="margin-top:12px"><b style="font-size:13px">日ごと</b>
         ${dayMonths.length ? `<select onchange="castDayYm=this.value;renderCastDetail()" style="margin-left:8px;font-family:inherit;padding:4px 8px;border-radius:8px;border:1.5px solid var(--line)">${dayMonths.map(ym=>`<option value="${ym}" ${ym === castDayYm ? "selected" : ""}>${ymLabel(ym)}</option>`).join("")}</select>` : ""}
-        ${days.length ? `<div class="tw"><table class="t"><tr><th class="l">日付</th><th>出勤時間</th><th>元のシフト</th><th>実際のシフト</th><th class="l">状態</th><th>出勤ずれ</th><th>退勤ずれ</th><th>店落ち</th><th>報酬</th><th>新規</th><th>店リピ</th><th>本指名</th><th>本数</th></tr>
-          ${days.map(x=>{ const d = new Date(x.d + "T12:00:00Z"); const st = x.status || "";
-            return `<tr class="${st === "欠勤" ? "absent" : st === "お茶" ? "ocha" : ""}"><td class="l">${d.getUTCMonth() + 1}/${d.getUTCDate()}(${"日月火水木金土"[d.getUTCDay()]})</td><td>${fmtH(x.work_hours)}</td><td>${esc(x.plan_shift || "")}</td><td>${esc(x.real_shift || "")}</td><td class="l">${esc(st)}</td>
-              <td>${x.late_h ? fmtH(x.late_h) : ""}</td><td>${x.early_h ? fmtH(x.early_h) : ""}</td><td>${yen0(x.drop_yen)}</td><td>${yen0(x.reward)}</td><td>${n0(x.n_new) || ""}</td><td>${n0(x.n_repeat) || ""}</td><td>${n0(x.n_honshi) || ""}</td><td>${n0(x.cnt) || ""}</td></tr>`; }).join("")}</table></div>
-          <div class="hint">出勤ずれ・退勤ずれは、元のシフトとくらべて何時間ずれたか（遅刻・早退など）。過去の日ごとの数字は2026年1月から</div>` : `<div class="hint">この期間の日ごとの数字はありません（過去の日ごとの数字は2026年1月から）</div>`}
+        ${days.length ? castDayTable(castDayYm, days) : `<div class="hint">この期間の日ごとの数字はありません（過去の日ごとの数字は2026年1月から）</div>`}
       </div></div>`;
   chart("ch_cast", { data: { labels: ms.map(ymLabel), datasets: [
     { type: "bar", label: "店落ち", data: ms.map(ym=>Math.round(v(ym, "drop_yen"))), backgroundColor: "rgba(95,208,160,.8)", borderRadius: 4, yAxisID: "y" },

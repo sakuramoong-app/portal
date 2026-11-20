@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="kb.css"><link rel="stylesheet" href="kb_theme.css?v=1">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script>
-<script src="kb_common.js?v=27"></script>
+<script src="kb_common.js?v=28"></script>
 <script src="kb_money.js?v=4"></script>
 <script src="kb_anal.js?v=2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -122,6 +122,9 @@ function chart(id, cfg){
   charts[id] = new Chart(el, cfg);
 }
 
+// 📈 集計のページの中（タブ）で開くとき：?embed=1&t=store（見出し・メニュー・タブはかくす）2026/11/20 店長「集計と分析を合体」
+const EMBED = new URLSearchParams(location.search).get("embed") === "1", EMBED_T = new URLSearchParams(location.search).get("t") || "store";
+if(EMBED) document.documentElement.classList.add("embed");
 async function init(){
   $("navArea").innerHTML = KB.nav("analysis.html");
   if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
@@ -152,7 +155,8 @@ async function start(){
   try{ await load(); }catch(e){ $("gate").textContent = "読みこめませんでした：" + (e.message || e); return; }
   $("gate").style.display = "none"; $("main").style.display = "";
   $("fromD").value = KB.bizDateOf(); $("toD").value = KB.bizDateOf();
-  paintStores(); render();
+  paintStores(); if(EMBED && ["store", "cast", "rank", "alert"].includes(EMBED_T)) tab(EMBED_T); else render();
+  if(EMBED) embedSize();
 }
 function paintStores(){
   $("storeChips").innerHTML = `<button type="button" class="${pick ? "" : "on"}" onclick="pickStore('')">全部</button>` +
@@ -313,6 +317,9 @@ function renderAlert(){
       <tr><td class="l"><b>やってみること</b></td><td class="l">${esc(a.try)}</td></tr></table>
     </div>`; }).join("") : `<div class="box"><h3>⚠ 要確認</h3><div>✅ いま気になるところはありません</div></div>`) + rules;
 }
+// 集計の中に出すとき、高さを集計のページに知らせる
+function embedSize(){ if(!EMBED || !window.parent || window.parent === window) return; const send = () => { try{ window.parent.postMessage({ kbAnalH: document.documentElement.scrollHeight }, location.origin); }catch(e){} }; send(); if(window.ResizeObserver) new ResizeObserver(send).observe(document.body); }
+document.head.insertAdjacentHTML("beforeend", `<style>html.embed header.kbh, html.embed #tabs{display:none !important} html.embed body{background:transparent} html.embed .wrap{padding-top:0}</style>`);
 init();
 </script>
 </body>

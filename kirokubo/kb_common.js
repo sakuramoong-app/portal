@@ -186,7 +186,7 @@
   function nav(active){
     // 練習モードは、記録簿と精算だけ（練習のまま行き来する）
     if(PRACTICE) return `<nav class="kbnav">${[["kiroku.html","📒 記録簿（練習）"],["settle.html","💴 精算（練習）"]].map(([h,l])=>`<a href="${h}?practice=1" class="${h===active?"on":""}">${l}</a>`).join("")}</nav>`;
-    const all = [["kiroku.html","📒 記録簿"],["settle.html","💴 精算"],["index.html","📒 キャスト台帳"],["customers.html","👥 顧客台帳"],["stats.html","📈 集計"],["analysis.html","🔬 分析"],["substores.html","⛓ 極門・五反田"],["backup.html","💾 バックアップ"]];
+    const all = [["kiroku.html","📒 記録簿"],["settle.html","💴 精算"],["index.html","📒 キャスト台帳"],["customers.html","👥 顧客台帳"],["stats.html","📈 集計・分析"],["substores.html","⛓ 極門・五反田"],["backup.html","💾 バックアップ"]];
     const items = IS_BOSS ? all : all.filter(([h])=>h === "index.html" || (STAFF_OPEN && STAFF_PAGES.includes(h)) || namedOK(h));   // 店長・社長は全部、ほかの内勤はキャスト台帳だけ
     // スマホでは、スマホで開けるページだけ（session_guard.js と同じ：受付・精算・キャスト台帳。回収明細は店長・社長）
     const phone = /iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent) || matchMedia("(max-width:640px)").matches;
