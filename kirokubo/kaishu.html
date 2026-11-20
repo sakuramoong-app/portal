@@ -729,7 +729,11 @@ function paintDay(){
   const { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand, kikiPaid, kikiPaidSum, kikiRet, kikiRetSum, unpaid, unpaidSum, adv, advOpen } = totalsFor(D.day, D, rows);
   const TRL = { wait: "振込待ち", owner: "社長の確認待ち", done: "✅ 振込処理完了" }, trLine = r => `${esc(names[r.cast_id] || "")} ${["cancel", "tobi", "flowed"].includes(r.status) ? "キャンセル料" : "もらい忘れ"}（${TRL[r.transfer_status] || ""}）`;
   const ed = KB.CAN_EDIT && !D.no171, dt = new Date(D.day + "T12:00:00Z");
-  bagDiffSave(D.day, ho && ho.bag_amount != null ? Number(ho.bag_amount) - hand : null);   // 👛 袋の差を覚える（どの日にも出す）
+  // 👛 袋の差を覚える（どの日にも出す）。数えたときに合っていた日は出さない（2026/11/21 店長）：
+  //   ・数えたときの「はず」（bag_hand）とぴったり ／ ・前の決まり（キキララを足して返した日に引く。11/21 まで）でぴったり
+  { const bagN = ho && ho.bag_amount != null ? Number(ho.bag_amount) : null, hc = BAGH[D.day];
+    const okThen = bagN != null && ((hc && bagN === Number(hc.hand)) || bagN === hand + kikiPaidSum - kikiRetSum);
+    bagDiffSave(D.day, bagN == null || okThen ? null : bagN - hand); }
   if(dayTab === "today"){ $("dayArea").innerHTML = tabBarHtml() + bagWarnHtml() + todayHtml(); return; }
   if(dayTab !== "today" && envSel !== "day"){ $("dayArea").innerHTML = tabBarHtml() + bagWarnHtml() + `<div class="card">${envTabHtml(rows, ed)}</div>`; return; }
   let h = tabBarHtml() + bagWarnHtml() + (place ? "" : topFlowHtml(A, staff, F, ex, fin, tr)) + (D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "");
