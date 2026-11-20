@@ -1377,7 +1377,11 @@ async function bagDiffSave(day, df){
 function bagWarnHtml(){
   const l = Object.entries(BAGD).filter(([, v]) => Number(v)).sort((a, b) => a[0].localeCompare(b[0]));
   if(!l.length) return "";
-  return `<div class="bagwarn">👛 袋の中身が合っていない日があります（ぴったりになると消えます）：${l.map(([d, v]) => `<button type="button" onclick="$('day').value='${d}';reload()">${md(d)}　${Number(v) > 0 ? yen(Number(v)) + " 多い" : yen(-Number(v)) + " 足りない"}</button>`).join("")}</div>`;
+  const btn = ([d, v]) => `<button type="button" onclick="$('day').value='${d}';reload()">${md(d)}　${yen(Math.abs(Number(v)))}</button>`;
+  const short = l.filter(([, v]) => Number(v) < 0), over = l.filter(([, v]) => Number(v) > 0);   // 足りない（左）・多い（右）に分ける（2026/11/21 店長）
+  return `<div class="bagwarn"><div class="bwh">👛 袋の中身が合っていない日があります（ぴったりになると消えます）</div>
+    <div class="bwcols"><div class="bwc short"><b>⬇ 足りない（${short.length}日）</b><div>${short.map(btn).join("") || '<small>なし</small>'}</div></div>
+      <div class="bwc over"><b>⬆ 多い（${over.length}日）</b><div>${over.map(btn).join("") || '<small>なし</small>'}</div></div></div></div>`;
 }
 /* 🧮 上にも計算式（2026/11/20 店長）：店落ちの合計 − 内勤日払い ＝ 想定店落ち（F）− カード（D）− 経費（E）＝ 全部回収したときに社長に渡す額 */
 function topFlowHtml(A, staff, F, ex, fin, tr){
@@ -1387,7 +1391,10 @@ function topFlowHtml(A, staff, F, ex, fin, tr){
     <span class="eq">＝ 全部回収したときに社長に渡す額 <b>${yen(fin)}</b></span></div>`;
 }
 document.head.insertAdjacentHTML("beforeend", `<style>
-  .bagwarn{background:#FFE8EC;border:2px solid #E5486C;color:#B0213F;border-radius:12px;padding:8px 12px;margin:0 0 10px;font-weight:800;font-size:13.5px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .bagwarn{background:#FFE8EC;border:2px solid #E5486C;color:#B0213F;border-radius:12px;padding:8px 12px;margin:0 0 10px;font-weight:800;font-size:13.5px}
+  .bagwarn .bwcols{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px} .bagwarn .bwc{background:#fff;border-radius:10px;padding:6px 8px} .bagwarn .bwc > div{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+  .bagwarn .bwc.over{color:#1f5d99} .bagwarn .bwc.over button{border-color:#5B8DD6;color:#1f5d99} .bagwarn small{color:#9C8B8F;font-weight:700}
+  @media (max-width:600px){ .bagwarn .bwcols{grid-template-columns:1fr} }
   .bagwarn button{font-family:inherit;font-weight:800;font-size:13px;background:#fff;border:1.5px solid #E5486C;color:#B0213F;border-radius:99px;padding:3px 10px;cursor:pointer}
   .topflow{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;background:var(--card,#fff);border:1.5px solid var(--line,#eee);border-radius:12px;padding:8px 12px;margin:0 0 10px;font-size:13px}
   .topflow b{font-size:14px} .topflow .eq{font-weight:800;color:#1E7A3C}
