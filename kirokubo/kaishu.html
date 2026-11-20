@@ -368,7 +368,7 @@ function totalsFor(day, R, rows){
   const unpaid = staff.filter(x => !x.paid), unpaidSum = sum(unpaid, x => Number(x.day_paid) || 0);   // まだ払っていない日払いは、回収金に残っている
   const rfOut = rfOutOf(R, day), rfRet = rfRetOf(R, day), rfOutSum = sum(rfOut, rfAmt), rfRetSum = sum(rfRet, rfAmt);   // 💴 キキララから立て替えた返金：その日は回収金に残っている（＋）／返金完了の日に回収金から（−）
   // 🪙 キキララから払った日払いは、かならずキキララへ返すお金なので、社長には渡さない（足しもどさない）。返金した日も引かない（2026/11/21 店長）
-  const hand = fin - A.notCol + unpaidSum - advOpen + advBackSum + rfOutSum - rfRetSum;   // 随時の回収合計（未回収 ■ を引いた、今渡す額・実際のお金）
+  const hand = fin - A.notCol + unpaidSum - advOpen + advBackSum;   // 随時の回収合計（キキララのお金は＋も−もしない。2026/11/21）（未回収 ■ を引いた、今渡す額・実際のお金）
   return { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand, all, kikiPaid, kikiPaidSum, kikiRet, kikiRetSum, unpaid, unpaidSum, adv, advOpen, advBack, advBackSum, rfOut, rfRet, rfOutSum, rfRetSum };
 }
 
@@ -435,7 +435,8 @@ function bag3Calc(rows, ex, staff, ho, kret, rf){   // kret：この日に「返
   // 💴 キキララから立て替えた返金：そのキャストの行（−の額）は袋から出ていない → その行と同じところに足す。返金完了した日は ② に（キキララへ返す分）
   const rfOut = rf.out || [], rfRetL = rf.ret || [], rfIn = l => rfOut.filter(c => l.some(r => r.id === c.cast_id && r.day === c.biz_date)).reduce((a, c) => a + rfAmt(c), 0);
   const rfOne = rfIn(dayL), rfTwo = rfIn(laterL), rfBack = rfRetL.reduce((a, c) => a + rfAmt(c), 0);
-  const one = sum(dayL) - (Number(ex) || 0) - paidCash + rfOne, two = sum(laterL) + inSum + kikiIn + rfTwo + rfBack;
+  // 🪙 キキララのお金（返金の立て替え・返した分）は、袋にも社長に渡す額にも入れない（キキララの表に出るだけ）2026/11/21 店長
+  const one = sum(dayL) - (Number(ex) || 0) - paidCash, two = sum(laterL) + inSum + kikiIn;
   return { rfOne, rfTwo, rfBack, rfRetL, dayL, laterL, paidCash, kikiOut, items, inSum, kikiIn, kret: kret || [], dayAmt: sum(dayL), laterAmt: sum(laterL), one, two, three: one + two - kikiOut };
 }
 function bag3Html(rows, ex, staff, ho, ed, kret, rf){
@@ -452,7 +453,6 @@ function bag3Html(rows, ex, staff, ho, ed, kret, rf){
         <td class="l">${ed ? `<a class="j" href="javascript:void 0" onclick="delExp(${x.i})">🗑</a>` : ""}</td></tr>`).join("")}
         ${ed ? `<tr><td class="l" colspan="3"><button class="btn btn-ghost btn-sm" onclick="addExp('bagin')">＋ 袋に入れたお金を足す（キキララへの返金は自動）</button></td></tr>` : ""}</table>` : ""}
       ${B.kret.length ? `<div class="b3l">${B.kret.map(x => `<span class="b3c">🪙 キキララへ返金 ${md(x.biz_date)}の${esc(staffNames[x.staff_id] || x.staff_id)} ${num(kikiAmt(x))}<small>（${md(x.biz_date)}に分けておいたお金から。この袋には入れない）</small></span>`).join("")}</div>` : ""}
-      ${B.rfOne || B.rfTwo || B.rfBack ? `<div class="b3l">${B.rfOne || B.rfTwo ? `<span class="b3c">💴 キキララから立て替えた返金（袋から出ていない）<b>＋${num(B.rfOne + B.rfTwo)}</b></span>` : ""}${B.rfRetL.map(c => `<span class="b3c">🪙 返金の立て替えをキキララへ返した ${md(c.biz_date)}の${esc(names[c.cast_id] || c.cast_id)} <b>${num(rfAmt(c))}</b><small>（返金完了で自動）</small></span>`).join("")}</div>` : ""}
       <div class="b3f">後日内勤回収・店長回収 ${yen(B.laterAmt)}${B.kikiIn ? " ＋ キキララへ返金 " + yen(B.kikiIn) : ""}${B.inSum ? " ＋ 手で足したお金 " + yen(B.inSum) : ""} ＝ <b>${yen(B.two)}</b></div></div>
     <div class="b3 b3three"><div class="b3h">③ 袋の中身の総額（① ＋ ②${B.kikiOut ? " − 🪙 キキララへ返す分" : ""}）<b>${yen(B.three)}</b></div>
       <div class="b3f">${yen(B.one)} ＋ ${yen(B.two)}${B.kikiOut ? ` − 🪙 キキララへ返す分 ${yen(B.kikiOut)}<small>（キキララから払った日払い。袋から分けておく）</small>` : ""} ＝ <b>${yen(B.three)}</b></div></div></div>`;
@@ -742,14 +742,16 @@ function paintDay(){
     bagDiffSave(D.day, bagN == null || okThen ? null : (Math.abs(dOld) < Math.abs(dNew) ? dOld : dNew)); }
   if(dayTab === "today"){ $("dayArea").innerHTML = tabBarHtml() + bagWarnHtml() + todayHtml(); return; }
   if(dayTab !== "today" && envSel !== "day"){ $("dayArea").innerHTML = tabBarHtml() + bagWarnHtml() + `<div class="card">${envTabHtml(rows, ed)}</div>`; return; }
-  let h = tabBarHtml() + bagWarnHtml() + (place ? "" : topFlowHtml(A, staff, F, ex, fin, tr)) + (D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "");
-  h += `<div class="sum">
+  let h = tabBarHtml() + bagWarnHtml() + (D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "");
+  // 計算式と数字を1つの枠に（2026/11/21 店長：上下に分かれていてわかりづらい）。袋の中身を入れるところは、いちばん下
+  h += `<div class="sumbox">${place ? "" : topFlowHtml(A, staff, F, ex, fin, tr)}<div class="sum">
     <div class="s">想定店落ち 1日の粗利（F）<b>${yen(F)}</b></div>
-    <div class="handcol"><div class="s handbox">🤝 随時の回収合計（＝社長に手渡し）<b style="color:#E0001B">${yen(hand)}</b></div>${bagHtml(ho, hand, ed)}</div>
+    <div class="s handbox">🤝 随時の回収合計（＝社長に手渡し）<b style="color:#E0001B">${yen(hand)}</b></div>
     <div class="s">カード（D）<b>${yen(A.card)}</b></div>
     <div class="s">回収サイン<b><span class="mk day">✔${T.dayN}</span>　<span class="mk later">✔${T.laterN}</span>　<span class="mk me">✔${T.meN}</span>　<span class="mk none">■${T.noneN}</span></b></div>
     <div class="s ${T.yetN ? "ng" : ""}">まだチェックしていない<b>${T.yetN}人</b></div>
-    <div class="s ${T.todo ? "ng" : ""}">処理まだ（交通費・経費・精算ミス）<b>${T.todo}件</b></div></div>`;
+    <div class="s ${T.todo ? "ng" : ""}">処理まだ（交通費・経費・精算ミス）<b>${T.todo}件</b></div></div>
+    <div class="sumbag">${bagHtml(ho, hand, ed)}</div></div>`;
   h += bag3Html(rows, ex, staff, ho, ed, kikiRet, { out: rfOutOf(D, D.day), ret: rfRetOf(D, D.day) });   // 💰 ① 当日回収 ② その後に店長が回収 ③ 袋の中身の総額（2026/11/11 店長：上にまとめる）
   /* 👛 回収を3つに分ける（2026/11/4 店長の希望）
      ① 内勤者ごと：精算場所「回収」（内勤がその場で受け取った）。精算した内勤ごと。内勤の日払いをどこから取ったかも
@@ -1465,6 +1467,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .bagwarn button{font-family:inherit;font-weight:800;font-size:13px;background:#fff;border:1.5px solid #E5486C;color:#B0213F;border-radius:99px;padding:3px 10px;cursor:pointer}
   .topflow{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;background:var(--card,#fff);border:1.5px solid var(--line,#eee);border-radius:12px;padding:8px 12px;margin:0 0 10px;font-size:13px}
   .topflow b{font-size:14px} .topflow .eq{font-weight:800;color:#1E7A3C}
+  .sumbox{background:var(--card,#fff);border:1.5px solid var(--line,#eee);border-radius:16px;padding:10px 12px;margin:0 0 12px;display:flex;flex-direction:column;gap:8px}
+  .sumbox .topflow{border:none;padding:0 2px;margin:0;background:none} .sumbox .sum{margin:0} .sumbox .sumbag .bagbox{max-width:520px}
 </style>`);
 // 数えたときの「はず」とくらべる：数えたときは合っていた → そのあと（後日の回収・精算のやりなおし・計算の決まりの変更）で変わった、がわかる（2026/11/21）function bagHandNote(hand, b){ const h = BAGH[D.day]; if(!h || b == null) return ""; const was = Number(h.hand), ch = hand - was; return `<div class="baghand"><small>数えたとき（${esc(h.by || "")} ${h.at ? when(h.at) : ""}）の随時の回収合計は ${yen(was)}・袋の差は ${b - was === 0 ? "ぴったり" : (b - was > 0 ? "多い " : "足りない ") + yen(Math.abs(b - was))}${ch ? `。<b>そのあと ${ch > 0 ? "＋" : "−"}${yen(Math.abs(ch))} 変わった</b>（後日の回収・精算のやりなおしなど）` : ""}</small></div>`; }
 // 数えたときの「はず」とくらべる：数えたときは合っていた → そのあと（後日の回収・精算のやりなおし・計算の決まりの変更）で変わった、がわかる（2026/11/21）
