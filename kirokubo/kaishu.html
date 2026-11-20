@@ -743,15 +743,7 @@ function paintDay(){
   if(dayTab === "today"){ $("dayArea").innerHTML = tabBarHtml() + bagWarnHtml() + todayHtml(); return; }
   if(dayTab !== "today" && envSel !== "day"){ $("dayArea").innerHTML = tabBarHtml() + bagWarnHtml() + `<div class="card">${envTabHtml(rows, ed)}</div>`; return; }
   let h = tabBarHtml() + bagWarnHtml() + (D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "");
-  // 計算式と数字を1つの枠に（2026/11/21 店長：上下に分かれていてわかりづらい）。袋の中身を入れるところは、いちばん下
-  h += `<div class="sumbox">${place ? "" : topFlowHtml(A, staff, F, ex, fin, tr)}<div class="sum">
-    <div class="s">想定店落ち 1日の粗利（F）<b>${yen(F)}</b></div>
-    <div class="s handbox">🤝 随時の回収合計（＝社長に手渡し）<b style="color:#E0001B">${yen(hand)}</b></div>
-    <div class="s">カード（D）<b>${yen(A.card)}</b></div>
-    <div class="s">回収サイン<b><span class="mk day">✔${T.dayN}</span>　<span class="mk later">✔${T.laterN}</span>　<span class="mk me">✔${T.meN}</span>　<span class="mk none">■${T.noneN}</span></b></div>
-    <div class="s ${T.yetN ? "ng" : ""}">まだチェックしていない<b>${T.yetN}人</b></div>
-    <div class="s ${T.todo ? "ng" : ""}">処理まだ（交通費・経費・精算ミス）<b>${T.todo}件</b></div></div>
-    <div class="sumbag">${bagHtml(ho, hand, ed)}</div></div>`;
+  // 上の計算式・数字の枠はなくした（下の「🧮 社長に渡す額」と同じだった）。袋の中身は「社長に渡す額」の中に（2026/11/21 店長）
   h += bag3Html(rows, ex, staff, ho, ed, kikiRet, { out: rfOutOf(D, D.day), ret: rfRetOf(D, D.day) });   // 💰 ① 当日回収 ② その後に店長が回収 ③ 袋の中身の総額（2026/11/11 店長：上にまとめる）
   /* 👛 回収を3つに分ける（2026/11/4 店長の希望）
      ① 内勤者ごと：精算場所「回収」（内勤がその場で受け取った）。精算した内勤ごと。内勤の日払いをどこから取ったかも
@@ -867,6 +859,7 @@ function paintDay(){
       ${adv.filter(x => (!x.settled || (x.settled_on && x.settled_on !== D.day)) && Number(x.amount)).map(x => `<span style="color:${x.settled ? "inherit" : "#c0392b"}">− 🪙 キキララへ立て替え${x.settled ? `（${md(x.settled_on)} に売上金へもどした）` : "（まだ精算していない）"}${esc(x.memo || "")}</span><span class="v" style="color:${x.settled ? "inherit" : "#c0392b"}">−${yen(x.amount)}</span>`).join("")}
       ${(advBack || []).map(x => `<span>＋ 🪙 キキララから売上金へもどった立て替え（${md(x.biz_date)}の分）${esc(x.memo || "")}</span><span class="v">＋${yen(x.amount)}</span>`).join("")}
       <div class="handrow"><span>＝ 🤝 随時の回収合計（今、社長に渡す額）</span><span style="color:#E0001B;font-size:18px">${yen(hand)}</span></div>
+      ${place ? "" : `<div class="handbag">${bagHtml(ho, hand, ed)}</div>`}
       ${kikiPaidSum ? `<div class="leg" style="margin-top:4px">🪙 キキララから払った日払い ${kikiPaid.map(x => esc(staffNames[x.staff_id] || x.staff_id) + " " + yen(kikiAmt(x))).join("・")} は、キキララへ返すお金なので社長には渡しません（袋から分けておく）</div>` : ""}
     </div>
     <div class="flow" style="margin-top:12px">
@@ -1468,6 +1461,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .topflow{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;background:var(--card,#fff);border:1.5px solid var(--line,#eee);border-radius:12px;padding:8px 12px;margin:0 0 10px;font-size:13px}
   .topflow b{font-size:14px} .topflow .eq{font-weight:800;color:#1E7A3C}
   .sumbox{background:var(--card,#fff);border:1.5px solid var(--line,#eee);border-radius:16px;padding:10px 12px;margin:0 0 12px;display:flex;flex-direction:column;gap:8px}
+  .handbag{margin-top:8px} .handbag .s.bagbox{max-width:none}
   .sumbox .topflow{border:none;padding:0 2px;margin:0;background:none} .sumbox .sum{margin:0} .sumbox .sumbag .bagbox{max-width:520px}
 </style>`);
 // 数えたときの「はず」とくらべる：数えたときは合っていた → そのあと（後日の回収・精算のやりなおし・計算の決まりの変更）で変わった、がわかる（2026/11/21）function bagHandNote(hand, b){ const h = BAGH[D.day]; if(!h || b == null) return ""; const was = Number(h.hand), ch = hand - was; return `<div class="baghand"><small>数えたとき（${esc(h.by || "")} ${h.at ? when(h.at) : ""}）の随時の回収合計は ${yen(was)}・袋の差は ${b - was === 0 ? "ぴったり" : (b - was > 0 ? "多い " : "足りない ") + yen(Math.abs(b - was))}${ch ? `。<b>そのあと ${ch > 0 ? "＋" : "−"}${yen(Math.abs(ch))} 変わった</b>（後日の回収・精算のやりなおしなど）` : ""}</small></div>`; }
