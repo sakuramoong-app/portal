@@ -834,8 +834,6 @@ function paintDay(){
   const itemRows = (list, kind) => list.map(x => `<tr>
       <td class="l">${ed ? `<input value="${esc(x.memo || "")}" placeholder="${kind === "transfer" ? "メモ（例：キャンセル料 ○○さん）" : "メモ（例：キャッシュフロー補充）"}" maxlength="60" style="width:100%" onchange="setExp(${x.i},'memo',this.value)">` : esc(x.memo || "")}</td>
       <td>${ed ? `<input type="number" value="${Number(x.amount) || ""}" placeholder="金額" style="width:100px;text-align:right" onchange="setExp(${x.i},'amount',this.value)">` : num(x.amount)}</td>
-      ${kind === "ex" ? `<td class="l" style="white-space:nowrap">${fromSel(x, ed)}
-        <label class="tk"><input type="checkbox" ${x.taken ? "checked" : ""} ${ed ? "" : "disabled"} onchange="setExp(${x.i},'taken',this.checked)"> 取った</label>${x.taken && x.taken_by ? `<small class="who2">${esc(x.taken_by)} ${when(x.taken_at)}</small>` : ""}</td>` : ""}
       <td class="l" style="white-space:nowrap">${ed ? `<a class="j" href="javascript:void 0" onclick="delExp(${x.i})">🗑</a>` : ""}</td></tr>`).join("");
   // どこの回収金から（① 内勤 ／ ② 待機場）
   const fromOpts = [...new Set(Object.values(staffNames).concat(rowsFor(D.day, D).filter(r => r.place === "回収").map(r => r.cd.settled_by).filter(Boolean)))].map(n => "🙋 " + n).concat(PLACES.map(p => "📮 " + p));
