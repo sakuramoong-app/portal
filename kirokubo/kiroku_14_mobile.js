@@ -270,3 +270,10 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   #mob .mhead #kbDarkBtn{position:static;width:36px;height:36px;box-shadow:none;font-size:18px}
 </style>`);
 document.head.insertAdjacentHTML("beforeend", `<style>#mob .mcust{font-size:13px;font-weight:900;color:#E5638C;text-decoration:none;border:1.5px solid #FFC2D1;background:#fff;border-radius:99px;padding:6px 11px;white-space:nowrap}</style>`);
+/* 📱 スマホの受付：入れる欄が見えるように小さく（2026/11/20 店長）
+   ・上の「必須でまだ」は項目のボタンだけ（「⚠️ 必須でまだ：」と「まだ決まっていない…」の説明はかくす）
+   ・キャストのタイムラインの「予約○件・予約○時間・空き○時間」はかくす */
+document.head.insertAdjacentHTML("beforeend", `<style>@media (max-width:700px){
+  .rqlbl, .rqhelp{display:none !important}
+  .tl2s{display:none !important}
+}</style>`);

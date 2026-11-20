@@ -1195,7 +1195,7 @@ function paintReqBar(){
   const flowed = ($("f_status") || {}).value === "flowed";
   let list = []; try{ list = flowed ? tentativeMissing() : cancelLike ? [] : missingRequired(true); }catch(e){}
   bar.className = "reqbar " + (list.length ? "ng" : "ok");
-  bar.innerHTML = list.length ? `⚠️ 必須でまだ：${list.map(([n, id]) => `<button type="button" onclick="const el=$('${id}');if(el){el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.add('miss');}">${esc(n)}</button>`).join("")}${flowed ? "" : `<div style="font-weight:700;font-size:12px;margin-top:2px">まだ決まっていない・確かめることがあるときは「📌 仮予約で登録」（電話番号と名前だけでOK）</div>`}`
+  bar.innerHTML = list.length ? `<span class="rqlbl">⚠️ 必須でまだ：</span>${list.map(([n, id]) => `<button type="button" onclick="const el=$('${id}');if(el){el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.add('miss');}">${esc(n)}</button>`).join("")}${flowed ? "" : `<div class="rqhelp" style="font-weight:700;font-size:12px;margin-top:2px">まだ決まっていない・確かめることがあるときは「📌 仮予約で登録」（電話番号と名前だけでOK）</div>`}`
     : "✅ 必須はぜんぶ入っています";
   // 💾 登録する：必須がまだなら、押せない見た目に（押すと、足りない項目と「📌 仮予約で登録」の案内が出る）2026/11/12
   document.querySelectorAll('#formBg button[onclick="saveRes()"]').forEach(b => { b.classList.toggle("btn-off", !!list.length); b.title = list.length ? "必須がまだあります（まだ決まっていないときは「📌 仮予約で登録」）" : ""; });
