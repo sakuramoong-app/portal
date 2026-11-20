@@ -567,6 +567,64 @@ function dailyRows(ym){
   }
   return { rows: out, live };
 }
+/* 🎌 日本の祝日（振替休日・国民の休日こみ）。2019〜2021 の特別な日も（2026/11/20 連休の集計のため） */
+const JP_HOL = {};
+function jpHolidays(y){
+  if(JP_HOL[y]) return JP_HOL[y];
+  const s = new Set(), p = (m, d) => s.add(y + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0"));
+  const nthMon = (m, n) => { const w = new Date(Date.UTC(y, m - 1, 1)).getUTCDay(); return 1 + ((8 - w) % 7) + (n - 1) * 7; };
+  p(1, 1); p(1, nthMon(1, 2)); p(2, 11); if(y >= 2020) p(2, 23); if(y <= 2018) p(12, 23);
+  p(3, Math.floor(20.8431 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4)));
+  p(4, 29); p(5, 3); p(5, 4); p(5, 5);
+  if(y === 2020){ p(7, 23); p(7, 24); p(8, 10); } else if(y === 2021){ p(7, 22); p(7, 23); p(8, 8); } else { p(7, nthMon(7, 3)); p(8, 11); p(10, nthMon(10, 2)); }
+  p(9, nthMon(9, 3)); p(9, Math.floor(23.2488 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4)));
+  p(11, 3); p(11, 23);
+  if(y === 2019){ p(4, 30); p(5, 1); p(5, 2); p(10, 22); }
+  const add = (d, n) => { const t = new Date(d + "T12:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+  [...s].forEach(d => { if(add(d, 2) && s.has(add(d, 2)) && !s.has(add(d, 1)) && new Date(add(d, 1) + "T12:00:00Z").getUTCDay() !== 0) s.add(add(d, 1)); });   // 国民の休日（はさまれた日）
+  [...s].sort().forEach(d => { if(new Date(d + "T12:00:00Z").getUTCDay() === 0){ let t = add(d, 1); while(s.has(t)) t = add(t, 1); s.add(t); } });   // 振替休日
+  return JP_HOL[y] = s;
+}
+const isHoliday = d => jpHolidays(Number(d.slice(0, 4))).has(d);
+const isOff = d => { const w = new Date(d + "T12:00:00Z").getUTCDay(); return w === 0 || w === 6 || isHoliday(d); };
+// その月の「祝前日〜連休」：祝日をふくむ休みのつながり（土日祝）と、その前の日（祝前日）
+function holidayBlocks(ym, last){
+  const ds = []; for(let i = 1; i <= last; i++) ds.push(ym + "-" + String(i).padStart(2, "0"));
+  const out = []; let cur = [];
+  const flush = () => { if(cur.some(isHoliday)){ const t = new Date(cur[0] + "T12:00:00Z"); t.setUTCDate(t.getUTCDate() - 1); const pre = t.toISOString().slice(0, 10); out.push((pre.slice(0, 7) === ym ? [pre] : []).concat(cur)); } cur = []; };
+  ds.forEach(d => { if(isOff(d)) cur.push(d); else flush(); }); flush();
+  return out;
+}
+/* 📊 月合計・月平均・前半（1〜14日）・後半（15日〜）・祝前日〜連休・前年比・伸び率（エクセルと同じ。2026/11/20 店長）
+   平均は「その範囲の日数」で割る（今月は今日までの日数）。前年比は去年の同じ月の同じ日まで */
+function dailySummary(ym, rows, live){
+  const today = KB.bizDateOf(), done = rows.filter(r => !r.future && r.d <= today);
+  if(!done.length) return "";
+  const [y, m] = ym.split("-").map(Number), last = rows.length, upto = Number(done[done.length - 1].d.slice(8));
+  const pick = f => done.filter(f);
+  const S = (l, k) => l.reduce((a, r) => a + n0(r[k]), 0), A = (l, k) => l.length ? Math.round(S(l, k) / l.length) : null;
+  const first = pick(r => Number(r.d.slice(8)) <= 14), second = pick(r => Number(r.d.slice(8)) >= 15);
+  const blocks = holidayBlocks(ym, last).map(b => b.filter(d => d <= today)).filter(b => b.length);
+  const hol = pick(r => blocks.some(b => b.includes(r.d)));
+  const prevYm = (y - 1) + "-" + String(m).padStart(2, "0");
+  const pr = dailyRows(prevYm).rows.filter(r => Number(r.d.slice(8)) <= upto), prevNet = pr.some(r => r.net != null) ? S(pr, "net") : null;
+  const prevTot = pr.some(r => r.total != null) ? S(pr, "total") : null;
+  const ratio = (a, b) => b ? Math.round(a / b * 1000) / 10 : null, P = v => v == null ? "−" : v.toFixed(1) + "%";
+  const rN = ratio(S(done, "net"), prevNet), rT = live && prevTot ? ratio(S(done, "total"), prevTot) : null;
+  const cols = live ? ["店落ち", "売上総額"] : ["店落ち"];
+  const line = (lab, l, sub) => `<tr><td class="l">${lab}${sub ? `<small>${sub}</small>` : ""}</td><td><b>${yen(S(l, "net"))}</b></td>${live ? `<td>${yen(S(l, "total"))}</td>` : ""}</tr>
+    <tr class="avg"><td class="l">　平均（${l.length}日）</td><td>${A(l, "net") == null ? "−" : yen(A(l, "net"))}</td>${live ? `<td>${A(l, "total") == null ? "−" : yen(A(l, "total"))}</td>` : ""}</tr>`;
+  const md = d => Number(d.slice(5, 7)) + "/" + Number(d.slice(8));
+  return `<div class="dsum"><table class="t"><tr><th class="l"></th>${cols.map(c => `<th>${c}</th>`).join("")}</tr>
+    ${line("月合計", done, upto < last ? `（${upto}日まで）` : "")}
+    ${line("前半合計", first, "（1〜14日）")}
+    ${second.length ? line("後半合計", second, "（15日〜）") : ""}
+    ${hol.length ? line("祝前日〜連休", hol, "（" + blocks.map(b => md(b[0]) + "〜" + md(b[b.length - 1])).join("・") + "）") : `<tr><td class="l">祝前日〜連休</td><td colspan="${cols.length}" style="color:var(--sub)">この月は祝日の連休がありません</td></tr>`}
+    <tr class="yoy"><td class="l">前年比<small>（${ymLabel(prevYm)}${upto < last ? "の" + upto + "日まで" : ""}）</small></td><td><b>${P(rN)}</b></td>${live ? `<td>${P(rT)}</td>` : ""}</tr>
+    <tr class="yoy"><td class="l">伸び率</td><td><b class="${rN != null && rN < 100 ? "down" : "up"}">${rN == null ? "−" : (rN - 100 >= 0 ? "+" : "") + (rN - 100).toFixed(1) + "%"}</b></td>${live ? `<td>${rT == null ? "−" : (rT - 100 >= 0 ? "+" : "") + (rT - 100).toFixed(1) + "%"}</td>` : ""}</tr></table>
+    ${live && prevTot == null ? `<div class="hint">去年の売上総額は記録がないので、前年比は店落ちだけです</div>` : ""}</div>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>.dsum{max-width:560px;margin:0 0 10px}.dsum td small{color:var(--sub);font-size:11.5px;margin-left:4px}.dsum tr.avg td{color:var(--sub);font-size:12.5px;border-top:none}.dsum tr.yoy td{background:#FFF8E6}.dsum .down{color:#d9534f}.dsum .up{color:#1f7a55}</style>`);
 function renderDaily(){
   const ms = dailyMonths(); if(!ms.length){ $("v_daily").innerHTML = `<div class="box">数字がありません</div>`; return; }
   if(!dailyYm || !ms.includes(dailyYm)) dailyYm = ms.includes(KB.bizDateOf().slice(0, 7)) ? KB.bizDateOf().slice(0, 7) : ms[0];
@@ -587,6 +645,7 @@ function renderDaily(){
       <select id="dailyYm" onchange="dailyYm=this.value;renderDaily()" style="margin-left:8px">${ms.map(m => `<option value="${m}" ${m === dailyYm ? "selected" : ""}>${ymLabel(m)}</option>`).join("")}</select></h3>
     <div class="hint" style="margin:2px 0 8px">${live ? "新しい記録簿の数字。店落ち＝総額−キャスト報酬＋雑費、いちばん右は内勤の日払いを引いた額（記録簿・集計の店落ちと同じ）" : "エクセル（売上管理）の数字です。この月は店落ちだけ記録があります（売上総額はありません）"}</div>
     <div style="font-size:13.5px;margin-bottom:6px">${avg}</div>
+    ${dailySummary(dailyYm, rows, live)}
     <div class="tw"><table class="t daily"><tr>${head.map((h, i) => `<th class="${i ? "" : "l"}">${h}</th>`).join("")}</tr>${rows.map(line).join("")}${tot}</table></div></div>`;
 }
 window.addEventListener("message", e => { if(e.origin === location.origin && e.data && e.data.kbAnalH){ const fr = $("analFrame"); if(fr) fr.style.height = Math.max(600, Number(e.data.kbAnalH) + 20) + "px"; } });   // 分析のタブの高さ
