@@ -11,7 +11,7 @@ const MOB_Q = window.matchMedia ? window.matchMedia("(max-width:700px)") : { mat
 let mobTab = "tl", mobRange = "auto", mobPage = "res";
 const mobLs = (k, d) => { try{ const v = localStorage.getItem(k); return v == null ? d : v; }catch(e){ return d; } };
 const mobLsSet = (k, v) => { try{ localStorage.setItem(k, v); }catch(e){} };
-const mobOn = () => (MOB_Q.matches || window.__mobForce) && mobLs("kbMobPC", "") !== "1";   // __mobForce：テスト用
+const mobOn = () => !!((MOB_Q.matches || window.__mobForce) && mobLs("kbMobPC", "") !== "1");   // !! が大事（undefined だと classList.toggle が「入れかえ」になって PC でもスマホの画面になった。2026/11/20）   // __mobForce：テスト用
 const MOB_PPH = 72;   // 1時間の幅（px）
 
 function mobApply(){
