@@ -489,7 +489,7 @@ async function auditRun(){
       const unsettled = rows.filter(r => !(r.cd && r.cd.settled) && r.kind !== "home" && r.amt).map(r => names[r.id] || r.id);
       const home = rows.filter(r => r.kind === "home").map(r => names[r.id] || r.id);
       const notCol = rows.filter(r => (r.state === "none" || !r.state) && r.amt).map(r => `${names[r.id] || r.id} ${num(r.amt)}`);
-      const staffBad = (t.staff || []).filter(x => !x.paid || !(Number(x.day_paid) > 0) || !x.pay_source).map(x => `${staffNames[x.staff_id] || x.staff_id}${!x.paid ? "（払っていない）" : !x.pay_source ? "（どこから？）" : "（金額？）"}`);
+      const staffBad = (t.staff || []).filter(x => !x.paid || !(Number(x.day_paid) > 0) || (!x.pay_source && d >= "2026-11-12"))   // 「どこから」は 11/12 から（それより前は記録がない）.map(x => `${staffNames[x.staff_id] || x.staff_id}${!x.paid ? "（払っていない）" : !x.pay_source ? "（どこから？）" : "（金額？）"}`);
       out.push({ d, F: t.F, card: t.A.card, ex: t.ex, fin: t.fin, hand: t.hand, bag, diff: bag == null ? null : bag - t.hand, envN: envs.length, envBad, unsettled, home, notCol, staffBad,
         kikiOpen: (t.kikiPaid || []).filter(x => !x.kiki_returned_on).map(x => `${staffNames[x.staff_id] || x.staff_id} ${num(kikiAmt(x))}`) });
     }catch(e){ out.push({ d, err: e.message || String(e) }); }
@@ -1421,8 +1421,9 @@ const HO = () => D.ho.find(h => h.biz_date === D.day) || null;
 // 👛 袋の中身：実際に数えた額を手で入れる。上の「随時の回収合計（＝社長に手渡し）」のすぐ下に同じ幅で出す。社長に手渡しの額とくらべる（2026/11/7 店長）
 /* 👛 袋の中身が合っていない日（多い・足りない）を、どの日を開いても上に出す。ぴったりになったら消える（2026/11/20 店長）
    kb_settings 'bag_diffs' = { 日付: 差（＋多い／−足りない） }。その日を開いたときに、今の差を入れなおす */
-let BAGD = {};
-async function bagDiffLoad(){ try{ const r = q(await sb.from("kb_settings").select("value").eq("key", "bag_diffs").maybeSingle()); BAGD = (r && r.value && typeof r.value === "object") ? r.value : {}; }catch(e){ BAGD = {}; } }
+let BAGD = {}, BAGH = {};   // BAGH：袋を数えたときの「はず」（随時の回収合計）{ 日付: { hand, at, by } }（kb_settings bag_hand）2026/11/21
+async function bagHandSave(day, hand){ try{ const r = q(await sb.from("kb_settings").select("value").eq("key", "bag_hand").maybeSingle()); const v = Object.assign({}, (r && r.value) || {}); v[day] = { hand, at: new Date().toISOString(), by: KB.operatorName() }; q(await sb.from("kb_settings").upsert({ key: "bag_hand", value: v, note: "👛 回収明細：袋を数えたときの随時の回収合計（あとで変わったかを見る）" })); BAGH = v; }catch(e){ console.warn("bagHandSave", e); } }
+async function bagDiffLoad(){ try{ const r = q(await sb.from("kb_settings").select("key,value").in("key", ["bag_diffs", "bag_hand"])) || []; const g = k => ((r.find(x => x.key === k) || {}).value) || {}; BAGD = g("bag_diffs"); BAGH = g("bag_hand"); }catch(e){ BAGD = {}; BAGH = {}; } }
 async function bagDiffSave(day, df){
   const cur = BAGD[day] == null ? null : Number(BAGD[day]), nv = df ? df : null;
   if(cur === nv || !KB.CAN_EDIT) return;
@@ -1456,16 +1457,24 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .topflow{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;background:var(--card,#fff);border:1.5px solid var(--line,#eee);border-radius:12px;padding:8px 12px;margin:0 0 10px;font-size:13px}
   .topflow b{font-size:14px} .topflow .eq{font-weight:800;color:#1E7A3C}
 </style>`);
+// 数えたときの「はず」とくらべる：数えたときは合っていた → そのあと（後日の回収・精算のやりなおし・計算の決まりの変更）で変わった、がわかる（2026/11/21）function bagHandNote(hand, b){ const h = BAGH[D.day]; if(!h || b == null) return ""; const was = Number(h.hand), ch = hand - was; return `<div class="baghand"><small>数えたとき（${esc(h.by || "")} ${h.at ? when(h.at) : ""}）の随時の回収合計は ${yen(was)}・袋の差は ${b - was === 0 ? "ぴったり" : (b - was > 0 ? "多い " : "足りない ") + yen(Math.abs(b - was))}${ch ? `。<b>そのあと ${ch > 0 ? "＋" : "−"}${yen(Math.abs(ch))} 変わった</b>（後日の回収・精算のやりなおしなど）` : ""}</small></div>`; }
+// 数えたときの「はず」とくらべる：数えたときは合っていた → そのあと（後日の回収・精算のやりなおし・計算の決まりの変更）で変わった、がわかる（2026/11/21）
+function bagHandNote(hand, b){
+  const h = BAGH[D.day]; if(!h || b == null) return "";
+  const was = Number(h.hand), ch = hand - was, d0 = b - was;
+  return `<div class="baghand"><small>数えたとき（${esc(h.by || "")} ${h.at ? when(h.at) : ""}）の随時の回収合計は ${yen(was)}・袋の差は ${d0 === 0 ? "ぴったり" : (d0 > 0 ? "多い " : "足りない ") + yen(Math.abs(d0))}${ch ? `。<b>そのあと ${ch > 0 ? "＋" : "−"}${yen(Math.abs(ch))} 変わった</b>（後日の回収・精算のやりなおしなど）` : ""}</small></div>`;
+}
 function bagHtml(ho, hand, ed){
   const b = ho && ho.bag_amount != null ? Number(ho.bag_amount) : null, df = b == null ? null : b - hand;
   return `<div class="s bagbox ${df == null ? "" : df === 0 ? "ok" : "ng"}">👛 袋の中身（実際に数えた額）
     <div class="bagin">${ed ? `<input type="number" id="bagAmt" value="${b == null ? "" : b}" placeholder="数えた額" onchange="setBag(this.value)"><span>円</span>` : `<b>${b == null ? "まだ" : yen(b)}</b>`}</div>
-    <div class="bagst">${df == null ? "数えたら入れる" : df === 0 ? "✅ 手渡しの額とぴったり" : df > 0 ? `⚠️ ${yen(df)} 多い` : `⚠️ ${yen(-df)} 足りない`}${b != null && ho.bag_by ? ` <small>（${esc(ho.bag_by)} ${ho.bag_at ? when(ho.bag_at) : ""}）</small>` : ""}</div></div>`;
+    <div class="bagst">${df == null ? "数えたら入れる" : df === 0 ? "✅ 手渡しの額とぴったり" : df > 0 ? `⚠️ ${yen(df)} 多い` : `⚠️ ${yen(-df)} 足りない`}${b != null && ho.bag_by ? ` <small>（${esc(ho.bag_by)} ${ho.bag_at ? when(ho.bag_at) : ""}）</small>` : ""}</div>${bagHandNote(hand, b)}</div>`;
 }
 // 👛 袋の中身（数えた額）を保存。空にすると消す（SQL 232）
 async function setBag(v){
   const n = String(v).trim() === "" ? null : Math.round(Number(v));
   if(n != null && !isFinite(n)){ toast("数字で入れてください"); return; }
+  try{ if(n != null) await bagHandSave(D.day, totalsFor(D.day, D, rowsFor(D.day, D)).hand); }catch(e){}   // 数えたときの「はず」を覚える（2026/11/21）
   try{ q(await sb.from("kb_handovers").upsert({ biz_date: D.day, bag_amount: n, bag_by: n == null ? "" : KB.operatorName(), bag_at: n == null ? null : new Date().toISOString(), updated_by: KB.operatorName(), updated_at: new Date().toISOString() }, { onConflict: "biz_date" })); toast(n == null ? "袋の中身を消しました" : "👛 袋の中身を入れました"); }
   catch(e){ toast("保存できませんでした（SQL 232 は実行ずみ？）：" + (e.message || e)); }
   loadDay(true);   // 保存のあと：画面を消さずに、今の場所のまま描きなおす
