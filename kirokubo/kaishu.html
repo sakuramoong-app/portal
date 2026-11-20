@@ -737,7 +737,9 @@ function paintDay(){
   //   ・数えたときの「はず」（bag_hand）とぴったり ／ ・前の決まり（キキララを足して返した日に引く。11/21 まで）でぴったり
   { const bagN = ho && ho.bag_amount != null ? Number(ho.bag_amount) : null, hc = BAGH[D.day];
     const okThen = bagN != null && ((hc && bagN === Number(hc.hand)) || bagN === hand + kikiPaidSum - kikiRetSum);
-    bagDiffSave(D.day, bagN == null || okThen ? null : bagN - hand); }
+    // 前の決まりでくらべたほうが差が小さい日は、そちらの差を出す（キキララのお金を袋に入れたまま数えた日など）
+    const dNew = bagN == null ? null : bagN - hand, dOld = bagN == null ? null : bagN - (hand + kikiPaidSum - kikiRetSum);
+    bagDiffSave(D.day, bagN == null || okThen ? null : (Math.abs(dOld) < Math.abs(dNew) ? dOld : dNew)); }
   if(dayTab === "today"){ $("dayArea").innerHTML = tabBarHtml() + bagWarnHtml() + todayHtml(); return; }
   if(dayTab !== "today" && envSel !== "day"){ $("dayArea").innerHTML = tabBarHtml() + bagWarnHtml() + `<div class="card">${envTabHtml(rows, ed)}</div>`; return; }
   let h = tabBarHtml() + bagWarnHtml() + (place ? "" : topFlowHtml(A, staff, F, ex, fin, tr)) + (D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "");
