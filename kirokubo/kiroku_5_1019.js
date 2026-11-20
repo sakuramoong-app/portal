@@ -881,7 +881,7 @@ function shiftNoticeItems(){
   Object.entries(shiftNoticeShifts).forEach(([name, sh])=>{
     const c = M.casts.find(x=>x.shift_name === name || x.official_name === name); if(!c) return;
     const cd = shiftNoticeDays[c.id] || {}, own = (set.casts || {})[c.id] || {};
-    if(cd.status === "欠勤") return;
+    if(cd.status === "欠勤" || sh.dropped) return;   // シフトを取り下げた子（記録簿の下に残しているだけ）には、出勤・退勤のお知らせを出さない（2026/11/20）
     const hs = cd.shift_start_ov != null ? Number(cd.shift_start_ov) : Number(sh.start), he = cd.shift_end_ov != null ? Number(cd.shift_end_ov) : Number(sh.end);   // 時間の変更（出勤時間を変える）があればそちら
     const dIn = base + hs * 3600000 - ntfBefore("in") * 60000, dOut = base + he * 3600000 - ntfBefore("out") * 60000;   // 「何分前に出す」（通知の設定）
     if(!own.off_in && !cd.notice_in_at && now >= dIn && now < dIn + SN_SHOW_MS) items.push({ c, kind: "in", h: hs });

@@ -380,7 +380,7 @@ async function loadDay(quiet){   // quiet：保存のあと（「読み込み中
     if(day !== $("day").value || mode !== "day") return;   // とちゅうで日を変えた
     // 🪙 キキララから払って、まだ返していない日払い（この日までの全部）
     // 📒 まだ精算していない未精算・お釣り（kb_unsettled）。キャストの行の「交通費・経費・精算ミス」に出す
-    R.unsOpen = [];
+    R.unsOpen = []; await bagDiffLoad();
     try{ const uo = await sb.from("kb_unsettled").select("cast_id,biz_date,amount").is("done_on", null).order("biz_date"); R.unsOpen = uo.error ? [] : (uo.data || []).filter(x => Number(x.amount)); }catch(e){}
     // 🔁 この日にできた未精算・お釣り（あとの日に精算したものも）→ 「○日から入る／○日へ移す」を出す（2026/11/15）
     // 📮 封筒ごとチェック：この日にいっしょに精算した、ほかの日の精算（その日の「はず」を見る）
@@ -670,9 +670,10 @@ function paintDay(){
   const { T, A, ho, ex, tr, trRes, trCancel, staff, staffSum, B, F, fin, hand, kikiPaid, kikiPaidSum, kikiRet, kikiRetSum, unpaid, unpaidSum, adv, advOpen } = totalsFor(D.day, D, rows);
   const TRL = { wait: "振込待ち", owner: "社長の確認待ち", done: "✅ 振込処理完了" }, trLine = r => `${esc(names[r.cast_id] || "")} ${["cancel", "tobi", "flowed"].includes(r.status) ? "キャンセル料" : "もらい忘れ"}（${TRL[r.transfer_status] || ""}）`;
   const ed = KB.CAN_EDIT && !D.no171, dt = new Date(D.day + "T12:00:00Z");
-  if(dayTab === "today"){ $("dayArea").innerHTML = tabBarHtml() + todayHtml(); return; }
-  if(dayTab !== "today" && envSel !== "day"){ $("dayArea").innerHTML = tabBarHtml() + `<div class="card">${envTabHtml(rows, ed)}</div>`; return; }
-  let h = tabBarHtml() + (D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "");
+  bagDiffSave(D.day, ho && ho.bag_amount != null ? Number(ho.bag_amount) - hand : null);   // 👛 袋の差を覚える（どの日にも出す）
+  if(dayTab === "today"){ $("dayArea").innerHTML = tabBarHtml() + bagWarnHtml() + todayHtml(); return; }
+  if(dayTab !== "today" && envSel !== "day"){ $("dayArea").innerHTML = tabBarHtml() + bagWarnHtml() + `<div class="card">${envTabHtml(rows, ed)}</div>`; return; }
+  let h = tabBarHtml() + bagWarnHtml() + (place ? "" : topFlowHtml(A, staff, F, ex, fin, tr)) + (D.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です（それまでは見るだけ）。</div>` : "");
   h += `<div class="sum">
     <div class="s">想定店落ち 1日の粗利（F）<b>${yen(F)}</b></div>
     <div class="handcol"><div class="s handbox">🤝 随時の回収合計（＝社長に手渡し）<b style="color:#E0001B">${yen(hand)}</b></div>${bagHtml(ho, hand, ed)}</div>
@@ -816,6 +817,7 @@ function paintDay(){
     ${D.no185 ? `<div class="warn">⚠️ 返金を記録するには、SQL 185 の実行が必要です。</div>` : `<table class="ex">
       ${(D.kikiOpen || []).map(x => `<tr><td class="l">${md(x.biz_date)} ${esc(staffNames[x.staff_id] || x.staff_id)}<small style="color:#c0392b">（まだ返していない）</small></td><td>${num(kikiAmt(x))}</td>
         <td class="l" style="white-space:nowrap">${ed ? `<button class="btn btn-primary btn-sm" onclick="kikiReturn('${x.biz_date}','${esc(x.staff_id)}',true)">返金完了</button>` : ""}</td></tr>`).join("")}
+      ${staff.filter(x => (x.pay_source === "kikirara" || x.pay_source === "split") && x.kiki_returned_on && x.kiki_returned_on !== D.day).map(x => `<tr><td class="l">${md(x.biz_date)} ${esc(staffNames[x.staff_id] || x.staff_id)}<small style="color:#2e8b57">（✅ ${md(x.kiki_returned_on)} に返金完了${x.kiki_returned_by ? "・" + esc(x.kiki_returned_by) : ""}）</small></td><td>${num(kikiAmt(x))}</td><td class="l"><a class="j" href="javascript:void 0" onclick="$('day').value='${x.kiki_returned_on}';reload()">その日へ</a></td></tr>`).join("")}   <!-- 🪙 この日の分を、あとの日に返金完了した記録も、この日に出す（2026/11/20 店長） -->
       ${kikiRet.map(x => `<tr><td class="l">${md(x.biz_date)} ${esc(staffNames[x.staff_id] || x.staff_id)}<small style="color:#2e8b57">（✅ この日に返した${x.kiki_returned_by ? "・" + esc(x.kiki_returned_by) : ""}）</small></td><td>${num(kikiAmt(x))}</td>
         <td class="l">${ed ? `<a class="j" href="javascript:void 0" onclick="kikiReturn('${x.biz_date}','${esc(x.staff_id)}',false)">取り消し</a>` : ""}</td></tr>`).join("")}
       ${(D.rfOpen || []).map(c => `<tr><td class="l">💴 ${md(c.biz_date)} ${esc(names[c.cast_id] || c.cast_id)}への返金<small style="color:#c0392b">（キキララから立て替え・まだ返していない）</small></td><td>${num(rfAmt(c))}</td>
@@ -1355,6 +1357,36 @@ async function saveHo(patch){
 }
 const HO = () => D.ho.find(h => h.biz_date === D.day) || null;
 // 👛 袋の中身：実際に数えた額を手で入れる。上の「随時の回収合計（＝社長に手渡し）」のすぐ下に同じ幅で出す。社長に手渡しの額とくらべる（2026/11/7 店長）
+/* 👛 袋の中身が合っていない日（多い・足りない）を、どの日を開いても上に出す。ぴったりになったら消える（2026/11/20 店長）
+   kb_settings 'bag_diffs' = { 日付: 差（＋多い／−足りない） }。その日を開いたときに、今の差を入れなおす */
+let BAGD = {};
+async function bagDiffLoad(){ try{ const r = q(await sb.from("kb_settings").select("value").eq("key", "bag_diffs").maybeSingle()); BAGD = (r && r.value && typeof r.value === "object") ? r.value : {}; }catch(e){ BAGD = {}; } }
+async function bagDiffSave(day, df){
+  const cur = BAGD[day] == null ? null : Number(BAGD[day]), nv = df ? df : null;
+  if(cur === nv || !KB.CAN_EDIT) return;
+  try{
+    await bagDiffLoad(); const v = Object.assign({}, BAGD); if(nv == null) delete v[day]; else v[day] = nv;
+    q(await sb.from("kb_settings").upsert({ key: "bag_diffs", value: v, note: "👛 回収明細：袋の中身が合っていない日（ぴったりになると消える）" })); BAGD = v;
+  }catch(e){ console.warn("bagDiffSave", e); }
+}
+function bagWarnHtml(){
+  const l = Object.entries(BAGD).filter(([, v]) => Number(v)).sort((a, b) => a[0].localeCompare(b[0]));
+  if(!l.length) return "";
+  return `<div class="bagwarn">👛 袋の中身が合っていない日があります（ぴったりになると消えます）：${l.map(([d, v]) => `<button type="button" onclick="$('day').value='${d}';reload()">${md(d)}　${Number(v) > 0 ? yen(Number(v)) + " 多い" : yen(-Number(v)) + " 足りない"}</button>`).join("")}</div>`;
+}
+/* 🧮 上にも計算式（2026/11/20 店長）：店落ちの合計 − 内勤日払い ＝ 想定店落ち（F）− カード（D）− 経費（E）＝ 全部回収したときに社長に渡す額 */
+function topFlowHtml(A, staff, F, ex, fin, tr){
+  const st = staff.map(x => `<span>− 内勤日払い ${esc(staffNames[x.staff_id] || x.staff_id)} <b>${yen(Number(x.day_paid) || 0)}</b></span>`).join("");
+  return `<div class="topflow"><span>キャスト全員の店落ち（暫定的な残額＋雑費）の合計 <b>${yen(A.shop)}</b></span>${tr ? `<span>＋ 振込 <b>${yen(tr)}</b></span>` : ""}${st}
+    <span class="eq">＝ 想定店落ち 1日の粗利（F）<b>${yen(F)}</b></span><span>− クレジットカード総額（D）<b>${yen(A.card)}</b></span>${F - A.card - ex !== fin ? `<span>− 振込 <b>${yen(F - A.card - ex - fin)}</b></span>` : ""}<span>− 経費（E：キャッシュフローに補充）<b>${yen(ex)}</b></span>
+    <span class="eq">＝ 全部回収したときに社長に渡す額 <b>${yen(fin)}</b></span></div>`;
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .bagwarn{background:#FFE8EC;border:2px solid #E5486C;color:#B0213F;border-radius:12px;padding:8px 12px;margin:0 0 10px;font-weight:800;font-size:13.5px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .bagwarn button{font-family:inherit;font-weight:800;font-size:13px;background:#fff;border:1.5px solid #E5486C;color:#B0213F;border-radius:99px;padding:3px 10px;cursor:pointer}
+  .topflow{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;background:var(--card,#fff);border:1.5px solid var(--line,#eee);border-radius:12px;padding:8px 12px;margin:0 0 10px;font-size:13px}
+  .topflow b{font-size:14px} .topflow .eq{font-weight:800;color:#1E7A3C}
+</style>`);
 function bagHtml(ho, hand, ed){
   const b = ho && ho.bag_amount != null ? Number(ho.bag_amount) : null, df = b == null ? null : b - hand;
   return `<div class="s bagbox ${df == null ? "" : df === 0 ? "ok" : "ng"}">👛 袋の中身（実際に数えた額）
