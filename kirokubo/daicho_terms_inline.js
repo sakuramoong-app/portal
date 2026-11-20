@@ -30,7 +30,7 @@ function tmInlineShow(){
 { const __st = saveTerms; saveTerms = async function(){ TM_SAVING = true; let r; try{ r = await __st.apply(this, arguments); } finally { TM_SAVING = false; } if(TM_INLINE && termsCast) await openTerms(); return r; }; }
 // アコーディオンを開いたとき・キャストを開いたとき（もう開いていたら）
 document.addEventListener("toggle", e => { const d = e.target; if(d && d.matches && d.matches('details[data-p="terms"]') && d.open) tmInlineShow(); }, true);
-{ const __oe = openEdit; openEdit = function(){ const r = __oe.apply(this, arguments); setTimeout(() => { const d = document.querySelector('details[data-p="terms"]'); if(d && d.open && editingId) tmInlineShow(); }, 300); return r; }; }
+{ const __oe = openEdit; openEdit = function(){ const r = __oe.apply(this, arguments); setTimeout(() => { const d = document.querySelector('details[data-p="terms"]'); if(d && d.open && editingId) tmInlineShow(); else if(TM_INLINE && editingId && termsCast && termsCast.id !== editingId) openTerms(); }, 300); return r; }; }   // ほかの子に切りかえたら、閉じていても中身をその子にしておく（2026/11/21 みんな りか の表示になっていた）
 document.head.insertAdjacentHTML("beforeend", `<style>
   #t_inline .tmodal.tminline{max-width:none;width:auto;box-shadow:none;padding:0;margin:0;background:transparent;border:none;max-height:none;overflow:visible}
   #t_inline .tminline .tmwho,#t_inline .tminline .tmx,#t_inline .tminline .tmtitle{display:none}
