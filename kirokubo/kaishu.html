@@ -558,7 +558,7 @@ let envPick = "", envFilter = "all";
 const envKey = r => r.day + "|" + r.id;
 function envStatusOf(r){
   if(!r.cd.settled) return r.kind === "home" ? "home" : "none";
-  if(envMerged(r)) return "merged";
+  // 📦 合算した日も、ふつうの封筒と同じに（分けて入れて、店長回収 ✓ で完了）2026/11/21
   if(r.state === "day" && countPerfect(r)) return "done";   // ✔ 当日回収は、① 当日回収のカードで確かめたので完璧回収（2026/11/19）
   const st = envState(r);
   return st.perfect ? "done" : (st.counted != null && !r.s.refund) || st.dn.length ? "doing" : "wait";
@@ -572,7 +572,7 @@ function envBoardHtml(list, ed, title){
   const shown = all.filter(r => envFilter === "all" || (envFilter === "done" ? envIsDone(r) : !envIsDone(r)));
   const cur = shown.find(r => envKey(r) === envPick) || shown.find(r => !envIsDone(r)) || shown[0] || null;
   if(cur) envPick = envKey(cur);
-  const envs = all.filter(r => r.cd.settled && !envMerged(r)), perfectN = envs.filter(r => envStatusOf(r) === "done").length;
+  const envs = all.filter(r => r.cd.settled), perfectN = envs.filter(r => envStatusOf(r) === "done").length;
   const sumHazu = envs.reduce((a, r) => a + r.amt, 0), notYet = all.filter(r => !r.cd.settled);
   const pct = envs.length ? Math.round(perfectN / envs.length * 100) : 0;
   const tiles = `<div class="ebtiles">
@@ -1198,18 +1198,21 @@ function envOf(r){
   if(s.refund) checks.push(["env:cash", `💴 キャストに <b>${num(s.refund.amount)}円</b> 渡した（${s.refund.src === "kiki" ? "🪙 キキララから立て替え" : "💴 当日の回収金から"}・この封筒はお店から渡した精算メモだけ）`]);
   const rc = receiptsOf(r); if(rc.length) checks.push(["env:rcpt", receiptLine(rc)]);   // 領収書がないはずの封筒は出さない
   const todo = mv.map(m => m.text).concat(info);   // 文字だけ（記録・むかしのテスト用）
-  return { memoL, due, dep, mv, recv, info, todo, checks, keys: checks.map(c => c[0]).concat(mv.map(m => m.key)) };
+  // 📦 合算で ほかの日の封筒に入っていた日：精算メモ・領収書は、入っていた封筒（精算した日）で見たので、ここでは ✓ しなくていい（2026/11/21 店長）
+  const ck = envMerged(r) ? [] : checks;
+  return { memoL, due, dep, mv, recv, info, todo, checks: ck, keys: ck.map(c => c[0]).concat(mv.map(m => m.key)) };
 }
 // 封筒のいま：封筒中（数えて入れた額）＋ ✓ した別の処理 ＋ ほかの封筒からの分 → はず ＋ まだのお釣り・未精算 と同じなら 💯
 function envState(r, E){
   E = E || envOf(r);
   const dn = doneItems(r), refund = !!(r.s && r.s.refund);
-  const counted = refund ? E.dep : (r.cl.collected != null ? Number(r.cl.collected) : null);
+  const counted = refund ? E.dep : (r.cl.collected != null ? Number(r.cl.collected) : envMerged(r) && ["day", "later", "me"].includes(r.state) ? rawDep(r) : null);   // 📦 合算した日は、回収 ✓ で封筒中が自動（精算した日の封筒で数えて分けたので）2026/11/21
   const done = E.mv.filter(m => dn.includes(m.key)), plus = done.reduce((a, m) => a + m.sgn * m.amt, 0), recv = E.recv.reduce((a, m) => a + m.sgn * m.amt, 0);
   const now = counted == null ? null : counted + plus + recv, target = r.amt + pendingOf(r);
   const left = E.keys.filter(k => !dn.includes(k)).length + (counted == null ? 1 : 0);
   return { dn, counted, plus, recv, now, target, rest: now == null ? null : now - target, left, perfect: left === 0 && now === target };
 }
+document.head.insertAdjacentHTML("beforeend", `<style>.envmerged{background:#F1ECFF;border:1.5px solid #CBBDF5;color:#4B3A8A;border-radius:10px;padding:7px 10px;margin:6px 0;font-size:13px;line-height:1.7}.envmerged .btn{margin-left:6px}</style>`);
 // 📦 ほかの日の封筒に合算で入っている日（この日の売上として、この日の中に出す。チェックは入っている封筒のカードで）2026/11/15
 const envMerged = r => !!(r.s && r.s.paidOn && !r.s.only && r.s.paidOn !== r.day);
 function envSignHtml(r, ed){
@@ -1252,7 +1255,7 @@ function envHtml(rows, ed, pre, title){
      → ③ 交通費・未精算など別の処理：金額が合っていたら ✓（封筒中に自動で足し引き）→ ④ 全部うまったら 💯 完璧回収
      合っていないとき：精算画面で直す → 正しい額と元の額をくらべる → キャストに精算を送りなおして、差額をもらう／渡す */
   const card = r => {
-    if(envMerged(r)) return mergedCard(r, ed);
+    // 📦 合算した日も、ふつうの封筒と同じカード（前は「○日の封筒へ」だけだった）2026/11/21 店長
     const E = envOf(r), st = envState(r, E), dn = st.dn, refund = !!r.s.refund;
     const cb = (k, html, amt) => `<label class="envi ${dn.includes(k) ? "on" : ""}"><input type="checkbox" ${dn.includes(k) ? "checked" : ""} ${ed ? "" : "disabled"} onchange="setDoneItem('${esc(r.id)}','${k}',this.checked,'${r.day}')"> <span>${html}</span>${amt != null ? `<b class="envamt ${amt < 0 ? "m" : ""}">${amt > 0 ? "＋" : "−"}${num(Math.abs(amt))}</b>` : ""}</label>`;
     const cnt = st.counted, dif = cnt == null || E.dep == null ? null : cnt - E.dep;
@@ -1266,7 +1269,8 @@ function envHtml(rows, ed, pre, title){
       <div class="envcount">
         ${refund ? `<div class="envsub">封筒中：${num(cnt)}円（お店から渡した分）</div>` : `<div class="envin">封筒中 ${ed ? `<input type="number" class="cnt" value="${cnt != null ? cnt : ""}" placeholder="数えた額" onchange="setCollected('${esc(r.id)}',this.value,${r.amt},'${r.day}',${E.dep == null ? "null" : E.dep})">` : `<b>${cnt != null ? num(cnt) : "—"}</b>`} 円</div>`}
         ${refund || cnt == null || E.dep == null ? "" : `<div class="envcmp">${dif === 0 ? `✅ 封筒中は、精算で投函した額（${num(E.dep)}円）と同じ` : `⚠️ 封筒中が、精算で投函した額 ${num(E.dep)}円 より ${num(Math.abs(dif))}円 ${dif < 0 ? "少ない" : "多い"}`}</div>${envUnsHtml(r, cnt, E.dep, ed)}`}</div>
-      <div class="envh">② 精算メモ・領収書を見くらべる（合っていたら ✓）</div>${E.checks.map(([k, h]) => cb(k, h)).join("")}
+      ${envMerged(r) ? `<div class="envmerged">📦 この日の分は、<b>${md(r.s.paidOn)}</b> にいっしょに精算して、${md(r.s.paidOn)} の封筒に入っていました。${md(r.s.paidOn)} の封筒から <b>この日の分（${num(rawDep(r))}円）</b> を分けて、下に入れてください。<button type="button" class="btn btn-ghost btn-sm" onclick="openDay('${r.s.paidOn}')">📮 ${md(r.s.paidOn)}の封筒へ</button></div>` : ""}
+      <div class="envh">② 精算メモ・領収書を見くらべる（合っていたら ✓）</div>${envMerged(r) ? `<div class="envsub">${md(r.s.paidOn)} の封筒で見たので、ここでは ✓ しなくてOK</div>` : E.checks.map(([k, h]) => cb(k, h)).join("")}
       <div class="envh">③ 交通費・未精算など、別の処理（金額が合っていたら ✓ して処理）</div>
       ${E.mv.length ? E.mv.map(m => cb(m.key, m.text, m.sgn * m.amt)).join("") : `<div class="envsub">別の処理はありません</div>`}
       ${E.recv.map(m => `<div class="envrecv">↪ ${m.text}<b class="envamt ${m.sgn < 0 ? "m" : ""}">${m.sgn > 0 ? "＋" : "−"}${num(m.amt)}</b><small>（ほかの日の封筒で処理）</small></div>`).join("")}
@@ -1282,7 +1286,7 @@ function envHtml(rows, ed, pre, title){
       ${envLogHtml(r)}
       ${chainNeed(r) ? `<button type="button" class="btn btn-primary btn-sm envchain" onclick="chainView('${esc(r.id)}','${r.day}')">🔗 関係する日をならべる（未精算・合算がからむ）</button>` : ""}</details>`;
   };
-  const done = list.filter(r => !envMerged(r) && envState(r).perfect).length;
+  const done = list.filter(r => envState(r).perfect).length;
   return `<h3 class="sec">📮 封筒ごとチェック（${title || "この日に精算した封筒"} ${list.length}通・💯 ${done}通 完璧回収）</h3>
     <div class="leg">① 透明封筒を開けて、中のお金を数えて入れる → ② 精算メモ・領収書を見くらべて ✓ → ③ 交通費・未精算など別の処理を、金額が合っていたら ✓（封筒中に自動で足し引き）→ 全部うまったら 💯 完璧回収</div>
     <div class="envlist">${list.map(card).join("")}</div>`;
