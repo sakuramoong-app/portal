@@ -462,8 +462,65 @@ let dayN = (() => { try{ return Number(localStorage.getItem("kaishuDays")) || 1;
 const prevDay = (d, n) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() - n); return x.toISOString().slice(0, 10); };
 function setDayTab(t){ dayTab = t; try{ localStorage.setItem("kaishuTab", t); }catch(e){} if((t === "today" && dayN > 1) || t === "env") loadDay(true); else paintDay(); }
 function setDayN(n){ dayN = n; try{ localStorage.setItem("kaishuDays", String(n)); }catch(e){} loadDay(true); }
+/* 🔍 期間をまとめて確かめる（2026/11/21 店長：10/22〜11/20 の計算が合っているか）
+   1日ずつ、この回収明細と同じ計算（その日を開いたときと同じ）で、合っていないところをならべる。データは変えない（袋の差の一覧だけ新しくなる） */
+let AUDIT = null;
+async function auditRun(){
+  const from = prompt("いつから確かめますか？（例：2026-10-22）", "2026-10-22"); if(!from || !/^\d{4}-\d{2}-\d{2}$/.test(from)) return;
+  const to = prompt("いつまで？（例：2026-11-20）", prevDay(KB.bizDateOf(), 1)); if(!to || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return;
+  const keep = { day: $("day").value, dayTab, dayN };
+  dayTab = "today"; dayN = 1;
+  const bg = document.createElement("div"); bg.id = "auditBg";
+  bg.style.cssText = "position:fixed;inset:0;z-index:1300;background:rgba(40,20,30,.55);display:flex;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto";
+  bg.innerHTML = `<div style="width:100%;max-width:1100px;background:#fff;border-radius:18px;padding:16px 18px"><b style="font-size:17px;color:#e5638c">🔍 ${md(from)}〜${md(to)} の計算を確かめています…</b><div id="auditBox" style="margin-top:10px">はじめます</div></div>`;
+  document.body.appendChild(bg);
+  const out = [];
+  for(let d = from; d <= to; d = nextDay(d)){
+    $("auditBox").textContent = `${md(d)} を確かめています…（${out.length + 1}日目）`;
+    $("day").value = d;
+    try{ await loadDay(true); }catch(e){}
+    if(!D || D.day !== d){ out.push({ d, err: "読めませんでした" }); continue; }
+    try{
+      const rows = rowsFor(d, D), t = totalsFor(d, D, rows), ho = t.ho || {};
+      const bag = ho.bag_amount != null ? Number(ho.bag_amount) : null;
+      const envs = rows.filter(r => r.cd && r.cd.settled);
+      const envBad = envs.filter(r => { try{ return envStatusOf(r) !== "done"; }catch(e){ return true; } }).map(r => { let st = {}; try{ st = envState(r); }catch(e){}
+        return `${names[r.id] || r.id}（${envStatusOf(r) === "wait" ? "待ち" : "処理中"}${st.rest ? "・" + (st.rest < 0 ? "あと" + num(-st.rest) : num(st.rest) + "多い") : ""}）`; });
+      const unsettled = rows.filter(r => !(r.cd && r.cd.settled) && r.kind !== "home" && r.amt).map(r => names[r.id] || r.id);
+      const home = rows.filter(r => r.kind === "home").map(r => names[r.id] || r.id);
+      const notCol = rows.filter(r => (r.state === "none" || !r.state) && r.amt).map(r => `${names[r.id] || r.id} ${num(r.amt)}`);
+      const staffBad = (t.staff || []).filter(x => !x.paid || !(Number(x.day_paid) > 0) || !x.pay_source).map(x => `${staffNames[x.staff_id] || x.staff_id}${!x.paid ? "（払っていない）" : !x.pay_source ? "（どこから？）" : "（金額？）"}`);
+      out.push({ d, F: t.F, card: t.A.card, ex: t.ex, fin: t.fin, hand: t.hand, bag, diff: bag == null ? null : bag - t.hand, envN: envs.length, envBad, unsettled, home, notCol, staffBad,
+        kikiOpen: (t.kikiPaid || []).filter(x => !x.kiki_returned_on).map(x => `${staffNames[x.staff_id] || x.staff_id} ${num(kikiAmt(x))}`) });
+    }catch(e){ out.push({ d, err: e.message || String(e) }); }
+  }
+  AUDIT = out;
+  $("day").value = keep.day; dayTab = keep.dayTab; dayN = keep.dayN; loadDay(true);
+  auditPaint();
+}
+function auditPaint(){
+  const box = $("auditBox"); if(!box || !AUDIT) return;
+  const bad = x => x.err || x.bag == null || x.diff || x.envBad.length || x.unsettled.length || x.notCol.length || x.staffBad.length || x.kikiOpen.length;
+  const cell = l => l && l.length ? l.map(esc).join("<br>") : "";
+  const rows = AUDIT.map(x => x.err ? `<tr class="bad"><td class="l">${md(x.d)}</td><td colspan="9" class="l">⚠ ${esc(x.err)}</td></tr>` : `<tr class="${bad(x) ? "bad" : "ok"}">
+    <td class="l"><a class="j" href="javascript:void 0" onclick="document.getElementById('auditBg').remove();$('day').value='${x.d}';reload()">${md(x.d)}</a></td>
+    <td>${num(x.hand)}</td><td>${x.bag == null ? `<b style="color:#c0392b">まだ</b>` : num(x.bag)}</td>
+    <td style="font-weight:900;color:${x.diff ? "#c0392b" : "#2e8b57"}">${x.diff == null ? "" : x.diff ? (x.diff < 0 ? "足りない " + num(-x.diff) : "多い " + num(x.diff)) : "✅"}</td>
+    <td>${x.envN - x.envBad.length}／${x.envN}</td><td class="l">${cell(x.envBad)}</td><td class="l">${cell(x.unsettled.concat(x.home.map(h => h + "（直帰）")))}</td>
+    <td class="l">${cell(x.notCol)}</td><td class="l">${cell(x.staffBad)}</td><td class="l">${cell(x.kikiOpen)}</td></tr>`).join("");
+  const n = AUDIT.filter(bad).length;
+  box.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:16px">${AUDIT.length}日のうち、気になる日 <span style="color:#c0392b">${n}日</span></b><span style="flex:1"></span>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="auditCopy()">📋 文でコピー</button><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('auditBg').remove()">とじる</button></div>
+    <div class="leg" style="margin:6px 0">・袋の差 ＝ 数えた袋の中身 − 随時の回収合計（今、社長に渡す額）　・封筒 ＝ ✔完了の数／精算した数　・赤い行が気になる日。日付を押すとその日へ</div>
+    <div style="overflow:auto"><table class="ex audit"><tr><th class="l">日付</th><th>随時の回収合計</th><th>袋（数えた）</th><th>袋の差</th><th>封筒</th><th class="l">完了していない封筒</th><th class="l">未精算・直帰</th><th class="l">未回収 ■</th><th class="l">内勤日払い</th><th class="l">キキララ まだ返していない</th></tr>${rows}</table></div>`;
+}
+function auditCopy(){
+  const t = (AUDIT || []).map(x => x.err ? `${x.d} 読めない：${x.err}` : [x.d, `随時 ${x.hand}`, `袋 ${x.bag == null ? "まだ" : x.bag}`, x.diff ? `差 ${x.diff}` : "", x.envBad.length ? "封筒 " + x.envBad.join("・") : "", x.unsettled.length ? "未精算 " + x.unsettled.join("・") : "", x.home.length ? "直帰 " + x.home.join("・") : "", x.notCol.length ? "未回収 " + x.notCol.join("・") : "", x.staffBad.length ? "日払い " + x.staffBad.join("・") : "", x.kikiOpen.length ? "キキララ " + x.kikiOpen.join("・") : ""].filter(Boolean).join(" ／ ")).join("\n");
+  try{ navigator.clipboard.writeText(t).then(() => toast("コピーしました"), () => prompt("コピーしてください", t)); }catch(e){ prompt("コピーしてください", t); }
+}
+document.head.insertAdjacentHTML("beforeend", `<style>table.audit td{vertical-align:top;font-size:12.5px} table.audit tr.bad td{background:#FFF1F3} table.audit tr.ok td{background:#F3FBF5}</style>`);
 function tabBarHtml(){
-  return `<div class="dtabs">${[["today", "① 当日回収（毎日）"], ["env", "📮 封筒（後日回収・待機場）"]].map(([k, l]) => `<button type="button" class="dtab ${dayTab === k ? "on" : ""}" onclick="setDayTab('${k}')">${l}</button>`).join("")}</div>`;
+  return `<div class="dtabs">${KB.IS_BOSS ? `<button type="button" class="dtab" style="margin-left:auto;order:9" onclick="auditRun()" title="何日分かを、1日ずつ この画面と同じ計算で確かめる">🔍 期間をまとめて確かめる</button>` : ""}${[["today", "① 当日回収（毎日）"], ["env", "📮 封筒（後日回収・待機場）"]].map(([k, l]) => `<button type="button" class="dtab ${dayTab === k ? "on" : ""}" onclick="setDayTab('${k}')">${l}</button>`).join("")}</div>`;
 }
 // ① 当日回収：日ごとに、当日回収した子・経費・内勤の日払い → ① ／社長に手渡し／袋の中身
 /* ✔ 当日回収・内勤の日払いを、1人ずつ確かめたしるし（2026/11/18 店長）
