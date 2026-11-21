@@ -344,7 +344,9 @@ function matchScore(dm, sp, c){
     const step = (k, per, max) => { const i = LOOK[k].indexOf(a[k]), j = LOOK[k].indexOf(b[k]); if(i >= 0 && j >= 0){ s -= Math.min(max, Math.abs(i - j) * per); n++; } };
     step("len", 6, 18); step("color", 5, 15);
   }
-  return n ? Math.max(0, Math.round(s)) : null;
+  const v = n ? Math.max(0, Math.round(s)) : null;
+  // 🖼 イメージキャスト（台帳の 🎭 ダミー名で入れた子）は、データがなくても上に（2026/11/21 店長）
+  return c && dm && (dm.image_cast_ids || []).includes(c.id) ? Math.max(v == null ? 0 : v, 95) : v;
 }
 async function renderDummyMatch(){
   const el = $("dummyMatch");
@@ -353,7 +355,7 @@ async function renderDummyMatch(){
   const dm = M.dummies.find(d=>d.store_key === store && d.name === name) || {};
   const spec = [dm.age ? dm.age + "歳" : "", dm.height ? "T" + dm.height : "", dm.weight ? dm.weight + "kg" : "", dm.cup ? dm.cup + "カップ" : "", dm.psize ? "P" + dm.psize : ""].filter(Boolean).join(" ");
   const ops = [["AF", dm.af], ["逆AF", dm.rev_af], ["射精", dm.shasei]].filter(x=>x[1]).map(x=>x[0] + x[1]).join(" ");
-  el.innerHTML = `<div style="font-size:12.5px;margin-top:6px;display:flex;gap:8px;align-items:flex-start">${dmPhoto(dm, 90)}<div><b>🎭 ${esc(name)}</b>：${esc(spec || "データなし")} ${esc(ops)}${lookText(dm.look) ? `<br><small>👀 ${esc(lookText(dm.look))}</small>` : ""}${dm.note ? `<br><small>${esc(dm.note)}</small>` : ""}</div></div>
+  el.innerHTML = `<div style="font-size:12.5px;margin-top:6px;display:flex;gap:8px;align-items:flex-start">${dmPhoto(dm, 90)}<div><b>🎭 ${esc(name)}</b>：${esc(spec || "データなし")} ${esc(ops)}${(dm.image_cast_ids || []).length ? `<br>🖼 イメージ：<b>${esc(dm.image_cast_ids.map(id => castName(id)).join("・"))}</b>` : ""}${lookText(dm.look) ? `<br><small>👀 ${esc(lookText(dm.look))}</small>` : ""}${dm.note ? `<br><small>${esc(dm.note)}</small>` : ""}</div></div>
     <div style="font-size:12px;color:var(--sub);margin-top:4px">近いキャストを探しています…</div>`;
   try{
     const [profs, shifts] = await Promise.all([loadProfs(), loadShifts(($("f_day") && $("f_day").value) || day)]);   // 受付の日付のシフト
