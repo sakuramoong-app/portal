@@ -15,7 +15,10 @@ function dmImgAdd(id){ if(!id) return; dmImgTmp = dmImgTmp || []; if(!dmImgTmp.i
   if(!("image_cast_ids" in d)) return base.replace('<div class="f" style="margin-top:6px"><label>メモ', `<div class="hint" style="margin-top:6px">🖼 イメージキャスト・🗓 シフトを使う子は、SQL 937 のあとで入れられます</div><div class="f" style="margin-top:6px"><label>メモ`);
   dmImgTmp = (d.image_cast_ids || []).slice();
   const cs = dmActiveCasts();
-  const extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:8px"><button type="button" class="btn btn-ghost btn-sm" onclick="dmReadHp(${d.id})">📥 公式HPからプロフを読む</button><small style="color:var(--sub)">番号を入れてから押す。年齢・サイズ・AFなどが上に入ります（見てから 💾 保存）</small></div>
+  const real = "real_cast_id" in d ? `<div class="f" style="margin-top:8px"><label>👤 本物（サクラ在籍の同じ子。いれば）</label>
+      <select id="dm_real" onchange="if(this.value&&document.getElementById('dm_shift'))document.getElementById('dm_shift').value=this.value"><option value="">（いない・ダミーだけ）</option>${cs.map(c => `<option value="${c.id}" ${d.real_cast_id === c.id ? "selected" : ""}>${esc(c.official_name || c.temp_name)}</option>`).join("")}</select>
+      <small style="color:var(--sub)">えらぶと、シフトもこの子のものになります。受付のマッチ率は100%</small></div>` : `<div class="hint" style="margin-top:8px">👤 本物の子とのリンクは、SQL 938 のあとで入れられます</div>`;
+  const extra = real + `<div style="display:flex;gap:6px;align-items:center;margin-top:8px"><button type="button" class="btn btn-ghost btn-sm" onclick="dmReadHp(${d.id})">📥 公式HPからプロフを読む</button><small style="color:var(--sub)">番号を入れてから押す。年齢・サイズ・AFなどが上に入ります（見てから 💾 保存）</small></div>
     <div class="f" style="margin-top:8px"><label>🖼 イメージキャスト（何人でも。行くのはこの子でなくてもOK）</label>
       <div id="dm_img" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">${dmImgChips()}</div>
       <select onchange="dmImgAdd(this.value);this.value=''"><option value="">＋ イメージキャストを足す</option>${cs.map(c => `<option value="${c.id}">${esc(c.official_name || c.temp_name)}</option>`).join("")}</select></div>
@@ -27,6 +30,7 @@ function dmImgAdd(id){ if(!id) return; dmImgTmp = dmImgTmp || []; if(!dmImgTmp.i
   const d = dmList.find(x => x.id === id);
   if(d && "image_cast_ids" in d && $("dm_shift")){
     const u = { image_cast_ids: (dmImgTmp || []).slice(), shift_cast_id: $("dm_shift").value || null };
+    if($("dm_real")){ u.real_cast_id = $("dm_real").value || null; if(u.real_cast_id) u.shift_cast_id = u.real_cast_id; }   // 本物がいれば、シフトも本物の（SQL 938）
     try{ q(await sb.from("kb_dummy_names").update(u).eq("id", id)); Object.assign(d, u); }catch(e){ toast("イメージキャスト・シフトが保存できませんでした：" + (e.message || e)); return; }
   }
   return __s.apply(this, arguments);
@@ -62,12 +66,13 @@ async function dmReadHp(id, quiet){
 // 📥 全部まとめて読む：今のお店で、番号があってプロフが空いている子だけ。空いている欄だけ入れて保存する
 const DM_PF = ["age", "height", "cup", "weight", "psize", "af", "rev_af", "shasei"];
 const dmEmpty = (d, k) => d[k] == null || d[k] === "";
-const dmNeedsRead = d => d.active !== false && d.hp_no && ["age", "height", "cup"].some(k => dmEmpty(d, k));
+// 年齢か身長が空で、まだ公式HPから読んでいない子だけ（カップは公式HPに無い子もいるので見ない 11/22）
+const dmNeedsRead = d => d.active !== false && d.hp_no && !d.hp_read_at && ["age", "height"].some(k => dmEmpty(d, k));
 async function dmReadAll(){
   const list = dmList.filter(d => d.store_key === dmStore && dmNeedsRead(d));
   if(!list.length){ toast("プロフが空いている子はいません（番号がない子は、番号を入れてください）"); return; }
   if(!confirm(`${list.length}人のプロフを公式HPから読んで、空いている欄だけ入れます。いいですか？`)) return;
-  let ok = 0; const errs = [];
+  let ok = 0; const errs = [], same = [];
   for(let i = 0; i < list.length; i += 8){
     const part = list.slice(i, i + 8);
     toast(`公式HPを読んでいます… ${i + 1}〜${i + part.length}人目／${list.length}人`);
@@ -78,13 +83,14 @@ async function dmReadAll(){
       if(p.error){ errs.push(d.name + "：" + p.error); continue; }
       const got = dmParseProf(p), u = {};
       DM_PF.forEach(k => { if(got[k] != null && dmEmpty(d, k)) u[k] = got[k]; });
-      if(!Object.keys(u).length){ errs.push(d.name + "：公式HPにもプロフがありません"); continue; }
-      try{ q(await sb.from("kb_dummy_names").update(Object.assign({ hp_read_at: new Date().toISOString() }, u)).eq("id", d.id)); Object.assign(d, u); ok++; }
+      const at = { hp_read_at: new Date().toISOString() };
+      if(!Object.keys(u).length){ try{ q(await sb.from("kb_dummy_names").update(at).eq("id", d.id)); Object.assign(d, at); }catch(e){} same.push(d.name); continue; }
+      try{ q(await sb.from("kb_dummy_names").update(Object.assign(at, u)).eq("id", d.id)); Object.assign(d, u, at); ok++; }
       catch(e){ errs.push(d.name + "：" + (e.message || e)); }
     }
   }
   dmPaint();
-  toast(`📥 ${ok}人のプロフを入れました` + (errs.length ? `（入らなかった子：${errs.join("、")}）` : ""));
+  toast(`📥 ${ok}人のプロフを入れました` + (same.length ? `。${same.join("・")}は、公式HPにも足りない欄がないので、そのままです` : "") + (errs.length ? `（読めなかった子：${errs.join("、")}）` : ""));
 }
 // ＋ 足したら：公式HPの在籍（hp_casts）から同じ名前の番号をさがして、プロフも読む
 { const __a = dmAdd; dmAdd = async function(){
@@ -107,6 +113,7 @@ async function dmReadAll(){
       const id = Number((b.getAttribute("onclick").match(/dmEditId=(\d+)/) || [])[1]); const d = dmList.find(x => x.id === id); if(!d) return;
       const info = b.previousElementSibling; if(!info) return;
       const img = (d.image_cast_ids || []).map(dmCastName), sh = d.shift_cast_id ? dmCastName(d.shift_cast_id) : "";
+      if(d.real_cast_id) info.insertAdjacentHTML("beforeend", `<br><small>👤 本物：<b>${esc(dmCastName(d.real_cast_id))}</b></small>`);
       if(img.length || sh) info.insertAdjacentHTML("beforeend", `<br><small>${img.length ? `🖼 イメージ：<b>${esc(img.join("・"))}</b>` : ""}${sh ? `${img.length ? "　" : ""}🗓 シフト：<b>${esc(sh)}</b>` : ""}</small>`);
     });
     const nr = dmList.filter(d => d.store_key === dmStore && dmNeedsRead(d)).length;

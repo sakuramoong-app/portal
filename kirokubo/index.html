@@ -5196,7 +5196,7 @@ function dmForm(d){
   const sel = (k, l) => `<div class="f"><label>${l}</label><select id="dm_${k}">${DM_MARKS.map(m => `<option value="${m}" ${d[k] === m ? "selected" : ""}>${m || "－"}</option>`).join("")}</select></div>`;
   return `<div style="background:#FBF7F8;border-radius:12px;padding:10px;margin:-2px 0 10px">
     <div class="grid">${num("hp_no", "公式HPの番号（写真用）", "gal-○○ の数字")}${num("nomination_fee", "指名料（円・空ならふつう）", "例：3000")}${num("age", "年齢")}${num("height", "身長（cm）")}${num("weight", "体重（kg）")}
-      <div class="f"><label>カップ</label><input id="dm_cup" maxlength="5" value="${esc(d.cup || "")}" placeholder="C"></div>${num("psize", "Pサイズ（cm）")}${sel("af", "AF")}${sel("rev_af", "逆AF")}${sel("shasei", "射精")}</div>
+      <div class="f"><label>カップ</label><input id="dm_cup" maxlength="5" value="${esc(d.cup || "")}" placeholder="例：C"></div>${num("psize", "Pサイズ（cm）")}${sel("af", "AF")}${sel("rev_af", "逆AF")}${sel("shasei", "射精")}</div>
     ${"look" in d ? `<div class="f" style="margin-top:6px"><label>👀 見た目（写真を見て選ぶ）</label>
       <div style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13.5px">${LOOK.vibe.map(v => `<label style="display:flex;gap:3px;align-items:center;font-weight:600"><input type="checkbox" class="dm_vibe" value="${v}" style="width:auto" ${(lk.vibe || []).includes(v) ? "checked" : ""}>${v}</label>`).join("")}</div>
       <div style="display:flex;gap:6px;margin-top:6px">${[["len", "髪の長さ"], ["color", "髪の明るさ"]].map(([k, l]) => `<select id="dm_look_${k}" style="flex:1"><option value="">${l}（－）</option>${LOOK[k].map(v => `<option ${lk[k] === v ? "selected" : ""}>${v}</option>`).join("")}</select>`).join("")}</div></div>` : ""}
