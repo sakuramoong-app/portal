@@ -860,7 +860,6 @@ function paintDay(){
       ${(advBack || []).map(x => `<span>＋ 🪙 キキララから売上金へもどった立て替え（${md(x.biz_date)}の分）${esc(x.memo || "")}</span><span class="v">＋${yen(x.amount)}</span>`).join("")}
       <div class="handrow"><span>＝ 🤝 随時の回収合計（今、社長に渡す額）</span><span style="color:#E0001B;font-size:18px">${yen(hand)}</span></div>
       ${place ? "" : `<div class="handbag">${bagHtml(ho, hand, ed)}</div>`}
-      ${kikiPaidSum ? `<div class="leg" style="margin-top:4px">🪙 キキララから払った日払い ${kikiPaid.map(x => esc(staffNames[x.staff_id] || x.staff_id) + " " + yen(kikiAmt(x))).join("・")} は、キキララへ返すお金なので社長には渡しません（袋から分けておく）</div>` : ""}
     </div>
     <div class="flow" style="margin-top:12px">
       ${(() => { const cash = staffSum - kikiPaidSum - unpaidSum + kikiRetSum;   // 回収金から出ていったお金：回収金から払った日払い＋キキララへの返金
@@ -1186,7 +1185,10 @@ async function chainView(cid, day){
 async function setCollected(cid, v, amt, day, exp){
   day = day || D.day;
   const n = v === "" ? null : Math.round(Number(v) || 0);   // 空にすると、自動（当日回収なら精算の投函額）にもどる
-  await saveCol(cid, { collected: n, done: n != null && n === amt }, true, day);
+  // 封筒中（回収金）を入れたら、回収サインがまだ（または ■ 未回収）なら自動で「店長回収」に（2026/11/21 店長）
+  const curC = ((D && D.col) || []).concat((chainC && chainC.col) || []).find(c => c.cast_id === cid && c.biz_date === day);
+  const autoMe = n != null && (!curC || !curC.state || curC.state === "none");
+  await saveCol(cid, Object.assign({ collected: n, done: n != null && n === amt }, autoMe ? { state: "me" } : {}), true, day);
   // 封筒中が精算の投函とちがっても、ここでは聞かない。封筒カードの「📒 未精算にする」ボタンで（2026/11/15 店長）
   if(exp != null) await countUnsSync(cid, day, n, exp, "keep");
   afterColSave();
@@ -1467,16 +1469,29 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 // 数えたときの「はず」とくらべる：数えたときは合っていた → そのあと（後日の回収・精算のやりなおし・計算の決まりの変更）で変わった、がわかる（2026/11/21）function bagHandNote(hand, b){ const h = BAGH[D.day]; if(!h || b == null) return ""; const was = Number(h.hand), ch = hand - was; return `<div class="baghand"><small>数えたとき（${esc(h.by || "")} ${h.at ? when(h.at) : ""}）の随時の回収合計は ${yen(was)}・袋の差は ${b - was === 0 ? "ぴったり" : (b - was > 0 ? "多い " : "足りない ") + yen(Math.abs(b - was))}${ch ? `。<b>そのあと ${ch > 0 ? "＋" : "−"}${yen(Math.abs(ch))} 変わった</b>（後日の回収・精算のやりなおしなど）` : ""}</small></div>`; }
 // 数えたときの「はず」とくらべる：数えたときは合っていた → そのあと（後日の回収・精算のやりなおし・計算の決まりの変更）で変わった、がわかる（2026/11/21）
 function bagHandNote(hand, b){
-  const h = BAGH[D.day]; if(!h || b == null) return "";
+  const h = D && BAGH[D.day]; if(!h || b == null) return "";
   const was = Number(h.hand), ch = hand - was, d0 = b - was;
   return `<div class="baghand"><small>数えたとき（${esc(h.by || "")} ${h.at ? when(h.at) : ""}）の随時の回収合計は ${yen(was)}・袋の差は ${d0 === 0 ? "ぴったり" : (d0 > 0 ? "多い " : "足りない ") + yen(Math.abs(d0))}${ch ? `。<b>そのあと ${ch > 0 ? "＋" : "−"}${yen(Math.abs(ch))} 変わった</b>（後日の回収・精算のやりなおしなど）` : ""}</small></div>`;
 }
 function bagHtml(ho, hand, ed){
   const b = ho && ho.bag_amount != null ? Number(ho.bag_amount) : null, df = b == null ? null : b - hand;
+  // ✅ ぴったり：緑の大きい枠と大きい ✓ ／ ❌ 合っていない：赤い枠で差と未回収を出す（2026/11/21 店長：一致したのがわかりやすいように）
+  const nc = (typeof D !== "undefined" && D) ? rowsFor(D.day, D).filter(r => (r.state === "none" || !r.state) && r.amt) : [];
+  const st = df == null ? `<div class="bagst">数えたら入れる</div>`
+    : df === 0 ? `<div class="bagok"><span class="bigchk">✓</span><div><b>ぴったり一致！</b><small>袋の中身と、随時の回収合計（社長に渡す額）が合っています</small></div></div>`
+    : `<div class="bagng"><b>${df > 0 ? `⚠️ 袋が ${yen(df)} 多い` : `⚠️ 袋が ${yen(-df)} 足りない`}</b><small>随時の回収合計 ${yen(hand)} とくらべて${nc.length ? `。未回収 ■：${nc.map(r => `${esc(names[r.id] || r.id)} ${yen(r.amt)}`).join("・")}` : ""}</small></div>`;
   return `<div class="s bagbox ${df == null ? "" : df === 0 ? "ok" : "ng"}">👛 袋の中身（実際に数えた額）
     <div class="bagin">${ed ? `<input type="number" id="bagAmt" value="${b == null ? "" : b}" placeholder="数えた額" onchange="setBag(this.value)"><span>円</span>` : `<b>${b == null ? "まだ" : yen(b)}</b>`}</div>
-    <div class="bagst">${df == null ? "数えたら入れる" : df === 0 ? "✅ 手渡しの額とぴったり" : df > 0 ? `⚠️ ${yen(df)} 多い` : `⚠️ ${yen(-df)} 足りない`}${b != null && ho.bag_by ? ` <small>（${esc(ho.bag_by)} ${ho.bag_at ? when(ho.bag_at) : ""}）</small>` : ""}</div>${bagHandNote(hand, b)}</div>`;
+    ${st}${b != null && ho.bag_by ? `<div class="bagwho"><small>（${esc(ho.bag_by)} ${ho.bag_at ? when(ho.bag_at) : ""}）</small></div>` : ""}${bagHandNote(hand, b)}</div>`;
 }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .handbag .s.bagbox.ok{background:#E9F8EE;border:3px solid #2E9E4A;border-radius:14px}
+  .handbag .s.bagbox.ng{background:#FFEEF0;border:3px solid #E0001B;border-radius:14px}
+  .bagok{display:flex;align-items:center;gap:12px;margin-top:6px;color:#1E7A3C} .bagok .bigchk{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:50%;background:#2E9E4A;color:#fff;font-size:34px;font-weight:900;flex:none}
+  .bagok b{font-size:20px;display:block} .bagok small{font-size:12px;color:#3d7a52}
+  .bagng{margin-top:6px;color:#B0213F} .bagng b{font-size:18px;display:block} .bagng small{font-size:12.5px}
+  .bagwho{text-align:right;color:#9C8B8F}
+</style>`);
 // 👛 袋の中身（数えた額）を保存。空にすると消す（SQL 232）
 async function setBag(v){
   const n = String(v).trim() === "" ? null : Math.round(Number(v));
