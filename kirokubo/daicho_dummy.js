@@ -69,9 +69,14 @@ const dmEmpty = (d, k) => d[k] == null || d[k] === "";
 // 年齢か身長が空で、まだ公式HPから読んでいない子だけ（カップは公式HPに無い子もいるので見ない 11/22）
 const dmNeedsRead = d => d.active !== false && d.hp_no && !d.hp_read_at && ["age", "height"].some(k => dmEmpty(d, k));
 async function dmReadAll(){
-  const list = dmList.filter(d => d.store_key === dmStore && dmNeedsRead(d));
-  if(!list.length){ toast("プロフが空いている子はいません（番号がない子は、番号を入れてください）"); return; }
-  if(!confirm(`${list.length}人のプロフを公式HPから読んで、空いている欄だけ入れます。いいですか？`)) return;
+  let list = dmList.filter(d => d.store_key === dmStore && dmNeedsRead(d));
+  if(!list.length){   // 空いている子がいなくても、押したら読みなおせるように（11/22 反応しない）
+    const all = dmList.filter(d => d.store_key === dmStore && d.active !== false && d.hp_no);
+    const noNo = dmList.filter(d => d.store_key === dmStore && d.active !== false && !d.hp_no).map(d => d.name);
+    if(!all.length){ toast("番号が入っている子がいません。「✏️ 直す」で番号を入れてください"); return; }
+    if(!confirm(`年齢・身長が空いている子はいません。\n番号がある${all.length}人を、公式HPから読みなおしますか？（空いている欄だけ入れます。入っている欄は変えません）` + (noNo.length ? `\n\n番号がない子：${noNo.join("・")}（「✏️ 直す」で番号を入れてください）` : ""))) return;
+    list = all;
+  } else if(!confirm(`${list.length}人のプロフを公式HPから読んで、空いている欄だけ入れます。いいですか？`)) return;
   let ok = 0; const errs = [], same = [];
   for(let i = 0; i < list.length; i += 8){
     const part = list.slice(i, i + 8);
@@ -117,7 +122,7 @@ async function dmReadAll(){
       if(img.length || sh) info.insertAdjacentHTML("beforeend", `<br><small>${img.length ? `🖼 イメージ：<b>${esc(img.join("・"))}</b>` : ""}${sh ? `${img.length ? "　" : ""}🗓 シフト：<b>${esc(sh)}</b>` : ""}</small>`);
     });
     const nr = dmList.filter(d => d.store_key === dmStore && dmNeedsRead(d)).length;
-    if(CAN_EDIT) $("dmBody").insertAdjacentHTML("afterbegin", `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><button type="button" class="btn btn-ghost btn-sm" id="dmReadAllBtn" onclick="dmReadAll()" ${nr ? "" : "disabled"}>📥 全部まとめて読む（${nr}人）</button><small style="color:var(--sub)">番号があってプロフが空いている子だけ、公式HPから入れます</small></div>`);
+    if(CAN_EDIT) $("dmBody").insertAdjacentHTML("afterbegin", `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><button type="button" class="btn btn-ghost btn-sm" id="dmReadAllBtn" onclick="dmReadAll()">📥 全部まとめて読む（${nr}人）</button><small style="color:var(--sub)">番号があってプロフが空いている子だけ、公式HPから入れます</small></div>`);
   }catch(e){}
   return r;
 }; }
