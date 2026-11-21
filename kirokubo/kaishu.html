@@ -1527,9 +1527,10 @@ function notColList(rows){
   });
 }
 // 👛 1か月ごとの袋の欄：ぴったり／袋がずれている（多い・足りない）／まだ数えていない。未回収があってもぴったりなら「ぴったり（未回収は別）」
-function bagCell(bag, bd, notCol){
+//   bd＝上の赤い枠と同じ「ずれ」（数えたときに合っていたら 0）。bd0＝今の随時の回収合計とのちがい（数えたあとに回収・精算した分など。11/22）
+function bagCell(bag, bd, notCol, bd0){
   if(bag == null) return `<span style="color:var(--sub)">まだ数えていない</span>`;
-  if(!bd) return `<span class="st ok">✅ ぴったり</span>${notCol ? `<div class="ncl">（未回収 ${num(notCol)}円 は別。集めたら渡す額がふえる）</div>` : ""}`;
+  if(!bd) return `<span class="st ok">✅ ぴったり</span>${bd0 ? `<div class="ncl">（数えたときは合っていた。そのあと ${sgn(-bd0)}円 変わった＝あとから回収・精算した分など）</div>` : ""}${notCol ? `<div class="ncl">（未回収 ${num(notCol)}円 は別。集めたら渡す額がふえる）</div>` : ""}`;
   return `<span class="st no">${bd > 0 ? "多い +" + num(bd) : "足りない " + num(bd)}</span><div class="ncl">袋のお金がずれている${notCol ? `（未回収 ${num(notCol)}円 とは別）` : ""}</div>`;
 }
 /* ---------- 1か月ごと ---------- */
@@ -1541,7 +1542,7 @@ async function loadMonth(){
   try{
     const [R, sw, rates] = await Promise.all([readRange(from, to),
       sb.from("kb_staff_work").select("*").gte("biz_date", from).lt("biz_date", to).order("biz_date"),
-      sb.from("kb_staff_rates").select("staff_id,record_name,from_date,hourly").order("from_date")]);
+      sb.from("kb_staff_rates").select("staff_id,record_name,from_date,hourly").order("from_date"), bagDiffLoad()]);
     if(mode !== "month" || $("day").value.slice(0, 7) !== ym) return;
     MO = Object.assign(R, { ym, from, to, sw: sw.error ? [] : (sw.data || []), rates: rates.error ? [] : (rates.data || []) });
   }catch(err){ $("dayArea").innerHTML = `<div class="warn">読めませんでした：${esc(err.message || err)}</div>`; return; }
@@ -1606,7 +1607,7 @@ function paintMonth(){
     const { T, A, ho, ex, tr: tr0, F, fin, hand } = totalsFor(d, MO, rows), tr = tr0 + A.tr;   // 振込は、予約のもらい忘れ分も入れて
     const rcv = ho && ho.received_at, got = rcv ? (ho.received_amount ?? hand) : 0;
     // 👛 袋：数えた額と「随時の回収合計」のちがい。未回収（■）があってもぴったりかどうかを分けて出す（2026/11/22 店長）
-    const bag = ho && ho.bag_amount != null ? Number(ho.bag_amount) : null, bd = bag == null ? null : bag - hand, nl = notColList(rowsFor(d, MO));
+    const bag = ho && ho.bag_amount != null ? Number(ho.bag_amount) : null, bd0 = bag == null ? null : bag - hand, bd = bag == null ? null : (BAGD[d] != null ? Number(BAGD[d]) : 0) /* ずれ＝赤い枠と同じ（数えたときの見方）。bd0＝今の随時とのちがい */, nl = notColList(rowsFor(d, MO));
     if(bd) { if(bd > 0) S.bagPlus += bd; else S.bagMinus += bd; }
     Object.assign(S, { F: S.F + F, card: S.card + A.card, tr: S.tr + tr, ex: S.ex + ex, fin: S.fin + fin, notCol: S.notCol + A.notCol, hand: S.hand + hand,
       rcv: S.rcv + got, rdays: S.rdays + (rcv ? 1 : 0), yet: S.yet + T.yetN, todo: S.todo + T.todo });
@@ -1615,7 +1616,7 @@ function paintMonth(){
       <td>${num(F)}</td><td>${A.card ? "−" + num(A.card) : ""}</td><td>${tr ? "−" + num(tr) : ""}</td><td>${ex ? "−" + num(ex) : ""}</td><td><b>${num(fin)}</b></td>
       <td class="l"><span class="mk day">✔${T.dayN}</span> <span class="mk later">✔${T.laterN}</span> <span class="mk me">✔${T.meN}</span> <span class="mk none">■${T.noneN}</span>${T.yetN ? ` <span class="st wait">まだ ${T.yetN}</span>` : ""}${T.todo ? ` <span class="st wait">処理 ${T.todo}</span>` : ""}</td>
       <td>${A.notCol ? "−" + num(A.notCol) + `<div class="ncl">${nl.map(x => esc(x.name)).join("・")}</div>` : ""}</td><td><b style="color:#E0001B">${num(hand)}</b></td>
-      <td class="l">${bagCell(bag, bd, A.notCol)}</td>
+      <td class="l">${bagCell(bag, bd, A.notCol, bd0)}</td>
       <td class="l">${rcv ? `<span class="st ok">🤝 ${num(got)} ${when(ho.received_at)}</span>${A.notCol ? `<div class="ncl" style="color:#C0392B">⏳ あと ${num(A.notCol)}円 未回収（${nl.map(x => esc(x.name)).join("・")}）</div>` : ""}` : `<span class="st no">まだ</span>`}</td></tr>`;
   });
   let html = MO.no171 ? `<div class="warn" style="margin-bottom:10px">⚠️ 回収のチェックを入れるには、SQL 171 の実行が必要です。</div>` : "";
