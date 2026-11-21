@@ -22,8 +22,8 @@ function dmImgAdd(id){ if(!id) return; dmImgTmp = dmImgTmp || []; if(!dmImgTmp.i
     <div class="f" style="margin-top:8px"><label>🖼 イメージキャスト（何人でも。行くのはこの子でなくてもOK）</label>
       <div id="dm_img" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">${dmImgChips()}</div>
       <select onchange="dmImgAdd(this.value);this.value=''"><option value="">＋ イメージキャストを足す</option>${cs.map(c => `<option value="${c.id}">${esc(c.official_name || c.temp_name)}</option>`).join("")}</select></div>
-    <div class="f" style="margin-top:8px"><label>🗓 シフトを使う子（公式HP・シフトアプリに、この子のシフトを出す）</label>
-      <select id="dm_shift"><option value="">（なし）</option>${cs.map(c => `<option value="${c.id}" ${d.shift_cast_id === c.id ? "selected" : ""}>${esc(c.official_name || c.temp_name)}</option>`).join("")}</select></div>`;
+    <div class="f" style="margin-top:8px"><label>🗓 シフトを使う子（この子のシフトが、ダミーの公式HPに入ります。シフトアプリのキャスト管理のダミー名にも自動で入ります）</label>
+      <select id="dm_shift"><option value="">（なし）</option>${cs.map(c => `<option value="${c.id}" ${dmShiftOf(d) === c.id ? "selected" : ""}>${esc(c.official_name || c.temp_name)}</option>`).join("")}</select></div>`;
   return base.replace('<div class="f" style="margin-top:6px"><label>メモ', extra + '<div class="f" style="margin-top:6px"><label>メモ');
 }; }
 { const __s = dmSave; dmSave = async function(id){
@@ -117,7 +117,7 @@ async function dmReadAll(){
     document.querySelectorAll('#dmBody button[onclick^="dmEditId="]').forEach(b => {
       const id = Number((b.getAttribute("onclick").match(/dmEditId=(\d+)/) || [])[1]); const d = dmList.find(x => x.id === id); if(!d) return;
       const info = b.previousElementSibling; if(!info) return;
-      const img = (d.image_cast_ids || []).map(dmCastName), sh = d.shift_cast_id ? dmCastName(d.shift_cast_id) : "";
+      const img = (d.image_cast_ids || []).map(dmCastName), sh = dmShiftOf(d) ? dmCastName(dmShiftOf(d)) : "";
       if(d.real_cast_id) info.insertAdjacentHTML("beforeend", `<br><small>👤 本物：<b>${esc(dmCastName(d.real_cast_id))}</b></small>`);
       if(img.length || sh) info.insertAdjacentHTML("beforeend", `<br><small>${img.length ? `🖼 イメージ：<b>${esc(img.join("・"))}</b>` : ""}${sh ? `${img.length ? "　" : ""}🗓 シフト：<b>${esc(sh)}</b>` : ""}</small>`);
     });
@@ -127,3 +127,69 @@ async function dmReadAll(){
   return r;
 }; }
 document.head.insertAdjacentHTML("beforeend", `<style>.dmimg{display:inline-flex;gap:4px;align-items:center;background:#F1ECFF;color:#4B3A8A;border-radius:99px;padding:2px 9px;font-size:12.5px;font-weight:800} .dmimg a{color:#9C8B8F;text-decoration:none}</style>`);
+// ===== 🗓 シフトアプリとつなぐ（11/22）=====
+// シフトアプリの「キャスト管理」の ダミー名（castAliases[シフト名]["18"|"極門"]）と、管理画面の番号（hp_dummy_map）を、台帳から入れる。
+// → 受理したときに、その子のシフトがダミーの公式HP（エイティーン・極門）にも入る（今までの hp_sync.js のしくみ）
+const DM_SHOP = { eighteen: "18", gokumon: "極門" };
+let dmAliases = null;   // シフトアプリの castAliases（一覧で「だれのシフトか」を出すため）
+const dmShiftName = id => { const c = (typeof casts !== "undefined" ? casts : []).find(x => x.id === id); return (c && c.shift_name) || ""; };
+// シフトアプリで、このダミー名を使っている子（台帳でまだ選んでいなくても）
+function dmShiftOf(d){
+  if(d.shift_cast_id) return d.shift_cast_id;
+  const shop = DM_SHOP[d.store_key]; if(!shop || !dmAliases) return null;
+  const n = Object.keys(dmAliases).find(k => (dmAliases[k] || {})[shop] === d.name); if(!n) return null;
+  const c = (typeof casts !== "undefined" ? casts : []).find(x => x.shift_name === n); return c ? c.id : null;
+}
+async function dmLoadAliases(){
+  try{ const r = q(await sb.from("shift_master").select("data").eq("id", 1).maybeSingle()); dmAliases = (r && r.data && r.data.castAliases) || {}; }catch(e){ dmAliases = null; }
+}
+// 返り値：false＝やめた／文字＝お知らせ
+async function dmLinkShift(d, newId, oldId){
+  const shop = DM_SHOP[d.store_key]; if(!shop || (newId || null) === (oldId || null)) return "";
+  const r = q(await sb.from("shift_master").select("data").eq("id", 1).maybeSingle());
+  const m = r && r.data; if(!m || !m.castList) throw new Error("シフトアプリの名簿が読めません");
+  m.castAliases = m.castAliases || {}; m.castStores = m.castStores || {};
+  const inList = n => (m.castList || []).some(c => c && c.name === n);
+  const newN = newId ? dmShiftName(newId) : "", oldN = oldId ? dmShiftName(oldId) : "";
+  if(newId && (!newN || !inList(newN))) return `（${dmCastName(newId)}はシフトアプリにいないので、シフトはつなげませんでした）`;
+  let other = "";
+  if(newN){
+    other = (m.castAliases[newN] || {})[shop] || "";
+    if(other && other !== d.name && !confirm(`${dmCastName(newId)}は、シフトアプリで ${shop} の「${other}」のシフトになっています。\n「${d.name}」に変えますか？（1人の子は、1つのお店で1つのダミー名だけです）`)) return false;
+  }
+  // 前の子のつなぎを外す（このダミー名だったときだけ）
+  if(oldN && (m.castAliases[oldN] || {})[shop] === d.name){
+    delete m.castAliases[oldN][shop];
+    m.castStores[oldN] = (m.castStores[oldN] || []).filter(x => x !== shop);
+    try{ await sb.from("hp_dummy_map").delete().eq("store_key", d.store_key).eq("cast_name", oldN); }catch(e){}
+  }
+  if(newN){
+    m.castAliases[newN] = Object.assign({}, m.castAliases[newN], { [shop]: d.name });
+    if(!(m.castStores[newN] || []).includes(shop)) m.castStores[newN] = (m.castStores[newN] || []).concat(shop);
+    if(d.hp_no) q(await sb.from("hp_dummy_map").upsert({ store_key: d.store_key, cast_name: newN, no: Number(d.hp_no), by_name: operatorName(), updated_at: new Date().toISOString() }, { onConflict: "store_key,cast_name" }));
+    else { try{ await sb.from("hp_dummy_map").delete().eq("store_key", d.store_key).eq("cast_name", newN); }catch(e){} }
+  }
+  q(await sb.from("shift_master").upsert({ id: 1, data: m }));
+  dmAliases = m.castAliases;
+  // 前に「その子のシフト」にしていたほかのダミーは、外す
+  if(newId && other && other !== d.name){
+    const o = dmList.find(x => x.store_key === d.store_key && x.name === other);
+    if(o && o.shift_cast_id === newId){ try{ q(await sb.from("kb_dummy_names").update({ shift_cast_id: null }).eq("id", o.id)); o.shift_cast_id = null; }catch(e){} }
+  }
+  return newN ? `🗓 シフトアプリにもつなぎました（${dmCastName(newId)}のシフトが ${shop}「${d.name}」に入ります）` : `🗓 シフトアプリのつなぎを外しました`;
+}
+// 💾 保存のときに、シフトアプリにも入れる（dmSave のいちばん外側）
+{ const __s2 = dmSave; dmSave = async function(id){
+  const d = dmList.find(x => x.id === id);
+  if(!d || !("shift_cast_id" in d) || !$("dm_shift")) return __s2.apply(this, arguments);
+  const oldId = dmShiftOf(d);
+  let newId = $("dm_shift").value || null; if($("dm_real") && $("dm_real").value) newId = $("dm_real").value;
+  let msg = "";
+  try{ msg = await dmLinkShift(d, newId, oldId); }catch(e){ msg = "（シフトアプリにはつなげませんでした：" + (e.message || e) + "）"; }
+  if(msg === false){ $("dm_shift").value = oldId || ""; if($("dm_real") && $("dm_real").value === newId) $("dm_real").value = d.real_cast_id || ""; return; }
+  const r = await __s2.apply(this, arguments);
+  if(msg) setTimeout(() => toast(msg), 1200);
+  return r;
+}; }
+// 開いたときに、シフトアプリのダミー名も読む
+{ const __o = dmOpen; dmOpen = async function(){ await Promise.all([__o.apply(this, arguments), dmLoadAliases()]); try{ if($("dmBg").classList.contains("show") && dmList.length) dmPaint(); }catch(e){} }; }
