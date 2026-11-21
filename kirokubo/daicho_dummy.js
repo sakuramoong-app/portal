@@ -119,7 +119,7 @@ async function dmReadAll(){
       const info = b.previousElementSibling; if(!info) return;
       const img = (d.image_cast_ids || []).map(dmCastName), sh = dmShiftOf(d) ? dmCastName(dmShiftOf(d)) : "";
       if(d.real_cast_id) info.insertAdjacentHTML("beforeend", `<br><small>👤 本物：<b>${esc(dmCastName(d.real_cast_id))}</b></small>`);
-      if(img.length || sh) info.insertAdjacentHTML("beforeend", `<br><small>${img.length ? `🖼 イメージ：<b>${esc(img.join("・"))}</b>` : ""}${sh ? `${img.length ? "　" : ""}🗓 シフト：<b>${esc(sh)}</b>` : ""}</small>`);
+      if(img.length || sh) info.insertAdjacentHTML("beforeend", `<br><small>${img.length ? `🖼 イメージ：<b>${esc(img.join("・"))}</b>` : ""}${sh ? `${img.length ? "　" : ""}🗓 シフト：<b>${esc(sh)}</b>${dmLinkMark(d)}` : ""}</small>`);
     });
     const nr = dmList.filter(d => d.store_key === dmStore && dmNeedsRead(d)).length;
     if(CAN_EDIT) $("dmBody").insertAdjacentHTML("afterbegin", `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><button type="button" class="btn btn-ghost btn-sm" id="dmReadAllBtn" onclick="dmReadAll()">📥 全部まとめて読む（${nr}人）</button><small style="color:var(--sub)">番号があってプロフが空いている子だけ、公式HPから入れます</small></div>`);
@@ -193,3 +193,10 @@ async function dmLinkShift(d, newId, oldId){
 }; }
 // 開いたときに、シフトアプリのダミー名も読む
 { const __o = dmOpen; dmOpen = async function(){ await Promise.all([__o.apply(this, arguments), dmLoadAliases()]); try{ if($("dmBg").classList.contains("show") && dmList.length) dmPaint(); }catch(e){} }; }
+// 一覧：シフトアプリにつながっているか（✅／⚠ もう一度 💾 保存）
+function dmLinkMark(d){
+  const shop = DM_SHOP[d.store_key], id = dmShiftOf(d); if(!shop || !id || !dmAliases) return "";
+  const n = dmShiftName(id);
+  return n && (dmAliases[n] || {})[shop] === d.name ? ` <span style="color:#2E8B57;font-weight:800">✅ シフトアプリOK</span>`
+    : ` <span style="color:#C0392B;font-weight:800">⚠ シフトアプリにまだつながっていません（「✏️ 直す」→「💾 保存」）</span>`;
+}
