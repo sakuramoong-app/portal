@@ -5329,6 +5329,7 @@ function shiftStoresOf(ks){
   if(ks.some(k => ["sakuramoon", "lana_uguisu", "lana_kinshi", "dressgarden", "peachmoon", "gyakuanal", "eighteen"].includes(k))) out.push("ぴゅあらば", "情報局");
   if(ks.some(k => k !== "gokumon" && k !== "dressgarden")) out.push("NHF");   // NHF は極門・ドレスガーデンいがいのお店
   if(ks.some(k => ["sakuramoon", "lana_uguisu", "lana_kinshi", "peachmoon", "gyakuanal", "eighteen"].includes(k))) out.push("マンゾク");   // マンゾク（2026/11/22）
+  if(ks.some(k => ["sakuramoon", "lana_kinshi", "peachmoon", "dressgarden", "gyakuanal"].includes(k))) out.push("駅チカ");   // 駅チカ（2026/11/22）
   return out;
 }
 // prev：保存する前の在籍店舗。サクラシフトにもういる子は、新しくチェックしたお店と、変えたダミー名だけ送る（今の媒体の設定はさわらない）
