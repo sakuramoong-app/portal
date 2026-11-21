@@ -145,7 +145,10 @@ async function dmLoadAliases(){
 }
 // 返り値：false＝やめた／文字＝お知らせ
 async function dmLinkShift(d, newId, oldId){
-  const shop = DM_SHOP[d.store_key]; if(!shop || (newId || null) === (oldId || null)) return "";
+  // 同じ子のままでも、シフトアプリにまだつながっていなければ入れる（11/22 やこ：つなぐしくみの前に保存していた）
+  const shop = DM_SHOP[d.store_key]; if(!shop) return "";
+  const linked = id => !!id && !!dmAliases && ((dmAliases[dmShiftName(id)] || {})[shop] === d.name);
+  if((newId || null) === (oldId || null) && (!newId || linked(newId))) return "";
   const r = q(await sb.from("shift_master").select("data").eq("id", 1).maybeSingle());
   const m = r && r.data; if(!m || !m.castList) throw new Error("シフトアプリの名簿が読めません");
   m.castAliases = m.castAliases || {}; m.castStores = m.castStores || {};
