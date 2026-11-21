@@ -44,6 +44,7 @@
   .hc.cancel{background:#FFF7EC;border-color:#F3C77A;} .hc.tobi{background:#FFF0F0;border-color:#F2A1A1;} .hc.flowed{background:#F1FAF2;border-color:#A8DDB0;}
   .hc.castng{border-color:#E5484D;border-width:2px;}
   .hc .hh{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+  .hc .hedit{float:right;padding:1px 8px;font-size:11.5px;margin-left:6px}
   .hc .hm{color:#5C4B4F;font-size:13px;margin-top:2px;}
   .hc .hmemo{white-space:pre-wrap;background:#FBF7F8;border-radius:8px;padding:6px 8px;margin-top:6px;font-size:14px;}
   .hc .hmemo.red{color:#C62828;font-weight:700;}
@@ -129,6 +130,8 @@ const phoneNormC = s => { const t = String(s || "").normalize("NFKC").trim(), d 
 let M = { casts: [], stores: [] }, results = [], cur = null, filter = "all", timer = null;
 const STATUS = { done: "", cancel: "キャンセル", tobi: "トビ", flowed: "流れた" };
 const castLabel = id => { const c = M.casts.find(x=>x.id === id); return c ? (c.official_name || c.temp_name) : ""; };
+// 👥 その日にその子が在籍していたか（入店日〜退店日）。前にいた同じ名前の子（例：2026/5/18 より前のゆい）を、今の子とまちがえないため（2026/11/21 店長）
+const castOn = (id, d) => { const c = M.casts.find(x => x.id === id); if(!c || !d) return true; if(c.join_date && d < c.join_date) return false; if(c.leave_date && d > c.leave_date) return false; return true; };
 const storeLabel = k => { const s = M.stores.find(x=>x.key === k); return s ? s.label : k; };
 const md = d => { if(!d) return ""; const [y, m, dd] = String(d).split("-"); return `${y}/${Number(m)}/${Number(dd)}`; };
 const fmtPhone = p => { p = String(p || ""); return p.length === 11 ? p.slice(0, 3) + "-" + p.slice(3, 7) + "-" + p.slice(7) : p.length === 10 ? p.slice(0, 2) + "-" + p.slice(2, 6) + "-" + p.slice(6) : p; };
@@ -140,7 +143,7 @@ async function init(){
   if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
   try{
     const [casts, stores] = await Promise.all([
-      sb.from("master_casts").select("id,official_name,temp_name,kana,status,stores").order("kana"),
+      sb.from("master_casts").select("id,official_name,temp_name,kana,status,stores,join_date,leave_date").order("kana"),
       sb.from("master_stores").select("key,label").order("sort"),
     ]);
     M.casts = q(casts) || []; M.stores = q(stores) || [];
@@ -249,7 +252,7 @@ function rowsOf(c){
     course: r.course + (/^\d+$/.test(r.course) ? "分" : "") + (r.extension_count ? " 延長" + r.extension_count : ""), place: [r.area, r.address].filter(Boolean).join(" "), total: r.total,
     status: ["cancel", "tobi", "flowed"].includes(r.status) ? r.status : r.status === "done" ? "done" : "yet", card: r.payment !== "cash",
     memo: (r.memo_log || []).map(m=>m.text).join("\n"), castng: false, marks: null }));
-  const b = c._hist.map(h=>({ src: h.marks && h.marks.kind === "inquiry" ? "inquiry" : "excel", by: (h.marks && h.marks.by) || "", row: h.src_row, date: h.biz_date, store: h.store_key ? storeLabel(h.store_key) : h.store_raw, cast: h.cast_id ? castLabel(h.cast_id) : h.cast_raw, cast_id: h.cast_id,
+  const b = c._hist.map(h=>({ src: h.marks && h.marks.kind === "inquiry" ? "inquiry" : "excel", by: (h.marks && h.marks.by) || "", row: h.src_row, date: h.biz_date, store: h.store_key ? storeLabel(h.store_key) : h.store_raw, cast: h.cast_id && castOn(h.cast_id, h.biz_date) ? castLabel(h.cast_id) : (h.cast_raw || castLabel(h.cast_id)) + (h.cast_id && !castOn(h.cast_id, h.biz_date) ? "（前にいた同じ名前の子）" : ""), cast_id: h.cast_id && castOn(h.cast_id, h.biz_date) ? h.cast_id : null, cast_raw: h.cast_raw,
     course: h.course, place: [h.area, h.place].filter(Boolean).join(" "), total: h.total, status: h.status, card: h.card, memo: h.memo, castng: h.cast_ng, marks: h.marks, hid: h.id }));
   // 台帳エクセルの行が、記録簿の予約と キャスト・お店・総額・場所 まで同じなら、同じ利用を2回書いたもの（日付の打ちまちがいがあっても）
   //   → 出さない・数えない（記録簿の受付と同じ）。キャストNG・備考がある行だけは、消えないように出す（利用の数には入れない）
@@ -345,6 +348,7 @@ function histCard(r){
   return `<div class="hc ${r.status} ${r.castng ? "castng" : ""}">
     <div class="hh"><b>${md(r.date) || "日付なし"}</b>${r.src === "inquiry" ? `<span class="tag" style="background:#E3F2FD;color:#1565C0">📞 問い合わせの記録${r.by ? "（" + esc(r.by) + "）" : ""}</span>${KB.CAN_EDIT ? `<button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11.5px;color:#C0392B" onclick="delInquiry(${r.hid})">🗑 消す</button>` : ""}` : r.src === "excel" ? `<span class="tag">台帳${r.row ? " " + r.row + "行目" : ""}</span>` : ""}${r.dupNote ? `<span class="tag">記録簿の予約と同じ利用（数えない）</span>` : ""}
       ${st ? `<span class="badge ${r.status}">${esc(st)}</span>` : ""}${KB.CAN_EDIT && r.hid && r.src === "excel" && ["tobi", "cancel", "flowed"].includes(r.status) ? `<button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11.5px" onclick="histStatusFix(${r.hid},'${r.status}')">✏️ ${esc(st)}ではない</button>` : ""}${r.castng ?`<span class="badge tobi">🙅 キャストNG</span>${KB.CAN_EDIT && r.hid ? `<button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11.5px" onclick="histNgOff(${r.hid})">NGではない</button>` : ""}` : ""}${r.card ? '<span class="tag">💳 カード</span>' : ""}${colorDots(r.marks)}</div>
+    ${KB.CAN_EDIT && r.hid && r.src === "excel" ? `<button class="btn btn-ghost btn-sm hedit" onclick="histEdit(${r.hid})" title="キャストの名前・内容を直す">✏️ 直す</button>` : ""}
     <div class="hm">${r.cast_id && typeof KBF !== "undefined" ? KBF.img(r.cast_id, 28) : ""}${[r.store, r.cast, r.course, r.place].filter(Boolean).map(esc).join("　・　")}${r.total ? "　・　" + yen(r.total) : ""}</div>
     ${r.memo ? `<div class="hmemo ${memoRed ? "red" : ""}">${hl(r.memo)}</div>` : ""}</div>`;
 }
@@ -526,6 +530,20 @@ async function delCastNg(id){
 }
 // 過去の利用の1行だけ「キャストNGではない」に
 // ✏️ 台帳エクセルの行の「トビ・キャンセル・流れた」を直す（エクセルで背景が赤＝トビ として取りこんだが、ちがった行など）2026/11/19 店長
+/* ✏️ 台帳エクセルから取りこんだ履歴の行を直す：キャストの名前・内容（2026/11/21 店長：前にいたゆい など）
+   キャストの名前が、その日に在籍していた子とぴったりなら、その子につなぐ（写真が出る）。ちがう子・前の子なら、名前だけ */
+async function histEdit(hid){
+  if(!KB.CAN_EDIT || !cur) return;
+  const h = (cur._hist || []).find(x => x.id === hid); if(!h) return;
+  const nowName = h.cast_id && castOn(h.cast_id, h.biz_date) ? castLabel(h.cast_id) : (h.cast_raw || castLabel(h.cast_id) || "");
+  const nm = prompt(`${md(h.biz_date)} のキャストの名前（前にいた同じ名前の子なら、そのまま名前だけでOK）`, nowName); if(nm == null) return;
+  const memo = prompt("内容（メモ）", h.memo || ""); if(memo == null) return;
+  const key = s => String(s || "").normalize("NFKC").replace(/[\s　]/g, "");
+  const hit = M.casts.filter(c => [c.official_name, c.temp_name].some(x => x && key(x) === key(nm)) && castOn(c.id, h.biz_date));
+  const patch = { cast_raw: nm.trim(), cast_id: hit.length === 1 ? hit[0].id : null, memo };
+  try{ q(await sb.from("kb_cust_history").update(patch).eq("id", hid)); toast(hit.length === 1 ? `直しました（${castLabel(hit[0].id)} につなぎました）` : "直しました（名前だけ。今いる子にはつないでいません）"); openCustomer(cur.id); }
+  catch(e){ toast("直せませんでした：" + (e.message || e)); }
+}
 async function histStatusFix(hid, now){
   const opts = [["done", "ふつうに利用した"], ["tobi", "トビ"], ["cancel", "キャンセル"], ["flowed", "流れた"]].filter(([k]) => k !== now);
   const a = prompt(`この回は、ほんとうはどれですか？（番号を入れてください）\n${opts.map(([, l], i) => `${i + 1}：${l}`).join("\n")}`, "1");
