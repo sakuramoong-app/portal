@@ -31,6 +31,21 @@ function dmImgAdd(id){ if(!id) return; dmImgTmp = dmImgTmp || []; if(!dmImgTmp.i
   }
   return __s.apply(this, arguments);
 }; }
+// 公式HPのプロフ（ロボット cast_profiles の1人分）→ ダミーの欄 {age,height,cup,weight,psize,af,rev_af,shasei}
+function dmParseProf(p){
+  const o = {}, N = s => { const m = String(s || "").normalize("NFKC").match(/\d+(\.\d+)?/); return m ? Number(m[0]) : null; };
+  const sz = String(p.size || "").normalize("NFKC");
+  if(N(p.age)) o.age = N(p.age);
+  const t = sz.match(/T\s*(\d{3})/i); if(t) o.height = Number(t[1]);
+  const cup = sz.match(/B\s*\d+\s*[\(（]?\s*([A-K])\s*[\)）]?/i) || sz.match(/([A-K])\s*カップ/i); if(cup) o.cup = cup[1].toUpperCase();
+  const w = sz.match(/(\d{2,3})\s*kg/i); if(w) o.weight = Number(w[1]);
+  if(N(p.psize)) o.psize = N(p.psize);
+  const O = p.options || {}, pick = re => { const k = Object.keys(O).find(x => re.test(x.normalize("NFKC"))); return k ? O[k] : null; };
+  const mk = v => v == null ? null : ({ "◎": "◎", "○": "○", "△": "△", "×": "×" })[v] || null;
+  const raf = mk(pick(/逆\s*(AF|アナル)/i)), af = mk(pick(/^(?!.*逆).*(AF|アナル)/i)), sh = mk(pick(/射精/));
+  if(raf) o.rev_af = raf; if(af) o.af = af; if(sh) o.shasei = sh;
+  return o;
+}
 // 📥 公式HPの管理画面から、そのダミーのプロフを読む（ロボット cast_profiles）
 async function dmReadHp(id, quiet){
   const d = dmList.find(x => x.id === id); if(!d) return;
@@ -40,19 +55,36 @@ async function dmReadHp(id, quiet){
   try{ const r = await hpFn({ action: "cast_profiles", store: d.store_key, nos: [no] }); p = r && r.ok && r.profiles && r.profiles[0]; if(!p || p.error) throw new Error((p && p.error) || (r && r.error) || "読めませんでした"); }
   catch(e){ toast("読めませんでした：" + (e.message || e)); return; }
   const set = (k, v) => { const el = $("dm_" + k); if(el && v != null && v !== "") el.value = v; };
-  const N = s => { const m = String(s || "").normalize("NFKC").match(/\d+(\.\d+)?/); return m ? Number(m[0]) : null; };
-  const sz = String(p.size || "").normalize("NFKC");
-  set("hp_no", no); set("age", N(p.age));
-  const t = sz.match(/T\s*(\d{3})/i); if(t) set("height", Number(t[1]));
-  const cup = sz.match(/B\s*\d+\s*[\(（]?\s*([A-K])\s*[\)）]?/i) || sz.match(/([A-K])\s*カップ/i); if(cup) set("cup", cup[1].toUpperCase());
-  const w = sz.match(/(\d{2,3})\s*kg/i); if(w) set("weight", Number(w[1]));
-  if(N(p.psize)) set("psize", N(p.psize));
-  const O = p.options || {}, pick = re => { const k = Object.keys(O).find(x => re.test(x.normalize("NFKC"))); return k ? O[k] : null; };
-  const mk = v => v == null ? null : ({ "◎": "◎", "○": "○", "△": "△", "×": "×" })[v] || null;
-  const raf = mk(pick(/逆\s*(AF|アナル)/i)), af = mk(pick(/^(?!.*逆).*(AF|アナル)/i)), sh = mk(pick(/射精/));
-  if(raf) set("rev_af", raf); if(af) set("af", af); if(sh) set("shasei", sh);
+  set("hp_no", no); Object.entries(dmParseProf(p)).forEach(([k, v]) => set(k, v));
   try{ q(await sb.from("kb_dummy_names").update({ hp_read_at: new Date().toISOString() }).eq("id", id)); }catch(e){}
   toast(`📥 ${p.name || d.name}（${no}番）のプロフを読みました。見てから「💾 保存」を押してください` + (p.name && p.name !== d.name ? `（公式HPの名前は「${p.name}」）` : ""));
+}
+// 📥 全部まとめて読む：今のお店で、番号があってプロフが空いている子だけ。空いている欄だけ入れて保存する
+const DM_PF = ["age", "height", "cup", "weight", "psize", "af", "rev_af", "shasei"];
+const dmEmpty = (d, k) => d[k] == null || d[k] === "";
+const dmNeedsRead = d => d.active !== false && d.hp_no && ["age", "height", "cup"].some(k => dmEmpty(d, k));
+async function dmReadAll(){
+  const list = dmList.filter(d => d.store_key === dmStore && dmNeedsRead(d));
+  if(!list.length){ toast("プロフが空いている子はいません（番号がない子は、番号を入れてください）"); return; }
+  if(!confirm(`${list.length}人のプロフを公式HPから読んで、空いている欄だけ入れます。いいですか？`)) return;
+  let ok = 0; const errs = [];
+  for(let i = 0; i < list.length; i += 8){
+    const part = list.slice(i, i + 8);
+    toast(`公式HPを読んでいます… ${i + 1}〜${i + part.length}人目／${list.length}人`);
+    let r; try{ r = await hpFn({ action: "cast_profiles", store: dmStore, nos: part.map(x => Number(x.hp_no)) }); }catch(e){ r = { ok: false, error: e.message || e }; }
+    if(!r || !r.ok){ errs.push((r && r.error) || "読めませんでした"); continue; }
+    for(const p of (r.profiles || [])){
+      const d = part.find(y => Number(y.hp_no) === Number(p.no)); if(!d) continue;
+      if(p.error){ errs.push(d.name + "：" + p.error); continue; }
+      const got = dmParseProf(p), u = {};
+      DM_PF.forEach(k => { if(got[k] != null && dmEmpty(d, k)) u[k] = got[k]; });
+      if(!Object.keys(u).length){ errs.push(d.name + "：公式HPにもプロフがありません"); continue; }
+      try{ q(await sb.from("kb_dummy_names").update(Object.assign({ hp_read_at: new Date().toISOString() }, u)).eq("id", d.id)); Object.assign(d, u); ok++; }
+      catch(e){ errs.push(d.name + "：" + (e.message || e)); }
+    }
+  }
+  dmPaint();
+  toast(`📥 ${ok}人のプロフを入れました` + (errs.length ? `（入らなかった子：${errs.join("、")}）` : ""));
 }
 // ＋ 足したら：公式HPの在籍（hp_casts）から同じ名前の番号をさがして、プロフも読む
 { const __a = dmAdd; dmAdd = async function(){
@@ -77,6 +109,8 @@ async function dmReadHp(id, quiet){
       const img = (d.image_cast_ids || []).map(dmCastName), sh = d.shift_cast_id ? dmCastName(d.shift_cast_id) : "";
       if(img.length || sh) info.insertAdjacentHTML("beforeend", `<br><small>${img.length ? `🖼 イメージ：<b>${esc(img.join("・"))}</b>` : ""}${sh ? `${img.length ? "　" : ""}🗓 シフト：<b>${esc(sh)}</b>` : ""}</small>`);
     });
+    const nr = dmList.filter(d => d.store_key === dmStore && dmNeedsRead(d)).length;
+    if(CAN_EDIT) $("dmBody").insertAdjacentHTML("afterbegin", `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><button type="button" class="btn btn-ghost btn-sm" id="dmReadAllBtn" onclick="dmReadAll()" ${nr ? "" : "disabled"}>📥 全部まとめて読む（${nr}人）</button><small style="color:var(--sub)">番号があってプロフが空いている子だけ、公式HPから入れます</small></div>`);
   }catch(e){}
   return r;
 }; }
