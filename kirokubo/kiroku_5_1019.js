@@ -46,14 +46,16 @@ const manualT = x=>{
 function endedOf(x){
   if(!x.c || day !== KB.bizDateOf()) return null;
   const now = nowHour(), msOf = h => { const d0 = Date.parse(day + "T00:00:00+09:00"); return d0 + h * 3600000; };
-  let best = null;
+  let best = null; const man = manualT(x);
+  // 手で動かしたのが、その予約が始まったあと（仕事の途中・終わりの時刻の前）なら、その予約では「振り分け待ち」にしない＝手動が最優先（2026/11/22 店長）
   x.bks.forEach(b => {
     let t = 0;
     if(b.r.status === "done") t = Math.max(Date.parse(b.r.status_at || b.r.updated_at || 0) || 0, Math.min(msOf(b.e), Date.now()));
     else if(b.r.status === "working" && now > b.e) t = msOf(b.e);
+    if(t && man >= (Date.parse(b.r.start_at) || msOf(b.s))) t = 0;
     if(t && (!best || t > best.t)) best = { r: b.r, b, t };
   });
-  if(!best || best.t <= manualT(x)) return null;
+  if(!best || best.t <= man) return null;
   if(workNow(x) && !(workNow(x).r.status === "working" && now > workNow(x).e)) return null;   // いま別の予約の時間なら、仕事中のほう
   return best;
 }
