@@ -1557,7 +1557,7 @@ function paintCastGrid(){
   box.innerHTML = opts.map(o => {
     const c = M.casts.find(x => x.id === o.value); if(!c) return "";
     const tm = (o.textContent.split("　")[1] || "").trim();   // 「名前　12:00〜22:00」の時間
-    const off = o.parentElement && /シフトにない/.test(o.parentElement.label || "");
+    const off = o.parentElement && /シフトにない|今いない/.test(o.parentElement.label || "");
     return `<button type="button" class="cg-c ${o.value === cur ? "on" : ""} ${off ? "off" : ""}" onclick="pickCastGrid('${o.value}')" title="${esc(o.textContent)}">${KBF.img(c, 48, store)}<span class="cg-n">${esc(c.official_name || c.temp_name || "")}</span>${tm ? `<span class="cg-t">${esc(tm)}</span>` : ""}${cgJobs(c.id)}</button>`;
   }).join("");
 }
