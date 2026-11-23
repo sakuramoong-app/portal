@@ -20,7 +20,9 @@
     .v2top{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;align-items:start;background:#FFF4F8;border:2px solid #F3C6D6;border-radius:16px;padding:10px 12px;margin-bottom:10px}
     .v2top .f{margin:0}
     .v2top #f_visit{margin:0}
-    .v2top .v2-phone{order:1} .v2top #mailBar{order:2;margin:0} .v2top .v2-name{order:3} .v2top .v2visit{order:4} .v2top .v2-fs{order:5;grid-column:1/-1}
+    /* 上の枠：①電話｜メールアドレス  ②名前｜メール予約を貼る  ③種別｜お客様のこと  ④探す（2026/11/23 店長） */
+    .v2top .v2-phone{grid-column:1;grid-row:1} .v2top .v2-email{grid-column:2;grid-row:1} .v2top #mailBar{grid-column:2;grid-row:2;margin:0}
+    .v2top .v2-name{grid-column:1;grid-row:2} .v2top .v2visit{grid-column:1;grid-row:3} .v2top .v2-guest{grid-column:2;grid-row:3} .v2top .v2-fs{grid-column:1/-1;grid-row:4}
     .v2top>*,.v2g>*,.v2main,.v2side,.v2s,.v2card{min-width:0}
     body.v2 #formBg .drawer input,body.v2 #formBg .drawer select,body.v2 #formBg .drawer textarea{max-width:100%}
     .v2s,.v2card{overflow-x:auto}
@@ -48,7 +50,7 @@
     .v2flash{animation:v2fl 1.6s ease-out 1;border-radius:12px}
     .v2note{font-size:12px;color:var(--sub,#888);margin:-4px 0 8px}
     @media (max-width:1000px){ .v2grid{grid-template-columns:1fr} .v2side{position:static;max-height:none} }
-    @media (max-width:700px){ .v2top{grid-template-columns:1fr} .v2req .v2g{grid-template-columns:1fr} }
+    @media (max-width:700px){ .v2top{grid-template-columns:1fr} .v2top>*{grid-column:auto !important;grid-row:auto !important} .v2top .v2-phone{order:1} .v2top .v2-email{order:2} .v2top #mailBar{order:3} .v2top .v2-name{order:4} .v2top .v2visit{order:5} .v2top .v2-guest{order:6} .v2top .v2-fs{order:7} .v2req .v2g{grid-template-columns:1fr} }
   </style>`);
 
   function build(){
@@ -67,6 +69,9 @@
     if(ph){ ph.classList.add("v2-phone"); top.appendChild(ph); }
     if(nm){ nm.classList.add("v2-name"); top.appendChild(nm); }
     if(vis){ vis.classList.add("v2visit"); top.appendChild(vis); }
+    const em = fOf("f_email"), gu = fOf("f_guest");
+    if(em){ em.classList.add("v2-email"); top.appendChild(em); }
+    if(gu){ gu.classList.add("v2-guest"); top.appendChild(gu); }
     if(fs){ fs.classList.add("v2-fs"); top.appendChild(fs); }
 
     const grid = el("div", "v2grid"); root.appendChild(grid);
@@ -82,7 +87,12 @@
     full($("dummyWrap"));
     put(g, fOf("f_course"), fOf("endView"));
     full(document.querySelector(".feechk"));
+    full(fOf("f_discount"));   // 割引・女装（キューティ）・OP・延長・デートはコースの近く（2026/11/23 店長）
+    full($("dressWrap"));
+    full($("optDetails"));
     put(g, fOf("f_areaSel"), fOf("f_place"));
+    full(fOf("f_map"));   // 地図のURL・交通費はエリアの近く（2026/11/23 店長）
+    { const tr = $("f_transport"); if(tr) full(tr.closest(".row2") || fOf("f_transport")); }
     full($("afBox"));
     full(fOf("f_play"));   // 希望プレイは AF・逆AF のすぐ下（2026/11/23 店長）
     put(g, fOf("f_pay"));
@@ -91,14 +101,9 @@
     put(g, fOf("f_status_at"));
 
 
-    // ---------- 左：そのほか（必要なときだけ） ----------
-    const more = el("details", "v2card v2more", `<summary>＋ そのほか（割引・OP・延長・交通費・地図・メール・お客様のこと）</summary>`); main.appendChild(more);
-    // ---------- 左：料金 ----------
+    // ---------- 左：料金 ----------（「そのほか」の欄は、全部それぞれ近くの欄へ移したのでなくした。2026/11/23 店長）
     const calc = el("div", "v2card", `<h3>💴 料金</h3>`); main.appendChild(calc);
     put(calc, $("calc"), $("backDet"));
-    put(more, fOf("f_discount"), $("dressWrap"), $("optDetails"));
-    const tr = $("f_transport"); if(tr) put(more, tr.closest(".row2") || fOf("f_transport"));
-    put(more, fOf("f_map"), fOf("f_email"), fOf("f_guest"));
 
     // ---------- 右：説明・チェック・注意 ----------
     // 右の枠：見出しの「▲ 閉じる／▼ 開く」でたためる（たたんだのは覚えておく。2026/11/23 店長「お客さんのことは閉じるボタンほしい」）
@@ -114,10 +119,14 @@
     put(ms, $("netReplyWrap"));
     sec("📝 備考・NG", [fOf("formLog"), "laterBox", $("delBtn") && $("delBtn").parentNode]);
 
-    // ---------- のこり（今までの①〜⑥の枠）：何も消さないように「そのほか」のいちばん下へ ----------
+    // ---------- のこり（今までの①〜⑥の枠）：見えるものがのこっていたら、何も消さないように料金の下の「のこり」へ。空なら出さない ----------
+    //   （中に <style> だけのこった空の枠が、四角い枠に見えていた。2026/11/23）
+    let rest = null;
     drawer.querySelectorAll(".step").forEach(s => {
       const h = s.querySelector("h3"); if(h) h.remove();
-      if(s.textContent.trim() || s.querySelector("input,select,textarea,button")){ s.classList.add("v2oldleft"); more.appendChild(s); }
+      const c = s.cloneNode(true); c.querySelectorAll("style,script,input[type=hidden]").forEach(x => x.remove());
+      const live = c.textContent.trim() || c.querySelector("input:not([type=hidden]),select,textarea,button");
+      if(live){ if(!rest){ rest = el("details", "v2card v2more", `<summary>＋ のこりの項目</summary>`); main.appendChild(rest); } s.classList.add("v2oldleft"); rest.appendChild(s); }
       else s.classList.add("v2old");
     });
 
