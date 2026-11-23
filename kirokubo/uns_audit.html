@@ -38,6 +38,7 @@
   </div>
 </div>
 <script>
+const $ = id => document.getElementById(id), sb = KB.sb, q = KB.q;
 const yen = n => (Number(n) || 0).toLocaleString("ja-JP") + "円";
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 const md = s => { const [y, m, d] = String(s).split("-").map(Number); return `${y}/${m}/${d}`; };
