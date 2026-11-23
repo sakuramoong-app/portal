@@ -709,12 +709,19 @@
       </div>
       <div id="castCal" style="display:none"></div>
       <div class="row1"><div class="f"><label>コース<span class="req">必須</span> <a href="javascript:void(0)" class="edit-only" onclick="openPriceEdit()" style="font-size:12.5px;font-weight:800;color:var(--pink-deep);margin-left:6px">✏️ コース・料金を直す</a></label><select id="f_course" onchange="recalc()"></select></div></div>
+      <!-- コースの真下：キューティのNH料金・極門の入会金（見落とさないように、色つきで大きく。2026/11/23 店長） -->
+      <div class="feechk">
+        <label id="nhWrap"><input type="checkbox" id="f_nh" onchange="recalc()"> 💄 キューティ：NH料金で取った</label>
+        <label id="admWrap"><input type="checkbox" id="f_adm" onchange="recalc()"> 🎫 入会金あり（極門の新規）</label>
+      </div>
+      <style>
+        .feechk{display:flex;gap:10px;flex-wrap:wrap;margin:-2px 0 10px}
+        .feechk label{display:flex;align-items:center;gap:8px;background:#FFF4C2;border:2px solid #E0A800;border-radius:12px;padding:9px 14px;font-size:16px;font-weight:800;color:#6b4e00;cursor:pointer}
+        .feechk label input{width:22px;height:22px;margin:0}
+        .feechk label:has(input:checked){background:#E3F8EA;border-color:#2f9e6e;color:#1f6b45}
+      </style>
       <div class="row1"><div class="f"><label>割引（円）・割引の名前</label>
         <div style="display:flex;gap:6px"><input type="number" id="f_discount" min="0" value="0" oninput="recalc()" style="max-width:140px"><input id="f_discnote" placeholder="例：口コミ割（キャストへの連絡にも出ます）" maxlength="60" oninput="recalc()"></div></div></div>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px;font-size:14px;font-weight:800">
-        <label id="nhWrap"><input type="checkbox" id="f_nh" onchange="recalc()"> キューティ：NH料金で取った</label>
-        <label id="admWrap"><input type="checkbox" id="f_adm" onchange="recalc()"> 入会金あり（極門の新規）</label>
-      </div>
       <!-- 👗 キューティー：お客さんの女装（身長・体重・ウィッグ・洋服） -->
       <div id="dressWrap" style="display:none;background:#FFF0F7;border:1.5px solid #F7C3DA;border-radius:12px;padding:8px 10px;margin-bottom:8px">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-weight:800;font-size:13.5px;color:#b0306a">👗 お客さんの女装
@@ -883,8 +890,8 @@
 <script src="cast_share.js?v=7"></script><!-- 📲 テストのキャストは精算をアプリに送る -->
 <script src="kiroku_4_ichiran.js?v=10"></script>
 <script src="kiroku_5_1019.js?v=17"></script>
-<script src="kiroku_6_1020.js?v=14"></script>
-<script src="kiroku_7_1025.js?v=41"></script>
+<script src="kiroku_6_1020.js?v=15"></script>
+<script src="kiroku_7_1025.js?v=42"></script>
 <script src="kb_backtable.js?v=3"></script><!-- 💴 バック表（台帳と同じ。受付の ✏️ コース・料金 から） -->
 <script src="kiroku_8_layout.js?v=8"></script>
 <script src="kiroku_9_mail.js?v=5"></script>

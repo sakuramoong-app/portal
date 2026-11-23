@@ -661,6 +661,12 @@ function rcEndWarn(r){
   return `<span class="rc-endwarn" title="コース（${esc(r.course)}）・延長・デートから出すと ${hm(new Date(want).toISOString())} までです。開いて「💾 登録する」を押すと直ります">⚠️ 終了は${hm(new Date(want).toISOString())}のはず</span>`;
 }
 document.head.insertAdjacentHTML("beforeend", `<style>.rc-endwarn{display:inline-block;margin-left:4px;background:#FFF4E5;border:1.5px solid #FFB547;color:#a35a00;font-size:12px;font-weight:800;border-radius:99px;padding:1px 8px;white-space:nowrap}</style>`);
+// 名前の横に 新規・店リピ・本指名（開かなくてもわかるように。2026/11/23 店長）
+function rcVisitChip(r){
+  const v = { new: ["新規", "#E3F2FD", "#1565C0"], repeat: ["店リピ", "#E8F5E9", "#2E7D32"], honshi: ["💗本指名", "#FCE4EC", "#C2185B"] }[r.visit_kind];
+  return v ? `<span class="rc-visit" style="background:${v[1]};color:${v[2]}">${v[0]}</span>` : "";
+}
+document.head.insertAdjacentHTML("beforeend", `<style>.rc-visit{display:inline-block;margin-left:4px;font-size:12px;font-weight:800;border-radius:99px;padding:1px 8px;white-space:nowrap;vertical-align:middle}</style>`);
 function resCard(r, i){
   const c = r.kb_customers || {}, ed = KB.CAN_EDIT, cx = ["cancel", "tobi", "flowed"].includes(r.status);
   // キャストの枠の中の何番目の予約か：予約①〜⑥（色も6色。7件目からは色をくり返す）2026/11/4
@@ -694,7 +700,7 @@ function resCard(r, i){
       ${ed ? `<button type="button" class="rc-hotel" onclick="openHotelBox(${r.id})" title="ホテル名・部屋番号・地図（開かずに入れられる）">🏨 ${esc(r.address || "ホテル・部屋を入れる")}</button>${cx ? "" : rcHotelWarn(r)}` : r.address ? `<span class="rc-k">🏨 ${esc(r.address)}</span>` : ""}${r.address ? `<button type="button" class="rc-hcopy" title="ホテル名と部屋番号をコピー" onclick="rcCopyAddr(${r.id})">📋</button>` : ""}
       <span class="rc-k">${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""}${r.extension_count ? "＋延長" + r.extension_count : ""}</span>
       <span class="rc-k">総額 <b class="rc-yen">${yen(r.total)}</b><small>（${r.payment === "cash" && Number(r.card_total) > 0 ? "現金＋カード " + yen(Number(r.card_total)) : esc(PAY_LABEL[r.payment] || "")}）</small></span>
-      <span class="rc-k">👤<b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${castNgPairs.has(r.customer_id + "|" + r.cast_id) && !cx ? `<span class="rc-castng" title="このお客さんは、このキャストのNGに入っています（キャストNG）">🚫 キャストNGのお客さん</span>` : ""}${custTagsHtml(c)}${digits(c.phone || "").length >= 6 ? ` <span class="tel">📞${esc(c.phone)}</span>` : ` <span class="rc-nophone">📞番号まだ</span>`}</span>
+      <span class="rc-k">👤<b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${rcVisitChip(r)}${castNgPairs.has(r.customer_id + "|" + r.cast_id) && !cx ? `<span class="rc-castng" title="このお客さんは、このキャストのNGに入っています（キャストNG）">🚫 キャストNGのお客さん</span>` : ""}${custTagsHtml(c)}${digits(c.phone || "").length >= 6 ? ` <span class="tel">📞${esc(c.phone)}</span>` : ` <span class="rc-nophone">📞番号まだ</span>`}</span>
       ${told}
 
       ${mates.map(m => `<button type="button" class="rc-mate" onclick="rcJump(${m.id})">👥 ${esc(castName(m.cast_id))}の予約へ</button>`).join("")}
