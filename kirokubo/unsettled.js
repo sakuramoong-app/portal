@@ -113,11 +113,12 @@ async function unsLoad(){
   UNSD = [];
   try{
     const from = new Date(new Date(day + "T12:00:00Z").getTime() - UNS_DAYS * 864e5).toISOString().slice(0, 10);
-    const [rr, cc] = await Promise.all([
-      sb.from("kb_reservations").select("*").gte("biz_date", from).lt("biz_date", day).eq("deleted", false).not("cast_id", "is", null),
-      sb.from("kb_cast_days").select("*").gte("biz_date", from).lt("biz_date", day),
+    // 1回に1000件までしか返らないので、1000件ずつ全部読む（60日分が1000件をこえて、予約がぬけて未精算の金額がずれていた。2026/11/23）
+    const all = async mk => { let out = []; for(let i = 0; i < 50; i++){ const r = await mk().range(i * 1000, i * 1000 + 999); if(r.error) throw r.error; out = out.concat(r.data || []); if((r.data || []).length < 1000) break; } return out; };
+    const [resv, cds] = await Promise.all([
+      all(() => sb.from("kb_reservations").select("*").gte("biz_date", from).lt("biz_date", day).eq("deleted", false).not("cast_id", "is", null).order("id")),
+      all(() => sb.from("kb_cast_days").select("*").gte("biz_date", from).lt("biz_date", day).order("biz_date").order("cast_id")),
     ]);
-    const resv = rr.data || [], cds = cc.data || [];
     const byDay = {}; resv.forEach(x => { (byDay[x.biz_date] = byDay[x.biz_date] || []).push(x); });
     Object.keys(byDay).sort().forEach(d => {
       const list = byDay[d];

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>未精算の点検│サクラG</title>
+<link rel="icon" type="image/png" href="../favicon.png?v=3">
+<link rel="stylesheet" href="kb.css"><link rel="stylesheet" href="kb_theme.css?v=1">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
+<script src="kb_common.js?v=28"></script>
+<script src="kb_money.js?v=4"></script>
+<style>
+  body{font-size:14.5px;}
+  .wrap{max-width:980px;}
+  .box{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;}
+  .lead{font-size:13px;color:var(--sub);line-height:1.7;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;}
+  td.n{text-align:right;font-variant-numeric:tabular-nums;}
+  tr.ng td{background:#FFF1F1;}
+  .ok{color:#1f7a55;font-weight:800;} .bad{color:#B0213F;font-weight:800;}
+</style>
+</head>
+<body>
+<!-- 🔎 未精算の点検（2026/11/23）
+     記録簿の「📒 未精算」は、過去60日分の予約を1回で読んでいたため、1000件をこえると予約がぬけて、未精算の金額が少なく出ていた（11/22 ムム 51,000 → 35,000）。
+     このページは、今までに「未精算をいっしょに精算」した記録（kb_cast_days.settle_snapshot.uns）を全部読み、
+     その日の予約を全部読みなおして計算しなおし（kb_money.js の calcCast）、記録の金額とくらべる。読むだけ（何も直さない） -->
+<div class="wrap">
+  <header class="kbh"><h1>🔎 未精算の点検</h1></header>
+  <div id="gate" class="gate">読み込み中…</div>
+  <div id="main" style="display:none">
+    <div class="box"><p class="lead">今までに「📒 未精算」を<b>ほかの日といっしょに精算した記録</b>を全部、予約を読みなおして計算しなおし、そのときの金額とくらべます。<br>
+      <b class="bad">ずれ</b>があるものは、そのときの未精算の金額がまちがっていた可能性があります（そのあと予約を直した場合も、ずれとして出ます）。<b>読むだけで、何も直しません。</b></p></div>
+    <div class="box" id="sum"></div>
+    <div class="box"><table><thead><tr><th>まとめて精算した日</th><th>キャスト</th><th>未精算の日</th><th class="n">そのときの金額</th><th class="n">計算しなおした金額</th><th class="n">ずれ</th></tr></thead><tbody id="rows"></tbody></table></div>
+  </div>
+</div>
+<script>
+const yen = n => (Number(n) || 0).toLocaleString("ja-JP") + "円";
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const md = s => { const [y, m, d] = String(s).split("-").map(Number); return `${y}/${m}/${d}`; };
+// 1000件ずつ全部読む
+async function all(mk){ let out = []; for(let i = 0; i < 200; i++){ const r = await mk().range(i * 1000, i * 1000 + 999); if(r.error) throw r.error; out = out.concat(r.data || []); if((r.data || []).length < 1000) break; } return out; }
+async function init(){
+  if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください"; return; }
+  try{
+    $("gate").textContent = "精算の記録を読んでいます…";
+    const [snaps, casts, rules] = await Promise.all([
+      all(() => sb.from("kb_cast_days").select("biz_date,cast_id,settle_snapshot").not("settle_snapshot", "is", null).order("biz_date").order("cast_id")),
+      all(() => sb.from("master_casts").select("id,official_name,temp_name").order("id")),
+      all(() => sb.from("kb_cast_rules").select("*").order("id")),
+    ]);
+    const nm = id => { const c = casts.find(x => x.id === id); return c ? (c.official_name || c.temp_name) : id; };
+    const items = [];
+    snaps.forEach(cd => ((cd.settle_snapshot || {}).uns || []).forEach(u => { if(u && u.kind === "day" && u.date) items.push({ paidOn: cd.biz_date, cast: cd.cast_id, date: u.date, rec: Number(u.amount) || 0 }); }));
+    if(!items.length){ $("gate").style.display = "none"; $("main").style.display = ""; $("sum").innerHTML = `<b class="ok">まとめて精算した未精算は、まだありません。</b>`; return; }
+    const dates = [...new Set(items.map(x => x.date))];
+    $("gate").textContent = `予約を読みなおしています…（${dates.length}日分）`;
+    let resv = [], cds = [];
+    for(let i = 0; i < dates.length; i += 20){
+      const ds = dates.slice(i, i + 20);
+      const [a, b] = await Promise.all([
+        all(() => sb.from("kb_reservations").select("*").in("biz_date", ds).eq("deleted", false).order("id")),
+        all(() => sb.from("kb_cast_days").select("*").in("biz_date", ds).order("biz_date").order("cast_id")),
+      ]);
+      resv = resv.concat(a); cds = cds.concat(b);
+    }
+    let bad = 0;
+    const rowsH = items.map(x => {
+      const allR = resv.filter(r => r.biz_date === x.date && r.cast_id === x.cast);
+      const cd = cds.find(c => c.biz_date === x.date && c.cast_id === x.cast) || {};
+      const c = KBM.calcCast({ all: allR, cd, rules: rules.filter(r => r.cast_id === x.cast && (r.valid_from || "2000-01-01") <= x.date && (!r.valid_to || r.valid_to > x.date)), day: x.date });
+      const now = Number(c.drop) || 0, diff = now - x.rec;
+      if(diff) bad++;
+      return `<tr class="${diff ? "ng" : ""}"><td>${md(x.paidOn)}</td><td>${esc(nm(x.cast))}</td><td>${md(x.date)}</td><td class="n">${yen(x.rec)}</td><td class="n">${yen(now)}</td><td class="n ${diff ? "bad" : "ok"}">${diff ? (diff > 0 ? "＋" : "−") + yen(Math.abs(diff)) : "OK"}</td></tr>`;
+    }).join("");
+    $("rows").innerHTML = rowsH;
+    $("sum").innerHTML = bad ? `<b class="bad">⚠ ずれ ${bad}件</b>（全部で ${items.length}件の未精算をくらべました）。赤い行を店長が確かめてください。「＋」は、そのとき少なく精算していた（まだもらえていない分がある）可能性です。`
+                              : `<b class="ok">✅ ずれはありませんでした</b>（全部で ${items.length}件の未精算をくらべました）`;
+  }catch(e){ $("gate").textContent = "読めませんでした：" + (e.message || e); return; }
+  $("gate").style.display = "none"; $("main").style.display = "";
+}
+init();
+</script>
+</body>
+</html>
