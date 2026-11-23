@@ -1142,7 +1142,24 @@ function visitFrom(past, cid){
   if(!prev.length) return "new";
   // 今回フリー（フリー・特別フリー・イベフリー）なら、前にその子を指名していても本指名ではない → 店リピ（2026/11/9 内勤さん）
   if($("f_free") && $("f_free").value) return "repeat";
-  return cid && prev.some(p=>p.cast_id === cid) ? "honshi" : "repeat";
+  // 本指名は「同じお店のグループで、その子を利用していた」とき（2026/11/23 店長）。別のグループだけなら店リピ（種別の下に「判断して」と出す）
+  //   お店をまだ選んでいないときは、今までどおり（どのお店でもその子を利用していれば本指名）
+  const mine = cid ? prev.filter(p => p.cast_id === cid) : [];
+  if(!mine.length) return "repeat";
+  const g = storeGrp($("f_store") && $("f_store").value);
+  return !g || mine.some(p => storeGrp(p.store_key) === g) ? "honshi" : "repeat";
+}
+// お店のグループ：サクラムーンG（サクラ・ラナ・ピーチ・ドレス・逆AF・キューティ）／極門／エイティーン
+const STORE_GRP_LABEL = { sakura: "サクラムーンG", gokumon: "極門", eighteen: "エイティーン" };
+function storeGrp(k){ return !k ? "" : k === "gokumon" ? "gokumon" : k === "eighteen" ? "eighteen" : "sakura"; }
+// 別のグループでだけ、その子を利用していた（→「判断してください」）。そのグループの名前を返す
+function otherGrpNomi(cid){
+  const g = storeGrp($("f_store") && $("f_store").value);
+  if(!cid || !g || !(Array.isArray(custSeen) || Array.isArray(custPast))) return [];
+  const fd = visitDay();
+  const mine = seenNorm().filter(p => p.cast_id === cid && p.status === "done" && !(editing && p.id === editing.id) && p.biz_date && p.biz_date < fd);
+  if(!mine.length || mine.some(p => storeGrp(p.store_key) === g)) return [];
+  return [...new Set(mine.map(p => STORE_GRP_LABEL[storeGrp(p.store_key)] || "ほかのお店"))];
 }
 // その回がフリーだったか（記録簿の予約：free_kind／台帳エクセル：フリーの欄に「フリー」「イベ」など）
 function isFreeVisit(p){ return !!(p && p.free_kind && String(p.free_kind).trim()); }
@@ -1473,7 +1490,17 @@ function lastNomiPaint(){
   if(!el){ el = document.createElement("span"); el.id = "lastNomi"; el.style.cssText = "font-size:13px;font-weight:800;color:#b0306a;margin-left:8px;align-self:center"; $("f_visit").appendChild(el); }
   const d = visit === "honshi" ? lastNomiOf($("f_cast").value) : "";
   el.textContent = d ? `💗 前回 ${d}` : "";
+  // 別のお店のグループでだけ、その子を利用していた → 判断してもらう（2026/11/23 店長）
+  let w = $("visitWarn");
+  if(!w){ w = document.createElement("div"); w.id = "visitWarn"; w.style.cssText = "margin-top:6px;background:#FFF4E5;border:2px solid #FFB547;color:#8a4b00;border-radius:10px;padding:6px 10px;font-size:13.5px;font-weight:800"; $("f_visit").insertAdjacentElement("afterend", w); }
+  const og = otherGrpNomi($("f_cast").value);
+  w.style.display = og.length ? "" : "none";
+  w.textContent = og.length ? `⚠ 種別：過去に別店舗（${og.join("・")}）で指名した履歴があります。本指名にするかの判断をして下さい` : "";
 }
+// お店を変えたら、種別を決めなおす（本指名は同じお店のグループのときだけなので）2026/11/23
+{ const __osVisit = onStore; onStore = function(){ const r = __osVisit.apply(this, arguments);
+  try{ if(custPast && $("f_cast").value) autoVisit(visitFrom(custSeen || custPast, $("f_cast").value)); }catch(e){}
+  return r; }; }
 { const __rcNomi = recalc; recalc = function(){ const r = __rcNomi.apply(this, arguments);
     try{ lastNomiPaint(); const d = visit === "honshi" ? lastNomiOf($("f_cast").value) : "";
       if(d) $("msg").value = $("msg").value.replace(/^(【名前】[^\n]*本指名)(?!（前回)/m, `$1（前回 ${d}）`); }catch(e){}

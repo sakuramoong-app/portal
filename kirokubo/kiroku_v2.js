@@ -36,7 +36,11 @@
     .v2more[open]>summary{margin-bottom:8px}
     .v2side{position:sticky;top:0;max-height:calc(100vh - 130px);overflow-y:auto;padding-right:4px}
     .v2s{background:#FBFAFF;border:1.5px solid #E6E0F5;border-radius:14px;padding:8px 10px;margin-bottom:10px}
-    .v2s>h4{margin:0 0 6px;font-size:14px;color:#5E35B1}
+    .v2s>h4{margin:0 0 6px;font-size:14px;color:#5E35B1;display:flex;align-items:center;gap:8px}
+    .v2s>h4>span{flex:1}
+    .v2tog{border:1.5px solid #D9C9F5;background:#fff;color:#5E35B1;border-radius:99px;padding:3px 12px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit}
+    .v2s.v2closed>:not(h4){display:none !important}
+    .v2s.v2closed>h4{margin:0}
     .v2s.v2empty{display:none}
     .v2old{display:none}
     .v2note{font-size:12px;color:var(--sub,#888);margin:-4px 0 8px}
@@ -93,7 +97,10 @@
     put(more, fOf("f_map"), fOf("f_email"), fOf("f_guest"));
 
     // ---------- 右：説明・チェック・注意 ----------
-    const sec = (title, ids) => { const s = el("div", "v2s", `<h4>${title}</h4>`); ids.forEach(id => { const n = typeof id === "string" ? $(id) : id; if(n) s.appendChild(n); }); side.appendChild(s); return s; };
+    // 右の枠：見出しの「▲ 閉じる／▼ 開く」でたためる（たたんだのは覚えておく。2026/11/23 店長「お客さんのことは閉じるボタンほしい」）
+    const closedKey = "kbV2Closed", closed = (() => { try{ return JSON.parse(localStorage.getItem(closedKey) || "{}"); }catch(e){ return {}; } })();
+    const sec = (title, ids) => { const key = title, s = el("div", "v2s" + (closed[key] ? " v2closed" : ""), `<h4><span>${title}</span><button type="button" class="v2tog">${closed[key] ? "▼ 開く" : "▲ 閉じる"}</button></h4>`);
+      s.querySelector(".v2tog").onclick = () => { const c = s.classList.toggle("v2closed"); s.querySelector(".v2tog").textContent = c ? "▼ 開く" : "▲ 閉じる"; closed[key] = c; try{ localStorage.setItem(closedKey, JSON.stringify(closed)); }catch(e){} }; ids.forEach(id => { const n = typeof id === "string" ? $(id) : id; if(n) s.appendChild(n); }); side.appendChild(s); return s; };
     sec("📌 受付のルール・お知らせ", ["receptionNotes"]);
     sec("🙋 お客さんのこと", ["custInfo"]);
     sec("👤 キャストのこと", ["castInfo", "castChecks", "castTimeline", "neighborBox", "castCal"]);
