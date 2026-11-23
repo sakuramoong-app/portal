@@ -499,7 +499,7 @@ async function loadCallAlerts(){
   try{
     const today = KB.bizDateOf();
     callAlertRows = q(await sb.from("kb_reservations").select("*")
-      .in("biz_date", [addDays(today, -1), today, addDays(today, 1)]).not("status", "in", "(done,cancel,tobi,flowed)").eq("deleted", false)) || [];   // ほかの状態は「⏰ 時刻」をすぎたかを見る（SQL 182）
+      .in("biz_date", [addDays(today, -1), today, addDays(today, 1)]).not("status", "in", "(done,cancel,tobi,flowed)").eq("deleted", false)) || [];   // 1000件OK：3日分の、まだ終わっていない予約だけ   // ほかの状態は「⏰ 時刻」をすぎたかを見る（SQL 182）
   }catch(e){ callAlertRows = []; }
   renderCallAlerts();
 }

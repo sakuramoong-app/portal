@@ -212,7 +212,7 @@ async function readRange(from, to){
   const [a, b, c] = await Promise.all([
     pageAll(() => sb.from("kb_cast_days").select("*").gte("biz_date", from).lt("biz_date", to).order("biz_date").order("cast_id")),
     pageAll(() => sb.from("kb_reservations").select(RESV_COLS).gte("biz_date", from).lt("biz_date", to).eq("deleted", false).order("id")),
-    sb.from("kb_staff_work").select("*").gte("biz_date", from).lt("biz_date", to),
+    pageAll(() => sb.from("kb_staff_work").select("*").gte("biz_date", from).lt("biz_date", to).order("biz_date").order("staff_id")),
   ]);
   // 内勤日払い：想定店落ち（F）からは、どこから払ったか（回収金・キキララ）に関係なく全部引く（記録簿の「今日の店落ち」と同じ）
   R.cds = q(a) || []; R.resv = q(b) || []; R.staff = (c.error ? [] : (c.data || [])).filter(x => Number(x.day_paid));   // まだ払っていない日払いも（店落ちからは引く・回収金には残っている）
@@ -228,8 +228,8 @@ async function readRange(from, to){
   try{ const rr = await sb.from("kb_cast_days").select("biz_date,cast_id,settle_snapshot").gte("settle_snapshot->refund->>kiki_returned_on", from).lt("settle_snapshot->refund->>kiki_returned_on", to);
     R.rfRet = rr.error ? [] : (rr.data || []).filter(c => { const f = c.settle_snapshot && c.settle_snapshot.refund; return f && f.src === "kiki" && f.kiki_returned_on && f.kiki_returned_on >= from && f.kiki_returned_on < to; }); }catch(e){}
   try{
-    R.col = q(await sb.from("kb_collections").select("*").gte("biz_date", from).lt("biz_date", to)) || [];
-    R.ho = q(await sb.from("kb_handovers").select("*").gte("biz_date", from).lt("biz_date", to)) || [];
+    R.col = q(await pageAll(() => sb.from("kb_collections").select("*").gte("biz_date", from).lt("biz_date", to).order("biz_date").order("cast_id"))) || [];
+    R.ho = q(await pageAll(() => sb.from("kb_handovers").select("*").gte("biz_date", from).lt("biz_date", to).order("biz_date"))) || [];
   }catch(e){ R.no171 = true; }
   return R;
 }
@@ -401,7 +401,7 @@ async function loadDay(quiet){   // quiet：保存のあと（「読み込み中
     // 📮 封筒ごとチェック：この日にいっしょに精算した、ほかの日の精算（その日の「はず」を見る）
     R.envX = [];
     try{ const xd = [...new Set(R.cds.filter(c => c.biz_date === day && c.settled && c.settle_snapshot && Array.isArray(c.settle_snapshot.uns)).flatMap(c => c.settle_snapshot.uns.filter(x => x.kind === "day" && x.date).map(x => x.date)))];
-      if(xd.length){ const ex = await sb.from("kb_cast_days").select("biz_date,cast_id,settle_snapshot,plus_items").in("biz_date", xd); R.envX = ex.error ? [] : (ex.data || []); } }catch(e){}
+      if(xd.length){ const ex = await pageAll(() => sb.from("kb_cast_days").select("biz_date,cast_id,settle_snapshot,plus_items").in("biz_date", xd).order("biz_date").order("cast_id")); R.envX = ex.error ? [] : (ex.data || []); } }catch(e){}
     R.unsMade = [];
     try{ const um = await sb.from("kb_unsettled").select("cast_id,biz_date,amount,done_on,source,note").eq("biz_date", day); R.unsMade = um.error ? [] : (um.data || []).filter(x => x.biz_date === day && Number(x.amount)); }catch(e){}
     // 💴 キキララから立て替えた返金で、まだキキララへ返していないもの（どの日の分でも）2026/11/15
@@ -616,11 +616,11 @@ async function loadEnvSet(){
     .filter(c => { const s = c.settle_snapshot || {}; return !(s.paidOn && !s.only && s.paidOn !== c.biz_date); });   // いっしょに精算した日は、その封筒の中
   const days = [...new Set(cds.map(c => c.biz_date))], R2 = { cds, resv: [], col: [], unsMade: [], envX: [] };
   if(days.length){
-    try{ R2.resv = q(await sb.from("kb_reservations").select(RESV_COLS).in("biz_date", days).eq("deleted", false)) || []; }catch(e){}
-    try{ R2.col = q(await sb.from("kb_collections").select("*").in("biz_date", days)) || []; }catch(e){}
-    try{ const um = await sb.from("kb_unsettled").select("cast_id,biz_date,amount,done_on,source,note").in("biz_date", days); R2.unsMade = um.error ? [] : (um.data || []); }catch(e){}
+    try{ R2.resv = q(await pageAll(() => sb.from("kb_reservations").select(RESV_COLS).in("biz_date", days).eq("deleted", false).order("id"))) || []; }catch(e){}
+    try{ R2.col = q(await pageAll(() => sb.from("kb_collections").select("*").in("biz_date", days).order("biz_date").order("cast_id"))) || []; }catch(e){}
+    try{ const um = await pageAll(() => sb.from("kb_unsettled").select("cast_id,biz_date,amount,done_on,source,note").in("biz_date", days).order("id")); R2.unsMade = um.error ? [] : (um.data || []); }catch(e){}
     const xd = [...new Set(cds.flatMap(c => (c.settle_snapshot && Array.isArray(c.settle_snapshot.uns) ? c.settle_snapshot.uns : []).filter(x => x.kind === "day" && x.date).map(x => x.date)))];
-    if(xd.length){ try{ const ex = await sb.from("kb_cast_days").select("biz_date,cast_id,settle_snapshot,plus_items").in("biz_date", xd); R2.envX = ex.error ? [] : (ex.data || []); }catch(e){} }
+    if(xd.length){ try{ const ex = await pageAll(() => sb.from("kb_cast_days").select("biz_date,cast_id,settle_snapshot,plus_items").in("biz_date", xd).order("biz_date").order("cast_id")); R2.envX = ex.error ? [] : (ex.data || []); }catch(e){} }
   }
   const rows = [];
   cds.forEach(c => { const r = rowsFor(c.biz_date, R2).find(x => x.id === c.cast_id); if(r && r.s && !rows.some(x => x.id === r.id && x.day === r.day)) rows.push(r); });
@@ -1552,7 +1552,7 @@ async function loadMonth(){
   $("dayArea").innerHTML = `<div class="lead">読み込み中…</div>`;
   try{
     const [R, sw, rates] = await Promise.all([readRange(from, to),
-      sb.from("kb_staff_work").select("*").gte("biz_date", from).lt("biz_date", to).order("biz_date"),
+      pageAll(() => sb.from("kb_staff_work").select("*").gte("biz_date", from).lt("biz_date", to).order("biz_date").order("staff_id")),
       sb.from("kb_staff_rates").select("staff_id,record_name,from_date,hourly").order("from_date"), bagDiffLoad()]);
     if(mode !== "month" || $("day").value.slice(0, 7) !== ym) return;
     MO = Object.assign(R, { ym, from, to, sw: sw.error ? [] : (sw.data || []), rates: rates.error ? [] : (rates.data || []) });

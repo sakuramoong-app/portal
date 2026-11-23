@@ -451,12 +451,14 @@ function unsListToggle(){ const el = document.getElementById("unsList"); if(!el)
 /* ---------- 📜 精算・未精算のログ（月ごと）：処理した日時・内勤（ログイン名）・キャスト・営業日・種類・内容。フィルターつき ---------- */
 let SLOG = { ym: "", rows: [], f: { cast: "", day: "", kind: "", by: "", at: "" } };
 function slogToggle(){ const el = document.getElementById("slogPanel"); if(!el) return; const on = el.style.display === "none"; el.style.display = on ? "" : "none"; if(on){ if(!SLOG.ym) SLOG.ym = day.slice(0, 7); slogLoad(); } }
+// 1回に1000件までしか返らないので、1000件ずつ全部読む（{ data, error } の形で返す）2026/11/23
+async function unsPageAll(mk){ let out = []; for(let i = 0; i < 50; i++){ const r = await mk().range(i * 1000, i * 1000 + 999); if(r.error) return { data: null, error: r.error }; out = out.concat(r.data || []); if((r.data || []).length < 1000) break; } return { data: out, error: null }; }
 async function slogLoad(){
   const el = document.getElementById("slogPanel"); el.innerHTML = `<div class="hint2">読みこみ中…</div>`;
   const ym = SLOG.ym, from = ym + "-01", to = new Date(Date.UTC(+ym.slice(0, 4), +ym.slice(5, 7), 1)).toISOString().slice(0, 10);
   const rows = [];
   try{
-    const cd = q(await sb.from("kb_cast_days").select("*").gte("biz_date", from).lt("biz_date", to)) || [];
+    const cd = q(await unsPageAll(() => sb.from("kb_cast_days").select("*").gte("biz_date", from).lt("biz_date", to).order("biz_date").order("cast_id"))) || [];
     cd.forEach(d => {
       const l = Array.isArray(d.settle_log) ? d.settle_log : [];
       l.forEach(x => rows.push({ at: x.at, by: x.by || "", cid: d.cast_id, bd: d.biz_date, kind: /取り消/.test(x.text) ? "取消" : /^精算済/.test(x.text) ? "精算" : /未精算/.test(x.text) ? "未精算" : /精算/.test(x.text) ? "精算" : "備考", text: x.text }));
@@ -464,7 +466,7 @@ async function slogLoad(){
         text: `精算済（${d.settle_place || ""}）` + (d.settle_snapshot ? `　手取り ${yen(d.settle_snapshot.takeHome || 0)}／投函額 ${yen(d.settle_snapshot.drop || 0)}${d.settle_snapshot.paidOn ? "（" + unsMd(d.settle_snapshot.paidOn) + "にまとめて精算）" : ""}` : "") });
     });
     if(UNS !== null){
-      const un = q(await sb.from("kb_unsettled").select("*").gte("biz_date", from).lt("biz_date", to)) || [];
+      const un = q(await unsPageAll(() => sb.from("kb_unsettled").select("*").gte("biz_date", from).lt("biz_date", to).order("id"))) || [];
       un.forEach(x => rows.push({ at: x.created_at, by: x.created_by || "", cid: x.cast_id, bd: x.biz_date, kind: "未精算",
         text: `未精算が入った：${x.note || ""}（${x.amount >= 0 ? "未精算 " + yen(x.amount) : "お釣り " + yen(-x.amount)}）${x.source === "manual" ? "・手で入れた" : ""}${x.done_on ? `\n→ ${unsMd(x.done_on)} に精算（${x.done_by || ""}）` : ""}` }));
     }
