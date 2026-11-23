@@ -109,9 +109,13 @@
     // 右の枠：見出しの「▲ 閉じる／▼ 開く」でたためる（たたんだのは覚えておく。2026/11/23 店長「お客さんのことは閉じるボタンほしい」）
     const closedKey = "kbV2Closed", closed = (() => { try{ return JSON.parse(localStorage.getItem(closedKey) || "{}"); }catch(e){ return {}; } })();
     const sec = (title, ids) => { const key = title, s = el("div", "v2s" + (closed[key] ? " v2closed" : ""), `<h4><span>${title}</span><button type="button" class="v2tog">${closed[key] ? "▼ 開く" : "▲ 閉じる"}</button></h4>`);
-      s.querySelector(".v2tog").onclick = () => { const c = s.classList.toggle("v2closed"); s.querySelector(".v2tog").textContent = c ? "▼ 開く" : "▲ 閉じる"; closed[key] = c; try{ localStorage.setItem(closedKey, JSON.stringify(closed)); }catch(e){} }; ids.forEach(id => { const n = typeof id === "string" ? $(id) : id; if(n) s.appendChild(n); }); side.appendChild(s); return s; };
+      s.querySelector(".v2tog").onclick = () => { const c = s.classList.toggle("v2closed"); s.querySelector(".v2tog").textContent = c ? "▼ 開く" : "▲ 閉じる"; if(key !== "🙋 お客さんのこと"){ closed[key] = c; try{ localStorage.setItem(closedKey, JSON.stringify(closed)); }catch(e){} } }; ids.forEach(id => { const n = typeof id === "string" ? $(id) : id; if(n) s.appendChild(n); }); side.appendChild(s); return s; };
     sec("📌 受付のルール・お知らせ", ["receptionNotes"]);
-    sec("🙋 お客さんのこと", ["custInfo"]);
+    // お客さんのことは、受付を開くたびに「開いた」状態から（閉じたことは覚えない。2026/11/23 店長）
+    const custSec = sec("🙋 お客さんのこと", ["custInfo"]);
+    const custOpen = () => { custSec.classList.remove("v2closed"); const b = custSec.querySelector(".v2tog"); if(b) b.textContent = "▲ 閉じる"; };
+    delete closed["🙋 お客さんのこと"]; custOpen();
+    if(typeof openForm === "function"){ const __ofV2 = openForm; openForm = function(){ const r = __ofV2.apply(this, arguments); try{ custOpen(); }catch(e){} return r; }; }
     sec("👤 キャストのこと", ["castInfo", "castChecks", "castTimeline", "neighborBox", "castCal"]);
     sec("🏨 場所・ホテル・コース", ["placePick", "hotelStatusBox", "p3HotelBox", "bizBox", "newHotelBox", "hotelMemoBox", "areaInfo", "nextFeeInfo", "courseInfo"]);
     const msg = $("msg"), ms = sec("📨 最終確認・キャストへの連絡", ["finalSummary"]);
