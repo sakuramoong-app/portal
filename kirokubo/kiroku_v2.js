@@ -43,6 +43,8 @@
     .v2s.v2closed>h4{margin:0}
     .v2s.v2empty{display:none}
     .v2old{display:none}
+    @keyframes v2fl{0%{box-shadow:0 0 0 0 rgba(229,99,140,.0)}30%{box-shadow:0 0 0 4px rgba(229,99,140,.55)}100%{box-shadow:0 0 0 0 rgba(229,99,140,0)}}
+    .v2flash{animation:v2fl 1.6s ease-out 1;border-radius:12px}
     .v2note{font-size:12px;color:var(--sub,#888);margin:-4px 0 8px}
     @media (max-width:1000px){ .v2grid{grid-template-columns:1fr} .v2side{position:static;max-height:none} }
     @media (max-width:700px){ .v2top{grid-template-columns:1fr} .v2req .v2g{grid-template-columns:1fr} }
@@ -124,6 +126,14 @@
       s.classList.toggle("v2empty", !has);
     });
     tidy(); setInterval(tidy, 800);
+
+    // キャストを選んだら、画面を「種別」の所へもどす（決まった種別・「判断して」のお知らせを確かめられるように。2026/11/23 店長）。種別の枠を少し光らせる
+    const cs = $("f_cast");
+    if(cs) cs.addEventListener("change", () => setTimeout(() => {
+      const v = fOf("f_visit"); if(!v) return;
+      v.scrollIntoView({ block: "center", behavior: "smooth" });
+      v.classList.remove("v2flash"); void v.offsetWidth; v.classList.add("v2flash");
+    }, 250));
   }
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", build); else build();
 })();
