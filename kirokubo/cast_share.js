@@ -47,5 +47,8 @@ async function castShareSend(id){
 function castShareActs(id){
   if(!csIsPilot(id)) return `<button class="btn btn-ghost btn-sm" onclick="copyDetail('${id}')">📋 精算明細をコピー（LINE用）</button>
       <button class="btn btn-ghost btn-sm" onclick="copyDetailImg('${id}')">🖼 画像でコピー</button>`;
-  return `<button class="btn btn-primary btn-sm" id="csb-${id}" onclick="castShareSend('${id}')">${CS.shared[id + "|" + day] ? "📲 送りなおす（確定ずみ）" : "📲 確定してアプリに送る"}</button>`;
+  // アプリでうまくいかなかったとき用に、LINE 用のコピーも小さく残す（2026/11/23 店長）
+  return `<button class="btn btn-primary btn-sm" id="csb-${id}" onclick="castShareSend('${id}')">${CS.shared[id + "|" + day] ? "📲 送りなおす（確定ずみ）" : "📲 確定してアプリに送る"}</button>
+      <button class="btn btn-ghost btn-sm" onclick="copyDetailImg('${id}')" title="アプリでうまくいかなかったとき用">🖼 LINE用に画像コピー</button>
+      <button class="btn btn-ghost btn-sm" onclick="copyDetail('${id}')" title="アプリでうまくいかなかったとき用">📋 LINE用に文をコピー</button>`;
 }
