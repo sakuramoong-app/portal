@@ -341,6 +341,7 @@ function paintDetail(){
 }
 // ---------- 📱 キャスト記入メモ（キャストがアプリで書いたもの。内勤は読むだけ。2026/11/23）----------
 //   キャストには、内勤のメモ・ほかのキャストのメモは見えない（キャストは自分が書いた分だけ）
+const CMICO = { "年齢": "🎂", "見た目": "👀", "性格": "💭", "在住": "🏠", "趣味": "🎮", "きっかけ": "✨", "したプレイ": "💕", "早漏・遅漏": "⏱️", "S・M": "⛓️", "女装": "👗", "話したこと": "💬" };   // キャストのアプリと同じ絵文字
 function cmemoHtml(c){
   const L = c._cmemo || [];
   if(!L.length) return "";
@@ -350,10 +351,10 @@ function cmemoHtml(c){
       const F = (m.fields || []).filter(f => String(f.value || "").trim());   // 空の項目は出さない
       return `<div style="background:#fff;border:1.5px solid #E2D6F7;border-radius:12px;padding:8px 10px;margin:6px 0">
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:4px"><b>${esc(castLabel(m.cast_id))}</b><span class="src">${esc(dateOf(m.reservation_id))}の予約</span>
-          ${m.nick ? `<span style="background:#F3ECFF;color:#5E35B1;border-radius:99px;padding:1px 10px;font-size:12.5px;font-weight:800">あだ名「${esc(m.nick)}」</span>` : ""}</div>
+          ${m.nick ? `<span style="background:#F3ECFF;color:#5E35B1;border-radius:99px;padding:1px 10px;font-size:12.5px;font-weight:800">🏷️ あだ名「${esc(m.nick)}」</span>` : ""}</div>
         ${(m.tags || []).length ? `<div style="background:#FFEBEE;border:1.5px solid #E57373;color:#B71C1C;border-radius:10px;padding:6px 10px;margin:4px 0;font-weight:700;white-space:pre-wrap">⚠ ${m.tags.map(esc).join("・")}${m.shop_note ? "\n" + esc(m.shop_note) : ""}</div>` : ""}
-        ${F.length ? `<div style="display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;font-size:13.5px">${F.map(f => `<span style="color:var(--sub);font-weight:800">${esc(f.label)}</span><span style="white-space:pre-wrap">${esc(f.value)}</span>`).join("")}</div>` : ""}
-        ${m.body ? `<div style="white-space:pre-wrap;margin-top:4px;font-size:13.5px"><span style="color:var(--sub);font-weight:800">そのほか　</span>${esc(m.body)}</div>` : ""}</div>`;
+        ${F.length ? `<div style="display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;font-size:13.5px">${F.map(f => `<span style="color:var(--sub);font-weight:800">${CMICO[f.label] || "📌"} ${esc(f.label)}</span><span style="white-space:pre-wrap">${esc(f.value)}</span>`).join("")}</div>` : ""}
+        ${m.body ? `<div style="white-space:pre-wrap;margin-top:4px;font-size:13.5px"><span style="color:var(--sub);font-weight:800">📝 そのほか　</span>${esc(m.body)}</div>` : ""}</div>`;
     }).join("")}</div>`;
 }
 // ---------- 利用の履歴：1回ずつのカード（備考は全文。何かあった回は目立たせる） ----------

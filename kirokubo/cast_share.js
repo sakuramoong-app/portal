@@ -66,6 +66,7 @@ async function csSend(id){
     img = path;
   }catch(e){ console.warn("精算の画像を送れませんでした（文だけ送ります）", e); }
   q(await sb.from("kb_cast_settle_share").upsert({ cast_id: id, biz_date: day, lines: x.lines, take_home: x.takeHome, state: st, img_path: img,
+    uns: typeof unsOpen === "function" ? unsOpen(id).map(u => ({ date: u.date, what: u.what, amount: u.amount })) : [],   // 📒 未精算リスト（内勤の画面と同じ）
     shared_at: new Date().toISOString(), shared_by: (KB.operatorName && KB.operatorName()) || "" }, { onConflict: "cast_id,biz_date" }));
   CS.shared[id + "|" + day] = true;
   return st;
