@@ -196,11 +196,22 @@ function paintPlaces(){
 function openDay(d){ $("day").value = d; setMode("day"); scrollTo(0, 0); }
 
 // 1日分の材料（cds・予約・回収チェック・経費など）を読む
+// 1回に1000件までしか返らないので、1000件ずつ全部読む（1か月分の予約が1000件をこえると、ぬけていた。2026/11/23）
+async function pageAll(mk){
+  let out = [];
+  for(let i = 0; i < 50; i++){
+    const r = await mk().range(i * 1000, i * 1000 + 999);
+    if(r.error) return { data: null, error: r.error };
+    out = out.concat(r.data || []);
+    if((r.data || []).length < 1000) break;
+  }
+  return { data: out, error: null };
+}
 async function readRange(from, to){
   const R = { cds: [], resv: [], col: [], ho: [], staff: [], no171: false };
   const [a, b, c] = await Promise.all([
-    sb.from("kb_cast_days").select("*").gte("biz_date", from).lt("biz_date", to),
-    sb.from("kb_reservations").select(RESV_COLS).gte("biz_date", from).lt("biz_date", to).eq("deleted", false),
+    pageAll(() => sb.from("kb_cast_days").select("*").gte("biz_date", from).lt("biz_date", to).order("biz_date").order("cast_id")),
+    pageAll(() => sb.from("kb_reservations").select(RESV_COLS).gte("biz_date", from).lt("biz_date", to).eq("deleted", false).order("id")),
     sb.from("kb_staff_work").select("*").gte("biz_date", from).lt("biz_date", to),
   ]);
   // 内勤日払い：想定店落ち（F）からは、どこから払ったか（回収金・キキララ）に関係なく全部引く（記録簿の「今日の店落ち」と同じ）
