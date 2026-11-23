@@ -56,10 +56,10 @@ function csImage(id){
     finally{ if(NOTE && !had){ const i = MEMO_NOTE.indexOf(NOTE); if(i >= 0) MEMO_NOTE.splice(i, 1); } }
   });
 }
-// 📒 未精算リスト：内勤の「📒 未精算」と同じもの。送る日がまだ未精算なら、その日も入れる（その日のカードの一覧には、その日は出ないため）
+// 📒 未精算リスト：内勤の「📒 未精算」と同じもの。送る日がまだ未精算・直帰なら、その日も入れる（その日のカードの一覧には、その日は出ないため）
 function csUns(id, st){
   const L = typeof unsOpen === "function" ? unsOpen(id).map(u => ({ date: u.date, what: u.what, amount: u.amount })) : [];
-  if(st === "unsettled"){
+  if(st === "unsettled" || st === "home"){   // 直帰もお金はまだ精算していない（2026/11/23）
     const c = calcCast(id), live = (c.all || []).some(r => ![ "cancel", "tobi", "flowed" ].includes(r.status));
     if(live && Number(c.drop) && !L.some(u => u.date === day)) L.push({ date: day, what: c.drop >= 0 ? `未精算 ${yen(c.drop)}` : `お店から渡す ${yen(-c.drop)}`, amount: c.drop });
   }
