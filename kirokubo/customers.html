@@ -239,7 +239,7 @@ async function openCustomer(id){
       sb.from("kb_cust_history").select("*").eq("customer_id", id).order("biz_date", { ascending: false }).limit(1000),
       sb.from("kb_cust_cast_ng").select("*").eq("customer_id", id).order("at"),
       sb.from("kb_customer_places").select("*").eq("customer_id", id).order("last_used", { ascending: false }),
-      sb.from("kb_cast_memos").select("reservation_id,cast_id,tags,body,updated_at").eq("customer_id", id).order("updated_at", { ascending: false }),   // 📱 キャスト記入メモ（SQL 955）
+      sb.from("kb_cast_memos").select("*").eq("customer_id", id).order("updated_at", { ascending: false }),   // 📱 キャスト記入メモ（SQL 955）
     ]);
     cur = q(c); if(!cur){ $("detail").innerHTML = `<div class="empty">見つかりません</div>`; return; }
     cur._res = q(res) || []; cur._hist = hist.error ? [] : (hist.data || []); cur._ngs = ngs.error ? [] : (ngs.data || []); cur._places = q(places) || []; cur._cmemo = cmemo && !cmemo.error ? (cmemo.data || []) : [];
@@ -348,6 +348,8 @@ function cmemoHtml(c){
   return `<div class="csec" style="background:#FAF7FF;border-radius:12px;padding:8px 10px"><h3>📱 キャスト記入メモ <small style="font-size:12px;color:var(--sub);font-weight:700">キャストがアプリで書いたもの（内勤は読むだけ）</small></h3>
     ${L.map(m => `<div class="pl" style="display:block"><b>${esc(castLabel(m.cast_id))}</b> <span class="src">${esc(dateOf(m.reservation_id))}の予約</span>
       ${(m.tags || []).length ? `<div style="margin:3px 0">${m.tags.map(t => `<span style="display:inline-block;background:#E9E0FA;border-radius:99px;padding:0 8px;margin:0 4px 2px 0;font-size:12px;font-weight:700">${esc(t)}</span>`).join("")}</div>` : ""}
+      ${m.nick ? `<div><b>「${esc(m.nick)}」</b></div>` : ""}
+      ${(m.fields || []).filter(f => String(f.value || "").trim()).map(f => `<div style="white-space:pre-wrap">${esc(f.label)}▶️${esc(f.value)}</div>`).join("")}
       ${m.body ? `<div style="white-space:pre-wrap">${esc(m.body)}</div>` : ""}</div>`).join("")}</div>`;
 }
 // ---------- 利用の履歴：1回ずつのカード（備考は全文。何かあった回は目立たせる） ----------
