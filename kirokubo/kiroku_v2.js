@@ -84,18 +84,19 @@
     full(document.querySelector(".feechk"));
     put(g, fOf("f_areaSel"), fOf("f_place"));
     full($("afBox"));
+    full(fOf("f_play"));   // 希望プレイは AF・逆AF のすぐ下（2026/11/23 店長）
     put(g, fOf("f_pay"));
     put(g, fOf("f_status"));
     full(fOf("f_media"));
     put(g, fOf("f_status_at"));
 
+
+    // ---------- 左：そのほか（必要なときだけ） ----------
+    const more = el("details", "v2card v2more", `<summary>＋ そのほか（割引・OP・延長・交通費・地図・メール・お客様のこと）</summary>`); main.appendChild(more);
     // ---------- 左：料金 ----------
     const calc = el("div", "v2card", `<h3>💴 料金</h3>`); main.appendChild(calc);
     put(calc, $("calc"), $("backDet"));
-
-    // ---------- 左：そのほか（必要なときだけ） ----------
-    const more = el("details", "v2card v2more", `<summary>＋ そのほか（割引・希望プレイ・OP・延長・交通費・地図・メール・お客様のこと）</summary>`); main.appendChild(more);
-    put(more, fOf("f_discount"), $("dressWrap"), fOf("f_play"), $("optDetails"));
+    put(more, fOf("f_discount"), $("dressWrap"), $("optDetails"));
     const tr = $("f_transport"); if(tr) put(more, tr.closest(".row2") || fOf("f_transport"));
     put(more, fOf("f_map"), fOf("f_email"), fOf("f_guest"));
 
