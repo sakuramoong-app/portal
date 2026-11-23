@@ -233,15 +233,16 @@ function liHtml(r){ return `<div class="li ${cur && cur.id === r.id ? "on" : ""}
 async function openCustomer(id){
   $("detail").innerHTML = `<div class="empty">読み込み中…</div>`;
   try{
-    const [c, res, hist, ngs, places] = await Promise.all([
+    const [c, res, hist, ngs, places, cmemo] = await Promise.all([
       sb.from("kb_customers").select("*").eq("id", id).maybeSingle(),
       sb.from("kb_reservations").select("id,biz_date,store_key,dummy_name,cast_id,course,extension_count,area,address,total,status,payment,memo_log,visit_kind").eq("customer_id", id).eq("deleted", false).order("biz_date", { ascending: false }).limit(500),
       sb.from("kb_cust_history").select("*").eq("customer_id", id).order("biz_date", { ascending: false }).limit(1000),
       sb.from("kb_cust_cast_ng").select("*").eq("customer_id", id).order("at"),
       sb.from("kb_customer_places").select("*").eq("customer_id", id).order("last_used", { ascending: false }),
+      sb.from("kb_cast_memos").select("reservation_id,cast_id,tags,body,updated_at").eq("customer_id", id).order("updated_at", { ascending: false }),   // 📱 キャスト記入メモ（SQL 955）
     ]);
     cur = q(c); if(!cur){ $("detail").innerHTML = `<div class="empty">見つかりません</div>`; return; }
-    cur._res = q(res) || []; cur._hist = hist.error ? [] : (hist.data || []); cur._ngs = ngs.error ? [] : (ngs.data || []); cur._places = q(places) || [];
+    cur._res = q(res) || []; cur._hist = hist.error ? [] : (hist.data || []); cur._ngs = ngs.error ? [] : (ngs.data || []); cur._places = q(places) || []; cur._cmemo = cmemo && !cmemo.error ? (cmemo.data || []) : [];
   }catch(e){ $("detail").innerHTML = `<div class="empty">読めませんでした：${esc(e.message || e)}</div>`; return; }
   if(custTagList == null) await loadCustTags();
   paintList(); paintDetail();
@@ -314,6 +315,8 @@ function paintDetail(){
           <div id="mg_list"></div></div>` : ""}
     </div>
 
+    ${cmemoHtml(c)}
+
     <div class="csec"><h3>🙅 キャストごとのNG（このキャストには付けない）</h3>
       ${c._ngs.length ? c._ngs.map(n=>`<div class="pl" ${n.ask ? 'style="background:#FFF8E1;border-radius:8px"' : ""}><b>${n.ask ? "🤔 " : ""}${esc(n.cast_id ? castLabel(n.cast_id) : n.cast_name)}</b><span>${esc(n.reason || "")}</span><span class="src">${n.source === "excel" ? "台帳エクセルより" : esc(n.by_name || "")}${n.ask ? "・<b>要確認</b>（NG？関係ない？）" : ""}</span>
         ${KB.CAN_EDIT ? (n.ask ? `<button class="btn btn-danger btn-sm" onclick="castNgOk(${n.id})">🙅 NG</button><button class="btn btn-ghost btn-sm" onclick="delCastNg(${n.id})">関係ない（消す）</button>` : `<button class="btn btn-ghost btn-sm" onclick="editCastNg(${n.id})">✏️ 直す</button><button class="btn btn-danger btn-sm" onclick="delCastNg(${n.id})">外す</button>`) : ""}</div>`).join("") : `<div class="src">なし</div>`}
@@ -335,6 +338,17 @@ function paintDetail(){
         <div class="hlist">${all.filter(r => !histOnly || isTrouble(r)).map(histCard).join("") || '<div class="src">ありません</div>'}</div>`
         : `<div class="src">まだありません</div>`}
     </div>`;
+}
+// ---------- 📱 キャスト記入メモ（キャストがアプリで書いたもの。内勤は読むだけ。2026/11/23）----------
+//   キャストには、内勤のメモ・ほかのキャストのメモは見えない（キャストは自分が書いた分だけ）
+function cmemoHtml(c){
+  const L = c._cmemo || [];
+  if(!L.length) return "";
+  const dateOf = rid => { const r = (c._res || []).find(x => x.id === rid); return r ? md(r.biz_date) : ""; };
+  return `<div class="csec" style="background:#FAF7FF;border-radius:12px;padding:8px 10px"><h3>📱 キャスト記入メモ <small style="font-size:12px;color:var(--sub);font-weight:700">キャストがアプリで書いたもの（内勤は読むだけ）</small></h3>
+    ${L.map(m => `<div class="pl" style="display:block"><b>${esc(castLabel(m.cast_id))}</b> <span class="src">${esc(dateOf(m.reservation_id))}の予約</span>
+      ${(m.tags || []).length ? `<div style="margin:3px 0">${m.tags.map(t => `<span style="display:inline-block;background:#E9E0FA;border-radius:99px;padding:0 8px;margin:0 4px 2px 0;font-size:12px;font-weight:700">${esc(t)}</span>`).join("")}</div>` : ""}
+      ${m.body ? `<div style="white-space:pre-wrap">${esc(m.body)}</div>` : ""}</div>`).join("")}</div>`;
 }
 // ---------- 利用の履歴：1回ずつのカード（備考は全文。何かあった回は目立たせる） ----------
 let histOnly = false;

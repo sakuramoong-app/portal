@@ -28,6 +28,8 @@ async function rtHideHp(c){
 { const __r = confirmRetire; confirmRetire = async function(){
   const c = pf && pf.c;
   const r = await __r.apply(this, arguments);
+  // 🔒 退店にしたら、シフトアプリ（キャストのアプリ）のログインをすぐ消す（2026/11/23 店長。送ってもらったメモ・シフトの記録は残る）
+  try{ if(c && $("e_status") && $("e_status").value === "left"){ const n = q(await sb.rpc("cast_login_delete", { p_cast_id: c.id })); toast(n ? "🔒 キャストのアプリのログインを消しました（もう入れません）" : "🔒 キャストのアプリのログインはありませんでした"); } }catch(e){ alert("⚠ キャストのアプリのログインを消せませんでした：" + (e.message || e) + "（SQL 955 は実行ずみ？）"); }
   try{ if(c && $("e_status") && $("e_status").value === "left") await rtHideHp(casts.find(x => x.id === c.id) || c); }catch(e){ toast("公式HPの掲載を外せませんでした：" + (e.message || e)); }
   return r;
 }; }
