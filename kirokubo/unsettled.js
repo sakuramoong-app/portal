@@ -880,6 +880,7 @@ cardHtml = function(id, c){
     <div class="acts">
       ${KB.CAN_EDIT ? `<select id="pl-${id}" class="plsel" style="background-color:${PLACE_COLOR[plNow] || "#fff"}" ${done ? "disabled" : ""}
           onchange="plSel['${id}'] = this.value; this.style.backgroundColor = PLACE_COLOR[this.value] || '#fff'; const w = document.getElementById('camw-${id}'); if(w) w.style.display = (this.value === '回収' || !this.value) ? 'none' : ''; sgRepaint('${id}')">${done ? "" : `<option value="" ${plNow ? "" : "selected"}>精算場所をえらぶ</option>`}${PLACES.map(p=>`<option ${plNow === p ? "selected" : ""} style="background:${PLACE_COLOR[p] || "#fff"}">${p}</option>`).join("")}</select>` : ""}
+      ${typeof csIsPilot === "function" && csIsPilot(id) ? `<button class="linecopy" style="background:linear-gradient(135deg,#9C6ADE,#7E57C2)" id="csb-${id}" onclick="castShareSend('${id}')"><span>📲 確定してアプリに送る</span><small>キャストのアプリの「報酬」に出ます</small></button>` : ""}   <!-- 📲 テストのキャスト（ムム）は、アプリに送る。LINE用は、うまくいかなかったとき用に残す（2026/11/23）-->
       <button class="linecopy" onclick="copyDetailImg('${id}')"><span>🖼 明細コピー</span><small>LINEで貼付 📷</small></button>
       ${KB.CAN_EDIT ? (done
         ? `<button class="btn btn-ghost btn-sm" onclick="unsettle('${id}')">↩ 精算済をもどす</button>`

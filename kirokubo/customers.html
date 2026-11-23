@@ -346,11 +346,15 @@ function cmemoHtml(c){
   if(!L.length) return "";
   const dateOf = rid => { const r = (c._res || []).find(x => x.id === rid); return r ? md(r.biz_date) : ""; };
   return `<div class="csec" style="background:#FAF7FF;border-radius:12px;padding:8px 10px"><h3>📱 キャスト記入メモ <small style="font-size:12px;color:var(--sub);font-weight:700">キャストがアプリで書いたもの（内勤は読むだけ）</small></h3>
-    ${L.map(m => `<div class="pl" style="display:block"><b>${esc(castLabel(m.cast_id))}</b> <span class="src">${esc(dateOf(m.reservation_id))}の予約</span>
-      ${(m.tags || []).length ? `<div style="margin:3px 0">${m.tags.map(t => `<span style="display:inline-block;background:#E9E0FA;border-radius:99px;padding:0 8px;margin:0 4px 2px 0;font-size:12px;font-weight:700">${esc(t)}</span>`).join("")}</div>` : ""}
-      ${m.nick ? `<div><b>「${esc(m.nick)}」</b></div>` : ""}
-      ${(m.fields || []).filter(f => String(f.value || "").trim()).map(f => `<div style="white-space:pre-wrap">${esc(f.label)}▶️${esc(f.value)}</div>`).join("")}
-      ${m.body ? `<div style="white-space:pre-wrap">${esc(m.body)}</div>` : ""}</div>`).join("")}</div>`;
+    ${L.map(m => {
+      const F = (m.fields || []).filter(f => String(f.value || "").trim());   // 空の項目は出さない
+      return `<div style="background:#fff;border:1.5px solid #E2D6F7;border-radius:12px;padding:8px 10px;margin:6px 0">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:4px"><b>${esc(castLabel(m.cast_id))}</b><span class="src">${esc(dateOf(m.reservation_id))}の予約</span>
+          ${m.nick ? `<span style="background:#F3ECFF;color:#5E35B1;border-radius:99px;padding:1px 10px;font-size:12.5px;font-weight:800">あだ名「${esc(m.nick)}」</span>` : ""}</div>
+        ${(m.tags || []).length ? `<div style="background:#FFEBEE;border:1.5px solid #E57373;color:#B71C1C;border-radius:10px;padding:6px 10px;margin:4px 0;font-weight:700;white-space:pre-wrap">⚠ ${m.tags.map(esc).join("・")}${m.shop_note ? "\n" + esc(m.shop_note) : ""}</div>` : ""}
+        ${F.length ? `<div style="display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;font-size:13.5px">${F.map(f => `<span style="color:var(--sub);font-weight:800">${esc(f.label)}</span><span style="white-space:pre-wrap">${esc(f.value)}</span>`).join("")}</div>` : ""}
+        ${m.body ? `<div style="white-space:pre-wrap;margin-top:4px;font-size:13.5px"><span style="color:var(--sub);font-weight:800">そのほか　</span>${esc(m.body)}</div>` : ""}</div>`;
+    }).join("")}</div>`;
 }
 // ---------- 利用の履歴：1回ずつのカード（備考は全文。何かあった回は目立たせる） ----------
 let histOnly = false;
