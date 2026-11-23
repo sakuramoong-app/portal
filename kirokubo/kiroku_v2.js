@@ -16,10 +16,14 @@
   document.head.insertAdjacentHTML("beforeend", `<style>
     body.v2 #formBg .drawer{max-width:1480px;width:97vw;padding:12px 16px 110px}
     body.v2 #stepNav{display:none !important}
-    .v2top{display:grid;grid-template-columns:minmax(220px,1.1fr) minmax(180px,1fr) auto;gap:10px;align-items:end;background:#FFF4F8;border:2px solid #F3C6D6;border-radius:16px;padding:10px 12px;margin-bottom:10px}
+    .v2top{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;align-items:start;background:#FFF4F8;border:2px solid #F3C6D6;border-radius:16px;padding:10px 12px;margin-bottom:10px}
     .v2top .f{margin:0}
     .v2top #f_visit{margin:0}
-    .v2top .v2visit{grid-column:1/-1}
+    .v2top .v2-phone{order:1} .v2top #mailBar{order:2;margin:0} .v2top .v2-name{order:3} .v2top .v2visit{order:4} .v2top .v2-fs{order:5;grid-column:1/-1}
+    .v2top>*,.v2g>*,.v2main,.v2side,.v2s,.v2card{min-width:0}
+    body.v2 #formBg .drawer input,body.v2 #formBg .drawer select,body.v2 #formBg .drawer textarea{max-width:100%}
+    .v2s,.v2card{overflow-x:auto}
+    body.v2 .tl2s{display:none}   /* キャストの「予約0件・予約0時間・空き5時間」は出さない（店長 11/23） */
     .v2grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:12px;align-items:start}
     .v2card{background:#fff;border:2px solid var(--line,#eee);border-radius:16px;padding:10px 12px;margin-bottom:12px}
     .v2card>h3{margin:0 0 8px;font-size:15px;display:flex;align-items:center;gap:6px}
@@ -36,7 +40,8 @@
     .v2s.v2empty{display:none}
     .v2old{display:none}
     .v2note{font-size:12px;color:var(--sub,#888);margin:-4px 0 8px}
-    @media (max-width:1000px){ .v2grid{grid-template-columns:1fr} .v2side{position:static;max-height:none} .v2top{grid-template-columns:1fr} .v2req .v2g{grid-template-columns:1fr} }
+    @media (max-width:1000px){ .v2grid{grid-template-columns:1fr} .v2side{position:static;max-height:none} }
+    @media (max-width:700px){ .v2top{grid-template-columns:1fr} .v2req .v2g{grid-template-columns:1fr} }
   </style>`);
 
   function build(){
@@ -49,8 +54,13 @@
 
     // ---------- 上：電話・名前・種別 ----------
     const top = el("div", "v2top"); root.appendChild(top);
-    put(top, fOf("f_phone"), fOf("f_name"));
-    const vis = fOf("f_visit"); if(vis){ vis.classList.add("v2visit"); top.appendChild(vis); }
+    // ①電話 ②メール予約を貼る（開いたときに電話の前に入る。並びは CSS の order で）
+    // ③名前 ④種別 → その下に 🔎探す
+    const ph = fOf("f_phone"), nm = fOf("f_name"), vis = fOf("f_visit"), fs = $("fsBox");
+    if(ph){ ph.classList.add("v2-phone"); top.appendChild(ph); }
+    if(nm){ nm.classList.add("v2-name"); top.appendChild(nm); }
+    if(vis){ vis.classList.add("v2visit"); top.appendChild(vis); }
+    if(fs){ fs.classList.add("v2-fs"); top.appendChild(fs); }
 
     const grid = el("div", "v2grid"); root.appendChild(grid);
     const main = el("div", "v2main"), side = el("div", "v2side"); grid.appendChild(main); grid.appendChild(side);
@@ -88,7 +98,6 @@
     sec("🙋 お客さんのこと", ["custInfo"]);
     sec("👤 キャストのこと", ["castInfo", "castChecks", "castTimeline", "neighborBox", "castCal"]);
     sec("🏨 場所・ホテル・コース", ["placePick", "hotelStatusBox", "p3HotelBox", "bizBox", "newHotelBox", "hotelMemoBox", "areaInfo", "nextFeeInfo", "courseInfo"]);
-    sec("🔎 探す（時間・キャスト・希望プレイ）", ["fsBox"]);
     const msg = $("msg"), ms = sec("📨 最終確認・キャストへの連絡", ["finalSummary"]);
     if(msg){ const lab = msg.previousElementSibling, btns = msg.nextElementSibling; put(ms, lab, msg, btns); }
     put(ms, $("netReplyWrap"));

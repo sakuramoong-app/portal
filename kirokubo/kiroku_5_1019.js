@@ -1133,9 +1133,11 @@ onCast = function(){
 function stColor(){ const el = $("f_status"); if(el) el.className = "stsel st " + (el.value || "pick"); }
 
 // 本指名・店リピ：その予約より前に「終了」した予約だけで決める（今の予約・キャンセル・トビは数えない）
+// 種別を決める日：予約の日。練習モードは日付が 2000/01/01 になるので、今日の営業日で見る（でないと過去の利用が0件になり、いつも新規になっていた。2026/11/23）
+function visitDay(){ const d = ($("f_day") && $("f_day").value) || day; return KB.PRACTICE && d === KB.PRACTICE_DAY ? KB.realBizDateOf() : d; }
 function visitFrom(past, cid){
   if(past && past === custSeen) past = seenNorm();
-  const fd = ($("f_day") && $("f_day").value) || day;   // 予約の日より前だけ（台帳エクセルには、この日の利用そのものが入っていることがある）
+  const fd = visitDay();   // 予約の日より前だけ（台帳エクセルには、この日の利用そのものが入っていることがある）
   const prev = (past || []).filter(p=>p.status === "done" && !(editing && p.id === editing.id) && p.biz_date && p.biz_date < fd);
   if(!prev.length) return "new";
   // 今回フリー（フリー・特別フリー・イベフリー）なら、前にその子を指名していても本指名ではない → 店リピ（2026/11/9 内勤さん）
@@ -1462,7 +1464,7 @@ document.addEventListener("pointerdown", e => { if(e.target && e.target.id === "
 /* ---------- 💗 本指名：前回その子を指名したのはいつか（記録簿＋台帳エクセル）。種別のボタンの横と、予約連絡の【名前】の行に ---------- */
 function lastNomiOf(cid){
   if(!cid || (!Array.isArray(custSeen) && !Array.isArray(custPast))) return "";
-  const l = seenNorm().filter(p => p.cast_id === cid && !["cancel", "tobi", "flowed"].includes(p.status) && !(editing && p.id === editing.id) && p.biz_date && p.biz_date < (($("f_day") && $("f_day").value) || day))
+  const l = seenNorm().filter(p => p.cast_id === cid && !["cancel", "tobi", "flowed"].includes(p.status) && !(editing && p.id === editing.id) && p.biz_date && p.biz_date < visitDay())
     .map(p => p.biz_date).sort();
   const d = l.pop(); return d ? d.replace(/^(\d{4})-(\d\d)-(\d\d)$/, (m, y, mo, da) => `${y}/${Number(mo)}/${Number(da)}`) : "";
 }
