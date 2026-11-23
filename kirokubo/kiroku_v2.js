@@ -1,5 +1,5 @@
-/* 🧪 受付の新しい並び（v2・2026/11/23 店長：上下に行ったり来たりで目が回る → 練習ページで作りなおしていく）
-   ・URL に「v2」を付けたときだけ動く（例：kiroku.html?practice&v2）。本番の受付（v2 なし）は何も変わらない
+/* 受付の並び（v2・2026/11/23 店長：上下に行ったり来たりで目が回る → 練習ページで作って、11/23 本番の標準に）
+   ・いつも動く。前の並びにもどしたいときは URL に「v1」
    ・新しく作るのではなく、今ある入力欄・説明・チェックを、そのまま新しい場所へ「移動」するだけ（id も動きも同じ。何も消さない）
    並び：
      上    ：📞 電話番号・お客さんの名前・新規/店リピ/本指名（まず最初に聞く）
@@ -7,7 +7,8 @@
              → 💴 料金 → ＋ そのほか（割引・希望プレイ・OP・延長・交通費・地図・メール など、必要なときだけ）
      右    ：説明・チェック・注意をまとめて（キャストのこと・お客さんのこと・場所とホテル・探す・連絡と備考）。右だけでスクロール */
 (function(){
-  if(!new URLSearchParams(location.search).has("v2")) return;
+  // 2026/11/23 店長OK → 本番の標準に。前の並び（縦1列）にもどしたいときは URL に「v1」（例：kiroku.html?v1）
+  if(new URLSearchParams(location.search).has("v1")) return;
   const $ = id => document.getElementById(id);
   const fOf = id => { const e = $(id); return e ? (e.closest(".f") || e) : null; };
   const el = (tag, cls, html) => { const d = document.createElement(tag); if(cls) d.className = cls; if(html) d.innerHTML = html; return d; };
@@ -56,7 +57,7 @@
     const firstStep = drawer.querySelector(".step");
     const root = el("div"); root.id = "v2root";
     firstStep.parentNode.insertBefore(root, firstStep);
-    root.appendChild(el("div", "v2note", "🧪 新しい並びのテスト中です（左＝必須をまとめて／右＝説明・チェック・注意）。入れたものは今までと同じように保存されます。"));
+    root.appendChild(el("div", "v2note", "左＝必須をまとめて／右＝説明・チェック・注意（右の枠は「▲ 閉じる」でたためます）"));
 
     // ---------- 上：電話・名前・種別 ----------
     const top = el("div", "v2top"); root.appendChild(top);
