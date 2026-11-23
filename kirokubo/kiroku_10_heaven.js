@@ -21,6 +21,8 @@ function hvSkMemSet(o){ try{ localStorage.setItem(hvSkMemKey(), JSON.stringify(o
 //   ・📞 出勤前連絡 → 出勤の時刻
 //   ・🈵 満了 → 退勤の時刻（ヘブンで受付終了になる）
 const hvSkGap = c => Number(c && c.interval_min) > 0 ? Number(c.interval_min) : 15;
+// 次回の時刻：予約が長引いて終わりの時刻をすぎていたら、今の時刻から（15分きざみで切り上げ）＋インターバル。すぎた時刻を送ると、ヘブンですぐ消える（2026/11/24）
+const hvSkEnd = (e, gap) => { const n = Math.ceil(nowHour() * 4) / 4; return fromHour(Math.max(e, n) + gap); };
 const hvSkLive = x => x.bks.filter(b => !["done", "cancel", "tobi", "flowed"].includes(b.r.status)).sort((a, b) => a.s - b.s);
 function hvSkWant(x){
   if(!x.c) return null;
@@ -32,9 +34,9 @@ function hvSkWant(x){
     const aw = autoWork(x);
     const r = (aw && aw.r) || (x.bks.find(b => b.r.status === "working") || {}).r;
     const b = r && x.bks.find(z => z.r === r);
-    return b ? { state: "work", end: fromHour(b.e + gap) } : null;   // 予約がわからない（手で仕事中にしただけ）ときは、さわらない
+    return b ? { state: "work", end: hvSkEnd(b.e, gap) } : null;   // 予約がわからない（手で仕事中にしただけ）ときは、さわらない
   }
-  if(st === "start"){ const b = hvSkLive(x)[0]; return b ? { state: "work", end: fromHour(b.e + gap), why: "予約スタート" } : null; }
+  if(st === "start"){ const b = hvSkLive(x)[0]; return b ? { state: "work", end: hvSkEnd(b.e, gap), why: "予約スタート" } : null; }
   if(st === "precall") return sh && sh.start != null ? { state: "work", end: fromHour(Number(sh.start)), why: "出勤前連絡" } : null;
   return null;
 }
@@ -54,12 +56,12 @@ function hvSkPlan(all){
   });
   return plan;
 }
-async function hvSkSync(all, dry){
+async function hvSkSync(all, dry, quiet){   // quiet：10分ごとの見なおし（画面に結果を出さない）
   if(HV_SK_BUSY) return;
   const plan = hvSkPlan(all);
-  if(!Object.keys(plan).length){ if(dry || all) hvSkShow("変えるところはありません"); return; }
+  if(!Object.keys(plan).length){ if((dry || all) && !quiet) hvSkShow("変えるところはありません"); return; }
   HV_SK_BUSY = true; hvSkPaint();
-  const mem = hvSkMem(), lines = [];
+  const mem = hvSkMem(), lines = [], bad = [];
   let err = "";
   for(const [k, list] of Object.entries(plan)){
     try{
@@ -69,6 +71,7 @@ async function hvSkSync(all, dry){
       (data.results || []).forEach((r, i) => {
         const w = list.find(z => z.names[0] === r.name) || list[i];
         if(!dry && w && r.ok) mem[w.key] = w.sig;   // うまくいった・ヘブンにいない子は、おぼえる（もう送らない）
+        if(!dry && r.did && r.did.length && !r.ok) bad.push(`${HV_SK_STORES[k]} ${r.heaven}（${r.after || "?"}）`);
         if(r.did && r.did.length) lines.push(`${HV_SK_STORES[k]} ${r.heaven}：${r.before} → ${dry ? "（ためし）" + r.did.join("・") : (r.after || r.did.join("・"))}${r.ok ? "" : " ⚠️うまくいかなかった"}`);
         else if(dry) lines.push(`${HV_SK_STORES[k]} ${r.heaven || r.name}：${r.why || "そのまま（" + r.before + "）"}`);
       });
@@ -77,10 +80,10 @@ async function hvSkSync(all, dry){
   }
   if(!dry) hvSkMemSet(mem);
   HV_SK_BUSY = false;
-  HV_SK_ERR = err; HV_SK_BACKOFF = err ? Date.now() + 3 * 60000 : 0;   // エラーのときは3分あけてから
+  HV_SK_ERR = err + (bad.length ? "ヘブンに入らなかった：" + bad.join("、") : ""); HV_SK_BACKOFF = err ? Date.now() + 3 * 60000 : 0;   // エラーのときは3分あけてから。入らなかった子は画面に出す（2026/11/24）
   HV_SK_LAST = new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
   if(lines.length && !dry) toast("🩷 ヘブン即ヒメ：" + lines.length + "件 変えました");
-  if(dry || all) hvSkShow((lines.join("\n") || "変えるところはありません") + (err ? "\n⚠️ " + err : ""));
+  if((dry || all) && !quiet) hvSkShow((lines.join("\n") || "変えるところはありません") + (err ? "\n⚠️ " + err : ""));
   hvSkPaint();
 }
 function hvSkShow(t){ const el = $("hvSkOut"); if(el){ el.textContent = t; el.style.display = "block"; } }
@@ -126,3 +129,12 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .hvskbar .hvsk-err{color:#c00;font-weight:700}
   .hvskout{white-space:pre-wrap;font-family:inherit;font-size:13px;background:#fff6fa;border:1px solid #f3c2d6;border-radius:10px;padding:8px 10px;margin:0 0 8px}
 </style>`);
+/* 🔁 10分ごとに、ヘブンの今の状態とくらべて直す（2026/11/24 店長「即ヒメ・満了が消えていた」）
+   ・今までは「このPCで前に送った形」と同じなら送らなかった → ヘブン側で時間がたって消えた（待機中が切れた・次回の時刻をすぎた）／
+     あとから即ヒメの画面に出てきた子（出勤があとで入った）を、その日のうちに入れなおさなかった
+   ・全員分をヘブンの今の状態とくらべて、ちがう子だけ直す（同じなら何も送らない）。ONで・今日のページで・編集できる人の画面から */
+setInterval(() => {
+  try{
+    if(hvSkOn() && KB.CAN_EDIT && day === KB.bizDateOf() && !HV_SK_BUSY && Date.now() > HV_SK_BACKOFF) hvSkSync(true, false, true);
+  }catch(e){ console.warn("hvSk 10分", e); }
+}, 10 * 60000);
