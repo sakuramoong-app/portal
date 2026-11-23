@@ -36,18 +36,67 @@ function castShareLines(id){
   else L.push(`（カード決済のため、お店から ${yen(-c.drop)} お渡しします）`);
   return { lines: L, takeHome: Math.round(Number(c.takeHome) || 0) };
 }
+// 精算済／直帰／未精算（今の状態）
+function csState(id){
+  const cd = (typeof unsCD === "function" ? unsCD()[id] : (typeof castDays !== "undefined" ? castDays[id] : null)) || {};
+  return cd.settled ? "settled" : cd.direct_home ? "home" : "unsettled";
+}
+// LINE で送っていた画像と同じもの（領収書があるときの一言も同じように入れる）
+function csImage(id){
+  return new Promise((ok, ng) => {
+    let NOTE = "", had = true;
+    try{
+      if(typeof rcptListOf === "function" && typeof MEMO_NOTE !== "undefined"){
+        const a = rcptListOf(id);
+        if(a.length){ NOTE = `※領収書（${rcptText(a)}）も必ずいっしょに投函・お渡しください`; had = MEMO_NOTE.includes(NOTE); if(!had) MEMO_NOTE.push(NOTE); }
+      }
+      const cv = settleCanvas(id);
+      cv.toBlob(b => b ? ok(b) : ng(new Error("画像が作れませんでした")), "image/png");
+    }catch(e){ ng(e); }
+    finally{ if(NOTE && !had){ const i = MEMO_NOTE.indexOf(NOTE); if(i >= 0) MEMO_NOTE.splice(i, 1); } }
+  });
+}
+async function csSend(id){
+  const x = castShareLines(id), st = csState(id), path = `${id}/${day}.png`;
+  let img = "";
+  try{
+    const b = await csImage(id);
+    const up = await sb.storage.from("cast-settle").upload(path, b, { upsert: true, contentType: "image/png" });
+    if(up.error) throw up.error;
+    img = path;
+  }catch(e){ console.warn("精算の画像を送れませんでした（文だけ送ります）", e); }
+  q(await sb.from("kb_cast_settle_share").upsert({ cast_id: id, biz_date: day, lines: x.lines, take_home: x.takeHome, state: st, img_path: img,
+    shared_at: new Date().toISOString(), shared_by: (KB.operatorName && KB.operatorName()) || "" }, { onConflict: "cast_id,biz_date" }));
+  CS.shared[id + "|" + day] = true;
+  return st;
+}
+const CS_STATE = { settled: "精算済", home: "直帰", unsettled: "未精算" };
 async function castShareSend(id){
   if(!csIsPilot(id)) return;
   const x = castShareLines(id);
-  if(!confirm(`${castName(id)}さんの ${day} の精算を確定して、アプリに送りますか？\n\n${x.lines.join("\n")}\n\n（送りなおすと、上書きされます）`)) return;
+  if(!confirm(`${castName(id)}さんの ${day} の精算（${CS_STATE[csState(id)]}）を、アプリに送りますか？\n\n${x.lines.join("\n")}\n\n（LINE で送っていた画像と同じものが届きます。送りなおすと上書き）`)) return;
   try{
-    q(await sb.from("kb_cast_settle_share").upsert({ cast_id: id, biz_date: day, lines: x.lines, take_home: x.takeHome,
-      shared_at: new Date().toISOString(), shared_by: (KB.operatorName && KB.operatorName()) || "" }, { onConflict: "cast_id,biz_date" }));
-    CS.shared[id + "|" + day] = true;
+    await csSend(id);
     toast("📲 アプリに送りました（キャストのアプリの「報酬」で見られます）");
     const b = document.getElementById("csb-" + id); if(b) b.textContent = "📲 送りなおす（確定ずみ）";
-  }catch(e){ alert("送れませんでした：" + (e.message || e) + "\n（SQL 955 は実行ずみ？）"); }
+  }catch(e){ alert("送れませんでした：" + (e.message || e) + "\n（SQL 958 は実行ずみ？）"); }
 }
+// 精算済・直帰・もどす を押したら、テストのキャストは自動でアプリにも送る（状態が変わったときだけ）
+window.addEventListener("load", () => {
+  ["settle", "unsettle", "setDirectHome"].forEach(fn => {
+    let orig; try{ orig = eval(fn); }catch(e){ return; }   // ページの中の関数（let でない、ふつうの関数）
+    if(typeof orig !== "function") return;
+    const wrap = async function(id){
+      const before = csIsPilot(id) ? csState(id) : null;
+      const r = await orig.apply(this, arguments);
+      try{
+        if(before != null && csState(id) !== before){ const st = await csSend(id); toast(`📲 アプリにも送りました（${CS_STATE[st]}）`); }
+      }catch(e){ console.warn("アプリに送れませんでした", e); }
+      return r;
+    };
+    try{ eval(fn + " = wrap"); }catch(e){}
+  });
+});
 // 精算カードのボタン：テストのキャストは「確定してアプリに送る」、ほかは今までどおり LINE 用
 function castShareActs(id){
   if(!csIsPilot(id)) return `<button class="btn btn-ghost btn-sm" onclick="copyDetail('${id}')">📋 精算明細をコピー（LINE用）</button>
