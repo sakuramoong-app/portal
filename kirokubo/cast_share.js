@@ -9,6 +9,11 @@ const CS = { pilot: new Set(), shared: {} };
     const r = await sb.from("kb_settings").select("value").eq("key", "cast_app_pilot").maybeSingle();
     const v = r && r.data && r.data.value;
     if(Array.isArray(v)) v.forEach(id => CS.pilot.add(String(id)));
+    // 一覧を読む前にカードが出ていたら、描きなおす（ボタンが LINE 用のままにならないように）
+    if(CS.pilot.size){
+      if(typeof refreshCastSettle === "function") CS.pilot.forEach(id => { try{ refreshCastSettle(id); }catch(e){} });
+      else if(typeof render === "function" && /settle.html/.test(location.pathname)) try{ render(); }catch(e){}
+    }
   }catch(e){ /* SQL 955 の前は、ふつうどおり */ }
 })();
 function csIsPilot(id){ return CS.pilot.has(String(id)); }
