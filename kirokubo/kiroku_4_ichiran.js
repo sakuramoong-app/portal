@@ -174,7 +174,7 @@ recalc = function(){
 };
 function todosHtml(r){
   const t = r.todos || []; if(!t.length) return "";
-  return `<div style="margin-top:4px">${t.map((x, i)=>`<button type="button" class="told ${x.done_at ? "on" : ""}" style="display:block;margin-top:2px;text-align:left"
+  return `<div style="margin-top:4px">${t.map((x, i)=>t.findIndex(y => String(y.text).trim() === String(x.text).trim()) !== i ? "" : `<button type="button" class="told ${x.done_at ? "on" : ""}" style="display:block;margin-top:2px;text-align:left"
       onclick="event.stopPropagation();toggleTodo(${r.id},${i})">${x.done_at ? "✅" : "⏳"} ${esc(x.text)}<small>${x.done_at ? KBF.staffTag(x.done_by) + " " + whenShort(x.done_at) : "済んだら押す✅"}</small></button>`).join("")}</div>`;
 }
 async function toggleTodo(id, i){

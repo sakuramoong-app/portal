@@ -704,7 +704,7 @@ function resCard(r, i){
       ${told}
 
       ${mates.map(m => `<button type="button" class="rc-mate" onclick="rcJump(${m.id})">👥 ${esc(castName(m.cast_id))}の予約へ</button>`).join("")}
-      ${(r.todos || []).filter(x => !x.done_at).map(x => `<button type="button" class="told rc-todo" onclick="event.stopPropagation();toggleTodo(${r.id},${(r.todos || []).indexOf(x)})">⏳ ${esc(x.text)}</button>`).join("")}
+      ${(r.todos || []).filter((x, i, a) => !x.done_at && a.findIndex(y => String(y.text).trim() === String(x.text).trim()) === i).map(x => `<button type="button" class="told rc-todo" onclick="event.stopPropagation();toggleTodo(${r.id},${(r.todos || []).indexOf(x)})">⏳ ${esc(x.text)}</button>`).join("")}
       <span style="flex:1"></span>
       <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ 開く</button>
     </div>

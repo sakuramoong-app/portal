@@ -1025,7 +1025,8 @@ function checksForSave(){
   const by = KB.operatorName(), at = new Date().toISOString();
   const list = boxes.filter(b=>b.checked).map(b=>{ const t = b.dataset.text; return prev.find(p=>p.text === t) || { text: t, kind: b.dataset.kind, at, by }; });
   const c = M.casts.find(x=>x.id === $("f_cast").value);
-  const afterTexts = c ? M.castChecks.filter(x=>x.cast_id === c.id && (x.kind || "announce") === "after" && ruleApplies(x)).map(x=>x.text) : [];
+  // 同じ文の受付ルールが2つ（お店ごとなど）あっても、やることは1つ（2026/11/24「新規客ホテル在室確認が2つ」）
+  const afterTexts = c ? [...new Set(M.castChecks.filter(x=>x.cast_id === c.id && (x.kind || "announce") === "after" && ruleApplies(x)).map(x=>String(x.text).trim()))] : [];
   const prevTodos = editing ? (editing.todos || []) : [];
   const todos = afterTexts.map(t=>prevTodos.find(p=>p.text === t) || { text: t, done_at: null, done_by: "" });
   // 🏨 新規の在室確認（部屋番号を入れたとき「する」を選んだら、予約のあとにやることに）
