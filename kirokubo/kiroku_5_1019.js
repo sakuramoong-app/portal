@@ -1112,6 +1112,9 @@ cycleGone = async function(cid){
   const next = GONE_CYCLE[(GONE_CYCLE.indexOf(goneKind(cd)) + 1) % GONE_CYCLE.length];
   // 欠勤は理由を聞く。やめたいときは「欠勤にしない（不在にもどす）」で ⬜不在 にもどせる
   if(next === "欠勤"){ openAttend(cid, "欠勤"); $("at_skip").style.display = ""; return; }
+  // お茶は1回押すだけでなってしまう（まちがえて押して、鶯谷の席も外れた。2026/11/24 店長）→ 確かめてから
+  if(next === "お茶" && !confirm(`${castName(cid)}さんを「🟩 お茶」にしますか？
+（お茶にすると、待機席に座っていたら席も外れます）`)) return;
   await saveDayPart(cid, { status: next });
 };
 
