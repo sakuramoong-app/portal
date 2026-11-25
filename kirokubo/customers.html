@@ -832,6 +832,7 @@ function paintCastNgReview(){
    ・エクセルから取りこんだ「美咲」「らぱんくん」などの名前だけのNGを、そのときの名前・在籍でキャストにつなぐ
    ・つないだあとは、受付はキャストだけで見分ける（名前が変わっても・同じ名前の別の子でもまちがえない）
    ・1人に決まったものは最初から選んである。決まらないものは内勤が選ぶ（選ばなければ、そのまま） ---------- */
+var cngLinkMsg = "";   // つないだ結果（画面の上に出す。押しても何も起きないように見えないように 2026/11/26）
 function cngLinkList(){ return (cngRev || []).filter(x => !x.n.cast_id); }
 function openCngLink(){
   const bg = $("ngRevBg"); if(!bg || !cngRev) return;
@@ -849,6 +850,7 @@ function openCngLink(){
         <optgroup label="ほかの子">${all.filter(c => !cs.includes(c)).map(c => `<option value="${esc(c.id)}">${lbl(c)}</option>`).join("")}</optgroup></select></div>`; };
   bg.innerHTML = `<div class="ngr">
     <div class="ngrh"><b>🔗 名前だけのキャストNGを、キャストにつなぐ</b><button class="btn btn-ghost btn-sm" onclick="paintCastNgReview()">← 見比べにもどる</button><button class="btn btn-ghost btn-sm" onclick="$('ngRevBg').remove()">閉じる</button></div>
+    ${cngLinkMsg ? `<div style="background:#E9F8EF;border:2px solid #3FA96A;color:#1E7B46;border-radius:12px;padding:8px 10px;margin-bottom:8px;font-weight:900">${esc(cngLinkMsg)}</div>` : ""}
     <div class="hint" style="margin:0 0 8px">エクセルから取りこんだNGは、名前だけで入っています。キャストにつなぐと、受付は<b>キャストで</b>見分けるので、名前が変わっても（らむ→らぱん→ニーア）、同じ名前の別の子でもまちがえません。<br>
       書き方のちがい（らぱんくん＝らぱん・カタカナ/ひらがな）と、キャスト台帳の「過去の名前」・その日に在籍していた子でさがしています。</div>
     ${groups.length ? `<div style="background:#F3F1FF;border-radius:12px;padding:8px 10px;margin-bottom:8px"><div style="font-weight:900">📛 名前ごとにまとめて選ぶ<small style="color:var(--sub);font-weight:700">　同じ名前のNGが何件もあるとき、ここで選ぶと下の全部に入ります（例：らむ → ニーア、美咲 → 櫻井美咲）</small></div>
@@ -879,7 +881,8 @@ async function doCngLink(){
     if(/duplicate|unique/i.test(r.error.message || "")){ const d = await sb.from("kb_cust_cast_ng").delete().eq("id", id); if(!d.error){ dup++; cngRev = cngRev.filter(y => y.n.id !== id); continue; } }
     ng++;
   }
-  toast(`🔗 つなぎました ${ok}件` + (dup ? `・同じNGがもうあったので名前だけの方を消した ${dup}件` : "") + (ng ? `・できなかった ${ng}件` : ""));
+  cngLinkMsg = `✅ つなぎました ${ok}件` + (dup ? `・同じNGがもうあったので名前だけの方を消した ${dup}件` : "") + (ng ? `・できなかった ${ng}件` : "") + `（${new Date().toTimeString().slice(0, 5)}）`;
+  toast(cngLinkMsg);
   openCngLink();
 }
 async function cngRevSet(id, isNg){

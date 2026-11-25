@@ -1249,7 +1249,7 @@ async function custCaution(custId){
   try{
     const [h, n, rt] = await Promise.all([
       sb.from("kb_cust_history").select("id,biz_date,status,cast_raw,memo,marks,cast_ng,src_row").eq("customer_id", custId).order("biz_date", { ascending: false }).limit(2000),
-      sb.from("kb_cust_cast_ng").select("cast_id,cast_name,reason").eq("customer_id", custId),
+      sb.from("kb_cust_cast_ng").select("*").eq("customer_id", custId),
       sb.from("kb_reservations").select("biz_date,store_key,cast_id,memo_log,note").eq("customer_id", custId).eq("status", "tobi").eq("deleted", false).order("biz_date", { ascending: false }).limit(50),
     ]);
     if(!curCustomer || curCustomer.id !== custId || !$("custInfo")) return;
@@ -1265,7 +1265,9 @@ async function custCaution(custId){
     const NEXT = /(今後|次回|次から|次は|前払い|先払い|カード|出禁|要注意|注意|本人確認|確認してから|受けない|NG|ＮＧ|保留|様子見|ブラック)/g;
     if(tobis.length) lines.push(`<div class="tobibox"><div class="th">🚨 トビ ${tobis.length}回</div>${tobis.map(t => `<div class="ti"><b>${fmt(t.d) || "日付なし"}</b> ${esc(t.who)}${t.row ? ` <small>（エクセル ${t.row}行目）</small>` : ""}
         ${t.memo ? `<div class="tm">${esc(t.memo).replace(NEXT, '<mark>$1</mark>')}</div>` : `<div class="tm" style="color:#9C8B8F">（備考なし）</div>`}</div>`).join("")}</div>`);
-    if(ngs.length) lines.push(`<div class="warn">🙅 キャストNG：${ngs.map(x => esc(x.cast_id ? castName(x.cast_id) : x.cast_name)).join("・")}（このキャストでは保存できません）</div>`);
+    // 🙅 キャストNG：サムネつきで横にならべる。押すと理由と経緯（2026/11/26 店長）。キャスト選択の写真にも 🚫NG（ngGridMark）
+    custNgView = { cust: custId, items: ngItemsOf(ngs, hs) };
+    if(ngs.length) lines.push(ngCastBoxHtml());
     if(cancel >= 2) lines.push(`<div class="warn" style="background:#FFF6E5;border-color:#F3C77A;color:#8a5a00">⚠️ キャンセル ${cancel}回</div>`);
     // 何かあった回（キャンセル・トビ・流れた・キャストNG・色つき・NGや出禁などの言葉・長い備考）は、備考を全文で見せる（見落とさないように）
     const WORDS = /NG|ＮＧ|出禁|トビ|ﾄﾋﾞ|飛ん|飛ば|とんだ|クレーム|トラブル|警察|盗撮|暴力|薬|要注意|注意|しつこ|強要|キャンセル/;
@@ -1280,6 +1282,7 @@ async function custCaution(custId){
       ${trouble.length > 3 ? `<details><summary style="cursor:pointer;font-weight:800">のこり ${trouble.length - 3}件を見る</summary>${trouble.slice(3).map(tItem).join("")}</details>` : ""}</div>`);
     const old = $("custCaution"); if(old) old.remove();
     $("custInfo").insertAdjacentHTML("afterbegin", `<div id="custCaution">${lines.join("")}${hs.length ? `<div class="hist">📚 台帳（エクセル）の利用 ${done}回${hs[0] && hs[0].biz_date ? "（最後 " + fmt(hs.find(x => x.biz_date).biz_date) + "）" : ""}</div>` : ""}</div>`);
+    try{ if(typeof paintCastGrid === "function") paintCastGrid(); }catch(e){}   // キャスト選択の写真に 🚫NG（2026/11/26）
   }catch(e){}
 }
 const __onCastON = onCast;
@@ -1295,3 +1298,71 @@ function buildMsgShort(c){
 （${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${st || "--:--"}〜）`;
 }
 
+
+/* ---------- 🙅 キャストNGをサムネつきで（2026/11/26 店長）
+   ・重要の枠：NGのキャストを「名前（上）＋写真（下）」で横にならべる。押すと、その子のNGの理由と経緯（エクセルの回・だれが入れたか）
+   ・キャスト選択の写真の一覧：NGの子に 🚫NG（名前だけのNGでだれか決まらないときは、当てはまる子みんなに 🚫NG?）
+   ・キャストにつながったNGはキャストで、名前だけのNGは kb_castname.js（書き方のちがい・過去の名前）で見分ける ---------- */
+let custNgView = { cust: null, items: [] };
+function ngItemsOf(ngs, hs){
+  return (ngs || []).map(x => {
+    const known = x.cast_id ? (M.casts.find(c => c.id === x.cast_id) || null) : null;
+    const cands = x.cast_id ? (known ? [known] : []) : (typeof castsByName === "function" ? castsByName(x.cast_name) : []);
+    const c = known || (cands.length === 1 ? cands[0] : null);
+    const nm = x.cast_id ? (known ? (known.official_name || known.temp_name) : (x.cast_name || castName(x.cast_id))) : x.cast_name;
+    const ps = typeof cnParts === "function" ? cnParts(x.cast_name || nm) : [String(x.cast_name || nm)];
+    const ev = (hs || []).filter(h => (x.cast_id && h.cast_id === x.cast_id) || (typeof cnParts === "function" && cnParts(h.cast_raw).some(p => ps.includes(p))))
+      .filter(h => h.cast_ng || /NG|ＮＧ|出禁|トビ|クレーム|トラブル|注意/.test(h.memo || ""));
+    return { x, c, cands, nm: nm || "（名前なし）", unsure: !x.cast_id && cands.length !== 1, ev };
+  });
+}
+function ngCastBoxHtml(){
+  const it = custNgView.items;
+  return `<div class="ngcast"><div class="ngct">🙅 キャストNG ${it.length}人<small>　押すと理由と経緯が出ます・このキャストでは保存できません</small></div>
+    <div class="ngcl">${it.map((t, i) => `<button type="button" class="ngci ${t.unsure ? "unsure" : ""}" onclick="toggleNgDetail(${i})" title="${esc(t.nm)}のNG：押すと理由と経緯">
+      <b>${esc(t.nm)}${t.unsure ? "？" : ""}</b>${typeof KBF !== "undefined" ? KBF.img(t.c || { official_name: t.nm }, 52) : ""}</button>`).join("")}</div>
+    <div id="ngcDetail"></div></div>`;
+}
+let ngDetailOpen = -1;
+function toggleNgDetail(i){
+  const box = $("ngcDetail"); if(!box) return;
+  ngDetailOpen = ngDetailOpen === i ? -1 : i;
+  document.querySelectorAll(".ngci").forEach((b, k) => b.classList.toggle("on", k === ngDetailOpen));
+  const t = custNgView.items[ngDetailOpen]; if(!t){ box.innerHTML = ""; return; }
+  const x = t.x, fmt = d => d ? String(d).replace(/-/g, "/") : "日付なし";
+  const who = x.source === "excel" ? "台帳エクセルから" : x.by_name ? x.by_name + "が入れた" : "";
+  box.innerHTML = `<div class="ngcd"><b>🙅 ${esc(t.nm)}のNG</b>${who ? ` <small>（${esc(who)}${x.at && x.source !== "excel" ? "・" + fmt(String(x.at).slice(0, 10)) : ""}）</small>` : ""}
+    <div class="ngcr">${esc(x.reason || "理由なし")}</div>
+    ${t.unsure ? `<div class="ngcu">名前だけのNG「${esc(x.cast_name)}」：${t.cands.length ? "当てはまる子 " + t.cands.map(c => esc(c.official_name || c.temp_name)).join("・") + "（だれのNGか確かめてください）" : "キャスト台帳に同じ名前の子が見つかりません"}。顧客台帳の「🔗 名前だけのNGをキャストにつなぐ」でつなげます</div>` : ""}
+    ${t.ev.length ? `<div class="ngce"><b>📝 経緯（台帳エクセルの回）</b>${t.ev.slice(0, 6).map(h => `<div><b>${fmt(h.biz_date)}</b> ${esc(h.cast_raw || "")}${h.cast_ng ? " 🙅" : ""}${h.src_row ? ` <small>（${h.src_row}行目）</small>` : ""}${h.memo ? `<div class="ngcm">${esc(h.memo)}</div>` : ""}</div>`).join("")}</div>` : ""}</div>`;
+}
+// キャスト選択の写真の一覧に 🚫NG
+function ngGridMark(){
+  const box = $("castGrid"); if(!box) return;
+  const on = typeof curCustomer !== "undefined" && curCustomer && custNgView.cust === curCustomer.id;
+  const sure = new Set(), maybe = new Set();
+  if(on) custNgView.items.forEach(t => { if(t.c && !t.unsure) sure.add(t.c.id); else t.cands.forEach(c => maybe.add(c.id)); });
+  box.querySelectorAll(".cg-c").forEach(b => {
+    const m = (b.getAttribute("onclick") || "").match(/'([^']+)'/), id = m && m[1];
+    b.querySelectorAll(".cg-ng").forEach(e => e.remove());
+    const ng = id && sure.has(id), may = id && !ng && maybe.has(id);
+    b.classList.toggle("ngcast", !!(ng || may));
+    if(ng || may) b.insertAdjacentHTML("afterbegin", `<span class="cg-ng" title="このお客さんのキャストNG${may ? "（名前だけのNG：この子か確かめて）" : ""}">🚫NG${may ? "?" : ""}</span>`);
+  });
+}
+// paintCastGrid は kiroku_7（あとで読む）にあるので、ページを読み終わってから包む
+function ngWrapGrid(){ if(typeof paintCastGrid !== "function" || paintCastGrid.__ng) return; const f = paintCastGrid; paintCastGrid = function(){ const r = f.apply(this, arguments); try{ ngGridMark(); }catch(e){} return r; }; paintCastGrid.__ng = true; }
+if(document.readyState === "complete") ngWrapGrid(); else window.addEventListener("load", ngWrapGrid);
+(function(){ const s = document.createElement("style"); s.textContent = `
+  .ngcast{background:#FFF1F2;border:2px solid #E5486C;border-radius:12px;padding:8px 10px;margin:6px 0}
+  .ngct{font-weight:900;color:#B0213F} .ngct small{font-weight:700;color:#9C5A6A}
+  .ngcl{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .ngci{display:flex;flex-direction:column;align-items:center;gap:3px;border:2px solid #F1A9AF;background:#fff;border-radius:12px;padding:4px 6px 6px;cursor:pointer;font-family:inherit;min-width:64px}
+  .ngci b{font-size:12.5px;color:#B0213F;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .ngci .kbface{margin:0}
+  .ngci.on{border-color:#E5486C;box-shadow:0 0 0 3px #FFD0D8} .ngci.unsure{border-style:dashed}
+  .ngcd{background:#fff;border-radius:10px;padding:8px 10px;margin-top:6px;border:1.5px solid #F1A9AF} .ngcr{font-weight:800;color:#8A1C2B;white-space:pre-wrap;margin:3px 0}
+  .ngcu{background:#FFF8E1;color:#6b4e00;border-radius:8px;padding:4px 8px;font-size:12.5px;font-weight:700;margin:4px 0}
+  .ngce > div{border-top:1px dashed #F1C9CF;padding:3px 0;font-size:12.5px} .ngcm{white-space:pre-wrap;background:#FFF8F0;border-radius:6px;padding:2px 6px}
+  #castGrid .cg-c{position:relative} #castGrid .cg-c.ngcast{border-color:#E5486C !important;background:#FFF1F2 !important} #castGrid .cg-c.ngcast img,#castGrid .cg-c.ngcast .kbface{filter:grayscale(.7);opacity:.75}
+  #castGrid .cg-ng{position:absolute;top:2px;left:2px;z-index:2;background:#E02424;color:#fff;font-size:10.5px;font-weight:900;border-radius:6px;padding:0 4px}`;
+  document.head.appendChild(s); })();
