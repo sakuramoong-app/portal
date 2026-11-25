@@ -1280,9 +1280,12 @@ async function custCaution(custId){
     if(trouble.length) lines.push(`<div class="warn" style="background:#FFF8F0;border-color:#F3B27A;color:#5c3a00;font-weight:400">
       <b>📝 台帳で何かあった回 ${trouble.length}件（備考は全文）</b>${trouble.slice(0, 3).map(tItem).join("")}
       ${trouble.length > 3 ? `<details><summary style="cursor:pointer;font-weight:800">のこり ${trouble.length - 3}件を見る</summary>${trouble.slice(3).map(tItem).join("")}</details>` : ""}</div>`);
+    // 📌 次回案内・確認してほしいこと（いちばん上。SQL 971）2026/11/26
+    if(typeof crLoad === "function"){ try{ await crLoad(custId); }catch(e){} if(CR.ok && curCustomer && curCustomer.id === custId) lines.unshift(`<div id="crBoxRes"></div>`); if(!curCustomer || curCustomer.id !== custId || !$("custInfo")) return; }
     const old = $("custCaution"); if(old) old.remove();
     $("custInfo").insertAdjacentHTML("afterbegin", `<div id="custCaution">${lines.join("")}${hs.length ? `<div class="hist">📚 台帳（エクセル）の利用 ${done}回${hs[0] && hs[0].biz_date ? "（最後 " + fmt(hs.find(x => x.biz_date).biz_date) + "）" : ""}</div>` : ""}</div>`);
     try{ if(typeof paintCastGrid === "function") paintCastGrid(); }catch(e){}   // キャスト選択の写真に 🚫NG（2026/11/26）
+    try{ crPaintRes(); }catch(e){}
   }catch(e){}
 }
 const __onCastON = onCast;
@@ -1366,3 +1369,15 @@ if(document.readyState === "complete") ngWrapGrid(); else window.addEventListene
   #castGrid .cg-c{position:relative} #castGrid .cg-c.ngcast{border-color:#E5486C !important;background:#FFF1F2 !important} #castGrid .cg-c.ngcast img,#castGrid .cg-c.ngcast .kbface{filter:grayscale(.7);opacity:.75}
   #castGrid .cg-ng{position:absolute;top:2px;left:2px;z-index:2;background:#E02424;color:#fff;font-size:10.5px;font-weight:900;border-radius:6px;padding:0 4px}`;
   document.head.appendChild(s); })();
+
+/* ---------- 📌 受付の「重要」に、次回案内・確認してほしいこと（kb_custrules.js・SQL 971）2026/11/26 店長
+   ・キャストを選ぶ前：このお客さんのぶん全部／キャストを選んだら：店全体＋そのキャストのぶんだけ ---------- */
+function crPaintRes(){
+  const el = $("crBoxRes"); if(!el || typeof CR === "undefined") return;
+  if(!curCustomer || CR.cust !== curCustomer.id){ el.innerHTML = ""; return; }
+  const cid = $("f_cast") ? $("f_cast").value : "", list = crListHtml(cid);
+  const n = CR.rows.filter(x => !x.done).length;
+  el.innerHTML = `<div class="crbox"><b>📌 次回案内・確認してほしいこと</b><small>${cid ? `　店全体＋${esc(castName(cid))}のぶん` : n ? "　このお客さんのぶん全部（キャストを選ぶと、その子のぶんだけ）" : ""}</small>
+    ${list || `<div class="cr-i" style="color:#7a8aa0;font-size:12.5px">${n ? "このキャストのぶんはありません" : "まだありません（次に来たときに案内・確認してほしいことがあれば入れてください）"}</div>`}${crFormHtml()}</div>`;
+}
+{ const __onCastCR = onCast; onCast = function(){ const r = __onCastCR.apply(this, arguments); try{ crPaintRes(); }catch(e){} return r; }; }

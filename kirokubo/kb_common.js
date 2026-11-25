@@ -29,7 +29,7 @@
   const PRACTICE_DAY = "2000-01-01";
   const PRACTICE = new URLSearchParams(location.search).has("practice");
   const DAY_TABLES = ["kb_reservations", "kb_cast_days", "kb_staff_work", "kb_day_notes", "kb_seat_logs"];
-  const PRACTICE_BLOCK = ["kb_cust_cast_ng", "kb_customer_places", "kb_unsettled", "kb_cust_history", "kb_envelope_checks", "kb_collections", "kb_handovers",
+  const PRACTICE_BLOCK = ["kb_cust_cast_ng", "kb_cust_rules", "kb_customer_places", "kb_unsettled", "kb_cust_history", "kb_envelope_checks", "kb_collections", "kb_handovers",
     "master_casts", "kb_cast_rules", "kb_settings", "prof_settings", "kb_media_fees", "kb_hotels", "kb_secrets", "staff_accounts", "kb_prices", "kb_back", "kb_options", "prof_hotels"];
   function fakeQ(){
     const p = Promise.resolve({ data: { id: 0 }, error: null });

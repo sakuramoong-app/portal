@@ -8,10 +8,11 @@
 <link rel="stylesheet" href="kb.css"><link rel="stylesheet" href="kb_theme.css?v=1">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
-<script src="kb_common.js?v=28"></script>
+<script src="kb_common.js?v=29"></script>
 <script src="kb_face.js?v=9"></script><!-- 🖼 キャストの写真アイコン -->
 <script src="kb_taglv.js?v=2"></script><!-- 🏷 タグの大事さ（並び・色） -->
 <script src="kb_castname.js?v=2"></script><!-- 🔎 名前からキャストをさがす（過去の名前・書き方のちがい） -->
+<script src="kb_custrules.js?v=1"></script><!-- 📌 次回案内・確認してほしいこと（SQL 971） -->
 <style>
   body{font-size:14.5px;}
   .wrap.wide{max-width:1280px;}
@@ -290,6 +291,7 @@ function paintDetail(){
         ${KB.CAN_EDIT ? `<div style="margin-top:6px"><button class="btn btn-danger btn-sm" onclick="custNgDecide(true)">⚠️ 店NG（受けない）</button> <button class="btn btn-ghost btn-sm" onclick="custNgDecide(false)">NGではない</button></div>` : ""}</div>`
       : c.ng ? `<div class="ngbox">⚠️ 店NG：${esc(c.ng_reason || "理由なし")}</div>` : ""}
     ${c._ngs.length ? `<div class="ngbox" style="background:#FFF4E5;border-color:#FFB547;color:#A35A00;margin-top:6px"><b>🙅 キャストNG（${c._ngs.length}人）</b>${c._ngs.map(n=>`<div class="cngl"><b>${esc(n.cast_id ? castLabel(n.cast_id) : n.cast_name)}</b>${n.reason ? `<div class="cngr">${esc(n.reason)}</div>` : ""}</div>`).join("")}</div>` : ""}
+    <div id="crBoxCust"></div>
     <div class="csec"><div class="stats">
       <div class="c"><div class="k">利用回数</div><div class="v">${done.length}回</div></div>
       <div class="c"><div class="k">合計</div><div class="v">${yen(total)}</div></div>
@@ -490,6 +492,7 @@ async function doMerge(oldId){
   if(!cur) return;
   const o = (q(await sb.from("kb_customers").select("id,name,phone").eq("id", oldId).maybeSingle())) || {};
   if(!confirm(`「${o.name || "名前なし"}（${fmtPhone(o.phone)}）」を\n「${cur.name || "名前なし"}（${fmtPhone(cur.phone)}）」にまとめますか？\n\n・予約・利用・キャストNG・よく使う場所・メモ・タグは「${cur.name || "名前なし"}」に移ります\n・番号は副番号に入ります\n・「${o.name || "名前なし"}」のお客さんは消えます（元にもどせません）`)) return;
+  try{ await sb.from("kb_cust_rules").update({ customer_id: cur.id }).eq("customer_id", oldId); }catch(e){}   // 📌 次回案内も残す方へ（SQL 971。2026/11/26）
   try{ const m = q(await sb.rpc("kb_cust_merge", { p_keep: cur.id, p_old: oldId, p_by: KB.operatorName() })); toast("🔗 " + (m || "まとめました")); results = results.filter(r => r.id !== oldId); paintList(); openCustomer(cur.id); }
   catch(e){ toast("まとめられませんでした（SQL 231 は実行ずみ？）：" + (e.message || e)); }
 }
@@ -916,6 +919,18 @@ async function cngRevUndo(id){
     x.done = !!x.n.ask_done; x.was = null; paintCastNgReview(); toast("↩ 戻しました");
   }catch(e){ toast("できませんでした：" + (e.message || e)); }
 }
+</script>
+<script>
+/* ---------- 📌 顧客台帳：次回案内・確認してほしいこと（kb_custrules.js・SQL 971）2026/11/26 店長
+   ・お客さんを開いたら読む。済みのものも下にうすく出す ---------- */
+function crPaintCust(){
+  const el = $("crBoxCust"); if(!el || typeof CR === "undefined") return;
+  if(!cur || CR.cust !== cur.id || !CR.ok){ el.innerHTML = ""; return; }
+  const n = CR.rows.filter(x => !x.done).length, list = crListHtml("", true);
+  el.innerHTML = `<div class="crbox"><b>📌 次回案内・確認してほしいこと（${n}件）</b><small>　受付の「重要」に出ます。キャストを選ぶと、そのキャストのときだけ</small>
+    ${list || `<div class="cr-i" style="color:#7a8aa0;font-size:12.5px">まだありません</div>`}${crFormHtml()}</div>`;
+}
+{ const __pdCR = paintDetail; paintDetail = function(){ const r = __pdCR.apply(this, arguments); const id = cur && cur.id; if(id){ if(CR.cust === id) crPaintCust(); else crLoad(id).then(() => { if(cur && cur.id === id) crPaintCust(); }).catch(() => {}); } return r; }; }
 </script>
 </body>
 </html>
