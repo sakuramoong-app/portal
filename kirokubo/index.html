@@ -2026,12 +2026,33 @@ function mpPaint(){
     : `<div class="warn">⚠️ ${esc(x.res.error || [...(x.res.results || []).filter(r => !r.ok).map(r => r.label + "が入らなかった"), ...(x.res.changed || []).map(k => k + "が変わってしまった")].join("・") || "うまく入りませんでした")}</div>`;
   bg.innerHTML = `<div class="mpBox"><h3>📡 ${esc(nameOf(mp.c))}のプロフを媒体にも入れる</h3>
     <div class="hint">公式HPと同じ中身（このキャスト台帳のプロフ）を入れます。媒体に合う欄がないものは入れません。写真・オプションのアイコンはまだ入れません。<br>ヘブン・ぴゅあらば・口コミ情報局・NHF・マンゾク・駅チカ・風じゃ・デリじゃに入れます（スナイパーはこのあと）。エイティーン・極門はダミーの名前・年齢なので、まだ入れません。</div>
-    ${it.length ? it.map((x, i) => `<div class="mpI"><label><input type="checkbox" ${x.on ? "checked" : ""} onchange="mpToggle(${i},this.checked)"> <b>${esc(x.label)}</b>に入れる</label>
-      <small>（この選びは、ほかのキャストでも同じです）</small>${tbl(x, i)}${res(x)}</div>`).join("") : `<div class="warn">このキャストは、プロフを入れられる媒体のお店に在籍していません</div>`}
+    ${it.length ? mpBulkBar() + mpGroups().map(([gk, gl, idx]) => `<div class="mpG"><div class="mpGh"><b>${esc(gl)}</b>
+        <button class="btn btn-ghost btn-sm" onclick="mpSetMany('${mp.sort}','${esc(gk)}',true)">✅ ${esc(gl)}を全部</button><button class="btn btn-ghost btn-sm" onclick="mpSetMany('${mp.sort}','${esc(gk)}',false)">☐ 外す</button></div>
+      ${idx.map(i => { const x = it[i]; return `<div class="mpI"><label><input type="checkbox" ${x.on ? "checked" : ""} onchange="mpToggle(${i},this.checked)"> <b>${esc(x.label)}</b>に入れる</label>
+      ${tbl(x, i)}${res(x)}</div>`; }).join("")}</div>`).join("") + `<div class="hint" style="margin-top:4px">チェックの選びは、ほかのキャストでも同じです</div>` : `<div class="warn">このキャストは、プロフを入れられる媒体のお店に在籍していません</div>`}
     <div class="btns" style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
       <button class="btn btn-ghost" onclick="$('mpBg').remove()">閉じる</button>
       ${it.some(x => x.on) ? `<button class="btn btn-ghost" id="mpPrev" onclick="mpRun(true)">🔍 変わるところを見る</button>` : ""}
       ${it.some(x => x.on && x.plan && !x.plan.error && (x.plan.plan || []).some(p => p.change) && !(x.res && x.res.ok)) ? `<button class="btn btn-primary" id="mpGo" onclick="mpRun(false)">📡 この内容で入れる</button>` : ""}</div></div>`;
+}
+// 並べ方（媒体ごと／お店ごと）と、まとめてチェック（2026/11/26 店長）
+function mpGroups(){
+  const it = mp.items, by = mp.sort === "store" ? (x => x.mk) : (x => x.media), g = new Map();
+  it.forEach((x, i) => { const k = by(x); if(!g.has(k)) g.set(k, []); g.get(k).push(i); });
+  const label = k => mp.sort === "store" ? (PROF_STORE_OF[k] || k) : ((MP_MEDIA.find(m => m.media === k) || {}).label || k);
+  return [...g].map(([k, idx]) => [k, label(k), idx]);
+}
+function mpBulkBar(){
+  const b = (on, t, f) => `<button class="btn btn-sm ${on ? "btn-primary" : "btn-ghost"}" onclick="${f}">${t}</button>`;
+  return `<div class="mpBar">並べ方 ${b(mp.sort !== "store", "📡 媒体ごと", "mp.sort='media';mpPaint()")}${b(mp.sort === "store", "🏪 お店ごと", "mp.sort='store';mpPaint()")}
+    <span style="flex:1"></span>${b(false, "✅ 全部チェック", "mpSetMany('all','',true)")}${b(false, "☐ 全部外す", "mpSetMany('all','',false)")}</div>`;
+}
+async function mpSetMany(kind, key, on){
+  const hit = x => kind === "all" || (kind === "store" ? x.mk === key : x.media === key);
+  const next = Object.assign({}, mp.set);
+  mp.items.forEach(x => { if(hit(x)){ x.on = on; next[x.media + ":" + x.mk] = on; } });
+  try{ q(await sb.from("kb_settings").upsert({ key: "media_prof_targets", value: next, note: "📡 媒体にプロフを入れるお店（media:お店 → true/false）" })); mp.set = next; }catch(e){ toast("選びを保存できませんでした：" + (e.message || e)); }
+  mpPaint();
 }
 async function mpToggle(i, on){
   mp.items[i].on = on; const k = mp.items[i].media + ":" + mp.items[i].mk;
@@ -2042,6 +2063,8 @@ async function mpToggle(i, on){
 (function(){ const s = document.createElement("style"); s.textContent = `.mpBox{background:#fff;border-radius:16px;padding:14px 16px;max-width:820px;width:100%;font-size:13.5px} .mpBox h3{margin:0 0 6px}
   .mpI{border:2px solid #E5D9F2;border-radius:12px;padding:8px 10px;margin-top:8px} .mpI small{color:#9C8B8F}
   .mpT{width:100%;border-collapse:collapse;margin-top:6px;font-size:12.5px} .mpT th,.mpT td{border-top:1px dashed #E5D9F2;padding:4px 6px;text-align:left;vertical-align:top;white-space:pre-wrap} .mpT td.o{color:#9C8B8F} .mpT td.n{color:#1E7B46;font-weight:700}
+  .mpBar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:#F6F2FF;border-radius:12px;padding:6px 10px;margin-top:8px;font-weight:800}
+  .mpG{border-top:2px solid #E5D9F2;margin-top:10px;padding-top:4px} .mpGh{display:flex;gap:6px;align-items:center;flex-wrap:wrap} .mpGh b{font-size:15px;margin-right:4px}
   .mpOk{background:#E9F8EF;border:2px solid #3FA96A;color:#1E7B46;border-radius:10px;padding:6px 10px;margin-top:6px;font-weight:900}`; document.head.appendChild(s); })();
 // 🆕 媒体に新規登録（dry＝入れる中身を見るだけ）
 async function mpNew(i, dry){
@@ -2708,7 +2731,8 @@ function pfPhotoHtml(){
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfLogoBulk()" title="公式HPに出ている写真を読んで、お店のロゴをのせた新しい写真にします（✂️ で確かめてから 💾 で入れる）">🏷 ロゴを入れる</button>
       ${srcs.length ?`<select id="phSrc">${srcs.map(x => `<option value="${esc(x.s)}">${esc(STORE_LABEL_OF(x.s))}（${x.no}番）</option>`).join("")}</select>
         <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoRun('copy')">📷 の同じ枠からコピー</button>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoPushOpen()" title="このお店の写真を、ほかのお店の同じ枠へ（画像だけ）">📤 ほかのお店へ写す</button>` : ""}
+        <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoPushOpen()" title="このお店の写真を、ほかのお店の同じ枠へ（画像だけ）">📤 ほかのお店へ写す</button>
+        <span class="hint" style="flex-basis:100%;margin:2px 0 0;color:#C0392B;font-weight:800">☝ うつしたい写真の枠に ✅ を入れてから「📤 ほかのお店へ写す」を押してください（✅ がないと、撮影準備中もふくめて全部の枠をうつします）</span>` : ""}
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoRun('ng')">🖼 撮影準備中にする</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoOrder=[1,2,3,4,5,6,7,8];pfPhotoOrderSk=pf.sk;pfCollect();paintProf()">↕ 並べかえ</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoBust=Date.now();pfCollect();paintProf()">🔄 読みなおす</button></div>
