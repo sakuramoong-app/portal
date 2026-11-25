@@ -2832,7 +2832,9 @@ function pfCollect(){
   data.storeProfiles = data.storeProfiles || {};
   const before = JSON.stringify({ b: PF_BASIC.map(([f]) => profGet(data, sk, f)), c: profGet(data, sk, "comment"), m: profGet(data, sk, "mgrComment"), o: profOpts(data, sk) });
   const sp = data.storeProfiles[sk] = data.storeProfiles[sk] || { active: true };
-  PF_BASIC.forEach(([f]) => { const v = $("pf_b_" + f).value.trim(); if(v !== String(profGet(data, sk, f) || "").trim()) sp[f] = v; });
+  // 年齢は「歳」なしでそろえる（2026/11/26 店長：「22歳」と「22」が混ざっていて、プロフの文が「22歳歳」になっていた。SQL 970）
+  const pfAgeNorm = v => String(v || "").normalize("NFKC").replace(/\s*(歳|才)\s*$/, "").trim();
+  PF_BASIC.forEach(([f]) => { const v = f === "age" ? pfAgeNorm($("pf_b_" + f).value) : $("pf_b_" + f).value.trim(); if(v !== String(profGet(data, sk, f) || "").trim()) sp[f] = v; });
   // 雰囲気（キャストプロフの vibes。いくつも入れられる。2026/11/6 旧プロフにあったもの）
   if($("pf_b_vibes")){ const v = $("pf_b_vibes").value.trim(); if(v !== pfVibesText(profGet(data, sk, "vibes"))){ sp.vibes = v.split(/[・、,，\s]+/).map(s => s.trim()).filter(Boolean); pf.dirty.add(sk); } }
   if($("pf_b_castType")){ const v = $("pf_b_castType").value; if(v !== String(profGet(data, sk, "castType") || "")){ sp.castType = v; pf.dirty.add(sk); } }
