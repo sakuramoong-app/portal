@@ -149,6 +149,8 @@
   .phCell.drag{touch-action:none;cursor:grab;user-select:none} .phCell.dragging{opacity:.4} .phCell.over img,.phCell.over .phNone{outline:3px dashed #E5638C;outline-offset:2px}
   .phCell.pend img{border:2.5px solid #4DBF8E} .phCell.pend small{color:#1f9d6b}
   .phCell.moved img,.phCell.moved .phNone{border:2.5px solid #FF8FAB} .phMv{border:1px solid #F1E3E7;background:#fff;border-radius:6px;padding:1px 8px;font-size:12px;cursor:pointer} .phMv:disabled{opacity:.3}
+  .phDrop{border:2.5px dashed #E5A3BC;border-radius:16px;padding:10px;background:#FFFAFC} .phDropHint{font-size:12.5px;color:#6B4A57;margin-top:8px;line-height:1.7}
+  .phBox{border:1.5px solid #EADCE3;border-radius:14px;padding:8px 10px;margin-top:10px;background:#fff} .phBoxT{font-size:13px;font-weight:900;color:#B0567A;margin-bottom:6px}
   .phTools{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px} .phTools select{width:auto;max-width:220px}
   .pfView .ed{display:none !important} .pfBody:not(.pfView) .vw{display:none !important}
   .pfEditBtn{margin-left:auto;background:#FFF0F5;border:1.5px solid #FFC2D1;border-radius:10px;padding:4px 10px;font-size:11.5px;font-weight:800;color:#e0507a;cursor:pointer;font-family:inherit}
@@ -2025,7 +2027,7 @@ function mpPaint(){
   const res = x => !x.res ? "" : x.res.ok ? `<div class="mpOk">✅ 入れました（${(x.res.results || []).length}か所・読みなおして確かめました）</div>`
     : `<div class="warn">⚠️ ${esc(x.res.error || [...(x.res.results || []).filter(r => !r.ok).map(r => r.label + "が入らなかった"), ...(x.res.changed || []).map(k => k + "が変わってしまった")].join("・") || "うまく入りませんでした")}</div>`;
   bg.innerHTML = `<div class="mpBox"><h3>📡 ${esc(nameOf(mp.c))}のプロフを媒体にも入れる</h3>
-    <div class="hint">公式HPと同じ中身（このキャスト台帳のプロフ）を入れます。媒体に合う欄がないものは入れません。写真・オプションのアイコンはまだ入れません。<br>ヘブン・ぴゅあらば・口コミ情報局・NHF・マンゾク・駅チカ・風じゃ・デリじゃに入れます（スナイパーはこのあと）。エイティーン・極門はダミーの名前・年齢なので、まだ入れません。</div>
+    <div class="pfStoreNote">🏪 プロフの中身は<b>お店ごと</b>です：それぞれのお店のプロフ（キャスト台帳のお店のタブ）の中身を、そのお店の媒体に入れます</div><div class="hint">公式HPと同じ中身（このキャスト台帳のプロフ）を入れます。媒体に合う欄がないものは入れません。写真・オプションのアイコンはまだ入れません。<br>ヘブン・ぴゅあらば・口コミ情報局・NHF・マンゾク・駅チカ・風じゃ・デリじゃに入れます（スナイパーはこのあと）。エイティーン・極門はダミーの名前・年齢なので、まだ入れません。</div>
     ${it.length ? mpBulkBar() + mpGroups().map(([gk, gl, idx]) => `<div class="mpG"><div class="mpGh"><b>${esc(gl)}</b>
         <button class="btn btn-ghost btn-sm" onclick="mpSetMany('${mp.sort}','${esc(gk)}',true)">✅ ${esc(gl)}を全部</button><button class="btn btn-ghost btn-sm" onclick="mpSetMany('${mp.sort}','${esc(gk)}',false)">☐ 外す</button></div>
       ${idx.map(i => { const x = it[i]; return `<div class="mpI"><label><input type="checkbox" ${x.on ? "checked" : ""} onchange="mpToggle(${i},this.checked)"> <b>${esc(x.label)}</b>に入れる</label>
@@ -2063,6 +2065,8 @@ async function mpToggle(i, on){
 (function(){ const s = document.createElement("style"); s.textContent = `.mpBox{background:#fff;border-radius:16px;padding:14px 16px;max-width:820px;width:100%;font-size:13.5px} .mpBox h3{margin:0 0 6px}
   .mpI{border:2px solid #E5D9F2;border-radius:12px;padding:8px 10px;margin-top:8px} .mpI small{color:#9C8B8F}
   .mpT{width:100%;border-collapse:collapse;margin-top:6px;font-size:12.5px} .mpT th,.mpT td{border-top:1px dashed #E5D9F2;padding:4px 6px;text-align:left;vertical-align:top;white-space:pre-wrap} .mpT td.o{color:#9C8B8F} .mpT td.n{color:#1E7B46;font-weight:700}
+  .pfStoreNote{background:#FFF8E1;border:1.5px solid #F5C542;color:#6B4E00;border-radius:12px;padding:6px 10px;font-size:12.5px;font-weight:700;margin:4px 0 6px}
+  .pfSaveOpt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;border:2px solid #F1C9D8;background:#FFF7FA;border-radius:14px;padding:10px 12px;margin-top:6px;cursor:pointer;font-family:inherit} .pfSaveOpt:hover{border-color:#E5638C;background:#FFEEF4} .pfSaveOpt b{font-size:14.5px} .pfSaveOpt small{color:#9C8B8F;font-weight:700}
   .mpBar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:#F6F2FF;border-radius:12px;padding:6px 10px;margin-top:8px;font-weight:800}
   .mpG{border-top:2px solid #E5D9F2;margin-top:10px;padding-top:4px} .mpGh{display:flex;gap:6px;align-items:center;flex-wrap:wrap} .mpGh b{font-size:15px;margin-right:4px}
   .mpOk{background:#E9F8EF;border:2px solid #3FA96A;color:#1E7B46;border-radius:10px;padding:6px 10px;margin-top:6px;font-weight:900}`; document.head.appendChild(s); })();
@@ -2123,6 +2127,7 @@ function paintHpPush(){
   const any = hpPush.some(x => x.on && x.state === "checked" && x.r && x.r.ok && x.r.changes && x.r.changes.length);
   bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:16px;max-width:760px;width:100%;max-height:90vh;overflow:auto;font-size:13.5px">
     <b style="font-size:16px">🌐 公式HPにも入れますか？</b>
+    <div class="pfStoreNote">🏪 プロフの中身は<b>お店ごと</b>です：それぞれのお店のプロフ（キャスト台帳のお店のタブ）の中身を、そのお店の公式HPに入れます</div>
     <div class="hint" style="margin:6px 0">キャストプロフには入れました。下は公式HPの管理画面を見て「変わるところ」を出しただけです（まだ何も変えていません）。入れるお店にチェックして「🌐 入れる」。エイティーン・極門は、オプションだけ入れます。</div>
     ${rowsHtml}
     <div style="display:flex;gap:8px;margin-top:12px">
@@ -2721,21 +2726,21 @@ function pfPhotoHtml(){
       ${pend[k] ? `<img src="${pend[k].prev || pend[k].url}" alt="${l}">` : img(k)}
       <span>${CAN_EDIT ? `<input type="checkbox" class="phSel" value="${k}"> ` : ""}${l}${pend[k] ? "<small>（新しい）</small>" : ""}</span>
       ${pend[k] && CAN_EDIT ? `<button type="button" class="phMv" style="width:auto;padding:2px 8px" onclick="event.preventDefault();pfCropOpen(${k})">✂️ トリミング</button>` : ""}</label>`).join("");
-  return `<div class="phGrid">${cells}</div>
+  // 2026/11/26 店長：枠の中のボタンを整理（📁 写真を入れる所は点線でかこむ／☑ チェックした枠を／そのほか）。「店舗を選んで同じ枠からコピー」はなくした
+  return `<div class="phDrop">
+    <div class="phGrid">${cells}</div>
     ${CAN_EDIT && nPend ? `<div class="phTools"><button type="button" class="btn btn-primary btn-sm" onclick="pfPhotoUpload()">💾 新しい写真を入れる（${nPend}枚）</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoPend={};pfCollect();paintProf()">やめる</button></div>` : ""}
-    ${CAN_EDIT ? `<div class="hint" style="margin-top:6px">📁 PCのフォルダから写真を<b>枠にドラッグ＆ドロップ</b>（何枚かまとめて落とすと、その枠から順に入ります）／コピーした画像は、枠に1つチェックして <b>Ctrl+V</b> で貼りつけ／
-      <a href="javascript:void(0)" onclick="$('phFile').click()">ファイルを選ぶ</a><input type="file" id="phFile" accept="image/*" multiple style="display:none" onchange="pfPhotoPick(this.files);this.value=''"></div>` : ""}
-    ${CAN_EDIT ? `<div class="phTools">
-      <span style="font-size:12px;color:#9C8B8F">チェックした枠を</span>
+    ${CAN_EDIT ? `<div class="phDropHint">📁 PCのフォルダから写真を<b>枠にドラッグ＆ドロップ</b>（何枚かまとめて落とすと、その枠から順に入ります）<br>📋 コピーした画像は、枠に1つ ✅ を入れて <b>Ctrl+V</b> で貼りつけ<br>
+      📂 <a href="javascript:void(0)" onclick="$('phFile').click()">ファイルを選ぶ</a>（✅ を入れた枠、なければ①から入ります）<input type="file" id="phFile" accept="image/*" multiple style="display:none" onchange="pfPhotoPick(this.files);this.value=''"></div>` : ""}</div>
+    ${CAN_EDIT ? `<div class="phBox"><div class="phBoxT">☑ チェックした枠を</div><div class="phTools" style="margin:0">
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfLogoBulk()" title="公式HPに出ている写真を読んで、お店のロゴをのせた新しい写真にします（✂️ で確かめてから 💾 で入れる）">🏷 ロゴを入れる</button>
-      ${srcs.length ?`<select id="phSrc">${srcs.map(x => `<option value="${esc(x.s)}">${esc(STORE_LABEL_OF(x.s))}（${x.no}番）</option>`).join("")}</select>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoRun('copy')">📷 の同じ枠からコピー</button>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoPushOpen()" title="このお店の写真を、ほかのお店の同じ枠へ（画像だけ）">📤 ほかのお店へ写す</button>
-        <span class="hint" style="flex-basis:100%;margin:2px 0 0;color:#C0392B;font-weight:800">☝ うつしたい写真の枠に ✅ を入れてから「📤 ほかのお店へ写す」を押してください（✅ がないと、撮影準備中もふくめて全部の枠をうつします）</span>` : ""}
-      <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoRun('ng')">🖼 撮影準備中にする</button>
+      ${srcs.length ? `<button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoPushOpen()" title="チェックした枠の写真だけを、ほかのお店の同じ枠へ（画像だけ）">📤 ほかのお店へ写す</button>` : ""}
+      <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoRun('ng')">🖼 撮影準備中にする</button></div>
+      <div class="hint" style="margin:4px 0 0">☝ 写真の枠に ✅ を入れてから押してください。「ほかのお店へ写す」は ✅ を入れた枠だけをうつします（撮影準備中をうつしてしまわないように）</div></div>
+    <div class="phBox"><div class="phBoxT">そのほか</div><div class="phTools" style="margin:0">
       <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoOrder=[1,2,3,4,5,6,7,8];pfPhotoOrderSk=pf.sk;pfCollect();paintProf()">↕ 並べかえ</button>
-      <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoBust=Date.now();pfCollect();paintProf()">🔄 読みなおす</button></div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="pfPhotoBust=Date.now();pfCollect();paintProf()">🔄 公式HPから読みなおす</button></div></div>
       <div id="phMsg" class="hint" style="margin-top:4px">写真は「更新」しなくても公式HPに出ます。入れた枠の写真は上書きされます。</div>` : ""}
     ${CAN_EDIT ? pfFormPhHtml() : ""}`;
 }
@@ -2797,7 +2802,8 @@ async function pfFormPhDel(i){
 function pfPhotoPushOpen(){
   if(pfPhotoBusy || !pf) return;
   const sel = [...document.querySelectorAll(".phSel:checked")].map(b => Number(b.value));
-  const slots = sel.length ? sel : [0, 1, 2, 3, 4, 5, 6, 7, 8];
+  if(!sel.length){ toast("☝ うつしたい写真の枠に ✅ を入れてから押してください（撮影準備中をうつさないように、✅ の枠だけうつします）"); return; }
+  const slots = sel;
   const tg = pf.stores.filter(s => s !== pf.sk).map(s => ({ s, ...hpNoOf(pf.c, s) })).filter(x => x.no && HP_SITE_OF[x.mk]);
   if(!tg.length){ toast("写せるほかのお店がありません（在籍番号が入っているお店だけ）"); return; }
   const bg = document.createElement("div"); bg.id = "phPushBg";
@@ -2910,10 +2916,7 @@ function paintProf(){
       ${CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:8px"><input id="pf_newopt" placeholder="新しいオプションの名前（例：TSP（有料））" style="flex:1"><button class="btn btn-ghost btn-sm" onclick="pfAddOpt()">＋ 種類を足す</button></div>` : ""}</div></div></details>
     <details ${pfAcc("photo")}><summary class="pfHead">📷 写真 <small style="font-weight:400;color:#9C8B8F">（公式HPに出ている写真）</small></summary><div class="pfBody">${pfPhotoHtml()}</div></details>
     ${CAN_EDIT ? `<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:6px">
-      <button class="btn btn-ghost" onclick="hpPushLater()">🌐 公式HPにまとめて入れる</button>
-      <button class="btn btn-ghost" onclick="mpOpen()" title="公式HPと同じプロフを、媒体（シフトと同じ8つ）にも入れる">📡 媒体にも入れる</button>
-      <button class="btn btn-ghost" onclick="saveProf(true)">💾 保存だけ（公式HPはあとで）</button>
-      <button class="btn btn-primary" onclick="saveProf()">💾 プロフを保存</button></div>` : ""}`;
+      <button class="btn btn-primary" onclick="pfSaveMenu()" title="押すと「保存だけ／公式HPにも／公式HPと媒体にも」を選べます">💾 保存する…</button></div>` : ""}`;
   reflPv("pf_c"); reflPv("pf_m");
   setTimeout(kbGlowApply, 0);   // ✨ 保存がまだなら光らせる
   if($("e_logs")) $("e_logs").innerHTML = pfLogsHtml();   // 🗓 記録・ヒアリングは大きい項目に
@@ -3375,6 +3378,42 @@ function hpSetsOf(data, sks){   // プロフのお店 → 公式HPに入れる�
   return sets;
 }
 // 🌐 あとでまとめて：保存ずみのプロフを、番号のある全部のお店の公式HPとくらべる（ちがうお店だけ入れられる）
+/* ---------- 💾 保存する…（2026/11/26 店長：4つのボタンを1つに。保存がまだのときはこのボタンが光る）
+   ・💾 保存だけ（キャスト台帳だけ）
+   ・💾＋🌐 公式HPにも（保存のあと「公式HPに入れますか？」の画面でお店を選ぶ）
+   ・💾＋🌐＋📡 公式HPと媒体にも（公式HPの画面を閉じたら、つづけて「📡 媒体にも入れる」の画面でお店・媒体を選ぶ） ---------- */
+function pfSaveMenu(){
+  if(!pf) return;
+  pfCollect();
+  const dirty = !!(pf.dirty.size || pf.hotelDirty || Object.keys(tplPending).length || (typeof introPending !== "undefined" && Object.keys(introPending).length));
+  let bg = $("pfSaveBg"); if(!bg){ bg = document.createElement("div"); bg.id = "pfSaveBg"; bg.style.cssText = "position:fixed;inset:0;z-index:305;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:14px"; document.body.appendChild(bg); bg.addEventListener("click", e => { if(e.target === bg) bg.remove(); }); }
+  const opt = (mode, icon, t, sub) => `<button type="button" class="pfSaveOpt" onclick="pfSaveGo('${mode}')"><b>${icon} ${t}</b><small>${sub}</small></button>`;
+  bg.innerHTML = `<div style="background:#fff;border-radius:18px;padding:16px;width:440px;max-width:100%">
+    <div style="font-size:16px;font-weight:900;margin-bottom:4px">💾 ${esc(nameOf(pf.c))}のプロフ</div>
+    <div class="hint" style="margin-bottom:8px">${dirty ? "直したところがあります。どこまで入れますか？" : "直したところはありません（保存ずみ）。入れるだけもできます。"}</div>
+    <div class="pfStoreNote">🏪 公式HP・媒体に入れるプロフの中身は、<b>お店ごと</b>のプロフ（このプロフの上のお店のタブ）から入ります。お店ごとに文を変えていれば、そのお店の文が入ります</div>
+    ${opt("save", "💾", dirty ? "保存だけ" : "保存だけ（いまは何もしない）", "キャスト台帳だけ。公式HP・媒体はあとで")}
+    ${opt("hp", "🌐", dirty ? "保存して、公式HPにも入れる" : "公式HPに入れる", "このあと、入れるお店を選べます")}
+    ${opt("all", "📡", dirty ? "保存して、公式HPと媒体にも入れる" : "公式HPと媒体に入れる", "公式HPのお店を選んで入れたあと、つづけて媒体（ヘブン・ぴゅあらば…）を選べます")}
+    <div style="text-align:right;margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="$('pfSaveBg').remove()">やめる</button></div></div>`;
+}
+async function pfSaveGo(mode){
+  const bg = $("pfSaveBg"); if(bg) bg.remove();
+  pfCollect();
+  const dirty = !!(pf.dirty.size || pf.hotelDirty || Object.keys(tplPending).length || (typeof introPending !== "undefined" && Object.keys(introPending).length));
+  if(dirty){ await saveProf(true); pfCollect(); if(pf.dirty.size) return; }   // 保存できなかったら、ここでやめる
+  else if(mode === "save"){ toast("直したところはありません"); return; }
+  if(mode === "save") return;
+  const before = !!$("hpBg");
+  hpPushLater();
+  if(mode !== "all") return;
+  // 公式HPの画面が出たら、閉じるのを待ってから媒体の画面（出なかったら＝入れるものがない → すぐ媒体）
+  await new Promise(r => setTimeout(r, 300));
+  if(!before && $("hpBg")){
+    toast("🌐 公式HPに入れたあと、この画面を閉じると 📡 媒体の画面が出ます");
+    const t0 = Date.now(); const iv = setInterval(() => { if(!$("hpBg")){ clearInterval(iv); mpOpen(); } else if(Date.now() - t0 > 30 * 60e3) clearInterval(iv); }, 500);
+  } else mpOpen();
+}
 function hpPushLater(){
   if(!pf) return;
   pfCollect();
@@ -5187,7 +5226,7 @@ function kbGlowApply(){
   const prof = !!(pf && (pf.dirty.size || Object.keys(tplPending).length || (typeof introPending !== "undefined" && Object.keys(introPending).length))), hotel = !!(pf && pf.hotelDirty);
   on('#editBg .actions button[onclick="saveCast()"]', kbArea.has("cast"));
   on('#e_private button[onclick="savePrivate()"]', kbArea.has("private"));
-  on('#e_prof button[onclick="saveProf()"]', prof);
+  on('#e_prof button[onclick="pfSaveMenu()"]', prof);   // 💾 保存する…（2026/11/26 4つのボタンを1つに）
   on('#e_hotel button[onclick="saveProf(true)"]', hotel);
   const names = [kbArea.has("cast") && "台帳（下の「💾 保存する」）", kbArea.has("private") && "連絡先", prof && "プロフ", hotel && "ホテル"].filter(Boolean);
   const act = document.querySelector("#editBg .actions");
