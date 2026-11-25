@@ -261,25 +261,25 @@ async function inlineSave(id, field, v){
 // 🏷 顧客タグ（顧客台帳の kb_customers.tags）を小さいバッジで。2026/11/6
 function custTagsHtml(c){
   const t = (c && Array.isArray(c.tags)) ? c.tags : [];
-  return t.length ? ` ${t.map(x => `<span class="ctag-b ${tagCls(x)}">${esc(x)}</span>`).join("")}` : "";
+  return t.length ? ` ${tagSort(t).map(x => `<span class="ctag-b ${tagCls(x)}">${esc(x)}</span>`).join("")}` : "";
 }
 // 要確認はオレンジ・要注意人物／トビ／出禁は赤（顧客台帳と同じ）2026/11/7
-function tagCls(t){ return /要確認/.test(t) ? "tg-chk" : /要注意|トビ|出禁|危険/.test(t) ? "tg-ng" : ""; }
+// tagCls は kb_taglv.js（タグの大事さで色。2026/11/26）
 // 🏷 受付のお客さんの欄：ついているタグ（要確認なら大きく）＋ 押してつける・外す（一覧は顧客台帳と同じ kb_settings 'cust_tags'）
 let custTagEdit = false;
 function custTagBox(c){
   const have = (c && c.tags) || [];
   const chk = have.some(x => /要確認/.test(x)) ? `<div class="warn" style="background:#FFF0E0;border-color:#E67E22;color:#8a4500;font-size:15px">🔎 <b>要確認のお客さんです：キャストに確認してから受けてください</b></div>` : "";
-  const list = [...new Set([...(Array.isArray(M.set.cust_tags) ? M.set.cust_tags : []), ...have])];
+  const list = tagSort([...new Set([...(Array.isArray(M.set.cust_tags) ? M.set.cust_tags : []), ...have])]);   // 大事な順（2026/11/26）
   const ed = KB.CAN_EDIT && c && c.id;
   return chk + `<div class="ctags-in">🏷 ${have.length ? custTagsHtml(c) : `<small style="color:var(--sub);font-weight:700">タグなし</small>`}
     ${ed ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-left:6px" onclick="custTagEdit=!custTagEdit;$('custTagBox').innerHTML=custTagBox(curCustomer)">${custTagEdit ? "閉じる" : "🏷 タグをつける"}</button>` : ""}</div>`
-    + (ed && custTagEdit ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin:0 0 8px">${list.map((t, i) => `<button type="button" class="ctag-b ${have.includes(t) ? tagCls(t) : "off"}" style="cursor:pointer;font-size:13px;padding:2px 10px" onclick="toggleResTag(${i})">${have.includes(t) ? "✓ " : ""}${esc(t)}</button>`).join("")}
+    + (ed && custTagEdit ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin:0 0 8px">${list.map((t, i) => `<button type="button" class="ctag-b ${have.includes(t) ? tagCls(t) : "off " + tagCls(t)}" style="cursor:pointer;font-size:13px;padding:2px 10px" onclick="toggleResTag(${i})">${have.includes(t) ? "✓ " : ""}${esc(t)}</button>`).join("")}
       <small style="color:var(--sub);align-self:center">（タグの一覧を足す・直す・消すのは顧客台帳で）</small></div>` : "");
 }
 async function toggleResTag(i){
   const c = curCustomer; if(!c || !KB.CAN_EDIT) return;
-  const have = c.tags || [], list = [...new Set([...(Array.isArray(M.set.cust_tags) ? M.set.cust_tags : []), ...have])], t = list[i]; if(!t) return;
+  const have = c.tags || [], list = tagSort([...new Set([...(Array.isArray(M.set.cust_tags) ? M.set.cust_tags : []), ...have])]), t = list[i]; if(!t) return;
   const next = have.includes(t) ? have.filter(x => x !== t) : have.concat(t);
   try{ q(await sb.from("kb_customers").update({ tags: next, updated_by: KB.operatorName() }).eq("id", c.id)); c.tags = next; $("custTagBox").innerHTML = custTagBox(c); toast("🏷 タグを" + (have.includes(t) ? "外しました" : "つけました")); }
   catch(e){ toast("タグを保存できませんでした：" + (e.message || e)); }

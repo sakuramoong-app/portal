@@ -10,6 +10,7 @@
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_common.js?v=28"></script>
 <script src="kb_face.js?v=9"></script><!-- 🖼 キャストの写真アイコン -->
+<script src="kb_taglv.js?v=1"></script><!-- 🏷 タグの大事さ（並び・色） -->
 <style>
   body{font-size:14.5px;}
   .wrap.wide{max-width:1280px;}
@@ -71,6 +72,9 @@
   body .detail h2{font-size:24px;font-weight:900}
   body .detail h2 small{font-size:16px !important;font-weight:800}
   body .ngbox{border-radius:16px;font-size:14.5px;box-shadow:0 3px 0 rgba(0,0,0,.05)}
+  /* キャストNGはキャストごとに分けて（2026/11/26 店長：文字がずらーっと並んで見づらい） */
+  .ngbox .cngl{border-top:1.5px dashed #FFC27A;margin-top:6px;padding-top:6px} .ngbox .cngl > b{display:inline-block;background:#fff;border:1.5px solid #FFB547;border-radius:99px;padding:0 10px;color:#A35A00}
+  .ngbox .cngr{font-weight:600;line-height:1.6;margin-top:3px;white-space:pre-wrap;color:#6B3A00}
   body .stats{gap:10px;grid-template-columns:repeat(auto-fit,minmax(138px,1fr))}
   body .stats .c{position:relative;background:linear-gradient(180deg,#fff,#FFF7FA);border:1.5px solid #F4E6EB;border-radius:16px;padding:10px 12px 10px 46px;box-shadow:0 3px 0 #F3E3E9,0 6px 14px rgba(92,75,79,.05)}
   body .stats .c::before{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:22px}
@@ -103,7 +107,7 @@
           <button class="chip on" data-f="all" onclick="setFilter('all')">ぜんぶ</button>
           <button class="chip" data-f="ng" onclick="setFilter('ng')">⚠️ 店NG</button>
           <button class="chip" data-f="cng" onclick="setFilter('cng')">🙅 キャストNGあり</button>
-          <button class="chip" onclick="openNgReview()" title="台帳エクセルと見比べて、本当にNGか1人ずつ決める">🔎 NGの見比べ</button>
+          <button class="chip" onclick="openCastNgReview()" title="台帳エクセルと見比べて、本当にNGか1件ずつ決める（店NGは終わったので、キャストNGから開く 2026/11/26。店NGは中の「⚠️ 店NGへ」）">🔎 NGの見比べ</button>
           <select id="tagSel" onchange="searchByTag(this.value)" onfocus="fillTagSel()" style="border-radius:99px;padding:4px 10px;font-weight:800"><option value="">🏷 タグで探す</option></select>
           <button class="btn btn-ghost btn-sm edit-only" onclick="newCustomer()">＋ お客さんを足す</button>
         </div>
@@ -284,7 +288,7 @@ function paintDetail(){
     ${c.ng && c.ng_ask ? `<div class="ngbox" style="background:#FFF8E1;border-color:#F5B400;color:#6b4e00">🤔 <b>出禁・店NG？</b>（台帳エクセルの備考から見分けました。条件つきの書き方なので、内勤が決めてください）<br>${esc(c.ng_reason || "")}
         ${KB.CAN_EDIT ? `<div style="margin-top:6px"><button class="btn btn-danger btn-sm" onclick="custNgDecide(true)">⚠️ 店NG（受けない）</button> <button class="btn btn-ghost btn-sm" onclick="custNgDecide(false)">NGではない</button></div>` : ""}</div>`
       : c.ng ? `<div class="ngbox">⚠️ 店NG：${esc(c.ng_reason || "理由なし")}</div>` : ""}
-    ${c._ngs.length ? `<div class="ngbox" style="background:#FFF4E5;border-color:#FFB547;color:#A35A00;margin-top:6px">🙅 キャストNG：${c._ngs.map(n=>esc(n.cast_id ? castLabel(n.cast_id) : n.cast_name) + (n.reason ? "（" + esc(n.reason) + "）" : "")).join("、")}</div>` : ""}
+    ${c._ngs.length ? `<div class="ngbox" style="background:#FFF4E5;border-color:#FFB547;color:#A35A00;margin-top:6px"><b>🙅 キャストNG（${c._ngs.length}人）</b>${c._ngs.map(n=>`<div class="cngl"><b>${esc(n.cast_id ? castLabel(n.cast_id) : n.cast_name)}</b>${n.reason ? `<div class="cngr">${esc(n.reason)}</div>` : ""}</div>`).join("")}</div>` : ""}
     <div class="csec"><div class="stats">
       <div class="c"><div class="k">利用回数</div><div class="v">${done.length}回</div></div>
       <div class="c"><div class="k">合計</div><div class="v">${yen(total)}</div></div>
@@ -429,14 +433,25 @@ async function delSubPhone(i){
 /* ---------- 🏷 顧客タグ（SQL 217：kb_customers.tags ＋ kb_settings 'cust_tags'）2026/11/6 ---------- */
 var custTagList = null;
 // 要確認はオレンジ・要注意人物／トビ／出禁は赤（受付と同じ）
-function tagCls(t){ return /要確認/.test(t) ? "tg-chk" : /要注意|トビ|出禁|危険/.test(t) ? "tg-ng" : ""; }
+// tagCls は kb_taglv.js（タグの大事さで色。2026/11/26）
 async function loadCustTags(){
   try{ const s = q(await sb.from("kb_settings").select("value").eq("key", "cust_tags").maybeSingle()); custTagList = Array.isArray(s && s.value) ? s.value : []; }
   catch(e){ custTagList = []; }
+  // 🏷 タグの大事さ（2026/11/26）
+  try{ const s = q(await sb.from("kb_settings").select("value").eq("key", "cust_tag_levels").maybeSingle()); window.TAG_LEVELS = (s && s.value && typeof s.value === "object") ? s.value : {}; }
+  catch(e){ window.TAG_LEVELS = window.TAG_LEVELS || {}; }
+}
+// 並び：大事な順（🔴→🟠→🟡→そのほか）。押したときの番号もこの並び（custTagAt）
+function custTagAll(){ const have = (cur && cur.tags) || []; return tagSort([...new Set([...(custTagList || []), ...have])]); }
+async function setTagLv(i, v){
+  const t = (custTagList || [])[i]; if(!t) return;
+  const next = Object.assign({}, window.TAG_LEVELS || {}); next[t] = v;
+  try{ q(await sb.from("kb_settings").upsert({ key: "cust_tag_levels", value: next, note: "🏷 顧客タグの大事さ（red・orange・yellow・none）並びと色" })); window.TAG_LEVELS = next; $("c_tags").innerHTML = custTagChips(); fillTagSel(); toast(`🏷 「${t}」を ${TAG_LV_NAME[v] || v} にしました`); }
+  catch(e){ toast("保存できませんでした：" + (e.message || e)); }
 }
 function custTagChips(){
   if(!cur) return "";
-  const have = cur.tags || [], list = [...new Set([...(custTagList || []), ...have])];
+  const have = cur.tags || [], list = custTagAll();
   const ed = KB.CAN_EDIT;
   return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${list.map((t, i) => { const on = have.includes(t);
       return `<button type="button" class="ctag ${on ? "on" : ""} ${tagCls(t)}" ${ed ? `onclick="toggleCustTag(custTagAt(${i}))"` : "disabled"}>${on ? "✓ " : ""}${esc(t)}</button>`; }).join("")}
@@ -447,7 +462,7 @@ setTimeout(() => { try{ fillTagSel(); }catch(e){} }, 1500);
 async function fillTagSel(){
   if(custTagList == null) await loadCustTags();
   const s = $("tagSel"), v = s.value;
-  s.innerHTML = `<option value="">🏷 タグで探す</option>` + (custTagList || []).map(t => `<option value="${esc(t)}" ${t === v ? "selected" : ""}>🏷 ${esc(t)}</option>`).join("");
+  s.innerHTML = `<option value="">🏷 タグで探す</option>` + tagSort(custTagList || []).map(t => `<option value="${esc(t)}" ${t === v ? "selected" : ""}>${TAG_LV_MARK[tagLvOf(t)] || "🏷"} ${esc(t)}</option>`).join("");
 }
 async function searchByTag(t){
   if(!t){ search(); return; }
@@ -483,8 +498,11 @@ function editCustTags(){ tagEditOpen = !tagEditOpen; $("c_tags").innerHTML = cus
 function tagEditHtml(){
   if(!tagEditOpen || !KB.CAN_EDIT) return "";
   return `<div style="border:1.5px dashed var(--line);border-radius:12px;padding:8px 10px;margin-top:8px"><b>⚙️ タグの一覧</b> <small style="color:var(--sub)">（名前を変える・消すと、そのタグがついているお客さん全員に効きます）</small>
-    ${(custTagList || []).map((t, i) => `<div style="display:flex;gap:6px;align-items:center;margin-top:5px"><span class="ctag on" style="cursor:default">${esc(t)}</span>
-      <button type="button" class="btn btn-ghost btn-sm" onclick="renameCustTag(${i})">✏️ 名前を変える</button><button type="button" class="btn btn-ghost btn-sm" onclick="deleteCustTag(${i})">🗑 消す</button></div>`).join("")}
+    <div style="font-size:12px;color:var(--sub);margin-top:4px">大事さを選ぶと、大事な順（🔴→🟠→🟡）に左上から並んで、その色になります（受付でも同じ）</div>
+    ${tagSort(custTagList || []).map(t => { const i = (custTagList || []).indexOf(t), lv = tagLvOf(t) || "none";
+      return `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap"><span class="ctag on ${tagCls(t)}" style="cursor:default">${esc(t)}</span>
+      <select onchange="setTagLv(${i},this.value)" style="font-family:inherit;font-weight:800;border:1.5px solid var(--line);border-radius:9px;padding:3px 6px">${["red", "orange", "yellow", "none"].map(k => `<option value="${k}" ${lv === k ? "selected" : ""}>${TAG_LV_NAME[k]}</option>`).join("")}</select>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="renameCustTag(${i})">✏️ 名前を変える</button><button type="button" class="btn btn-ghost btn-sm" onclick="deleteCustTag(${i})">🗑 消す</button></div>`; }).join("")}
     <div style="margin-top:8px"><button type="button" class="btn btn-ghost btn-sm" onclick="addTagOnly()">＋ 一覧にだけ足す</button> <button type="button" class="btn btn-ghost btn-sm" onclick="editCustTags()">閉じる</button></div></div>`;
 }
 async function renameCustTag(i){
@@ -505,7 +523,7 @@ async function addTagOnly(){
   try{ q(await sb.from("kb_settings").upsert({ key: "cust_tags", value: next, note: "🏷 顧客タグの一覧（顧客台帳で足せる）" })); custTagList = next; $("c_tags").innerHTML = custTagChips(); }
   catch(e){ toast("足せませんでした：" + (e.message || e)); }
 }
-function custTagAt(i){ const have = (cur && cur.tags) || []; return [...new Set([...(custTagList || []), ...have])][i]; }
+function custTagAt(i){ return custTagAll()[i]; }   // 大事な順の並びの i 番目（2026/11/26）
 async function toggleCustTag(t){
   if(!cur || !KB.CAN_EDIT || !t) return;
   const have = cur.tags || [], next = have.includes(t) ? have.filter(x => x !== t) : have.concat(t);
@@ -676,7 +694,7 @@ function paintNgReview(){
     <div class="hint" style="margin:0 0 8px">最後に来た日が新しい人（また来そうな人）から順です。<b>📋 A123</b> を押すと行番号をコピー → エクセルで <b>Ctrl+G</b> → 貼って Enter で、その行に飛びます。</div>
     ${list.map(x => { const c = x.c;
       return `<div class="ngrc ${x.done ? "done" : ""}" id="ngr_${c.id}">
-        <div class="ngrt"><b>${esc(c.name || "（名前なし）")}</b><small>📞 ${esc(fmtPhone(c.phone))}　最後に来た日 ${x.last ? md(x.last) : "なし"}</small>
+        <div class="ngrt"><b>${esc(c.name || "（名前なし）")}</b>${ngRevPhoneBtn(c.phone)}<small>最後に来た日 ${x.last ? md(x.last) : "なし"}</small>
           ${c.ng_ask ? `<span class="badge" style="background:#FFF3C4;color:#7a5600">🤔 条件つきの書き方</span>` : ""}
           <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="$('ngRevBg').remove();openCustomer(${c.id})">開く</button></div>
         <div class="ngrr">⚠️ ${esc(c.ng_reason || "理由なし")}</div>
@@ -687,6 +705,9 @@ function paintNgReview(){
           : x.done ? `<span class="ngrres">確認ずみ</span>`
           : ed ? `<button class="btn btn-danger btn-sm" onclick="ngRevSet(${c.id},true)">✅ NGで正しい</button><button class="btn btn-ghost btn-sm" onclick="ngRevSet(${c.id},false)">❌ NGではない</button>` : ""}</div></div>`; }).join("") || `<div class="empty">ぜんぶ確認ずみです 🎉</div>`}</div>`;
 }
+// 📞 電話番号をハイフンなしでコピー（エクセルで Ctrl+F に貼ってさがす。行のコピーよりやりやすい 2026/11/26 店長）
+function ngRevPhoneBtn(p){ const d = String(p || "").replace(/\D/g, ""); return d ? `<button class="ngrcp" onclick="ngRevCopyText('${d}')" title="ハイフンなしでコピー → エクセルで Ctrl+F に貼ってさがす">📋 📞 ${d}</button>` : `<span class="ngrcp no">📞 なし</span>`; }
+function ngRevCopyText(t){ navigator.clipboard.writeText(t).then(() => toast(`📋 ${t} をコピーしました（エクセルで Ctrl+F → 貼って Enter）`)).catch(() => toast(t)); }
 function ngRevCopy(row){ const t = "A" + row; navigator.clipboard.writeText(t).then(() => toast(`📋 ${t} をコピーしました（エクセルで Ctrl+G → 貼って Enter）`)).catch(() => toast(t)); }
 async function ngRevSet(id, isNg){
   const x = ngRev.find(y => y.c.id === id); if(!x) return;
@@ -788,7 +809,7 @@ function paintCastNgReview(){
     <div class="hint" style="margin:0 0 8px">最後に来た日が新しいお客さんから順です。<b>📋 A123</b> を押すと行番号をコピー → エクセルで <b>Ctrl+G</b> → 貼って Enter で、その行に飛びます。</div>
     ${list.map(x => { const n = x.n, c = x.c;
       return `<div class="ngrc ${x.done ? "done" : ""}">
-        <div class="ngrt"><b>🙅 ${esc(x.nm)}</b><span>のNG</span>　<b>${esc(c.name || "（名前なし）")}</b><small>📞 ${esc(fmtPhone(c.phone))}　最後に来た日 ${x.last ? md(x.last) : "なし"}</small>
+        <div class="ngrt"><b>🙅 ${esc(x.nm)}</b><span>のNG</span>　<b>${esc(c.name || "（名前なし）")}</b>${ngRevPhoneBtn(c.phone)}<small>最後に来た日 ${x.last ? md(x.last) : "なし"}</small>
           ${n.ask ? `<span class="badge" style="background:#FFF3C4;color:#7a5600">🤔 だれのNGか・条件があいまい</span>` : ""}
           <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="$('ngRevBg').remove();openCustomer(${c.id})">開く</button></div>
         <div class="ngrr">${esc(n.reason || "理由なし")}${n.source === "excel" ? ` <small style="color:var(--sub)">（エクセルから）</small>` : n.by_name ? ` <small style="color:var(--sub)">（${esc(n.by_name)}が入れた）</small>` : ""}</div>
