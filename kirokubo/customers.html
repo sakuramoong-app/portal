@@ -838,9 +838,12 @@ function openCngLink(){
   const list = cngLinkList(), sure = list.filter(x => (x.n._cands || []).length === 1), unsure = list.filter(x => (x.n._cands || []).length !== 1);
   const all = M.casts.slice().sort((a, b) => String(a.kana || a.official_name || "").localeCompare(String(b.kana || b.official_name || ""), "ja"));
   const lbl = c => esc(c.official_name || c.temp_name || c.id) + (c.status === "left" ? "（退店）" : "");
+  // 📛 同じ名前が2件以上 → 名前ごとにまとめて選ぶ（2026/11/26 店長：らむ・美咲が何件も出る）
+  const gm = {}; list.forEach(x => { const k = cnNorm(x.n.cast_name); if(!k) return; (gm[k] = gm[k] || { name: x.n.cast_name, n: 0 }).n++; });
+  const groups = Object.entries(gm).filter(([, g]) => g.n >= 2).sort((a, b) => b[1].n - a[1].n);
   const row = x => { const n = x.n, cs = n._cands || [];
     return `<div class="ngrs" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${esc(x.c.name || "（名前なし）")}</b><span>の「<b>${esc(n.cast_name)}</b>」NG</span><small style="color:var(--sub)">${n._d ? md(n._d) + "の回" : "日付なし"}</small>
-      <select class="cngsel" data-id="${n.id}" style="font-family:inherit;font-weight:800;border:1.5px solid var(--line);border-radius:9px;padding:3px 6px;margin-left:auto">
+      <select class="cngsel" data-id="${n.id}" data-nm="${esc(cnNorm(n.cast_name))}" style="font-family:inherit;font-weight:800;border:1.5px solid var(--line);border-radius:9px;padding:3px 6px;margin-left:auto">
         <option value="">— つながない —</option>
         ${cs.length ? `<optgroup label="名前が合う子">${cs.map(c => `<option value="${esc(c.id)}" ${cs.length === 1 ? "selected" : ""}>${lbl(c)}</option>`).join("")}</optgroup>` : ""}
         <optgroup label="ほかの子">${all.filter(c => !cs.includes(c)).map(c => `<option value="${esc(c.id)}">${lbl(c)}</option>`).join("")}</optgroup></select></div>`; };
@@ -848,10 +851,20 @@ function openCngLink(){
     <div class="ngrh"><b>🔗 名前だけのキャストNGを、キャストにつなぐ</b><button class="btn btn-ghost btn-sm" onclick="paintCastNgReview()">← 見比べにもどる</button><button class="btn btn-ghost btn-sm" onclick="$('ngRevBg').remove()">閉じる</button></div>
     <div class="hint" style="margin:0 0 8px">エクセルから取りこんだNGは、名前だけで入っています。キャストにつなぐと、受付は<b>キャストで</b>見分けるので、名前が変わっても（らむ→らぱん→ニーア）、同じ名前の別の子でもまちがえません。<br>
       書き方のちがい（らぱんくん＝らぱん・カタカナ/ひらがな）と、キャスト台帳の「過去の名前」・その日に在籍していた子でさがしています。</div>
+    ${groups.length ? `<div style="background:#F3F1FF;border-radius:12px;padding:8px 10px;margin-bottom:8px"><div style="font-weight:900">📛 名前ごとにまとめて選ぶ<small style="color:var(--sub);font-weight:700">　同じ名前のNGが何件もあるとき、ここで選ぶと下の全部に入ります（例：らむ → ニーア、美咲 → 櫻井美咲）</small></div>
+      ${groups.map(([k, g]) => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:5px"><b>「${esc(g.name)}」</b><span>${g.n}件</span>
+        <select onchange="cngGroupSet(this.dataset.nm,this.value)" data-nm="${esc(k)}" style="font-family:inherit;font-weight:800;border:1.5px solid #DCD6FA;border-radius:9px;padding:3px 6px;margin-left:auto">
+          <option value="">— 1件ずつ選ぶ —</option><option value="__none">— 全部つながない —</option>${all.map(c => `<option value="${esc(c.id)}">${lbl(c)}</option>`).join("")}</select></div>`).join("")}</div>` : ""}
     ${list.length ? `<div style="font-weight:900;margin-top:6px">✅ 1人に決まった（${sure.length}件）<small style="color:var(--sub);font-weight:700">　選んであります。ちがっていたら直してください</small></div>${sure.map(row).join("") || `<div class="ngrs" style="color:var(--sub)">なし</div>`}
       <div style="font-weight:900;margin-top:10px">🤔 決まらない・見つからない（${unsure.length}件）<small style="color:var(--sub);font-weight:700">　だれか分かるものだけ選んでください</small></div>${unsure.map(row).join("") || `<div class="ngrs" style="color:var(--sub)">なし</div>`}
       <div class="ngrb" style="margin-top:10px"><button class="btn btn-primary" onclick="doCngLink()">🔗 選んだものをキャストにつなぐ</button></div>`
       : `<div class="empty">名前だけのNGはありません 🎉</div>`}</div>`;
+}
+function cngGroupSet(nm, v){
+  if(!v) return;
+  let n = 0;
+  document.querySelectorAll("#ngRevBg .cngsel").forEach(s => { if(s.dataset.nm === nm){ s.value = v === "__none" ? "" : v; n++; } });
+  toast(`📛 ${n}件に入れました（まだつないでいません。下の「🔗 選んだものをキャストにつなぐ」で決まります）`);
 }
 async function doCngLink(){
   const sel = [...document.querySelectorAll("#ngRevBg .cngsel")].filter(s => s.value);
