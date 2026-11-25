@@ -1982,7 +1982,9 @@ async function hpFn(body){
    ・「🔍 変わるところを見る」→「📡 この内容で入れる」（ロボットが入れたあと読みなおして確かめる） ---------- */
 const MP_MEDIA = [{ media: "heaven", label: "ヘブン", stores: ["sakuramoon", "lana_uguisu"] },
   { media: "joho", label: "口コミ情報局", stores: ["sakuramoon", "lana_uguisu", "lana_kinshi", "dressgarden", "peachmoon", "gyakuanal", "cutie"] },
-  { media: "manzoku", label: "マンゾク", stores: ["sakuramoon", "lana_uguisu", "lana_kinshi", "peachmoon", "gyakuanal"] }];   // 18・極門はダミーの名前・年齢なので、まだ入れない
+  { media: "manzoku", label: "マンゾク", stores: ["sakuramoon", "lana_uguisu", "lana_kinshi", "peachmoon", "gyakuanal"] },
+  { media: "pure", label: "ぴゅあらば", stores: ["sakuramoon", "lana_uguisu", "lana_kinshi", "dressgarden", "peachmoon", "gyakuanal", "cutie"] },
+  { media: "nhf", label: "NHF", stores: ["sakuramoon", "lana_uguisu", "lana_kinshi", "peachmoon", "gyakuanal", "cutie"] }];   // 18・極門はダミーの名前・年齢なので、まだ入れない
 let mp = null;   // { c, items:[{ media, mk, label, sk, on, plan, res }], set }
 async function mpTargets(){
   try{ const s = q(await sb.from("kb_settings").select("value").eq("key", "media_prof_targets").maybeSingle()); return (s && s.value && typeof s.value === "object") ? s.value : {}; }catch(e){ return {}; }
@@ -2012,7 +2014,7 @@ function mpPaint(){
   const res = x => !x.res ? "" : x.res.ok ? `<div class="mpOk">✅ 入れました（${(x.res.results || []).length}か所・読みなおして確かめました）</div>`
     : `<div class="warn">⚠️ ${esc(x.res.error || [...(x.res.results || []).filter(r => !r.ok).map(r => r.label + "が入らなかった"), ...(x.res.changed || []).map(k => k + "が変わってしまった")].join("・") || "うまく入りませんでした")}</div>`;
   bg.innerHTML = `<div class="mpBox"><h3>📡 ${esc(nameOf(mp.c))}のプロフを媒体にも入れる</h3>
-    <div class="hint">公式HPと同じ中身（このキャスト台帳のプロフ）を入れます。媒体に合う欄がないものは入れません。写真・オプションのアイコンはまだ入れません。<br>いまはヘブン・口コミ情報局・マンゾクです（ほかの媒体はシフトと同じ順に足していきます）。エイティーン・極門はダミーの名前・年齢なので、まだ入れません。</div>
+    <div class="hint">公式HPと同じ中身（このキャスト台帳のプロフ）を入れます。媒体に合う欄がないものは入れません。写真・オプションのアイコンはまだ入れません。<br>いまはヘブン・ぴゅあらば・口コミ情報局・NHF・マンゾクです（駅チカ・風じゃ・デリじゃは、このあと足します）。エイティーン・極門はダミーの名前・年齢なので、まだ入れません。</div>
     ${it.length ? it.map((x, i) => `<div class="mpI"><label><input type="checkbox" ${x.on ? "checked" : ""} onchange="mpToggle(${i},this.checked)"> <b>${esc(x.label)}</b>に入れる</label>
       <small>（この選びは、ほかのキャストでも同じです）</small>${tbl(x)}${res(x)}</div>`).join("") : `<div class="warn">このキャストは、プロフを入れられる媒体のお店に在籍していません</div>`}
     <div class="btns" style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
@@ -2865,7 +2867,7 @@ function paintProf(){
     <details ${pfAcc("photo")}><summary class="pfHead">📷 写真 <small style="font-weight:400;color:#9C8B8F">（公式HPに出ている写真）</small></summary><div class="pfBody">${pfPhotoHtml()}</div></details>
     ${CAN_EDIT ? `<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:6px">
       <button class="btn btn-ghost" onclick="hpPushLater()">🌐 公式HPにまとめて入れる</button>
-      <button class="btn btn-ghost" onclick="mpOpen()" title="公式HPと同じプロフを、媒体（いまはヘブン・口コミ情報局・マンゾク）にも入れる">📡 媒体にも入れる</button>
+      <button class="btn btn-ghost" onclick="mpOpen()" title="公式HPと同じプロフを、媒体（ヘブン・ぴゅあらば・口コミ情報局・NHF・マンゾク）にも入れる">📡 媒体にも入れる</button>
       <button class="btn btn-ghost" onclick="saveProf(true)">💾 保存だけ（公式HPはあとで）</button>
       <button class="btn btn-primary" onclick="saveProf()">💾 プロフを保存</button></div>` : ""}`;
   reflPv("pf_c"); reflPv("pf_m");
