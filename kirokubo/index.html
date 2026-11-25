@@ -2041,20 +2041,23 @@ function mpPaint(){
     ${it.length ? mpBulkBar() + mpGroups().map(([gk, gl, idx]) => `<div class="mpG"><div class="mpGh"><b>${esc(gl)}</b>
         <button class="btn btn-ghost btn-sm" onclick="mpSetMany('${mp.sort}','${esc(gk)}',true)">✅ ${esc(gl)}を全部</button><button class="btn btn-ghost btn-sm" onclick="mpSetMany('${mp.sort}','${esc(gk)}',false)">☐ 外す</button></div>
       ${idx.map(i => { const x = it[i]; return `<div class="mpI"><label><input type="checkbox" ${x.on ? "checked" : ""} onchange="mpToggle(${i},this.checked)"> <b>${esc(x.label)}</b>に入れる</label>
-      ${tbl(x, i)}${res(x)}</div>`; }).join("")}</div>`).join("") + `<div class="hint" style="margin-top:4px">チェックの選びは、ほかのキャストでも同じです</div>` : `<div class="warn">このキャストは、プロフを入れられる媒体のお店に在籍していません</div>`}
+      ${tbl(x, i)}${res(x)}${mpPhotoBox(x, i)}</div>`; }).join("")}</div>`).join("") + `<div class="hint" style="margin-top:4px">チェックの選びは、ほかのキャストでも同じです</div>` : `<div class="warn">このキャストは、プロフを入れられる媒体のお店に在籍していません</div>`}
     ${(() => {
       // 🆕 まとめて新規登録（2026/11/26 店長）・次に押すボタンを光らせる
       const nPrev = mpNewIdx(false).length, nGo = mpNewIdx(true).length;
       const canGo = it.some(x => x.on && x.plan && !x.plan.error && (x.plan.plan || []).some(p => p.change) && !(x.res && x.res.ok));
       const looked = it.some(x => x.on && (x.plan || x.res));
-      const next = nGo ? "newGo" : canGo ? "go" : nPrev ? "newPrev" : (!looked && it.some(x => x.on)) ? "prev" : "";
+      const phPrev = mpPhotoIdx(false).length, phGo = mpPhotoIdx(true).length;
+      const next = nGo ? "newGo" : canGo ? "go" : nPrev ? "newPrev" : phGo ? "phGo" : phPrev ? "phPrev" : (!looked && it.some(x => x.on)) ? "prev" : "";
       const g = k => next === k ? " mpNext" : "";
       return `<div class="btns" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:10px">
       <button class="btn btn-ghost" onclick="$('mpBg').remove()">閉じる</button>
       ${it.some(x => x.on) ? `<button class="btn btn-ghost${g("prev")}" id="mpPrev" onclick="mpRun(true)">🔍 変わるところを見る</button>` : ""}
       ${nPrev ? `<button class="btn btn-ghost${g("newPrev")}" id="mpNewPrev" onclick="mpNewAll(true)">🆕 まとめて新規登録（まず中身を見る・${nPrev}か所）</button>` : ""}
       ${nGo ? `<button class="btn btn-primary${g("newGo")}" id="mpNewGo" onclick="mpNewAll(false)">🆕 この内容でまとめて新規登録する（${nGo}か所）</button>` : ""}
-      ${canGo ? `<button class="btn btn-primary${g("go")}" id="mpGo" onclick="mpRun(false)">📡 この内容で入れる</button>` : ""}</div>`; })()}</div>`;
+      ${canGo ? `<button class="btn btn-primary${g("go")}" id="mpGo" onclick="mpRun(false)">📡 この内容で入れる</button>` : ""}
+      ${phPrev ? `<button class="btn btn-ghost${g("phPrev")}" id="mpPhPrev" onclick="mpPhotoAll(true)">📷 写真もまとめて公式HPと同じに（まず見る・${phPrev}か所）</button>` : ""}
+      ${phGo ? `<button class="btn btn-primary${g("phGo")}" id="mpPhGo" onclick="mpPhotoAll(false)">📷 この写真でまとめて入れかえる（${phGo}か所）</button>` : ""}</div>`; })()}</div>`;
 }
 // 並べ方（媒体ごと／お店ごと）と、まとめてチェック（2026/11/26 店長）
 function mpGroups(){
@@ -2092,6 +2095,35 @@ async function mpToggle(i, on){
   .mpG{border-top:2px solid #E5D9F2;margin-top:10px;padding-top:4px} .mpGh{display:flex;gap:6px;align-items:center;flex-wrap:wrap} .mpGh b{font-size:15px;margin-right:4px}
   .mpOk{background:#E9F8EF;border:2px solid #3FA96A;color:#1E7B46;border-radius:10px;padding:6px 10px;margin-top:6px;font-weight:900}`; document.head.appendChild(s); })();
 // 🆕 媒体に新規登録（dry＝入れる中身を見るだけ）
+/* ---------- 📷 媒体の写真を、公式HPの写真と入れかえる（2026/11/26 店長。いまはぴゅあらば）
+   ・そのお店の公式HPのプロフ用 ①〜（一覧用はとばす）・撮影準備中はよける・ロゴは公式HPの写真のまま ---------- */
+const MP_PHOTO_MEDIA = ["pure"];
+function mpPhotoReady(x){ return x.on && MP_PHOTO_MEDIA.includes(x.media) && ((x.plan && !x.plan.error) || (x.nres && x.nres.ok)) && !(x.pres && x.pres.ok); }
+function mpPhotoBox(x, i){
+  if(!mpPhotoReady(x) && !x.pres) return "";
+  if(x.pres) return x.pres.ok ? `<div class="mpOk">📷 写真を入れかえました（${(x.pres.plan.use || []).map(n => PF_SLOT_LABEL[n]).join("・")}・${x.pres.after}枚）</div>` : `<div class="warn">📷 ⚠️ ${esc(x.pres.error || "写真を入れられませんでした")}</div>`;
+  const p = x.ppv && x.ppv.plan;
+  return `<div style="margin-top:6px">${x.ppv ? (x.ppv.error ? `<div class="warn">📷 ⚠️ ${esc(x.ppv.error)}</div>` : `<div class="hint">📷 公式HPの ${(p.use || []).map(n => PF_SLOT_LABEL[n]).join("・")} を入れます（今の写真 ${x.ppv.now}枚は消して入れかえ）${(p.skip || []).length ? `・撮影準備中（${p.skip.map(n => PF_SLOT_LABEL[n]).join("・")}）はよけます` : ""}・最大${p.max}枚</div>`) : ""}
+    ${x.ppv && x.ppv.error ? "" : `<button class="btn ${x.ppv ? "btn-primary" : "btn-ghost"} btn-sm" onclick="mpPhoto(${i},${x.ppv ? "false" : "true"})">${x.ppv ? "📷 この写真で入れかえる" : "📷 写真も公式HPと同じにする（まず見る）"}</button>`}</div>`;
+}
+function mpFrom(x){ const sk = PROF_STORE_OF[x.mk], h = hpNoOf(mp.c, sk); return { site: HP_SITE_OF[h.mk || x.mk], no: h.no }; }
+async function mpPhoto(i, dry, noAsk){
+  const x = mp && mp.items[i]; if(!x) return;
+  const from = mpFrom(x);
+  if(!from.no){ x.ppv = { error: "このお店の公式HPの在籍番号がないので、写真を読めません" }; mpPaint(); return; }
+  if(!dry && !noAsk && !confirm(`${x.label}の写真を、公式HPの写真と入れかえますか？（今の写真は消えます）`)) return;
+  const r = await hpFn({ action: "media_photo", media: x.media, store: x.mk, names: mpNames(mp.c, x.mk), from, dry, by: operatorName() });
+  if(dry) x.ppv = r && r.ok !== false ? r : { error: (r && r.error) || "読めませんでした" };
+  else x.pres = r || { ok: false, error: "返事がありません" };
+  mpPaint();
+}
+function mpPhotoIdx(ready){ return mp.items.map((x, i) => [x, i]).filter(([x]) => mpPhotoReady(x) && (ready ? !!(x.ppv && !x.ppv.error) : !x.ppv)).map(([, i]) => i); }
+async function mpPhotoAll(dry){
+  const idx = mpPhotoIdx(!dry); if(!idx.length) return;
+  if(!dry && !confirm(`${idx.map(i => mp.items[i].label).join("・")}\nの写真を、公式HPの写真とまとめて入れかえますか？（今の写真は消えます）`)) return;
+  for(const b of ["mpPhPrev", "mpPhGo"]){ const e = $(b); if(e){ e.disabled = true; e.textContent = "ロボットが写真を入れています…（1か所1〜2分）"; } }
+  for(const i of idx) await mpPhoto(i, dry, true);
+}
 // 新規登録できる所（チェックあり・その媒体にいない・新規登録のロボットがある・まだ登録していない）。ready＝中身を見たあと
 function mpNewIdx(ready){
   return mp.items.map((x, i) => [x, i]).filter(([x]) => x.on && x.plan && x.plan.error && /いません/.test(x.plan.error) && MP_NEW_MEDIA.includes(x.media) && !x.nres && (ready ? !!x.npv : !x.npv)).map(([, i]) => i);
