@@ -1976,6 +1976,71 @@ async function hpFn(body){
   if(error){ try{ r = await error.context.json(); }catch(e){ r = { ok: false, error: error.message }; } }
   return r || { ok: false, error: "返事がありません" };
 }
+/* ---------- 📡 媒体にもプロフを入れる（2026/11/26 店長：キャスト台帳から全媒体に。シフトと同じ順に1つずつ。いまはヘブン）
+   ・入れる中身は、そのお店のプロフ（公式HPと同じ）。媒体に合う欄がないものは入れない（空のまま）
+   ・お店ごと・媒体ごとに「入れる／入れない」を選べる（内勤みんな共通：kb_settings 'media_prof_targets'）
+   ・「🔍 変わるところを見る」→「📡 この内容で入れる」（ロボットが入れたあと読みなおして確かめる） ---------- */
+const MP_MEDIA = [{ media: "heaven", label: "ヘブン", stores: ["sakuramoon", "lana_uguisu"] },
+  { media: "joho", label: "口コミ情報局", stores: ["sakuramoon", "lana_uguisu", "lana_kinshi", "dressgarden", "peachmoon", "gyakuanal", "cutie"] },
+  { media: "manzoku", label: "マンゾク", stores: ["sakuramoon", "lana_uguisu", "lana_kinshi", "peachmoon", "gyakuanal"] }];   // 18・極門はダミーの名前・年齢なので、まだ入れない
+let mp = null;   // { c, items:[{ media, mk, label, sk, on, plan, res }], set }
+async function mpTargets(){
+  try{ const s = q(await sb.from("kb_settings").select("value").eq("key", "media_prof_targets").maybeSingle()); return (s && s.value && typeof s.value === "object") ? s.value : {}; }catch(e){ return {}; }
+}
+async function mpOpen(){
+  if(!pf) return;
+  pfCollect();
+  if(pf.dirty.size){ toast("先に「💾 プロフを保存」してください（保存した中身を媒体に入れます）"); return; }
+  const c = pf.c, set = await mpTargets();
+  const items = [];
+  MP_MEDIA.forEach(m => m.stores.forEach(mk => { if(c.stores && c.stores[mk]) items.push({ media: m.media, mk, label: `${m.label}（${PROF_STORE_OF[mk] || mk}）`, sk: PROF_STORE_OF[mk], on: set[m.media + ":" + mk] !== false, plan: null, res: null }); }));
+  mp = { c, items, set };
+  mpPaint();
+}
+function mpProfOf(sk){
+  const d = pf.data, o = {};
+  PF_BASIC.forEach(([f]) => { const v = String(profGet(d, sk, f) || profGet(d, "サクラムーン", f) || "").trim(); if(v) o[f] = v; });
+  ["comment", "mgrComment"].forEach(f => { const v = String(profGet(d, sk, f) || "").trim(); if(v) o[f] = v; });
+  return o;
+}
+function mpNames(c, mk){ return [...new Set([c.stores && c.stores[mk] && c.stores[mk].name, c.official_name, c.temp_name, c.shift_name].map(s => String(s || "").trim()).filter(Boolean))]; }
+function mpPaint(){
+  let bg = $("mpBg"); if(!bg){ bg = document.createElement("div"); bg.id = "mpBg"; bg.style.cssText = "position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;padding:14px;overflow:auto"; document.body.appendChild(bg); bg.addEventListener("click", e => { if(e.target === bg) bg.remove(); }); }
+  const it = mp.items;
+  const tbl = x => !x.plan ? "" : x.plan.error ? `<div class="warn">⚠️ ${esc(x.plan.error)}</div>`
+    : `<table class="mpT"><tr><th>欄</th><th>今の${esc(x.label)}</th><th>入れる中身</th></tr>${(x.plan.plan || []).filter(p => p.change).map(p => `<tr><td><b>${esc(p.label)}</b></td><td class="o">${esc(p.before || "（空）")}</td><td class="n">${esc(p.after)}</td></tr>`).join("") || `<tr><td colspan="3">✅ もう同じ中身です（変わるところはありません）</td></tr>`}</table>`;
+  const res = x => !x.res ? "" : x.res.ok ? `<div class="mpOk">✅ 入れました（${(x.res.results || []).length}か所・読みなおして確かめました）</div>`
+    : `<div class="warn">⚠️ ${esc(x.res.error || [...(x.res.results || []).filter(r => !r.ok).map(r => r.label + "が入らなかった"), ...(x.res.changed || []).map(k => k + "が変わってしまった")].join("・") || "うまく入りませんでした")}</div>`;
+  bg.innerHTML = `<div class="mpBox"><h3>📡 ${esc(nameOf(mp.c))}のプロフを媒体にも入れる</h3>
+    <div class="hint">公式HPと同じ中身（このキャスト台帳のプロフ）を入れます。媒体に合う欄がないものは入れません。写真・オプションのアイコンはまだ入れません。<br>いまはヘブン・口コミ情報局・マンゾクです（ほかの媒体はシフトと同じ順に足していきます）。エイティーン・極門はダミーの名前・年齢なので、まだ入れません。</div>
+    ${it.length ? it.map((x, i) => `<div class="mpI"><label><input type="checkbox" ${x.on ? "checked" : ""} onchange="mpToggle(${i},this.checked)"> <b>${esc(x.label)}</b>に入れる</label>
+      <small>（この選びは、ほかのキャストでも同じです）</small>${tbl(x)}${res(x)}</div>`).join("") : `<div class="warn">このキャストは、プロフを入れられる媒体のお店に在籍していません</div>`}
+    <div class="btns" style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button class="btn btn-ghost" onclick="$('mpBg').remove()">閉じる</button>
+      ${it.some(x => x.on) ? `<button class="btn btn-ghost" id="mpPrev" onclick="mpRun(true)">🔍 変わるところを見る</button>` : ""}
+      ${it.some(x => x.on && x.plan && !x.plan.error && (x.plan.plan || []).some(p => p.change) && !(x.res && x.res.ok)) ? `<button class="btn btn-primary" id="mpGo" onclick="mpRun(false)">📡 この内容で入れる</button>` : ""}</div></div>`;
+}
+async function mpToggle(i, on){
+  mp.items[i].on = on; const k = mp.items[i].media + ":" + mp.items[i].mk;
+  const next = Object.assign({}, mp.set, { [k]: on });
+  try{ q(await sb.from("kb_settings").upsert({ key: "media_prof_targets", value: next, note: "📡 媒体にプロフを入れるお店（media:お店 → true/false）" })); mp.set = next; }catch(e){ toast("選びを保存できませんでした：" + (e.message || e)); }
+  mpPaint();
+}
+(function(){ const s = document.createElement("style"); s.textContent = `.mpBox{background:#fff;border-radius:16px;padding:14px 16px;max-width:820px;width:100%;font-size:13.5px} .mpBox h3{margin:0 0 6px}
+  .mpI{border:2px solid #E5D9F2;border-radius:12px;padding:8px 10px;margin-top:8px} .mpI small{color:#9C8B8F}
+  .mpT{width:100%;border-collapse:collapse;margin-top:6px;font-size:12.5px} .mpT th,.mpT td{border-top:1px dashed #E5D9F2;padding:4px 6px;text-align:left;vertical-align:top;white-space:pre-wrap} .mpT td.o{color:#9C8B8F} .mpT td.n{color:#1E7B46;font-weight:700}
+  .mpOk{background:#E9F8EF;border:2px solid #3FA96A;color:#1E7B46;border-radius:10px;padding:6px 10px;margin-top:6px;font-weight:900}`; document.head.appendChild(s); })();
+async function mpRun(dry){
+  if(!mp) return;
+  if(!dry && !confirm("この内容で媒体に入れますか？")) return;
+  const b = $(dry ? "mpPrev" : "mpGo"); if(b){ b.disabled = true; b.textContent = "ロボットが見ています…（1分ほど）"; }
+  for(const x of mp.items.filter(y => y.on)){
+    const r = await hpFn({ action: "media_prof", media: x.media, store: x.mk, names: mpNames(mp.c, x.mk), prof: mpProfOf(x.sk), dry, by: operatorName() });
+    if(dry) x.plan = r && r.ok !== false ? r : { error: (r && (r.error || r.message)) || "読めませんでした" };
+    else x.res = r || { ok: false, error: "返事がありません" };
+  }
+  mpPaint();
+}
 function hpFromAnswer(){   // プロフはもう答えと同じ → 答えのプロフィールを、在籍しているお店の公式HPと比べる
   const d = ansCur.d, sets = {};
   refl.stores.forEach(sk => Object.keys(ANS_PROFILE_LABELS).forEach(k => { const v = String((d.profile || {})[k] || "").trim(); if(v) (sets[sk] = sets[sk] || {})[k] = v; }));
@@ -2800,6 +2865,7 @@ function paintProf(){
     <details ${pfAcc("photo")}><summary class="pfHead">📷 写真 <small style="font-weight:400;color:#9C8B8F">（公式HPに出ている写真）</small></summary><div class="pfBody">${pfPhotoHtml()}</div></details>
     ${CAN_EDIT ? `<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:6px">
       <button class="btn btn-ghost" onclick="hpPushLater()">🌐 公式HPにまとめて入れる</button>
+      <button class="btn btn-ghost" onclick="mpOpen()" title="公式HPと同じプロフを、媒体（いまはヘブン・口コミ情報局・マンゾク）にも入れる">📡 媒体にも入れる</button>
       <button class="btn btn-ghost" onclick="saveProf(true)">💾 保存だけ（公式HPはあとで）</button>
       <button class="btn btn-primary" onclick="saveProf()">💾 プロフを保存</button></div>` : ""}`;
   reflPv("pf_c"); reflPv("pf_m");
