@@ -4,7 +4,7 @@
    ・💼 仕事中 → ヘブン「接客中」（次回 終わりの時刻＋インターバル〜）
    ・▶️ 予約スタート・📞 出勤前連絡・🈵 満了 → 「接客中」（次回＝最初の予約の終わり＋インターバル／出勤時刻／退勤時刻）
    ・今いない（お茶・欠勤・不在・精算済・直帰・まだ来ていない）→ 待機中・接客中を解除
-   ・⏹ 仕事終了（振り分け待ち）→ さわらない
+   ・⏹ 仕事終了（振り分け待ち）→ 仕事中と同じ「接客中」（次回 終わった予約の終わり＋インターバル〜）2026/11/26
    ・変わったときだけ送る（その日・このPCで最後に送った形をおぼえておく）。ヘブンの画面にいない子（その日の出勤なし）はさわらない
    ・ON/OFF は内勤みんな共通（kb_settings 'heaven_sokuhime' = { on }）。今日のページで、編集できる人の画面からだけ送る
 */
@@ -38,6 +38,8 @@ function hvSkWant(x){
   }
   if(st === "start"){ const b = hvSkLive(x)[0]; return b ? { state: "work", end: hvSkEnd(b.e, gap), why: "予約スタート" } : null; }
   if(st === "precall") return sh && sh.start != null ? { state: "work", end: fromHour(Number(sh.start)), why: "出勤前連絡" } : null;
+  // ⏹ 仕事終了（振り分け待ち）→ 仕事中と同じ：終わった予約の終わり＋インターバル（すぎていたら今から）（2026/11/26 店長）
+  if(st === "ended"){ const en = endedOf(x), b = en && x.bks.find(z => z.r === en.r); return b ? { state: "work", end: hvSkEnd(b.e, gap), why: "仕事終了" } : null; }
   return null;
 }
 const hvSkSig = w => w.state + (w.end ? "@" + w.end : "");
