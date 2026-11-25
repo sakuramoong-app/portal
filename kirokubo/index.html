@@ -2916,7 +2916,7 @@ function paintProf(){
       ${CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:8px"><input id="pf_newopt" placeholder="新しいオプションの名前（例：TSP（有料））" style="flex:1"><button class="btn btn-ghost btn-sm" onclick="pfAddOpt()">＋ 種類を足す</button></div>` : ""}</div></div></details>
     <details ${pfAcc("photo")}><summary class="pfHead">📷 写真 <small style="font-weight:400;color:#9C8B8F">（公式HPに出ている写真）</small></summary><div class="pfBody">${pfPhotoHtml()}</div></details>
     ${CAN_EDIT ? `<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:6px">
-      <button class="btn btn-primary" onclick="pfSaveMenu()" title="押すと「保存だけ／公式HPにも／公式HPと媒体にも」を選べます">💾 保存する…</button></div>` : ""}`;
+      <button class="btn btn-primary" onclick="pfSaveMenu()" title="押すと「保存だけ／公式HPにも／媒体にも／公式HPと媒体にも」を選べます">💾 保存する／公式・媒体に反映</button></div>` : ""}`;
   reflPv("pf_c"); reflPv("pf_m");
   setTimeout(kbGlowApply, 0);   // ✨ 保存がまだなら光らせる
   if($("e_logs")) $("e_logs").innerHTML = pfLogsHtml();   // 🗓 記録・ヒアリングは大きい項目に
@@ -3394,7 +3394,8 @@ function pfSaveMenu(){
     <div class="pfStoreNote">🏪 公式HP・媒体に入れるプロフの中身は、<b>お店ごと</b>のプロフ（このプロフの上のお店のタブ）から入ります。お店ごとに文を変えていれば、そのお店の文が入ります</div>
     ${opt("save", "💾", dirty ? "保存だけ" : "保存だけ（いまは何もしない）", "キャスト台帳だけ。公式HP・媒体はあとで")}
     ${opt("hp", "🌐", dirty ? "保存して、公式HPにも入れる" : "公式HPに入れる", "このあと、入れるお店を選べます")}
-    ${opt("all", "📡", dirty ? "保存して、公式HPと媒体にも入れる" : "公式HPと媒体に入れる", "公式HPのお店を選んで入れたあと、つづけて媒体（ヘブン・ぴゅあらば…）を選べます")}
+    ${opt("mp", "📡", dirty ? "保存して、媒体にも入れる" : "媒体に入れる", "公式HPはさわらずに、媒体（ヘブン・ぴゅあらば…）だけ。お店・媒体を選べます")}
+    ${opt("all", "🌐📡", dirty ? "保存して、公式HPと媒体にも入れる" : "公式HPと媒体に入れる", "公式HPのお店を選んで入れたあと、つづけて媒体（ヘブン・ぴゅあらば…）を選べます")}
     <div style="text-align:right;margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="$('pfSaveBg').remove()">やめる</button></div></div>`;
 }
 async function pfSaveGo(mode){
@@ -3404,6 +3405,7 @@ async function pfSaveGo(mode){
   if(dirty){ await saveProf(true); pfCollect(); if(pf.dirty.size) return; }   // 保存できなかったら、ここでやめる
   else if(mode === "save"){ toast("直したところはありません"); return; }
   if(mode === "save") return;
+  if(mode === "mp"){ mpOpen(); return; }   // 📡 媒体にだけ（公式HPはさわらない）2026/11/26
   const before = !!$("hpBg");
   hpPushLater();
   if(mode !== "all") return;
