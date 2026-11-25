@@ -1987,7 +1987,8 @@ const MP_MEDIA = [{ media: "heaven", label: "ヘブン", stores: ["sakuramoon", 
   { media: "nhf", label: "NHF", stores: ["sakuramoon", "lana_uguisu", "lana_kinshi", "peachmoon", "gyakuanal", "cutie"] },
   { media: "ekichika", label: "駅チカ", stores: ["sakuramoon", "lana_kinshi", "dressgarden", "peachmoon", "gyakuanal"] },
   { media: "fuja", label: "風俗じゃぱん", stores: ["sakuramoon", "lana_uguisu", "gyakuanal"] },
-  { media: "delija", label: "デリヘルじゃぱん", stores: ["sakuramoon"] }];   // シフトの媒体と同じお店（18・極門はダミーなので、まだ）   // 18・極門はダミーの名前・年齢なので、まだ入れない
+  { media: "delija", label: "デリヘルじゃぱん", stores: ["sakuramoon"] },   // シフトの媒体と同じお店（18・極門はダミーなので、まだ）
+  { media: "sniper", label: "スナイパー", stores: ["gokumon"] }];   // 極門だけ（ダミー名で探す。年齢などは極門のプロフに入っているものだけ）   // 18・極門はダミーの名前・年齢なので、まだ入れない
 let mp = null;   // { c, items:[{ media, mk, label, sk, on, plan, res }], set }
 async function mpTargets(){
   try{ const s = q(await sb.from("kb_settings").select("value").eq("key", "media_prof_targets").maybeSingle()); return (s && s.value && typeof s.value === "object") ? s.value : {}; }catch(e){ return {}; }
@@ -2004,7 +2005,8 @@ async function mpOpen(){
 }
 function mpProfOf(sk){
   const d = pf.data, o = {};
-  PF_BASIC.forEach(([f]) => { const v = String(profGet(d, sk, f) || profGet(d, "サクラムーン", f) || "").trim(); if(v) o[f] = v; });
+  // ダミーのお店（極門・18）は名前・年齢を変えた別の設定なので、サクラムーンの中身は使わない
+  PF_BASIC.forEach(([f]) => { const v = String(profGet(d, sk, f) || (PROF_DUMMY.includes(sk) ? "" : profGet(d, "サクラムーン", f)) || "").trim(); if(v) o[f] = v; });
   ["comment", "mgrComment"].forEach(f => { const v = String(profGet(d, sk, f) || "").trim(); if(v) o[f] = v; });
   return o;
 }
@@ -2013,7 +2015,7 @@ function mpPaint(){
   let bg = $("mpBg"); if(!bg){ bg = document.createElement("div"); bg.id = "mpBg"; bg.style.cssText = "position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;padding:14px;overflow:auto"; document.body.appendChild(bg); bg.addEventListener("click", e => { if(e.target === bg) bg.remove(); }); }
   const it = mp.items;
   // 🆕 その媒体にいない子 → 新規登録（いまはヘブン）。「見る」→「登録する」
-  const MP_NEW = ["heaven", "joho"];
+  const MP_NEW = ["heaven", "joho", "manzoku", "pure", "nhf", "fuja", "delija", "sniper"];   // 駅チカの新規登録はまだ
   const newBox = (x, i) => !(x.plan && x.plan.error && /いません/.test(x.plan.error) && MP_NEW.includes(x.media)) ? "" : x.nres
     ? (x.nres.ok ? `<div class="mpOk">✅ 新規登録しました（${esc(x.label)}）。写真はヘブンの画面で入れてください</div>` : `<div class="warn">⚠️ ${esc(x.nres.error || "登録できませんでした")}</div>`)
     : `<div style="margin-top:6px">${x.npv ? `<table class="mpT"><tr><th>欄</th><th>新規登録で入れる中身</th></tr>${(x.npv.plan || []).map(p => `<tr><td><b>${esc(p.label)}</b></td><td class="n">${esc(p.after)}</td></tr>`).join("")}</table>` : ""}
