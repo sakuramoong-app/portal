@@ -1991,6 +1991,7 @@ const MP_MEDIA = [{ media: "heaven", label: "ヘブン", stores: ["sakuramoon", 
   { media: "fuja", label: "風俗じゃぱん", stores: ["sakuramoon", "lana_uguisu", "gyakuanal"] },
   { media: "delija", label: "デリヘルじゃぱん", stores: ["sakuramoon"] },   // シフトの媒体と同じお店（18・極門はダミーなので、まだ）
   { media: "sniper", label: "スナイパー", stores: ["gokumon"] }];   // 極門だけ（ダミー名で探す。年齢などは極門のプロフに入っているものだけ）   // 18・極門はダミーの名前・年齢なので、まだ入れない
+const MP_NEW_MEDIA = ["heaven", "joho", "manzoku", "pure", "nhf", "fuja", "delija", "sniper"];   // 🆕 新規登録できる媒体（駅チカはまだ）
 let mp = null;   // { c, items:[{ media, mk, label, sk, on, plan, res }], set }
 async function mpTargets(){
   try{ const s = q(await sb.from("kb_settings").select("value").eq("key", "media_prof_targets").maybeSingle()); return (s && s.value && typeof s.value === "object") ? s.value : {}; }catch(e){ return {}; }
@@ -2017,7 +2018,7 @@ function mpPaint(){
   let bg = $("mpBg"); if(!bg){ bg = document.createElement("div"); bg.id = "mpBg"; bg.style.cssText = "position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;padding:14px;overflow:auto"; document.body.appendChild(bg); bg.addEventListener("click", e => { if(e.target === bg) bg.remove(); }); }
   const it = mp.items;
   // 🆕 その媒体にいない子 → 新規登録（いまはヘブン）。「見る」→「登録する」
-  const MP_NEW = ["heaven", "joho", "manzoku", "pure", "nhf", "fuja", "delija", "sniper"];   // 駅チカの新規登録はまだ
+  const MP_NEW = MP_NEW_MEDIA;
   const newBox = (x, i) => !(x.plan && x.plan.error && /いません/.test(x.plan.error) && MP_NEW.includes(x.media)) ? "" : x.nres
     ? (x.nres.ok ? `<div class="mpOk">✅ 新規登録しました（${esc(x.label)}）。写真はヘブンの画面で入れてください</div>` : `<div class="warn">⚠️ ${esc(x.nres.error || "登録できませんでした")}</div>`)
     : `<div style="margin-top:6px">${x.npv ? `<table class="mpT"><tr><th>欄</th><th>新規登録で入れる中身</th></tr>${(x.npv.plan || []).map(p => `<tr><td><b>${esc(p.label)}</b></td><td class="n">${esc(p.after)}</td></tr>`).join("")}</table>` : ""}
@@ -2032,10 +2033,19 @@ function mpPaint(){
         <button class="btn btn-ghost btn-sm" onclick="mpSetMany('${mp.sort}','${esc(gk)}',true)">✅ ${esc(gl)}を全部</button><button class="btn btn-ghost btn-sm" onclick="mpSetMany('${mp.sort}','${esc(gk)}',false)">☐ 外す</button></div>
       ${idx.map(i => { const x = it[i]; return `<div class="mpI"><label><input type="checkbox" ${x.on ? "checked" : ""} onchange="mpToggle(${i},this.checked)"> <b>${esc(x.label)}</b>に入れる</label>
       ${tbl(x, i)}${res(x)}</div>`; }).join("")}</div>`).join("") + `<div class="hint" style="margin-top:4px">チェックの選びは、ほかのキャストでも同じです</div>` : `<div class="warn">このキャストは、プロフを入れられる媒体のお店に在籍していません</div>`}
-    <div class="btns" style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+    ${(() => {
+      // 🆕 まとめて新規登録（2026/11/26 店長）・次に押すボタンを光らせる
+      const nPrev = mpNewIdx(false).length, nGo = mpNewIdx(true).length;
+      const canGo = it.some(x => x.on && x.plan && !x.plan.error && (x.plan.plan || []).some(p => p.change) && !(x.res && x.res.ok));
+      const looked = it.some(x => x.on && (x.plan || x.res));
+      const next = nGo ? "newGo" : canGo ? "go" : nPrev ? "newPrev" : (!looked && it.some(x => x.on)) ? "prev" : "";
+      const g = k => next === k ? " mpNext" : "";
+      return `<div class="btns" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:10px">
       <button class="btn btn-ghost" onclick="$('mpBg').remove()">閉じる</button>
-      ${it.some(x => x.on) ? `<button class="btn btn-ghost" id="mpPrev" onclick="mpRun(true)">🔍 変わるところを見る</button>` : ""}
-      ${it.some(x => x.on && x.plan && !x.plan.error && (x.plan.plan || []).some(p => p.change) && !(x.res && x.res.ok)) ? `<button class="btn btn-primary" id="mpGo" onclick="mpRun(false)">📡 この内容で入れる</button>` : ""}</div></div>`;
+      ${it.some(x => x.on) ? `<button class="btn btn-ghost${g("prev")}" id="mpPrev" onclick="mpRun(true)">🔍 変わるところを見る</button>` : ""}
+      ${nPrev ? `<button class="btn btn-ghost${g("newPrev")}" id="mpNewPrev" onclick="mpNewAll(true)">🆕 まとめて新規登録（まず中身を見る・${nPrev}か所）</button>` : ""}
+      ${nGo ? `<button class="btn btn-primary${g("newGo")}" id="mpNewGo" onclick="mpNewAll(false)">🆕 この内容でまとめて新規登録する（${nGo}か所）</button>` : ""}
+      ${canGo ? `<button class="btn btn-primary${g("go")}" id="mpGo" onclick="mpRun(false)">📡 この内容で入れる</button>` : ""}</div>`; })()}</div>`;
 }
 // 並べ方（媒体ごと／お店ごと）と、まとめてチェック（2026/11/26 店長）
 function mpGroups(){
@@ -2067,13 +2077,25 @@ async function mpToggle(i, on){
   .mpT{width:100%;border-collapse:collapse;margin-top:6px;font-size:12.5px} .mpT th,.mpT td{border-top:1px dashed #E5D9F2;padding:4px 6px;text-align:left;vertical-align:top;white-space:pre-wrap} .mpT td.o{color:#9C8B8F} .mpT td.n{color:#1E7B46;font-weight:700}
   .pfStoreNote{background:#FFF8E1;border:1.5px solid #F5C542;color:#6B4E00;border-radius:12px;padding:6px 10px;font-size:12.5px;font-weight:700;margin:4px 0 6px}
   .pfSaveOpt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;border:2px solid #F1C9D8;background:#FFF7FA;border-radius:14px;padding:10px 12px;margin-top:6px;cursor:pointer;font-family:inherit} .pfSaveOpt:hover{border-color:#E5638C;background:#FFEEF4} .pfSaveOpt b{font-size:14.5px} .pfSaveOpt small{color:#9C8B8F;font-weight:700}
+  .mpNext{animation:mpNext 1s ease-in-out infinite;position:relative;box-shadow:0 0 0 3px #FFD43B} @keyframes mpNext{0%,100%{box-shadow:0 0 0 3px #FFD43B,0 0 10px #FFD43B}50%{box-shadow:0 0 0 6px #FFB800,0 0 22px #FFB800}}
+  .mpNext::after{content:"👉 次はこれ";position:absolute;left:50%;top:-24px;transform:translateX(-50%);white-space:nowrap;font-size:12px;font-weight:900;color:#B06A00;background:#FFF3C4;border-radius:99px;padding:1px 8px}
   .mpBar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:#F6F2FF;border-radius:12px;padding:6px 10px;margin-top:8px;font-weight:800}
   .mpG{border-top:2px solid #E5D9F2;margin-top:10px;padding-top:4px} .mpGh{display:flex;gap:6px;align-items:center;flex-wrap:wrap} .mpGh b{font-size:15px;margin-right:4px}
   .mpOk{background:#E9F8EF;border:2px solid #3FA96A;color:#1E7B46;border-radius:10px;padding:6px 10px;margin-top:6px;font-weight:900}`; document.head.appendChild(s); })();
 // 🆕 媒体に新規登録（dry＝入れる中身を見るだけ）
-async function mpNew(i, dry){
+// 新規登録できる所（チェックあり・その媒体にいない・新規登録のロボットがある・まだ登録していない）。ready＝中身を見たあと
+function mpNewIdx(ready){
+  return mp.items.map((x, i) => [x, i]).filter(([x]) => x.on && x.plan && x.plan.error && /いません/.test(x.plan.error) && MP_NEW_MEDIA.includes(x.media) && !x.nres && (ready ? !!x.npv : !x.npv)).map(([, i]) => i);
+}
+async function mpNewAll(dry){
+  const idx = mpNewIdx(!dry); if(!idx.length) return;
+  if(!dry && !confirm(`${idx.map(i => mp.items[i].label).join("・")}\nに「${mpNames(mp.c, mp.items[idx[0]].mk)[0]}」をまとめて新規登録しますか？（本当に登録されます）`)) return;
+  for(const b of ["mpNewPrev", "mpNewGo"]){ const e = $(b); if(e){ e.disabled = true; e.textContent = "ロボットが入れています…（1か所1分ほど）"; } }
+  for(const i of idx) await mpNew(i, dry, true);
+}
+async function mpNew(i, dry, noAsk){
   const x = mp && mp.items[i]; if(!x) return;
-  if(!dry && !confirm(`${x.label}に「${mpNames(mp.c, x.mk)[0]}」を新規登録しますか？（本当に登録されます）`)) return;
+  if(!dry && !noAsk && !confirm(`${x.label}に「${mpNames(mp.c, x.mk)[0]}」を新規登録しますか？（本当に登録されます）`)) return;
   const c = mp.c, r = await hpFn({ action: "media_new", media: x.media, store: x.mk, cast: { name: mpNames(c, x.mk)[0], kana: c.kana || "", join: c.join_date || "" }, prof: mpProfOf(x.sk), dry, by: operatorName() });
   if(dry){ if(r && r.ok !== false) x.npv = r; else x.nres = r || { ok: false, error: "返事がありません" }; }
   else x.nres = r || { ok: false, error: "返事がありません" };
