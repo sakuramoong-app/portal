@@ -1991,7 +1991,7 @@ const MP_MEDIA = [{ media: "heaven", label: "ヘブン", stores: ["sakuramoon", 
   { media: "fuja", label: "風俗じゃぱん", stores: ["sakuramoon", "lana_uguisu", "gyakuanal"] },
   { media: "delija", label: "デリヘルじゃぱん", stores: ["sakuramoon"] },   // シフトの媒体と同じお店（18・極門はダミーなので、まだ）
   { media: "sniper", label: "スナイパー", stores: ["gokumon"] }];   // 極門だけ（ダミー名で探す。年齢などは極門のプロフに入っているものだけ）   // 18・極門はダミーの名前・年齢なので、まだ入れない
-const MP_NEW_MEDIA = ["heaven", "joho", "manzoku", "pure", "nhf", "fuja", "delija", "sniper"];   // 🆕 新規登録できる媒体（駅チカはまだ）
+const MP_NEW_MEDIA = ["heaven", "manzoku", "pure", "nhf", "fuja", "delija", "sniper"];   // 口コミ情報局は、入ったかの確かめ方を直すまで止める（11/26 ゆずで「入りませんでした」）   // 🆕 新規登録できる媒体（駅チカはまだ）
 let mp = null;   // { c, items:[{ media, mk, label, sk, on, plan, res }], set }
 async function mpTargets(){
   try{ const s = q(await sb.from("kb_settings").select("value").eq("key", "media_prof_targets").maybeSingle()); return (s && s.value && typeof s.value === "object") ? s.value : {}; }catch(e){ return {}; }
@@ -2097,7 +2097,7 @@ async function mpToggle(i, on){
 // 🆕 媒体に新規登録（dry＝入れる中身を見るだけ）
 /* ---------- 📷 媒体の写真を、公式HPの写真と入れかえる（2026/11/26 店長。いまはぴゅあらば）
    ・そのお店の公式HPのプロフ用 ①〜（一覧用はとばす）・撮影準備中はよける・ロゴは公式HPの写真のまま ---------- */
-const MP_PHOTO_MEDIA = ["pure", "heaven", "joho"];
+const MP_PHOTO_MEDIA = ["pure", "heaven", "joho", "sniper", "fuja", "delija"];
 function mpPhotoReady(x){ return x.on && MP_PHOTO_MEDIA.includes(x.media) && ((x.plan && !x.plan.error) || (x.nres && x.nres.ok)) && !(x.pres && x.pres.ok); }
 function mpPhotoBox(x, i){
   if(!mpPhotoReady(x) && !x.pres) return "";
