@@ -85,6 +85,22 @@ boardCol = function(x, state){
   return inList(sb);
 };
 const autoLeft = new Set();
+// 2026/11/26 店長：お茶にしていないのに「自動：お茶」で席が外れた（ゆりあ・ゆきな 11/25 15:43 同じ分に）
+//   → お茶・欠勤・不在で外す前に、データベースの今の状態を読みなおす（このPCが古い状態を見ていたら外さないで、新しい状態にする）
+//   → 外したときは「だれが・いつ」お茶にしたかを席の記録に残す
+async function autoLeaveSeat(s, cid, why){
+  if(why === "接客中"){ leaveSeat(s.id, true, "自動：接客中"); return; }
+  let r = null;
+  try{ r = q(await sb.from("kb_cast_days").select("*").eq("biz_date", day).eq("cast_id", cid).maybeSingle()); }
+  catch(e){ autoLeft.delete(s.id); return; }   // 読めなかったら外さない（次の描きなおしでもう一度）
+  if(!r || r.status !== why){
+    castDays[cid] = r || Object.assign({}, castDays[cid] || {}, { status: "" });   // このPCが古かった → 新しい状態に
+    autoLeft.delete(s.id); renderList(); return;
+  }
+  const t = r.updated_at ? new Date(r.updated_at) : null;
+  const when = t ? String(t.getHours()).padStart(2, "0") + ":" + String(t.getMinutes()).padStart(2, "0") : "";
+  leaveSeat(s.id, true, "自動：" + why + (when || r.updated_by ? "（" + when + " " + (r.updated_by || "") + "が" + why + "に）" : ""));
+}
 renderBoard = function(){
   const el = $("boardGrid"); if(!el || !M.casts) return;
   if(!shiftCache[day]){ el.innerHTML = `<div class="gate">シフトを読み込み中…</div>`; return; }
@@ -100,7 +116,7 @@ renderBoard = function(){
     const nh = nowHour(), seatT = s ? new Date(s.start_at).getTime() : 0;
     const workingNow = x.bks.find(b => b.r.status === "working" && b.s <= nh && nh <= b.e && (!seatT || new Date(b.r.status_at || b.r.start_at || 0).getTime() >= seatT - 60000));
     const why = workingNow ? "接客中" : ["お茶", "欠勤", "不在"].find(v => cd0.status === v) || "";
-    if(s && KB.CAN_EDIT && why && !autoLeft.has(s.id)){ autoLeft.add(s.id); leaveSeat(s.id, true, "自動：" + why); }
+    if(s && KB.CAN_EDIT && why && !autoLeft.has(s.id)){ autoLeft.add(s.id); autoLeaveSeat(s, x.c.id, why); }
   });
   const used = seatLogs.filter(l=>!l.end_at);
   const chip = (x, st, col)=>{
