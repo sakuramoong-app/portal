@@ -61,3 +61,12 @@ function crRepaint(){
   .cr-add{background:#1f5d99;color:#fff;border-color:#1f5d99}
   .cr-f{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px} .cr-f select,.cr-f input{font-family:inherit;font-weight:700;border:1.5px solid #BFD7F2;border-radius:9px;padding:4px 8px;background:#fff} .cr-f input{flex:1;min-width:12em}`;
   document.head.appendChild(s); })();
+/* 🧹 取りこんだときの印を、画面の文から外す（2026/11/26 店長：文字が多くて見づらい。データはそのまま）
+   ・「📥 エクセルの記録簿からうつしました（…）」・「【台帳 2020-08-29・キャスト欄にNG】」・「[台帳 2025-01-16・キャスト欄にNG]」 */
+function kbClean(s){
+  return String(s == null ? "" : s)
+    .replace(/📥\s*エクセルの記録簿からうつしました(?:[（(][^）)]*[）)])?/g, "")
+    .replace(/【台帳[^】]*】/g, "")
+    .replace(/[（(]\s*\[台帳[^\]]*\]\s*[）)]/g, "").replace(/\[台帳[^\]]*\]/g, "")
+    .replace(/[ \t　]*\n[ \t　]*\n+/g, "\n").replace(/^[\s、,・／]+|[\s、,・／]+$/g, "");
+}

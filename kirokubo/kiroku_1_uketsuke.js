@@ -954,7 +954,7 @@ function renderCastChecks(c){
   if(custNg && custNg.ask){   // 🤔 エクセルの備考から見分けた、判断にまようキャストNG → 内勤が決めるまで保存しない
     longNg = true;
     askHtml = `<div class="ngask">🤔 <b>キャストNG？ 関係ない？</b>（台帳エクセルの備考に「NG」などの言葉がありました）
-      <div class="q">${esc(custNg.reason || "")}</div>
+      <div class="q">${esc(typeof kbClean === "function" ? kbClean(custNg.reason) : (custNg.reason || ""))}</div>
       <button type="button" class="btn btn-danger btn-sm" onclick="castNgDecide(${custNg.id},true)">🙅 ${esc(castName(c.id))}はNG（受けない）</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="castNgDecide(${custNg.id},false)">関係ない（NGではない）</button></div>`;
   } else if(custNg){   // たしかなNGでも、自動で入れたものはまちがいがあるので、外す・理由を直すができる
@@ -1138,7 +1138,7 @@ async function lookupCustomer(keepName){
     $("custInfo").innerHTML = (c.ng && c.ng_ask ? `<div class="ngask">🤔 <b>出禁・店NG？</b>（台帳エクセルの備考から見分けました。条件つきの書き方なので、内勤が決めてください）<div class="q">${esc(c.ng_reason || "")}</div>
         <button type="button" class="btn btn-danger btn-sm" onclick="custNgDecide(${c.id},true)">⚠️ 店NG（受けない）</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="custNgDecide(${c.id},false)">NGではない（受けてOK）</button></div>`
-      : c.ng ? `<div class="warn">⚠️ 店NGです：${esc(c.ng_reason||"理由なし")}
+      : c.ng ? `<div class="warn">⚠️ 店NGです：${esc((typeof kbClean === "function" ? kbClean(c.ng_reason) : c.ng_reason) || "理由なし")}
           <div style="margin-top:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="custNgReason(${c.id})">✏️ 理由を直す</button>
           <button type="button" class="btn btn-ghost btn-sm" onclick="if(confirm('店NGを外しますか？（まちがいだったとき）'))custNgDecide(${c.id},false)">NGを外す（まちがいだった）</button></div></div>` : "") +
       // 📝 お客さんメモ（顧客台帳のメモ。台帳エクセルの電話の欄の文字・⚠️注意の言葉もここ）

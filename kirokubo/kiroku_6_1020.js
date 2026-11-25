@@ -288,9 +288,9 @@ async function toggleResTag(i){
   .ctags-in{margin:8px 0;font-weight:800;font-size:13px}.ctags-in .ctag-b{font-size:13px;padding:1px 10px} .ctag-b.tg-chk{background:#FF9F43;border-color:#E67E22;color:#fff} .ctag-b.tg-ng{background:#E0001B;border-color:#B0001B;color:#fff} .ctag-b.off{background:#fff;border-color:#ddd;color:#999}`; document.head.appendChild(s); })();
 function custCell(r){
   const c = r.kb_customers || {};
-  if(!r.customer_id || !KB.CAN_EDIT) return c.ng ? `<br><small style="color:#B0213F">⚠️ NG：${esc(c.ng_reason || "")}</small>` : "";
+  if(!r.customer_id || !KB.CAN_EDIT) return c.ng ? `<br><small style="color:#B0213F">⚠️ NG：${esc(typeof kbClean === "function" ? kbClean(c.ng_reason) : (c.ng_reason || ""))}</small>` : "";
   return `<div class="inl" onclick="event.stopPropagation()">
-    <button type="button" class="mini ${c.ng ? "ng" : ""}" onclick="custNg(${r.id})">${c.ng ? "⚠️ 店NG：" + esc(c.ng_reason || "理由なし") : "🚫 店NGにする"}</button>
+    <button type="button" class="mini ${c.ng ? "ng" : ""}" onclick="custNg(${r.id})">${c.ng ? "⚠️ 店NG：" + esc((typeof kbClean === "function" ? kbClean(c.ng_reason) : c.ng_reason) || "理由なし") : "🚫 店NGにする"}</button>
     <button type="button" class="mini" onclick="custNextFee(${r.id})">🚕 次回の交通費${c.next_transport != null ? "：" + yen(c.next_transport) : ""}</button></div>`;
 }
 async function updCustomer(id, patch, msg){
@@ -481,10 +481,10 @@ saveRes = async function(){
 function placeOf(r){ return (placesByCust[r.customer_id] || []).find(p=>samePlace(p, r.area, r.address)); }
 custCell = function(r){
   const c = r.kb_customers || {};
-  if(!r.customer_id || !KB.CAN_EDIT) return c.ng ? `<br><small style="color:#B0213F">⚠️ NG：${esc(c.ng_reason || "")}</small>` : "";
+  if(!r.customer_id || !KB.CAN_EDIT) return c.ng ? `<br><small style="color:#B0213F">⚠️ NG：${esc(typeof kbClean === "function" ? kbClean(c.ng_reason) : (c.ng_reason || ""))}</small>` : "";
   const p = placeOf(r);
   return `<div class="inl" onclick="event.stopPropagation()">
-    <button type="button" class="mini ${c.ng ? "ng" : ""}" onclick="custNg(${r.id})">${c.ng ? "⚠️ 店NG：" + esc(c.ng_reason || "理由なし") : "🚫 店NGにする"}</button>
+    <button type="button" class="mini ${c.ng ? "ng" : ""}" onclick="custNg(${r.id})">${c.ng ? "⚠️ 店NG：" + esc((typeof kbClean === "function" ? kbClean(c.ng_reason) : c.ng_reason) || "理由なし") : "🚫 店NGにする"}</button>
     <button type="button" class="mini" onclick="custNextFee(${r.id})">🚕 この場所の次回の交通費${p && p.next_transport != null ? "：" + yen(p.next_transport) + (p.next_note ? "<small>（" + esc(p.next_note) + "）</small>" : "") : ""}</button></div>`;
 };
 custNextFee = function(id){
@@ -1164,7 +1164,7 @@ async function checkOldNomi(){
           if(x.cast_id){ if(x.cast_id === cid){ hitNg = x; unsure = false; break; } continue; }
           const cs = nameCands(x); if(cs.some(c => c.id === cid) && !hitNg){ hitNg = x; unsure = cs.length > 1; }
         }
-        if(hitNg) ng = { cid, id: hitNg.id, reason: (hitNg.reason || "") + (unsure ? `（名前だけのNG「${hitNg.cast_name}」：同じ名前の子がほかにもいるので、この子か確かめてください）` : ""), ask: !!hitNg.ask || unsure };
+        if(hitNg) ng = { cid, id: hitNg.id, reason: (typeof kbClean === "function" ? kbClean(hitNg.reason) : (hitNg.reason || "")) + (unsure ? `（名前だけのNG「${hitNg.cast_name}」：同じ名前の子がほかにもいるので、この子か確かめてください）` : ""), ask: !!hitNg.ask || unsure };
       }catch(e){}
       const last = rows2[0];
       if(last){
@@ -1335,7 +1335,7 @@ function toggleNgDetail(i){
   const x = t.x, fmt = d => d ? String(d).replace(/-/g, "/") : "日付なし";
   const who = x.source === "excel" ? "台帳エクセルから" : x.by_name ? x.by_name + "が入れた" : "";
   box.innerHTML = `<div class="ngcd"><b>🙅 ${esc(t.nm)}のNG</b>${who ? ` <small>（${esc(who)}${x.at && x.source !== "excel" ? "・" + fmt(String(x.at).slice(0, 10)) : ""}）</small>` : ""}
-    <div class="ngcr">${esc(x.reason || "理由なし")}</div>
+    <div class="ngcr">${esc(kbClean(x.reason) || "理由なし")}</div>
     ${t.unsure ? `<div class="ngcu">名前だけのNG「${esc(x.cast_name)}」：${t.cands.length ? "当てはまる子 " + t.cands.map(c => esc(c.official_name || c.temp_name)).join("・") + "（だれのNGか確かめてください）" : "キャスト台帳に同じ名前の子が見つかりません"}。顧客台帳の「🔗 名前だけのNGをキャストにつなぐ」でつなげます</div>` : ""}
     ${t.ev.length ? `<div class="ngce"><b>📝 経緯（台帳エクセルの回）</b>${t.ev.slice(0, 6).map(h => `<div><b>${fmt(h.biz_date)}</b> ${esc(h.cast_raw || "")}${h.cast_ng ? " 🙅" : ""}${h.src_row ? ` <small>（${h.src_row}行目）</small>` : ""}${h.memo ? `<div class="ngcm">${esc(h.memo)}</div>` : ""}</div>`).join("")}</div>` : ""}</div>`;
 }
