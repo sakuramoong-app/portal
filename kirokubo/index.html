@@ -2012,14 +2012,20 @@ function mpNames(c, mk){ return [...new Set([c.stores && c.stores[mk] && c.store
 function mpPaint(){
   let bg = $("mpBg"); if(!bg){ bg = document.createElement("div"); bg.id = "mpBg"; bg.style.cssText = "position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;padding:14px;overflow:auto"; document.body.appendChild(bg); bg.addEventListener("click", e => { if(e.target === bg) bg.remove(); }); }
   const it = mp.items;
-  const tbl = x => !x.plan ? "" : x.plan.error ? `<div class="warn">⚠️ ${esc(x.plan.error)}</div>`
+  // 🆕 その媒体にいない子 → 新規登録（いまはヘブン）。「見る」→「登録する」
+  const MP_NEW = ["heaven", "joho"];
+  const newBox = (x, i) => !(x.plan && x.plan.error && /いません/.test(x.plan.error) && MP_NEW.includes(x.media)) ? "" : x.nres
+    ? (x.nres.ok ? `<div class="mpOk">✅ 新規登録しました（${esc(x.label)}）。写真はヘブンの画面で入れてください</div>` : `<div class="warn">⚠️ ${esc(x.nres.error || "登録できませんでした")}</div>`)
+    : `<div style="margin-top:6px">${x.npv ? `<table class="mpT"><tr><th>欄</th><th>新規登録で入れる中身</th></tr>${(x.npv.plan || []).map(p => `<tr><td><b>${esc(p.label)}</b></td><td class="n">${esc(p.after)}</td></tr>`).join("")}</table>` : ""}
+      <button class="btn ${x.npv ? "btn-primary" : "btn-ghost"} btn-sm" onclick="mpNew(${i},${x.npv ? "false" : "true"})">${x.npv ? `🆕 この内容で${esc(x.label)}に新規登録する` : `🆕 ${esc(x.label)}に新規登録する（まず中身を見る）`}</button></div>`;
+  const tbl = (x, i) => !x.plan ? "" : x.plan.error ? `<div class="warn">⚠️ ${esc(x.plan.error)}</div>${newBox(x, i)}`
     : `<table class="mpT"><tr><th>欄</th><th>今の${esc(x.label)}</th><th>入れる中身</th></tr>${(x.plan.plan || []).filter(p => p.change).map(p => `<tr><td><b>${esc(p.label)}</b></td><td class="o">${esc(p.before || "（空）")}</td><td class="n">${esc(p.after)}</td></tr>`).join("") || `<tr><td colspan="3">✅ もう同じ中身です（変わるところはありません）</td></tr>`}</table>`;
   const res = x => !x.res ? "" : x.res.ok ? `<div class="mpOk">✅ 入れました（${(x.res.results || []).length}か所・読みなおして確かめました）</div>`
     : `<div class="warn">⚠️ ${esc(x.res.error || [...(x.res.results || []).filter(r => !r.ok).map(r => r.label + "が入らなかった"), ...(x.res.changed || []).map(k => k + "が変わってしまった")].join("・") || "うまく入りませんでした")}</div>`;
   bg.innerHTML = `<div class="mpBox"><h3>📡 ${esc(nameOf(mp.c))}のプロフを媒体にも入れる</h3>
     <div class="hint">公式HPと同じ中身（このキャスト台帳のプロフ）を入れます。媒体に合う欄がないものは入れません。写真・オプションのアイコンはまだ入れません。<br>ヘブン・ぴゅあらば・口コミ情報局・NHF・マンゾク・駅チカ・風じゃ・デリじゃに入れます（スナイパーはこのあと）。エイティーン・極門はダミーの名前・年齢なので、まだ入れません。</div>
     ${it.length ? it.map((x, i) => `<div class="mpI"><label><input type="checkbox" ${x.on ? "checked" : ""} onchange="mpToggle(${i},this.checked)"> <b>${esc(x.label)}</b>に入れる</label>
-      <small>（この選びは、ほかのキャストでも同じです）</small>${tbl(x)}${res(x)}</div>`).join("") : `<div class="warn">このキャストは、プロフを入れられる媒体のお店に在籍していません</div>`}
+      <small>（この選びは、ほかのキャストでも同じです）</small>${tbl(x, i)}${res(x)}</div>`).join("") : `<div class="warn">このキャストは、プロフを入れられる媒体のお店に在籍していません</div>`}
     <div class="btns" style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
       <button class="btn btn-ghost" onclick="$('mpBg').remove()">閉じる</button>
       ${it.some(x => x.on) ? `<button class="btn btn-ghost" id="mpPrev" onclick="mpRun(true)">🔍 変わるところを見る</button>` : ""}
@@ -2035,6 +2041,15 @@ async function mpToggle(i, on){
   .mpI{border:2px solid #E5D9F2;border-radius:12px;padding:8px 10px;margin-top:8px} .mpI small{color:#9C8B8F}
   .mpT{width:100%;border-collapse:collapse;margin-top:6px;font-size:12.5px} .mpT th,.mpT td{border-top:1px dashed #E5D9F2;padding:4px 6px;text-align:left;vertical-align:top;white-space:pre-wrap} .mpT td.o{color:#9C8B8F} .mpT td.n{color:#1E7B46;font-weight:700}
   .mpOk{background:#E9F8EF;border:2px solid #3FA96A;color:#1E7B46;border-radius:10px;padding:6px 10px;margin-top:6px;font-weight:900}`; document.head.appendChild(s); })();
+// 🆕 媒体に新規登録（dry＝入れる中身を見るだけ）
+async function mpNew(i, dry){
+  const x = mp && mp.items[i]; if(!x) return;
+  if(!dry && !confirm(`${x.label}に「${mpNames(mp.c, x.mk)[0]}」を新規登録しますか？（本当に登録されます）`)) return;
+  const c = mp.c, r = await hpFn({ action: "media_new", media: x.media, store: x.mk, cast: { name: mpNames(c, x.mk)[0], kana: c.kana || "", join: c.join_date || "" }, prof: mpProfOf(x.sk), dry, by: operatorName() });
+  if(dry){ if(r && r.ok !== false) x.npv = r; else x.nres = r || { ok: false, error: "返事がありません" }; }
+  else x.nres = r || { ok: false, error: "返事がありません" };
+  mpPaint();
+}
 async function mpRun(dry){
   if(!mp) return;
   if(!dry && !confirm("この内容で媒体に入れますか？")) return;
