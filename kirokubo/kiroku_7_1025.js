@@ -494,7 +494,7 @@ const dmGoer = (c, store) => !isDummyPerson(c) && !ownName(c, store);
    ① 名前・別名がぴったり → ② 正式な名前の最後が同じ（「美咲」→「櫻井美咲」・「あん」→「夏目あん」）で1人だけ → ③ 書き方の最後が名前（「新人美咲」→「美咲」）で1人だけ */
 function castByRaw(n){
   n = String(n || "").normalize("NFKC").replace(/[\s　]/g, ""); if(!n) return null;
-  const nm = c => [c.official_name, c.temp_name, c.shift_name, ...(Array.isArray(c.aliases) ? c.aliases : [])].filter(Boolean).map(x => String(x).normalize("NFKC").replace(/[\s　]/g, ""));
+  const nm = c => [c.official_name, c.temp_name, c.shift_name, ...(Array.isArray(c.aliases) ? c.aliases : []), ...(Array.isArray(c.name_history) ? c.name_history.map(h => h && h.name) : [])].filter(Boolean).map(x => String(x).normalize("NFKC").replace(/[\s　]/g, ""));
   const ex = M.casts.filter(c => nm(c).includes(n)); if(ex.length) return ex[0];
   const tail = M.casts.filter(c => nm(c).some(x => x.length > n.length && n.length >= 2 && x.endsWith(n))); if(tail.length === 1) return tail[0];
   const head = M.casts.filter(c => nm(c).some(x => x.length >= 2 && n.endsWith(x))); if(head.length === 1) return head[0];

@@ -1156,8 +1156,15 @@ async function checkOldNomi(){
         // 2026/11/14：キャストIDがつながっていないNG（エクセルの「美咲」「みさ」など名前だけ）も、名前でこの子なら止める
         let n = await sb.from("kb_cust_cast_ng").select("id,reason,ask,cast_id,cast_name").eq("customer_id", custId).limit(200);
         if(n.error) n = await sb.from("kb_cust_cast_ng").select("id,reason,cast_id,cast_name").eq("customer_id", custId).limit(200);   // SQL 162 の前
-        const hitNg = !n.error && (n.data || []).find(x => x.cast_id ? x.cast_id === cid : (typeof castByRaw === "function" && (castByRaw(x.cast_name) || {}).id === cid));
-        if(hitNg) ng = { cid, id: hitNg.id, reason: hitNg.reason || "", ask: !!hitNg.ask };
+        // 2026/11/26：キャストにつながっているNGは、キャストだけで見分ける（名前が変わっても・同じ名前の別の子でもまちがえない）
+        //   名前だけのNGは、書き方のちがい（らぱんくん＝らぱん）・過去の名前でもさがす。だれか決まらない（この子かもしれない）ときも止めて「要確認」に
+        const nameCands = x => typeof castsByName === "function" ? castsByName(x.cast_name) : (typeof castByRaw === "function" && castByRaw(x.cast_name) ? [castByRaw(x.cast_name)] : []);
+        let hitNg = null, unsure = false;
+        if(!n.error) for(const x of (n.data || [])){
+          if(x.cast_id){ if(x.cast_id === cid){ hitNg = x; unsure = false; break; } continue; }
+          const cs = nameCands(x); if(cs.some(c => c.id === cid) && !hitNg){ hitNg = x; unsure = cs.length > 1; }
+        }
+        if(hitNg) ng = { cid, id: hitNg.id, reason: (hitNg.reason || "") + (unsure ? `（名前だけのNG「${hitNg.cast_name}」：同じ名前の子がほかにもいるので、この子か確かめてください）` : ""), ask: !!hitNg.ask || unsure };
       }catch(e){}
       const last = rows2[0];
       if(last){

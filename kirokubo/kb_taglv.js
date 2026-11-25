@@ -5,7 +5,7 @@
 const TAG_LV_RANK = { red: 0, orange: 1, yellow: 2 };
 const TAG_LV_MARK = { red: "🔴", orange: "🟠", yellow: "🟡" };
 const TAG_LV_NAME = { red: "🔴 いちばん大事", orange: "🟠 大事", yellow: "🟡 気をつける", none: "なし" };
-function tagLevels(){ return window.TAG_LEVELS || (window.M && M.set && M.set.cust_tag_levels) || {}; }
+function tagLevels(){ return window.TAG_LEVELS || (typeof M !== "undefined" && M && M.set && M.set.cust_tag_levels) || {}; }   // M は let（window.M ではない）
 function tagLvOf(t){
   const lv = tagLevels();
   if(lv && Object.prototype.hasOwnProperty.call(lv, t)) return lv[t] === "none" ? "" : lv[t];

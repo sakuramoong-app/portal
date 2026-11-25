@@ -284,6 +284,9 @@
         <div class="f"><label>記録簿の集計名（空ならキャスト名と同じ）</label><input id="e_agg" maxlength="60"></div>
       </div>
       <div class="f" style="margin-top:10px"><label>別名（ほかのアプリ・お店での書き方。「、」で区切る）</label><input id="e_aliases"></div>
+      <div class="f" style="margin-top:10px"><label>📜 過去の名前（名前を変えた子：いつからいつまで使っていたか）</label><div id="e_nameHist"></div>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="nhAdd()">＋ 過去の名前を足す</button>
+        <div class="hint" style="margin-top:4px">例：らむ（〜2025/9/30）→ らぱん（2025/10/1〜2025/12/31）→ 今はニーア。顧客台帳の名前だけのNG（エクセルから）を、その日に使っていた名前でこの子につなぎます。日付がわからなければ空でOK</div></div>
     </div></details>
     <details class="pfPanel" data-p="status"><summary class="pfHead">🚦 状態・面接日</summary><div class="pfBody">
       <div class="grid">
@@ -5105,6 +5108,7 @@ function openEdit(id){
   $("e_status").value = c.status || "active"; $("e_join").value = c.join_date || ""; $("e_leave").value = c.leave_date || "";
   $("e_interview").value = ""; $("e_joinReason").value = ""; $("e_leaveReason").value = "";   // プロフを読んだら入る（renderProf）
   $("e_aliases").value = (c.aliases || []).join("、"); $("e_agg").value = c.agg_name || "";
+  nhList = (Array.isArray(c.name_history) ? c.name_history : []).map(h => Object.assign({}, h)); nhRender();   // 📜 過去の名前（SQL 969）
   $("e_terms").innerHTML = id ? termsHtml(c) : `<div class="hint">キャストを保存してから、ランク・条件を入れられます（面接の内容をヒアリングとして書いてください）。</div>`;
   $("termsBtn").style.display = id && CAN_EDIT ? "" : "none";
   renderChecks(id);
@@ -5239,6 +5243,25 @@ function renderLook(c){
 function getLook(){
   return { vibe: [...document.querySelectorAll(".e_vibe:checked")].map(x => x.value), len: $("e_look_len").value, color: $("e_look_color").value, wig: $("e_look_wig").checked };
 }
+// 📜 過去の名前（2026/11/26 店長）：[{ name, from, to }]。顧客台帳の名前だけのNGを、その日の名前でキャストにつなぐのに使う
+var nhList = [];
+function nhRender(){
+  const el = $("e_nameHist"); if(!el) return;
+  el.innerHTML = nhList.map((h, i) => `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:5px">
+    <input class="nh_name" data-i="${i}" value="${esc(h.name || "")}" placeholder="前の名前" maxlength="40" style="width:9em">
+    <input type="date" class="nh_from" data-i="${i}" value="${esc(h.from || "")}" title="使いはじめた日（わからなければ空）"><span>〜</span>
+    <input type="date" class="nh_to" data-i="${i}" value="${esc(h.to || "")}" title="使っていた最後の日（わからなければ空）">
+    <button type="button" class="btn btn-ghost btn-sm" onclick="nhCollect();nhList.splice(${i},1);nhRender()">✖</button></div>`).join("")
+    || `<div class="hint" style="margin:0 0 4px">なし</div>`;
+}
+function nhCollect(){
+  const el = $("e_nameHist"); if(!el) return nhList;
+  el.querySelectorAll(".nh_name").forEach(x => { const i = +x.dataset.i; if(nhList[i]) nhList[i].name = x.value.trim(); });
+  el.querySelectorAll(".nh_from").forEach(x => { const i = +x.dataset.i; if(nhList[i]) nhList[i].from = x.value || ""; });
+  el.querySelectorAll(".nh_to").forEach(x => { const i = +x.dataset.i; if(nhList[i]) nhList[i].to = x.value || ""; });
+  return nhList;
+}
+function nhAdd(){ nhCollect(); nhList.push({ name: "", from: "", to: "" }); nhRender(); }
 async function saveCast(){
   if(!CAN_EDIT){ toast("作成中のため、直せるのは店長だけです"); return; }
   if(pf && $("pf_c")){ pfCollect(); if((pf.dirty.size || pf.hotelDirty) && confirm("プロフも直しています。いっしょにプロフも保存しますか？\n（公式HPには入れません。あとで「🌐 公式HPにまとめて入れる」で入れられます）")) await saveProf(true); }
@@ -5249,8 +5272,11 @@ async function saveCast(){
   // （記録簿は サクラシフトの名前 → 正式な名前 の順でシフトを探すので、空のまま名前を変えるとシフトが見つからなくなる）
   const before = editingId && casts.find(c => c.id === editingId);
   let keepShift = null;
+  nhCollect();
   if(before && before.official_name && official && official !== before.official_name){
     if(!aliases.includes(before.official_name)) aliases.push(before.official_name);
+    // 📜 前の名前を「過去の名前」に（今日まで使っていた）2026/11/26
+    if(!nhList.some(h => h.name === before.official_name)){ const t = new Date(Date.now() + 9 * 3600e3); t.setUTCDate(t.getUTCDate() - 1); nhList.push({ name: before.official_name, from: before.join_date || "", to: t.toISOString().slice(0, 10) }); }
     if(!before.shift_name) keepShift = before.official_name;
   }
   const st = {};
@@ -5268,6 +5294,7 @@ async function saveCast(){
     interval_min: Math.max(0, Math.min(240, Number($("e_interval").value) || 0)),
   };
   if(keepShift) row.shift_name = keepShift;
+  if("name_history" in (casts[0] || {})) row.name_history = nhList.filter(h => h.name);   // 📜 過去の名前（SQL 969 のあと）
   if("onboarding" in (casts[0] || {})) row.onboarding = getOnb(before);   // 入店の手続き（SQL 148 のあと）
   if("look" in (casts[0] || {})) row.look = getLook();   // 見た目のタグ（SQL 157 のあと）
   // 受付ルール用（SQL 100 のあと）。上限が空なら「上限なし」

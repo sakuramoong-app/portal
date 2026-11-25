@@ -10,7 +10,8 @@
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="kb_common.js?v=28"></script>
 <script src="kb_face.js?v=9"></script><!-- 🖼 キャストの写真アイコン -->
-<script src="kb_taglv.js?v=1"></script><!-- 🏷 タグの大事さ（並び・色） -->
+<script src="kb_taglv.js?v=2"></script><!-- 🏷 タグの大事さ（並び・色） -->
+<script src="kb_castname.js?v=2"></script><!-- 🔎 名前からキャストをさがす（過去の名前・書き方のちがい） -->
 <style>
   body{font-size:14.5px;}
   .wrap.wide{max-width:1280px;}
@@ -147,7 +148,7 @@ async function init(){
   if(!(await KB.staffSession())){ $("gate").textContent = "ポータルから開いてください（ポータルでログインしてから20時間たった場合も、開き直してください）"; return; }
   try{
     const [casts, stores] = await Promise.all([
-      sb.from("master_casts").select("id,official_name,temp_name,kana,status,stores,join_date,leave_date").order("kana"),
+      sb.from("master_casts").select("*").order("kana"),   // 過去の名前・別名も（名前だけのNGをキャストにつなぐ 2026/11/26）
       sb.from("master_stores").select("key,label").order("sort"),
     ]);
     M.casts = q(casts) || []; M.stores = q(stores) || [];
@@ -748,10 +749,16 @@ let cngDays = 365, cngWho = "now", cngCast = "";
 // エクセルの名前だけのNG（「美咲」→ 櫻井美咲）もキャストにつなげて見る（受付と同じ考え方）2026/11/14
 function cngCastOf(n){
   if(n.cast_id) return M.casts.find(y => y.id === n.cast_id) || null;
-  const k = String(n.cast_name || "").normalize("NFKC").replace(/[\s　]/g, ""); if(!k) return null;
-  const nm = c => [c.official_name, c.temp_name].filter(Boolean).map(s => String(s).normalize("NFKC").replace(/[\s　]/g, ""));
-  const ex = M.casts.filter(c => nm(c).includes(k)); if(ex.length) return ex.find(c => c.status !== "left") || ex[0];
-  const tl = M.casts.filter(c => nm(c).some(s => s.length > k.length && k.length >= 2 && s.endsWith(k))); return tl.length === 1 ? tl[0] : null;
+  // 2026/11/26：書き方のちがい（らぱんくん＝らぱん）・過去の名前・その日に在籍していた子でさがす（kb_castname.js）。1人に決まらなければ null
+  if(n._cands === undefined) n._cands = castsByName(n.cast_name, n._d || "", M.casts);
+  return n._cands.length === 1 ? n._cands[0] : null;
+}
+// 名前だけのNGの「その日」：エクセルでその子に 🙅 がついた回（なければ、その名前が書いてある回）の日付
+function cngDateOf(n, hs){
+  const ps = cnParts(n.cast_name); if(!ps.length) return "";
+  const has = x => cnParts(x.cast_raw).some(p => ps.includes(p));
+  const h = hs.find(x => x.cast_ng && has(x)) || hs.find(has);
+  return (h && h.biz_date) || "";
 }
 function cngIsNow(x){ const c = cngCastOf(x.n); return !!c && c.status !== "left"; }
 function cngIn(x, skipCast){
@@ -780,8 +787,9 @@ async function openCastNgReview(){
       (r.data || []).forEach(x => { if(x.biz_date && (!last[x.customer_id] || x.biz_date > last[x.customer_id])) last[x.customer_id] = x.biz_date; });
     }
     cngRev = ns.map(n => {
-      const cc0 = cngCastOf(n), nm = cc0 ? (cc0.official_name || cc0.temp_name) : n.cast_name, short = String(n.cast_name || nm || "").trim();
       const hs = (hist[n.customer_id] || []).slice().sort((a, b) => String(b.biz_date || "").localeCompare(String(a.biz_date || "")));
+      if(!n.cast_id) n._d = cngDateOf(n, hs);
+      const cc0 = cngCastOf(n), nm = cc0 ? (cc0.official_name || cc0.temp_name) : n.cast_name, short = String(n.cast_name || nm || "").trim();
       const same = x => (n.cast_id && x.cast_id === n.cast_id) || (short && String(x.cast_raw || "").includes(short));
       let src = hs.filter(x => x.cast_ng && same(x));
       if(!src.length) src = hs.filter(x => short && String(x.memo || "").includes(short) && NGR_WORDS.test(x.memo || ""));
@@ -797,7 +805,7 @@ function paintCastNgReview(){
   const byCast = {}; cngRev.filter(x => cngIn(x, true)).forEach(x => { byCast[x.nm] = (byCast[x.nm] || 0) + 1; });
   const castOpts = Object.entries(byCast).sort((a, b) => b[1] - a[1]);
   bg.innerHTML = `<div class="ngr">
-    <div class="ngrh"><b>🙅 キャストNGの見比べ</b><button class="btn btn-ghost btn-sm" onclick="openNgReview()">⚠️ 店NGへ</button>
+    <div class="ngrh"><b>🙅 キャストNGの見比べ</b><button class="btn btn-ghost btn-sm" onclick="openNgReview()">⚠️ 店NGへ</button>${ed && cngLinkList().length ? `<button class="btn btn-primary btn-sm" onclick="openCngLink()" title="エクセルから取りこんだ名前だけのNGを、キャストにつなぐ（名前が変わってもまちがえない）">🔗 名前だけのNGをキャストにつなぐ（${cngLinkList().length}件）</button>` : ""}
       <span class="ngrp">確認ずみ <b>${done}</b> ／ ${pool.length}件<i style="width:${pool.length ? Math.round(done / pool.length * 100) : 0}%"></i></span>
       <label style="font-size:12.5px;font-weight:700"><input type="checkbox" ${cngRevHideDone ? "checked" : ""} onchange="cngRevHideDone=this.checked;paintCastNgReview()"> 確認ずみを隠す</label>
       <button class="btn btn-ghost btn-sm" onclick="$('ngRevBg').remove()">閉じる</button></div>
@@ -819,6 +827,47 @@ function paintCastNgReview(){
         <div class="ngrb">${x.was ? `<span class="ngrres">${x.was.kind === "ok" ? "✅ NGで正しい にしました" : "❌ NGではない にしました（キャストNGを外しました）"}</span><button class="btn btn-ghost btn-sm" onclick="cngRevUndo(${n.id})">↩ 戻す</button>`
           : x.done ? `<span class="ngrres">確認ずみ</span>`
           : ed ? `<button class="btn btn-danger btn-sm" onclick="cngRevSet(${n.id},true)">✅ NGで正しい</button><button class="btn btn-ghost btn-sm" onclick="cngRevSet(${n.id},false)">❌ NGではない</button>` : ""}</div></div>`; }).join("") || `<div class="empty">ぜんぶ確認ずみです 🎉</div>`}</div>`;
+}
+/* ---------- 🔗 名前だけのキャストNGを、キャストにつなぐ（2026/11/26 店長）
+   ・エクセルから取りこんだ「美咲」「らぱんくん」などの名前だけのNGを、そのときの名前・在籍でキャストにつなぐ
+   ・つないだあとは、受付はキャストだけで見分ける（名前が変わっても・同じ名前の別の子でもまちがえない）
+   ・1人に決まったものは最初から選んである。決まらないものは内勤が選ぶ（選ばなければ、そのまま） ---------- */
+function cngLinkList(){ return (cngRev || []).filter(x => !x.n.cast_id); }
+function openCngLink(){
+  const bg = $("ngRevBg"); if(!bg || !cngRev) return;
+  const list = cngLinkList(), sure = list.filter(x => (x.n._cands || []).length === 1), unsure = list.filter(x => (x.n._cands || []).length !== 1);
+  const all = M.casts.slice().sort((a, b) => String(a.kana || a.official_name || "").localeCompare(String(b.kana || b.official_name || ""), "ja"));
+  const lbl = c => esc(c.official_name || c.temp_name || c.id) + (c.status === "left" ? "（退店）" : "");
+  const row = x => { const n = x.n, cs = n._cands || [];
+    return `<div class="ngrs" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${esc(x.c.name || "（名前なし）")}</b><span>の「<b>${esc(n.cast_name)}</b>」NG</span><small style="color:var(--sub)">${n._d ? md(n._d) + "の回" : "日付なし"}</small>
+      <select class="cngsel" data-id="${n.id}" style="font-family:inherit;font-weight:800;border:1.5px solid var(--line);border-radius:9px;padding:3px 6px;margin-left:auto">
+        <option value="">— つながない —</option>
+        ${cs.length ? `<optgroup label="名前が合う子">${cs.map(c => `<option value="${esc(c.id)}" ${cs.length === 1 ? "selected" : ""}>${lbl(c)}</option>`).join("")}</optgroup>` : ""}
+        <optgroup label="ほかの子">${all.filter(c => !cs.includes(c)).map(c => `<option value="${esc(c.id)}">${lbl(c)}</option>`).join("")}</optgroup></select></div>`; };
+  bg.innerHTML = `<div class="ngr">
+    <div class="ngrh"><b>🔗 名前だけのキャストNGを、キャストにつなぐ</b><button class="btn btn-ghost btn-sm" onclick="paintCastNgReview()">← 見比べにもどる</button><button class="btn btn-ghost btn-sm" onclick="$('ngRevBg').remove()">閉じる</button></div>
+    <div class="hint" style="margin:0 0 8px">エクセルから取りこんだNGは、名前だけで入っています。キャストにつなぐと、受付は<b>キャストで</b>見分けるので、名前が変わっても（らむ→らぱん→ニーア）、同じ名前の別の子でもまちがえません。<br>
+      書き方のちがい（らぱんくん＝らぱん・カタカナ/ひらがな）と、キャスト台帳の「過去の名前」・その日に在籍していた子でさがしています。</div>
+    ${list.length ? `<div style="font-weight:900;margin-top:6px">✅ 1人に決まった（${sure.length}件）<small style="color:var(--sub);font-weight:700">　選んであります。ちがっていたら直してください</small></div>${sure.map(row).join("") || `<div class="ngrs" style="color:var(--sub)">なし</div>`}
+      <div style="font-weight:900;margin-top:10px">🤔 決まらない・見つからない（${unsure.length}件）<small style="color:var(--sub);font-weight:700">　だれか分かるものだけ選んでください</small></div>${unsure.map(row).join("") || `<div class="ngrs" style="color:var(--sub)">なし</div>`}
+      <div class="ngrb" style="margin-top:10px"><button class="btn btn-primary" onclick="doCngLink()">🔗 選んだものをキャストにつなぐ</button></div>`
+      : `<div class="empty">名前だけのNGはありません 🎉</div>`}</div>`;
+}
+async function doCngLink(){
+  const sel = [...document.querySelectorAll("#ngRevBg .cngsel")].filter(s => s.value);
+  if(!sel.length){ toast("選んだものがありません"); return; }
+  if(!confirm(`${sel.length}件のNGを、選んだキャストにつなぎます。よろしいですか？`)) return;
+  let ok = 0, dup = 0, ng = 0;
+  for(const s of sel){
+    const id = Number(s.dataset.id), cid = s.value;
+    const r = await sb.from("kb_cust_cast_ng").update({ cast_id: cid }).eq("id", id);
+    if(!r.error){ ok++; const x = cngRev.find(y => y.n.id === id); if(x){ x.n.cast_id = cid; x.n._cands = undefined; const c = M.casts.find(y => y.id === cid); if(c) x.nm = c.official_name || c.temp_name || x.nm; } continue; }
+    // 同じお客さん・同じ子のNGがもうある（キャストにつながったNGがある）→ 名前だけの方は消す（同じNGが2つにならないように）
+    if(/duplicate|unique/i.test(r.error.message || "")){ const d = await sb.from("kb_cust_cast_ng").delete().eq("id", id); if(!d.error){ dup++; cngRev = cngRev.filter(y => y.n.id !== id); continue; } }
+    ng++;
+  }
+  toast(`🔗 つなぎました ${ok}件` + (dup ? `・同じNGがもうあったので名前だけの方を消した ${dup}件` : "") + (ng ? `・できなかった ${ng}件` : ""));
+  openCngLink();
 }
 async function cngRevSet(id, isNg){
   const x = cngRev.find(y => y.n.id === id); if(!x) return;
