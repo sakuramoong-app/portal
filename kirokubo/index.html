@@ -2009,9 +2009,18 @@ async function mpOpen(){
 function mpProfOf(sk){
   const d = pf.data, o = {};
   // ダミーのお店（極門・18）は名前・年齢を変えた別の設定なので、サクラムーンの中身は使わない
-  PF_BASIC.forEach(([f]) => { const v = String(profGet(d, sk, f) || (PROF_DUMMY.includes(sk) ? "" : profGet(d, "サクラムーン", f)) || "").trim(); if(v) o[f] = v; });
-  ["comment", "mgrComment"].forEach(f => { const v = String(profGet(d, sk, f) || "").trim(); if(v) o[f] = v; });
+  PF_BASIC.forEach(([f]) => { const v = mpPlain(profGet(d, sk, f) || (PROF_DUMMY.includes(sk) ? "" : profGet(d, "サクラムーン", f))); if(v) o[f] = v; });
+  ["comment", "mgrComment"].forEach(f => { const v = mpPlain(profGet(d, sk, f)); if(v) o[f] = v; });
   return o;
+}
+// 媒体はHTMLを入れられない → HTMLを外して文だけにする（改行は残す。&amp; や &#x1F60A; などはもとの文字に）2026/11/26 店長
+function mpPlain(s){
+  let t = String(s == null ? "" : s);
+  if(!/<[a-z!\/]|&[#a-z0-9]+;/i.test(t)) return t.trim();
+  t = t.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, "").replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|h\d|tr|table|section)>/gi, "\n").replace(/<[^>]+>/g, "");
+  const ta = document.createElement("textarea"); ta.innerHTML = t; t = ta.value;   // 文字の置きかえ（&amp; &#x… など）をもどす
+  return t.replace(/\r\n/g, "\n").replace(/[ \t　]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 function mpNames(c, mk){ return [...new Set([c.stores && c.stores[mk] && c.stores[mk].name, c.official_name, c.temp_name, c.shift_name].map(s => String(s || "").trim()).filter(Boolean))]; }
 function mpPaint(){
