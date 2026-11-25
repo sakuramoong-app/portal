@@ -2097,7 +2097,7 @@ async function mpToggle(i, on){
 // 🆕 媒体に新規登録（dry＝入れる中身を見るだけ）
 /* ---------- 📷 媒体の写真を、公式HPの写真と入れかえる（2026/11/26 店長。いまはぴゅあらば）
    ・そのお店の公式HPのプロフ用 ①〜（一覧用はとばす）・撮影準備中はよける・ロゴは公式HPの写真のまま ---------- */
-const MP_PHOTO_MEDIA = ["pure"];
+const MP_PHOTO_MEDIA = ["pure", "heaven", "joho"];
 function mpPhotoReady(x){ return x.on && MP_PHOTO_MEDIA.includes(x.media) && ((x.plan && !x.plan.error) || (x.nres && x.nres.ok)) && !(x.pres && x.pres.ok); }
 function mpPhotoBox(x, i){
   if(!mpPhotoReady(x) && !x.pres) return "";
