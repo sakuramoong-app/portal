@@ -1379,5 +1379,6 @@ function crPaintRes(){
   const n = CR.rows.filter(x => !x.done).length;
   el.innerHTML = `<div class="crbox"><b>📌 次回案内・確認してほしいこと</b><small>${cid ? `　店全体＋${esc(castName(cid))}のぶん` : n ? "　このお客さんのぶん全部（キャストを選ぶと、その子のぶんだけ）" : ""}</small>
     ${list || `<div class="cr-i" style="color:#7a8aa0;font-size:12.5px">${n ? "このキャストのぶんはありません" : "まだありません（次に来たときに案内・確認してほしいことがあれば入れてください）"}</div>`}${crFormHtml()}</div>`;
+  try{ if(typeof cc2Sort === "function") cc2Sort(); }catch(e){}   // あるときは重要の中・ないときは重要の外（2026/11/26）
 }
 { const __onCastCR = onCast; onCast = function(){ const r = __onCastCR.apply(this, arguments); try{ crPaintRes(); }catch(e){} return r; }; }

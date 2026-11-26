@@ -2200,6 +2200,15 @@ function cc2Sort(){
     else if(el.classList.contains("ngask") || (el.classList.contains("warn") && /店NG/.test(el.textContent))) imp.insertBefore(el, imp.children[1] || null);
     else if(el.classList.contains("warn")) imp.appendChild(el);
   });
+  // 📌 次回案内（2026/11/26 店長）：案内・確認してほしいことがある → 重要の枠の中。ない（入れる欄だけ）→ 重要とは別の枠（重要の下）
+  { const all = [...document.querySelectorAll("#crBoxRes")], cau = $("custCaution");
+    if(all.length > 1){ const keep = all.find(e => cau && cau.contains(e)) || all[all.length - 1]; all.forEach(e => { if(e !== keep) e.remove(); }); }
+    const cr = $("crBoxRes");
+    if(cr){ const cid = $("f_cast") ? $("f_cast").value : "";
+      const act = typeof CR !== "undefined" && (CR.rows || []).some(x => !x.done && (!cid || !x.cast_id || x.cast_id === cid));
+      if(act){ if(cau && cr.parentElement !== cau) cau.insertBefore(cr, cau.firstChild); }
+      else if(imp.nextElementSibling !== cr) imp.insertAdjacentElement("afterend", cr);
+      cr.classList.toggle("crOut", !act); } }
   // 中身があるときだけ重要の枠を出す（見出しと、台帳の利用回数の行はのぞく）
   const has = [...imp.querySelectorAll(":scope > *:not(.cc2t)")].some(x => x.id === "custCaution" ? [...x.children].some(y => !y.classList.contains("hist")) : true)
     || /要確認のお客さん/.test(head.textContent);
