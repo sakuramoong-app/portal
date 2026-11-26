@@ -2013,6 +2013,10 @@ function mpProfOf(sk){
   ["comment", "mgrComment"].forEach(f => { const v = mpPlain(profGet(d, sk, f)); if(v) o[f] = v; });
   // キャストの種類（NHFのタイプに使う）2026/11/26
   const ct = String(profGet(d, sk, "castType") || profGet(d, "サクラムーン", "castType") || "").trim(); if(ct) o.castType = ct;
+  // オプション可否（◎○△×）→ 媒体の基本プレイ・オプションの ○×△ に（風俗じゃぱん）2026/11/26。[キー, 名前, 印]
+  const op = profOpts(d, sk).options || {};
+  const ol = Object.keys(op).filter(k => op[k]).map(k => [k, PF_OPT_LABEL[k] || k, op[k]]);
+  if(ol.length) o.opts = JSON.stringify(ol);
   return o;
 }
 // 媒体はHTMLを入れられない → HTMLを外して文だけにする（改行は残す。&amp; や &#x1F60A; などはもとの文字に）2026/11/26 店長
