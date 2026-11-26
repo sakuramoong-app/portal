@@ -1991,7 +1991,7 @@ const MP_MEDIA = [{ media: "heaven", label: "ヘブン", stores: ["sakuramoon", 
   { media: "fuja", label: "風俗じゃぱん", stores: ["sakuramoon", "lana_uguisu", "gyakuanal"] },
   { media: "delija", label: "デリヘルじゃぱん", stores: ["sakuramoon"] },   // シフトの媒体と同じお店（18・極門はダミーなので、まだ）
   { media: "sniper", label: "スナイパー", stores: ["gokumon"] }];   // 極門だけ（ダミー名で探す。年齢などは極門のプロフに入っているものだけ）   // 18・極門はダミーの名前・年齢なので、まだ入れない
-const MP_NEW_MEDIA = ["heaven", "joho", "manzoku", "pure", "nhf", "fuja", "delija", "sniper"];   // 🆕 新規登録できる媒体（駅チカはまだ）。口コミ情報局は写真もいっしょに送る（11/26）
+const MP_NEW_MEDIA = ["heaven", "joho", "manzoku", "pure", "nhf", "fuja", "delija", "sniper", "ekichika"];   // 🆕 新規登録できる媒体（駅チカは11/26から・写真はあとで）。口コミ情報局は写真もいっしょに送る（11/26）
 let mp = null;   // { c, items:[{ media, mk, label, sk, on, plan, res }], set }
 async function mpTargets(){
   try{ const s = q(await sb.from("kb_settings").select("value").eq("key", "media_prof_targets").maybeSingle()); return (s && s.value && typeof s.value === "object") ? s.value : {}; }catch(e){ return {}; }
@@ -2011,6 +2011,8 @@ function mpProfOf(sk){
   // ダミーのお店（極門・18）は名前・年齢を変えた別の設定なので、サクラムーンの中身は使わない
   PF_BASIC.forEach(([f]) => { const v = mpPlain(profGet(d, sk, f) || (PROF_DUMMY.includes(sk) ? "" : profGet(d, "サクラムーン", f))); if(v) o[f] = v; });
   ["comment", "mgrComment"].forEach(f => { const v = mpPlain(profGet(d, sk, f)); if(v) o[f] = v; });
+  // キャストの種類（NHFのタイプに使う）2026/11/26
+  const ct = String(profGet(d, sk, "castType") || profGet(d, "サクラムーン", "castType") || "").trim(); if(ct) o.castType = ct;
   return o;
 }
 // 媒体はHTMLを入れられない → HTMLを外して文だけにする（改行は残す。&amp; や &#x1F60A; などはもとの文字に）2026/11/26 店長
@@ -2029,7 +2031,7 @@ function mpPaint(){
   // 🆕 その媒体にいない子 → 新規登録（いまはヘブン）。「見る」→「登録する」
   const MP_NEW = MP_NEW_MEDIA;
   const newBox = (x, i) => !(x.plan && x.plan.error && /いません/.test(x.plan.error) && MP_NEW.includes(x.media)) ? "" : x.nres
-    ? (x.nres.ok ? `<div class="mpOk">✅ 新規登録しました（${esc(x.label)}）。${mpNewHasPhoto(x) ? "名前・プロフの文・写真（公式HPと同じ）を入れました" : `名前とプロフの文を入れました。写真は「📷 写真も公式HPと同じにする」で入れてください`}</div>` : `<div class="warn">⚠️ ${esc(x.nres.error || "登録できませんでした")}</div>`)
+    ? (x.nres.ok ? `<div class="mpOk">✅ 新規登録しました（${esc(x.label)}）。${mpNewHasPhoto(x) ? "名前・プロフの文・写真（公式HPと同じ）を入れました" : (MP_PHOTO_MEDIA.includes(x.media) ? `名前とプロフの文を入れました。写真は「📷 写真も公式HPと同じにする」で入れてください` : `名前とプロフの文を入れました。写真はまだ自動で入れられないので、${esc(x.label)}の管理画面で入れてください`)}</div>` : `<div class="warn">⚠️ ${esc(x.nres.error || "登録できませんでした")}</div>`)
     : `<div style="margin-top:6px">${x.npv ? `<table class="mpT"><tr><th>欄</th><th>新規登録で入れる中身</th></tr>${(x.npv.plan || []).map(p => `<tr><td><b>${esc(p.label)}</b></td><td class="n">${esc(p.after)}</td></tr>`).join("")}</table>` : ""}
       <button class="btn ${x.npv ? "btn-primary" : "btn-ghost"} btn-sm" onclick="mpNew(${i},${x.npv ? "false" : "true"})">${x.npv ? `🆕 この内容で${esc(x.label)}に新規登録する` : `🆕 ${esc(x.label)}に新規登録する（まず中身を見る）`}</button></div>`;
   const tbl = (x, i) => !x.plan ? "" : x.plan.error ? ((/いません/.test(x.plan.error) && MP_NEW_MEDIA.includes(x.media)) ? (x.nres && x.nres.ok ? "" : `<div class="mpNew">🆕 ${esc(x.label)}には、まだ登録されていません → 下の「🆕 新規登録」で入れます</div>`) : `<div class="warn">⚠️ ${esc(x.plan.error)}</div>`) + newBox(x, i)
