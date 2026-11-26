@@ -2050,7 +2050,7 @@ function mpPaint(){
     ${it.length ? mpBulkBar() + mpGroups().map(([gk, gl, idx]) => `<div class="mpG"><div class="mpGh"><b>${esc(gl)}</b>
         <button class="btn btn-ghost btn-sm" onclick="mpSetMany('${mp.sort}','${esc(gk)}',true)">✅ ${esc(gl)}を全部</button><button class="btn btn-ghost btn-sm" onclick="mpSetMany('${mp.sort}','${esc(gk)}',false)">☐ 外す</button></div>
       ${idx.map(i => { const x = it[i], now = mp.busy && mp.busy.cur === x; return `<div class="mpI${now ? " mpNow" : ""}" ${now ? 'id="mpNowItem"' : ""}><label><input type="checkbox" ${x.on ? "checked" : ""} onchange="mpToggle(${i},this.checked)"> <b>${esc(x.label)}</b>に入れる</label>
-      ${now ? `<div class="mpBusyI">⏳ ロボットが${esc(mp.busy.label)}…（ここを読み込み中）</div>` : ""}${tbl(x, i)}${res(x)}${mpPhotoBox(x, i)}</div>`; }).join("")}</div>`).join("") + `<div class="hint" style="margin-top:4px">チェックの選びは、ほかのキャストでも同じです</div>` : `<div class="warn">このキャストは、プロフを入れられる媒体のお店に在籍していません</div>`}
+      ${now ? `<div class="mpBusyI">⏳ ロボットが${esc(mp.busy.label)}…（ここを読み込み中）</div>` : ""}${tbl(x, i)}${res(x)}${mpPhotoBox(x, i)}${mpTopBox(x, i)}</div>`; }).join("")}</div>`).join("") + `<div class="hint" style="margin-top:4px">チェックの選びは、ほかのキャストでも同じです</div>` : `<div class="warn">このキャストは、プロフを入れられる媒体のお店に在籍していません</div>`}
     ${(() => {
       // 🆕 まとめて新規登録（2026/11/26 店長）・次に押すボタンを光らせる
       const nPrev = mpNewIdx(false).length, nGo = mpNewIdx(true).length;
@@ -2118,6 +2118,20 @@ async function mpToggle(i, on){
 const MP_PHOTO_MEDIA = ["pure", "heaven", "joho", "sniper", "fuja", "delija", "nhf", "manzoku", "ekichika"];   // 駅チカ 11/27（サムネは上寄りの正方形に切りぬき）
 // 新規登録のあと、女の子一覧のいちばん上にしたか（風じゃ・デリじゃ。2026/11/27）
 function mpTopNote(x){ const t = x.nres && x.nres.top; if(!t) return ""; return t.ok ? `<br>⬆ 女の子一覧のいちばん上にしました` : `<br><span style="color:#B45309">⬆ 女の子一覧のいちばん上にはできませんでした（${esc(String(t.error || ""))}）。${esc(x.label)}の並び替えで、いちばん上へ動かして「更新する」を押してください</span>`; }
+// ⬆ もう登録してある子を、女の子一覧のいちばん上へ（風じゃ・デリじゃ・駅チカ。2026/11/27 店長）
+const MP_TOP_MEDIA = ["fuja", "delija", "ekichika"];
+function mpTopBox(x, i){
+  if(!MP_TOP_MEDIA.includes(x.media) || !x.plan || x.plan.error || (x.nres && x.nres.top)) return "";
+  if(x.tres) return x.tres.busy ? `<div class="mpBusyI">⏳ いちばん上にしています…</div>` : x.tres.ok ? `<div class="mpOk">⬆ ${x.tres.already ? "もういちばん上です" : "女の子一覧のいちばん上にしました"}</div>` : `<div class="warn">⬆ ⚠️ ${esc(x.tres.error || "いちばん上にできませんでした")}</div>`;
+  return `<div style="margin-top:6px"><button class="btn btn-ghost btn-sm" onclick="mpTop(${i})">⬆ ${esc(x.label)}の一覧のいちばん上へ（新人のとき）</button></div>`;
+}
+async function mpTop(i){
+  const x = mp && mp.items[i]; if(!x) return;
+  if(!confirm(`${x.label}の女の子一覧で「${mpNames(mp.c, x.mk)[0]}」をいちばん上にしますか？（ほかの子は1つずつ下へ）`)) return;
+  x.tres = { busy: true }; mpPaint();
+  const r = await hpFn({ action: "media_top", media: x.media, store: x.mk, name: mpNames(mp.c, x.mk)[0], by: operatorName() });
+  x.tres = r || { ok: false, error: "返事がありません" }; mpPaint();
+}
 function mpNewHasPhoto(x){ return !!(x.nres && x.nres.ok && (x.nres.plan || []).some(p => p.label === "写真")); }   // 新規登録で写真もいっしょに入れた（口コミ情報局）
 function mpPhotoReady(x){ return x.on && !mpNewHasPhoto(x) && MP_PHOTO_MEDIA.includes(x.media) && ((x.plan && !x.plan.error) || (x.nres && x.nres.ok)) && !(x.pres && x.pres.ok); }
 function mpPhotoBox(x, i){
