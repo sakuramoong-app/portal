@@ -2013,6 +2013,8 @@ function mpProfOf(sk){
   ["comment", "mgrComment"].forEach(f => { const v = mpPlain(profGet(d, sk, f)); if(v) o[f] = v; });
   // キャストの種類（NHFのタイプに使う）2026/11/26
   const ct = String(profGet(d, sk, "castType") || profGet(d, "サクラムーン", "castType") || "").trim(); if(ct) o.castType = ct;
+  // 雰囲気（マンゾクのタイプ・風じゃのタグに使う）2026/11/26
+  const vb = pfVibesText(profGet(d, sk, "vibes") || profGet(d, "サクラムーン", "vibes")); if(vb) o.vibes = vb;
   // オプション可否（◎○△×）→ 媒体の基本プレイ・オプションの ○×△ に（風俗じゃぱん）2026/11/26。[キー, 名前, 印]
   const op = profOpts(d, sk).options || {};
   const ol = Object.keys(op).filter(k => op[k]).map(k => [k, PF_OPT_LABEL[k] || k, op[k]]);
