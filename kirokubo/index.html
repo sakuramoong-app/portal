@@ -2026,7 +2026,7 @@ function mpPlain(s){
   let t = String(s == null ? "" : s);
   if(!/<[a-z!\/]|&[#a-z0-9]+;/i.test(t)) return t.trim();
   t = t.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, "").replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|h\d|tr|table|section)>/gi, "\n").replace(/<[^>]+>/g, "");
+    .replace(/\r\n/g, "\n").replace(/[ \t]*<br\s*\/?>[ \t]*\n?/gi, "\n").replace(/[ \t]*<\/(p|div|li|h\d|tr|table|section)>[ \t]*\n?/gi, "\n").replace(/<[^>]+>/g, "").replace(/^[ \t]+/gm, "");   // <br>のうしろの改行で2つにならないように・HTMLの字下げ（半角）は外す（11/26）
   const ta = document.createElement("textarea"); ta.innerHTML = t; t = ta.value;   // 文字の置きかえ（&amp; &#x… など）をもどす
   return t.replace(/\r\n/g, "\n").replace(/[ \t　]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
