@@ -29,7 +29,9 @@ function hvSkWant(x){
   const st = boardState(x), cd = x.cd || {}, sh = x.shift, gap = hvSkGap(x.c) / 60;
   if(st === "gone") return { state: "off" };
   if(cd.full_at && sh && sh.end != null) return { state: "work", end: fromHour(Number(sh.end)), why: "満了" };
-  if(st === "wait") return { state: "wait" };
+  // ⏳ 待機中でも、次の予約まで60分を切ったら → 仕事中と同じ：その予約の終わり＋インターバルを次回に（2026/11/26 店長）
+  if(st === "wait"){ const n = nowHour(), nx = hvSkLive(x).find(b => b.s >= n - 0.02 && b.s - n <= 1);
+    return nx ? { state: "work", end: hvSkEnd(nx.e, gap), why: "次の仕事まで60分以内" } : { state: "wait" }; }
   if(st === "work"){
     const aw = autoWork(x);
     const r = (aw && aw.r) || (x.bks.find(b => b.r.status === "working") || {}).r;
