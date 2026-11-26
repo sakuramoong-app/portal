@@ -2037,7 +2037,7 @@ function mpPaint(){
   // 🆕 その媒体にいない子 → 新規登録（いまはヘブン）。「見る」→「登録する」
   const MP_NEW = MP_NEW_MEDIA;
   const newBox = (x, i) => !(x.plan && x.plan.error && /いません/.test(x.plan.error) && MP_NEW.includes(x.media)) ? "" : x.nres
-    ? (x.nres.ok ? `<div class="mpOk">✅ 新規登録しました（${esc(x.label)}）。${mpNewHasPhoto(x) ? "名前・プロフの文・写真（公式HPと同じ）を入れました" : (MP_PHOTO_MEDIA.includes(x.media) ? `名前とプロフの文を入れました。写真は「📷 写真も公式HPと同じにする」で入れてください` : `名前とプロフの文を入れました。写真はまだ自動で入れられないので、${esc(x.label)}の管理画面で入れてください`)}</div>` : `<div class="warn">⚠️ ${esc(x.nres.error || "登録できませんでした")}</div>`)
+    ? (x.nres.ok ? `<div class="mpOk">✅ 新規登録しました（${esc(x.label)}）。${mpNewHasPhoto(x) ? "名前・プロフの文・写真（公式HPと同じ）を入れました" : (MP_PHOTO_MEDIA.includes(x.media) ? `名前とプロフの文を入れました。写真は「📷 写真も公式HPと同じにする」で入れてください` : `名前とプロフの文を入れました。写真はまだ自動で入れられないので、${esc(x.label)}の管理画面で入れてください`)}${mpTopNote(x)}</div>` : `<div class="warn">⚠️ ${esc(x.nres.error || "登録できませんでした")}</div>`)
     : `<div style="margin-top:6px">${x.npv ? `<table class="mpT"><tr><th>欄</th><th>新規登録で入れる中身</th></tr>${(x.npv.plan || []).map(p => `<tr><td><b>${esc(p.label)}</b></td><td class="n">${esc(p.after)}</td></tr>`).join("")}</table>` : ""}
       <button class="btn ${x.npv ? "btn-primary" : "btn-ghost"} btn-sm" onclick="mpNew(${i},${x.npv ? "false" : "true"})">${x.npv ? `🆕 この内容で${esc(x.label)}に新規登録する` : `🆕 ${esc(x.label)}に新規登録する（まず中身を見る）`}</button></div>`;
   const tbl = (x, i) => !x.plan ? "" : x.plan.error ? ((/いません/.test(x.plan.error) && MP_NEW_MEDIA.includes(x.media)) ? (x.nres && x.nres.ok ? "" : `<div class="mpNew">🆕 ${esc(x.label)}には、まだ登録されていません → 下の「🆕 新規登録」で入れます</div>`) : `<div class="warn">⚠️ ${esc(x.plan.error)}</div>`) + newBox(x, i)
@@ -2114,6 +2114,8 @@ async function mpToggle(i, on){
 /* ---------- 📷 媒体の写真を、公式HPの写真と入れかえる（2026/11/26 店長。いまはぴゅあらば）
    ・そのお店の公式HPのプロフ用 ①〜（一覧用はとばす）・撮影準備中はよける・ロゴは公式HPの写真のまま ---------- */
 const MP_PHOTO_MEDIA = ["pure", "heaven", "joho", "sniper", "fuja", "delija", "nhf", "manzoku"];   // 駅チカはまだ（サムネイルの切りぬき）
+// 新規登録のあと、女の子一覧のいちばん上にしたか（風じゃ・デリじゃ。2026/11/27）
+function mpTopNote(x){ const t = x.nres && x.nres.top; if(!t) return ""; return t.ok ? `<br>⬆ 女の子一覧のいちばん上にしました` : `<br><span style="color:#B45309">⬆ 女の子一覧のいちばん上にはできませんでした（${esc(String(t.error || ""))}）。${esc(x.label)}の並び替えで、いちばん上へ動かして「更新する」を押してください</span>`; }
 function mpNewHasPhoto(x){ return !!(x.nres && x.nres.ok && (x.nres.plan || []).some(p => p.label === "写真")); }   // 新規登録で写真もいっしょに入れた（口コミ情報局）
 function mpPhotoReady(x){ return x.on && !mpNewHasPhoto(x) && MP_PHOTO_MEDIA.includes(x.media) && ((x.plan && !x.plan.error) || (x.nres && x.nres.ok)) && !(x.pres && x.pres.ok); }
 function mpPhotoBox(x, i){
