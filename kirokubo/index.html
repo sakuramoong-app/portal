@@ -1991,7 +1991,7 @@ const MP_MEDIA = [{ media: "heaven", label: "ヘブン", stores: ["sakuramoon", 
   { media: "fuja", label: "風俗じゃぱん", stores: ["sakuramoon", "lana_uguisu", "gyakuanal"] },
   { media: "delija", label: "デリヘルじゃぱん", stores: ["sakuramoon"] },   // シフトの媒体と同じお店（18・極門はダミーなので、まだ）
   { media: "sniper", label: "スナイパー", stores: ["gokumon"] }];   // 極門だけ（ダミー名で探す。年齢などは極門のプロフに入っているものだけ）   // 18・極門はダミーの名前・年齢なので、まだ入れない
-const MP_NEW_MEDIA = ["heaven", "manzoku", "pure", "nhf", "fuja", "delija", "sniper"];   // 口コミ情報局は、入ったかの確かめ方を直すまで止める（11/26 ゆずで「入りませんでした」）   // 🆕 新規登録できる媒体（駅チカはまだ）
+const MP_NEW_MEDIA = ["heaven", "joho", "manzoku", "pure", "nhf", "fuja", "delija", "sniper"];   // 🆕 新規登録できる媒体（駅チカはまだ）。口コミ情報局は写真もいっしょに送る（11/26）
 let mp = null;   // { c, items:[{ media, mk, label, sk, on, plan, res }], set }
 async function mpTargets(){
   try{ const s = q(await sb.from("kb_settings").select("value").eq("key", "media_prof_targets").maybeSingle()); return (s && s.value && typeof s.value === "object") ? s.value : {}; }catch(e){ return {}; }
@@ -2137,7 +2137,7 @@ async function mpNewAll(dry){
 async function mpNew(i, dry, noAsk){
   const x = mp && mp.items[i]; if(!x) return;
   if(!dry && !noAsk && !confirm(`${x.label}に「${mpNames(mp.c, x.mk)[0]}」を新規登録しますか？（本当に登録されます）`)) return;
-  const c = mp.c, r = await hpFn({ action: "media_new", media: x.media, store: x.mk, cast: { name: mpNames(c, x.mk)[0], kana: c.kana || "", join: c.join_date || "" }, prof: mpProfOf(x.sk), dry, by: operatorName() });
+  const c = mp.c, r = await hpFn({ action: "media_new", media: x.media, store: x.mk, cast: { name: mpNames(c, x.mk)[0], kana: c.kana || "", join: c.join_date || "" }, prof: mpProfOf(x.sk), from: mpFrom(x), dry, by: operatorName() });
   if(dry){ if(r && r.ok !== false) x.npv = r; else x.nres = r || { ok: false, error: "返事がありません" }; }
   else x.nres = r || { ok: false, error: "返事がありません" };
   mpPaint();
