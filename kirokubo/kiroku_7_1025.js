@@ -1652,18 +1652,20 @@ const KARI_SLOTS = ["13:00", "17:00", "21:00", "1:00"];
 let kariList = [], kariLoadedAt = 0;
 async function loadKari(){
   if(!HAS_KARI) return;
-  try{ kariList = (q(await sb.from("kb_reservations").select("id,biz_date,kari_at,kari_by,cast_id,start_at,store_key,deleted").not("kari_at", "is", null)) || []).filter(r => !r.deleted); }catch(e){}
+  try{ kariList = (q(await sb.from("kb_reservations").select("id,biz_date,kari_at,kari_by,cast_id,start_at,store_key,deleted,status,kb_customers(name)").not("kari_at", "is", null)) || []).filter(r => !r.deleted); }catch(e){}
 }
+// キャンセル・トビ・流れた・終了になった予約は、仮予約の印が残っていても知らせない（カードにも出ないので、どれかわからなかった。2026/11/26 店長）
+const KARI_OFF = new Set(["cancel", "tobi", "flowed", "done"]);
 function kariAll(){   // 開いている日の予約（いちばん新しい）＋ほかの日の仮予約
   const m = new Map();
   kariList.forEach(r => m.set(r.id, r));
   (rows || []).forEach(r => { if(r.kari_at && !r.deleted) m.set(r.id, r); else m.delete(r.id); });
-  return [...m.values()];
+  return [...m.values()].filter(r => !KARI_OFF.has(r.status));
 }
 function kariMsg(r){
-  const d = String(r.biz_date || "");
-  // 読み上げ：「11月12日予約　あすかさんの仮予約がまだです」（2026/11/12 店長）
-  return `${d ? Number(d.slice(5, 7)) + "月" + Number(d.slice(8)) + "日予約　" : ""}${r.cast_id ? castName(r.cast_id) + "さん" : "キャスト未定"}の仮予約がまだです`;
+  const d = String(r.biz_date || ""), cu = ((r.kb_customers || {}).name || "").trim();
+  // 読み上げ：「11月12日予約　13:16〜　かわい様　あすかさんの仮予約がまだです」（2026/11/12 店長。時刻・お客様名は 11/26 から：どの予約かわかるように）
+  return `${d ? Number(d.slice(5, 7)) + "月" + Number(d.slice(8)) + "日予約　" : ""}${r.start_at ? hm(r.start_at) + "〜　" : ""}${cu ? cu + "様　" : ""}${r.cast_id ? castName(r.cast_id) + "さん" : "キャスト未定"}の仮予約がまだです`;
 }
 function checkKari(){
   if(!M.casts || KB.PRACTICE || !HAS_KARI) return;
