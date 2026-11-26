@@ -2114,7 +2114,7 @@ async function mpToggle(i, on){
 // 🆕 媒体に新規登録（dry＝入れる中身を見るだけ）
 /* ---------- 📷 媒体の写真を、公式HPの写真と入れかえる（2026/11/26 店長。いまはぴゅあらば）
    ・そのお店の公式HPのプロフ用 ①〜（一覧用はとばす）・撮影準備中はよける・ロゴは公式HPの写真のまま ---------- */
-const MP_PHOTO_MEDIA = ["pure", "heaven", "joho", "sniper", "fuja", "delija", "nhf", "manzoku"];   // 駅チカはまだ（サムネイルの切りぬき）
+const MP_PHOTO_MEDIA = ["pure", "heaven", "joho", "sniper", "fuja", "delija", "nhf", "manzoku", "ekichika"];   // 駅チカ 11/27（サムネは上寄りの正方形に切りぬき）
 // 新規登録のあと、女の子一覧のいちばん上にしたか（風じゃ・デリじゃ。2026/11/27）
 function mpTopNote(x){ const t = x.nres && x.nres.top; if(!t) return ""; return t.ok ? `<br>⬆ 女の子一覧のいちばん上にしました` : `<br><span style="color:#B45309">⬆ 女の子一覧のいちばん上にはできませんでした（${esc(String(t.error || ""))}）。${esc(x.label)}の並び替えで、いちばん上へ動かして「更新する」を押してください</span>`; }
 function mpNewHasPhoto(x){ return !!(x.nres && x.nres.ok && (x.nres.plan || []).some(p => p.label === "写真")); }   // 新規登録で写真もいっしょに入れた（口コミ情報局）
