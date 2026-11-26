@@ -5605,8 +5605,9 @@ function shiftStoresOf(ks){
   return out;
 }
 // prev：保存する前の在籍店舗。サクラシフトにもういる子は、新しくチェックしたお店と、変えたダミー名だけ送る（今の媒体の設定はさわらない）
-async function syncShift(c, prev){
-  if(!CAN_EDIT || c.status === "left" || !Object.keys(c.stores || {}).length) return;
+// atLink：プロフとつないだとき（2026/11/26 店長）。在籍店舗がまだでも、名前とパスワードだけ先にサクラシフトに登録する（お店は保存したときに足す）
+async function syncShift(c, prev, atLink){
+  if(!CAN_EDIT || c.status === "left" || (!atLink && !Object.keys(c.stores || {}).length)) return;
   const name = c.shift_name || c.official_name || c.temp_name;
   if(!name) return;
   prev = prev || {};
@@ -5735,6 +5736,8 @@ async function addFromProf(pid){
     await autoMoveInternal(r.id);   // プロフの内勤連絡を自動で受付ルールなどに
     toast("台帳に入れました。在籍店舗を決めて保存してください");
     openEdit(r.id);
+    // 📅 同時にサクラシフトにも登録（パスワードは自動で作る・ほかの子と同じ番号にしない）（2026/11/26 店長）
+    if(!r.shift_name) await syncShift(r, {}, true);
   }catch(e){ toast("台帳に入れられませんでした：" + (e.message || e)); }
 }
 
