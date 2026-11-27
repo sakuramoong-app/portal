@@ -704,49 +704,38 @@ function resCard(r, i){
   return `<div class="rescard ${cx ? "cx" : ""} ${r.kari_at && !cx ? "kari" : ""} ${no == null ? "" : "rcs rs-" + r.status}" id="rc-${r.id}">   <!-- ①〜⑥の色は、予約の状態の色（2026/11/5） -->
     ${r.kari_at && !cx ? `<div class="rc-kari"><span class="kari-badge">📌 仮予約</span> <small>${KBF.staffTag(r.kari_by)} ${whenShort(r.kari_at)}・ぜんぶ入れて「💾 登録する」を押すと消えます</small> <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ 続きを入れる</button></div>` : ""}
     ${!cx && !r.cast_notified_at && r.status !== "done" && r.cast_id ? `<div class="toldov"><button type="button" onclick="toggleNotified(${r.id})" title="キャストに伝えたら押す">⚠️ キャストにまだ伝えていません<small>伝えたら押す</small></button></div>` : ""}
-    <div class="rc-top">
+    <div class="rc-top">   <!-- 11/28 店長：上の行は「何番目・状態・お店・キャストに伝えた・開く」だけ（時間・場所・コース・料金・お客さんは下の確認電話の並びに。同じものを2回出さない） -->
       ${noTxt ? `<span class="rc-no st ${r.status}">${noTxt}</span>` : ""}
       <span class="stbox">${stSel}${statusAtChip(r, ed)}</span>
-      <small class="rc-lbl">開始</small>${ed ? `<input type="time" class="rc-time" value="${hmIn(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>${rcEndWarn(r)}
       ${r.phone_draft ? `<span class="rc-draft" title="スマホで仮入力。PCで開いて確かめると取り入れます">📱仮入力</span>` : ""}${r.dummy_name ? `<span class="rc-store">🎭${esc(r.dummy_name)}</span>` : ""}
-      ${typeof KBF !== "undefined" ? KBF.storeChip(r.store_key) : ""}<span class="rc-k">📍<b>${esc(r.area || "エリアなし")}</b></span>
-      ${ed ? `<button type="button" class="rc-hotel" onclick="openHotelBox(${r.id})" title="ホテル名・部屋番号・地図（開かずに入れられる）">🏨 ${esc(r.address || "ホテル・部屋を入れる")}</button>${cx ? "" : rcHotelWarn(r)}` : r.address ? `<span class="rc-k">🏨 ${esc(r.address)}</span>` : ""}${r.address ? `<button type="button" class="rc-hcopy" title="ホテル名と部屋番号をコピー" onclick="rcCopyAddr(${r.id})">📋</button>` : ""}
-      <span class="rc-k">${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""}${r.extension_count ? "＋延長" + r.extension_count : ""}</span>
-      <span class="rc-k">総額 <b class="rc-yen">${yen(r.total)}</b><small>（${r.payment === "cash" && Number(r.card_total) > 0 ? "現金＋カード " + yen(Number(r.card_total)) : esc(PAY_LABEL[r.payment] || "")}）</small></span>
-      <span class="rc-k">👤<b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${rcVisitChip(r)}${castNgPairs.has(r.customer_id + "|" + r.cast_id) && !cx ? `<span class="rc-castng" title="このお客さんは、このキャストのNGに入っています（キャストNG）">🚫 キャストNGのお客さん</span>` : ""}${custTagsHtml(c)}${digits(c.phone || "").length >= 6 ? ` <span class="tel">📞${esc(c.phone)}</span>` : ` <span class="rc-nophone">📞番号まだ</span>`}</span>
+      ${typeof KBF !== "undefined" ? KBF.storeChip(r.store_key) : ""}
       ${told}
-
       ${mates.map(m => `<button type="button" class="rc-mate" onclick="rcJump(${m.id})">👥 ${esc(castName(m.cast_id))}の予約へ</button>`).join("")}
       ${(r.todos || []).filter((x, i, a) => !x.done_at && a.findIndex(y => String(y.text).trim() === String(x.text).trim()) === i).map(x => `<button type="button" class="told rc-todo" onclick="event.stopPropagation();toggleTodo(${r.id},${(r.todos || []).indexOf(x)})">⏳ ${esc(x.text)}</button>`).join("")}
       <span style="flex:1"></span>
       <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ 開く</button>
     </div>
-    ${memoInline}
     ${cardStep || payUrl ? `<div class="rc-2">${cardStep}${payUrl}</div>` : ""}
     ${trRow(r, ed)}
     ${r.dress && dressText(r.dress) ? `<div class="rc-dress">👗 ${esc(dressText(r.dress))}</div>` : ""}
-    <div class="rc-more rc-always">   <!-- 11/27 店長：「くわしく」をなくして、いつも全部見せる（確認電話で時間・場所・OPをすぐ見るため） -->
-    <div class="rc-grid">
-      <div class="rc-box"><div class="rc-h">💴 コース・料金</div>
-        <div class="rc-row">${ed ? `<select onchange="qCourse(${r.id},this.value)">${prices.map(p=>`<option value="${esc(p.course)}" ${p.course === r.course ? "selected" : ""}>${esc(p.course)}${/^\d+$/.test(p.course) ? "分" : ""}</option>`).join("")}${prices.some(p=>p.course === r.course) ? "" : `<option selected>${esc(r.course || "")}</option>`}</select>` : esc(r.course)}
+    <!-- 📞 確認電話で読みあげる順（2026/11/28 店長）：時間 → 場所 → コース → OP・希望 → お客さん → 支払い ／ 右に料金（筆算）／ 下に備考。幅は決まった大きさ（画面の幅で並びが変わらない） -->
+    <div class="rc-call">
+      <div class="rc-cl">
+        <div class="rc-f"><span class="rc-fl">🕒 時間</span><span class="rc-fv">${ed ? `<input type="time" class="rc-time" value="${hmIn(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>${rcEndWarn(r)}</span></div>
+        <div class="rc-f rc-place"><span class="rc-fl">📍 場所</span><span class="rc-fv"><b>${esc(r.area || "エリアなし")}</b>
+          ${ed ? `<button type="button" class="rc-hotel" onclick="openHotelBox(${r.id})" title="ホテル名・部屋番号・地図（開かずに入れられる）">🏨 ${esc(r.address || "ホテル・部屋を入れる")}</button>${cx ? "" : rcHotelWarn(r)}` : r.address ? `<span>🏨 ${esc(r.address)}</span>` : ""}${r.address ? `<button type="button" class="rc-hcopy" title="ホテル名と部屋番号をコピー" onclick="rcCopyAddr(${r.id})">📋</button>` : ""}
+          ${placeCell(r)}</span></div>
+        <div class="rc-f"><span class="rc-fl">⏳ コース</span><span class="rc-fv">${ed ? `<select onchange="qCourse(${r.id},this.value)">${prices.map(p=>`<option value="${esc(p.course)}" ${p.course === r.course ? "selected" : ""}>${esc(p.course)}${/^\d+$/.test(p.course) ? "分" : ""}</option>`).join("")}${prices.some(p=>p.course === r.course) ? "" : `<option selected>${esc(r.course || "")}</option>`}</select>` : `<b>${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""}</b>`}
           延長 ${ed ? `<input type="number" min="0" class="rc-num" value="${r.extension_count || 0}" onchange="qExt(${r.id},this.value)">` : (r.extension_count || 0)}回
-          ${r.free_kind ? `<small>${esc(FREE_SUFFIX[r.free_kind] || "")}</small>` : ""}</div>
-        <div class="rc-row"><small>OP：${esc(ops || "なし")}${afw ? "　希望：" + esc(afw) : ""}${r.cast_note ? "　📝 " + esc(r.cast_note) : ""}</small> ${ed ? `<button type="button" class="mini" onclick="openForm(${r.id})">OPを直す</button>` : ""}</div>
-        <div class="rc-row">支払い ${ed ? `<select onchange="qPay(${r.id},this.value)">${["cash", "card"].map(k=>`<option value="${k}" ${k === (r.payment === "card_paid" ? "card" : r.payment) ? "selected" : ""}>${PAY_LABEL[k]}</option>`).join("")}</select>` : esc(PAY_LABEL[r.payment] || "")}</div>
+          ${r.free_kind ? `<small>${esc(FREE_SUFFIX[r.free_kind] || "")}</small>` : ""}</span></div>
+        <div class="rc-f"><span class="rc-fl">💗 OP・希望</span><span class="rc-fv">${esc(ops || "OPなし")}${afw ? `<br>希望：<b>${esc(afw)}</b>` : ""}${r.play_wish ? `<br>希望プレイ：${esc(r.play_wish)}` : ""}${r.cast_note ? `<br>📝 ${esc(r.cast_note)}` : ""} ${ed ? `<button type="button" class="mini" onclick="openForm(${r.id})">OPを直す</button>` : ""}</span></div>
+        <div class="rc-f"><span class="rc-fl">👤 お客さん</span><span class="rc-fv"><b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${rcVisitChip(r)}${castNgPairs.has(r.customer_id + "|" + r.cast_id) && !cx ? `<span class="rc-castng" title="このお客さんは、このキャストのNGに入っています（キャストNG）">🚫 キャストNGのお客さん</span>` : ""}${custTagsHtml(c)}
+          ${digits(c.phone || "").length >= 6 ? `<span class="tel">📞${esc(c.phone)}</span>` : `<span class="rc-nophone">📞番号まだ</span>`}${custCell(r)}</span></div>
+        <div class="rc-f"><span class="rc-fl">💳 支払い</span><span class="rc-fv">${ed ? `<select onchange="qPay(${r.id},this.value)">${["cash", "card"].map(k=>`<option value="${k}" ${k === (r.payment === "card_paid" ? "card" : r.payment) ? "selected" : ""}>${PAY_LABEL[k]}</option>`).join("")}</select>` : esc(PAY_LABEL[r.payment] || "")}${r.payment === "cash" && Number(r.card_total) > 0 ? `<small>（現金＋カード ${yen(Number(r.card_total))}）</small>` : ""}</span></div>
       </div>
-      <div class="rc-box"><div class="rc-h">👤 お客さん</div>
-        <div class="rc-row"><b>${c.ng ? "⚠️" : ""}${esc(c.name || "（名前なし）")}</b> <small>${(VISIT.find(v=>v[0] === r.visit_kind) || [])[1] || ""}</small></div>
-        ${c.phone ? `<div class="rc-row"><span class="tel">📞 ${esc(c.phone)}</span></div>` : ""}
-        ${custCell(r)}
-      </div>
-      <div class="rc-box"><div class="rc-h">🏨 場所</div>
-        <div class="rc-row"><b>${esc(r.area || "（エリアなし）")}</b></div>
-        ${placeCell(r)}
-        ${todosHtml(r)}
-      </div>
-      <div class="rc-box"><div class="rc-h">🧾 料金の内訳・報酬</div>${rcMoneyRows(r)}</div>
-      <div class="rc-box rc-biko"><div class="rc-h">📝 備考</div>${memoBoxes(r)}</div>
-    </div></div>
+      <div class="rc-cr"><div class="rc-h">🧾 料金</div>${rcMoneyRows(r)}</div>
+      <div class="rc-cb"><div class="rc-h">📝 備考</div>${memoBoxes(r)}</div>
+    </div>
   </div>`;
 }
 const rcOpen = new Set();   // 「くわしく」を開いている予約（描きなおしても開いたまま）

@@ -70,6 +70,8 @@ recalc = function(){
   // 希望プレイを予約連絡に入れる
   const pw = $("f_play").value.trim();
   if(pw) $("msg").value = $("msg").value.replace(/(【バック無OP】[^\n]*)/, "$1\n【希望プレイ】" + pw);
+  // 🤝 AF・逆AF をキャストと相談（2026/11/28 店長：仕事予約詳細にも書く）
+  if(typeof radioVal === "function" && radioVal("f_afw") === "ask" && !/【AF・逆AF】/.test($("msg").value)) $("msg").value = $("msg").value.replace(/(【バック無OP】[^\n]*)/, "$1\n【AF・逆AF】キャストと相談");
   netReply();
   // 👥 3P・4P：一緒に行くキャストを予約連絡に
   if(party.kind === "cast"){

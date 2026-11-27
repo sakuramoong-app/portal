@@ -194,3 +194,18 @@ function fsApply(){
   document.addEventListener("dragover", e => { y = e.clientY; dragging = true; if(!raf) raf = requestAnimationFrame(tick); }, true);
   document.addEventListener("dragend", stop, true); document.addEventListener("drop", stop, true);
 })();
+/* ---------- 📞 予約カード：確認電話で読みあげる並び（2026/11/28 店長）。幅は決まった大きさ（画面の幅・文字の大きさで並びが変わらない） ---------- */
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .rescard{width:780px;max-width:100%;box-sizing:border-box}
+  .rescard .rc-call{display:grid;grid-template-columns:450px 300px;grid-template-areas:"l r" "b b";column-gap:14px;padding:8px 10px;overflow-x:auto}
+  .rescard .rc-cl{grid-area:l;min-width:0} .rescard .rc-cr{grid-area:r;min-width:0} .rescard .rc-cb{grid-area:b;margin-top:6px;border-top:1.5px dashed #F1E3E7;padding-top:6px}
+  .rescard .rc-f{display:grid;grid-template-columns:92px 1fr;align-items:start;gap:6px;padding:4px 0;border-bottom:1px dotted #EEE6E9;font-size:14.5px}
+  .rescard .rc-f:last-child{border-bottom:0}
+  .rescard .rc-fl{font-weight:900;color:#8a6b74;font-size:13px;white-space:nowrap;padding-top:2px}
+  .rescard .rc-fv{min-width:0;line-height:1.6;word-break:break-word} .rescard .rc-fv b{font-size:15.5px}
+  .rescard .rc-fv select, .rescard .rc-fv input{font-family:inherit;font-size:14px}
+  .rescard .rc-place .inl input{display:none} .rescard .rc-place .inl{display:inline-flex;margin-left:4px}
+  .rescard .rc-fv .inl{display:inline-flex;gap:4px;flex-wrap:wrap;margin-left:4px}
+  .rescard .rc-h{font-weight:900;color:#8a6b74;font-size:13px;margin-bottom:2px}
+  .rescard .rc-fv .tel{margin-left:6px}
+</style>`);

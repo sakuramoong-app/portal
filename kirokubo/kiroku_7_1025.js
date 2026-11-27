@@ -2349,7 +2349,9 @@ function toggleRoom(k){
   const h = __resCardRoom.apply(this, arguments), k = roomOf(r && r.guest_flags);
   if(!k) return h;
   const b = `<span class="rc-room ${k}">${k === "room_in" ? "🚪 入室済み" : "🏨 このあと入室"}</span>`;
-  return h.includes('<span class="rc-k">📍') ? h.replace('<span class="rc-k">📍', b + '<span class="rc-k">📍') : h;
+  if(h.includes('<span class="rc-k">📍')) return h.replace('<span class="rc-k">📍', b + '<span class="rc-k">📍');
+  // 11/28：確認電話の並びでは「📍 場所」の欄の頭に
+  return h.includes('<span class="rc-fl">📍 場所</span><span class="rc-fv">') ? h.replace('<span class="rc-fl">📍 場所</span><span class="rc-fv">', '<span class="rc-fl">📍 場所</span><span class="rc-fv">' + b) : h;
 }; }
 document.head.insertAdjacentHTML("beforeend", `<style>
   #roomChips{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}
