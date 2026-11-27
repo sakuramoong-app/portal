@@ -119,7 +119,7 @@ renderBoard = function(){
     if(s && KB.CAN_EDIT && why && !autoLeft.has(s.id)){ autoLeft.add(s.id); autoLeaveSeat(s, x.c.id, why); }
   });
   // 🙈 今いない の段も「並び・絞り（キャスト枠）」の順に（2026/11/27 店長 修正3）
-  try{ const kOf = x => (x.c && x.c.id) || x.name || "", ord = sortRows(tlRows()).map(kOf), ix = x => { const i = ord.indexOf(kOf(x)); return i < 0 ? 1e9 : i; }; gone.sort((a, b) => ix(a) - ix(b)); }catch(e){}
+  try{ const kOf = x => (x.c && x.c.id) || x.name || "", ord = (typeof __sortRowsTea === "function" ? __sortRowsTea : sortRows)(tlRows()).map(kOf)   /* 精算済・直帰・欠勤に分けずに、選んだ並び順のまま（11/28）*/, ix = x => { const i = ord.indexOf(kOf(x)); return i < 0 ? 1e9 : i; }; gone.sort((a, b) => ix(a) - ix(b)); }catch(e){}
   const used = seatLogs.filter(l=>!l.end_at);
   const chip = (x, st, col)=>{
     const cid = x.c ? x.c.id : "";
