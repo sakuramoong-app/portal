@@ -167,8 +167,11 @@ function fsApply(){
 }
 (function(){
   const bar = document.createElement("div"); bar.id = "fsBar";
-  bar.innerHTML = `<span>文字</span>` + [["s", "小"], ["m", "中"], ["l", "大"]].map(([k, l]) => `<button type="button" data-k="${k}" onclick="fsSet('${k}')">${l}</button>`).join("");
-  document.body.appendChild(bar);
+  bar.innerHTML = `<span>文字の大きさ</span>` + [["s", "小"], ["m", "中"], ["l", "大"]].map(([k, l]) => `<button type="button" data-k="${k}" onclick="fsSet('${k}')">${l}</button>`).join("");
+  // 11/28 店長：左下はポータルのボタンと重なって見えない → 「予約カード」の並びの右に置く
+  const cs = $("s_cardsort"), lab = cs && cs.closest("label");
+  if(lab){ bar.classList.add("inbar"); lab.insertAdjacentElement("afterend", bar); } else document.body.appendChild(bar);
+  document.head.insertAdjacentHTML("beforeend", `<style>#fsBar.inbar{position:static;box-shadow:none;left:auto;bottom:auto;z-index:auto;padding:3px 8px}</style>`);
   document.head.insertAdjacentHTML("beforeend", `<style>#fsBar{position:fixed;left:10px;bottom:10px;z-index:250;display:flex;gap:3px;align-items:center;background:#fff;border:1.5px solid #E5D9F2;border-radius:99px;padding:3px 6px;box-shadow:0 2px 8px rgba(0,0,0,.1);font-size:12px;font-weight:800;color:#6b5a5f}
     #fsBar button{border:1.5px solid #E5D9F2;background:#fff;border-radius:99px;padding:1px 9px;font-weight:900;cursor:pointer;font-family:inherit} #fsBar button.on{background:#E5638C;border-color:#E5638C;color:#fff}
     #fsBar button[data-k=s]{font-size:11px} #fsBar button[data-k=m]{font-size:13px} #fsBar button[data-k=l]{font-size:15px}</style>`);
@@ -305,3 +308,52 @@ async function castNgFromCard(id){
     renderList();
   }catch(e){ toast("キャストNGを保存できませんでした：" + (e.message || e)); }
 }
+/* ---------- 📞 予約カード 11/28 店長（2回目）：
+   ・お客さんの下に「🚫 店NG」「🙅 まほNG」を横並び（rcNgRow）／電話番号の横にコピー（rcCopyTel）
+   ・「この場所の次回の交通費」は場所の下（rcFeeBtn）／時刻は状態の左・お店はお客さんの上（kiroku_6_1020.js の resCard） ---------- */
+function rcNgRow(r){
+  const c = r.kb_customers || {}, reason = (typeof kbClean === "function" ? kbClean(c.ng_reason) : c.ng_reason) || "理由なし";
+  if(!r.customer_id || !KB.CAN_EDIT) return c.ng ? `<div class="rc-ngrow"><span class="mini ng">⚠️ 店NG：${esc(reason)}</span></div>` : "";
+  const shop = `<button type="button" class="mini ${c.ng ? "ng" : ""}" title="${c.ng ? "押すと理由を直す・外す" : "このお客さんを店NGにする"}" onclick="custNg(${r.id})">${c.ng ? "⚠️ 店NG：" + esc(reason) : "🚫 店NG"}</button>`;
+  let cast = "";
+  if(r.cast_id){
+    const on = castNgPairs.has(r.customer_id + "|" + r.cast_id), nm = esc(typeof castName === "function" ? castName(r.cast_id) : "");
+    cast = `<button type="button" class="mini ${on ? "ng" : ""}" title="${on ? "このキャストのNGに入っています（押すと外す）" : "このお客さんを " + nm + " のキャストNGにする"}" onclick="castNgFromCard(${r.id})">🙅 ${nm}NG${on ? "中" : ""}</button>`;
+  }
+  return `<div class="rc-ngrow" onclick="event.stopPropagation()">${shop}${cast}</div>`;
+}
+function rcFeeBtn(r){
+  if(!r.customer_id || !KB.CAN_EDIT) return "";
+  const p = typeof placeOf === "function" ? placeOf(r) : null;
+  return `<div class="rc-feerow" onclick="event.stopPropagation()"><button type="button" class="mini" onclick="custNextFee(${r.id})">🚕 この場所の次回の交通費${p && p.next_transport != null ? "：" + yen(p.next_transport) + (p.next_note ? "<small>（" + esc(p.next_note) + "）</small>" : "") : ""}</button></div>`;
+}
+function rcCopyTel(id){
+  const r = rows.find(x => x.id === id), t = ((r && r.kb_customers) || {}).phone; if(!t) return;
+  navigator.clipboard.writeText(String(t)).then(() => toast("📋 電話番号「" + t + "」をコピーしました"));
+}
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .rescard .rc-ngrow,.rescard .rc-feerow{display:flex;gap:6px;flex-wrap:wrap;margin-top:3px}
+  .rescard .rc-tt{display:inline-flex;align-items:center;gap:2px;font-weight:900;white-space:nowrap} .rescard .rc-tt .rc-time{font-size:15px;font-weight:900;font-family:inherit} .rescard .rc-tt .rc-end{font-size:15px}
+  .rescard .rc-telcopy{margin-left:4px}
+</style>`);
+/* ---------- 🚧 受付の「必須でまだ」：キープアウトのテープみたいに（2026/11/28 店長）
+   上下に黄色と黒のしましま・まん中に下線つき「必須項目リスト」・その下に項目・いちばん下に仮予約の案内 ---------- */
+{ const __prbTape = paintReqBar; paintReqBar = function(){
+  const r = __prbTape.apply(this, arguments);
+  try{
+    const bar = $("reqBar"); if(!bar || !bar.classList.contains("ng") || bar.querySelector(".rq-tape")) return r;
+    const btns = [...bar.querySelectorAll("button")], help = !!bar.querySelector(".rqhelp");
+    bar.innerHTML = `<div class="rq-tape"></div><div class="rq-title rqlbl"><span>必須項目リスト</span></div><div class="rq-items"></div>`
+      + (help ? `<div class="rq-kari rqhelp">未確定で登録したい場合「📌 仮予約で登録」（最低項目：電話番号、名前）</div>` : "") + `<div class="rq-tape"></div>`;
+    const it = bar.querySelector(".rq-items"); btns.forEach(b => it.appendChild(b));
+  }catch(e){}
+  return r;
+}; }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .reqbar.ng{background:#FFFBE6;border:0;padding:0 0 0;color:#3a2a00;overflow:hidden}
+  .reqbar .rq-tape{height:14px;background:repeating-linear-gradient(-45deg,#1b1b1b 0 12px,#FFD400 12px 24px)}
+  .reqbar .rq-title{text-align:center;margin:6px 0 4px} .reqbar .rq-title span{font-size:15px;font-weight:900;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;color:#1b1b1b}
+  .reqbar .rq-items{display:flex;flex-wrap:wrap;justify-content:center;gap:2px;padding:0 10px 4px}
+  .reqbar.ng .rq-items button{background:#fff;border:2px solid #1b1b1b;color:#1b1b1b}
+  .reqbar .rq-kari{text-align:center;font-size:12.5px;font-weight:800;padding:2px 10px 6px;color:#5a4300}
+</style>`);

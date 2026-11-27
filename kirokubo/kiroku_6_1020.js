@@ -690,8 +690,8 @@ function resCard(r, i){
   const told = r.cast_notified_at   // 押すと「キャストまだ」⇔「キャストOK」（伝えたか）
     ? `<button class="told on" onclick="toggleNotified(${r.id})" title="${esc(r.cast_notified_by || "")} ${whenShort(r.cast_notified_at)}に伝えた。押すと取り消し">✅ キャストOK</button>`
     : `<button class="told" onclick="toggleNotified(${r.id})" title="キャストに伝えたら押す">⚠️ キャストまだ</button>`;
-  const ops = (r.options || []).filter(o=>!["af", "gyakuaf"].includes(o.code)).map(o=>(typeof KBF !== "undefined" && !/^[🎁👥]/.test(o.label) ? KBF.opIcon(o.label) : "") + o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・");
-  const afw = r.af_wish === "ask" || r.rev_af_wish === "ask" ? "AF・逆AFはキャストと相談" : [r.af_wish === "yes" ? "AF" : "", r.rev_af_wish === "yes" ? "逆AF" : ""].filter(Boolean).join("・");   // ask＝キャストと相談（11/27）
+  const ops = (r.options || []).filter(o=>!["af", "gyakuaf"].includes(o.code)).map(o=>(typeof KBF !== "undefined" && !/^[🎁👥]/.test(o.label) ? KBF.opIcon(o.label) : "") + o.label + (o.qty > 1 ? "×" + o.qty : "")).join("／");   // 11/28 店長：区切りは「／」
+  const afw = r.af_wish === "ask" || r.rev_af_wish === "ask" ? "AF・逆AFはキャストと相談" : [r.af_wish === "yes" ? "AF" : "", r.rev_af_wish === "yes" ? "逆AF" : ""].filter(Boolean).join("／");   // ask＝キャストと相談（11/27）
   const cardStep = r.payment !== "cash" || isSplitPay(r) ? cardSel(r).replace(/^<br>/, "") : "";
   const payUrl = (r.payment === "card" || isSplitPay(r)) && (r.card_step || "unsent") === "unsent" ? `<a class="payurl" href="${PAY_ADMIN_URL}" target="_blank" rel="noopener" title="${esc(PAY_ADMIN_URL)}">💳 決済URL</a>` : "";
   // 1〜2行に：時間・お店・状態・場所・コース・総額（支払い）・電話・カードの状態・伝えた。ほかは「くわしく」にたたむ
@@ -705,14 +705,13 @@ function resCard(r, i){
     ${!cx && !r.cast_notified_at && r.status !== "done" && r.cast_id ? `<div class="toldov"><button type="button" onclick="toggleNotified(${r.id})" title="キャストに伝えたら押す">⚠️ キャストにまだ伝えていません<small>伝えたら押す</small></button></div>` : ""}
     <div class="rc-top">   <!-- 11/28 店長：上の行は「何番目・状態・お店・キャストに伝えた・開く」だけ（時間・場所・コース・料金・お客さんは下の確認電話の並びに。同じものを2回出さない） -->
       ${noTxt ? `<span class="rc-no st ${r.status}">${noTxt}</span>` : ""}
+      <span class="rc-tt">🕒 ${ed ? `<input type="time" class="rc-time" value="${hmIn(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>${rcEndWarn(r)}</span>   <!-- 11/28 店長：時刻（何時〜何時）は状態の左 -->
       <span class="stbox">${stSel}${statusAtChip(r, ed)}</span>
       ${r.phone_draft ? `<span class="rc-draft" title="スマホで仮入力。PCで開いて確かめると取り入れます">📱仮入力</span>` : ""}${r.dummy_name ? `<span class="rc-store">🎭${esc(r.dummy_name)}</span>` : ""}
-      ${typeof KBF !== "undefined" ? KBF.storeChip(r.store_key) : ""}
       ${told}
       ${mates.map(m => `<button type="button" class="rc-mate" onclick="rcJump(${m.id})">👥 ${esc(castName(m.cast_id))}の予約へ</button>`).join("")}
       ${(r.todos || []).filter((x, i, a) => !x.done_at && a.findIndex(y => String(y.text).trim() === String(x.text).trim()) === i).map(x => `<button type="button" class="told rc-todo" onclick="event.stopPropagation();toggleTodo(${r.id},${(r.todos || []).indexOf(x)})">⏳ ${esc(x.text)}</button>`).join("")}
-      <span style="flex:1"></span>
-      <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ 開く</button>
+      <button type="button" class="rc-open" onclick="openForm(${r.id})">✏️ 開く</button>   <!-- 11/28 店長：右はしではなく、キャストOK（とその右のもの）のすぐ右 -->
     </div>
     ${cardStep || payUrl ? `<div class="rc-2">${cardStep}${payUrl}</div>` : ""}
     ${trRow(r, ed)}
@@ -720,16 +719,16 @@ function resCard(r, i){
     <!-- 📞 確認電話で読みあげる順（2026/11/28 店長）：時間 → 場所 → コース → OP・希望 → お客さん → 支払い ／ 右に料金（筆算）／ 下に備考。幅は決まった大きさ（画面の幅で並びが変わらない） -->
     <div class="rc-call">
       <div class="rc-cl">
+        <div class="rc-f"><span class="rc-fl">🏪 お店</span><span class="rc-fv">${typeof KBF !== "undefined" ? KBF.storeChip(r.store_key) : esc(r.store_key || "")}</span></div>
         <div class="rc-f"><span class="rc-fl">👤 お客さん</span><span class="rc-fv"><b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${rcVisitChip(r)}${castNgPairs.has(r.customer_id + "|" + r.cast_id) && !cx ? `<span class="rc-castng" title="このお客さんは、このキャストのNGに入っています（キャストNG）">🚫 キャストNGのお客さん</span>` : ""}${custTagsHtml(c)}
-          ${digits(c.phone || "").length >= 6 ? `<span class="tel">📞${esc(c.phone)}</span>` : `<span class="rc-nophone">📞番号まだ</span>`}${custCell(r)}</span></div>
-        <div class="rc-f"><span class="rc-fl">🕒 時間</span><span class="rc-fv">${ed ? `<input type="time" class="rc-time" value="${hmIn(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>${rcEndWarn(r)}</span></div>
+          ${digits(c.phone || "").length >= 6 ? `<span class="tel">📞${esc(c.phone)}</span><button type="button" class="rc-hcopy rc-telcopy" title="電話番号をコピー" onclick="rcCopyTel(${r.id})">📋</button>` : `<span class="rc-nophone">📞番号まだ</span>`}${typeof rcNgRow === "function" ? rcNgRow(r) : custCell(r)}</span></div>
         <div class="rc-f rc-place"><span class="rc-fl">📍 場所</span><span class="rc-fv"><b>${esc(r.area || "エリアなし")}</b>
           ${ed ? `<button type="button" class="rc-hotel" onclick="openHotelBox(${r.id})" title="ホテル名・部屋番号・地図（開かずに入れられる）">🏨 ${esc(r.address || "ホテル・部屋を入れる")}</button>${cx ? "" : rcHotelWarn(r)}` : r.address ? `<span>🏨 ${esc(r.address)}</span>` : ""}${r.address ? `<button type="button" class="rc-hcopy" title="ホテル名と部屋番号をコピー" onclick="rcCopyAddr(${r.id})">📋</button>` : ""}
-          ${placeCell(r)}</span></div>
+          ${placeCell(r)}${typeof rcFeeBtn === "function" ? rcFeeBtn(r) : ""}</span></div>
         <div class="rc-f"><span class="rc-fl">⏳ コース</span><span class="rc-fv">${ed ? `<select onchange="qCourse(${r.id},this.value)">${prices.map(p=>`<option value="${esc(p.course)}" ${p.course === r.course ? "selected" : ""}>${esc(p.course)}${/^\d+$/.test(p.course) ? "分" : ""}</option>`).join("")}${prices.some(p=>p.course === r.course) ? "" : `<option selected>${esc(r.course || "")}</option>`}</select>` : `<b>${esc(r.course || "")}${/^\d+$/.test(r.course || "") ? "分" : ""}</b>`}
           延長 ${ed ? `<input type="number" min="0" class="rc-num" value="${r.extension_count || 0}" onchange="qExt(${r.id},this.value)">` : (r.extension_count || 0)}回
           ${r.free_kind ? `<small>${esc(FREE_SUFFIX[r.free_kind] || "")}</small>` : ""}</span></div>
-        <div class="rc-f"><span class="rc-fl">💗 OP・希望</span><span class="rc-fv">${esc(ops || "OPなし")}${afw ? `<br>希望：<b>${esc(afw)}</b>` : ""}${r.play_wish ? `<br>希望プレイ：${esc(r.play_wish)}` : ""}${r.cast_note ? `<br>📝 ${esc(r.cast_note)}` : ""} ${ed ? `<button type="button" class="mini" onclick="openForm(${r.id})">OPを直す</button>` : ""}</span></div>
+        <div class="rc-f"><span class="rc-fl">💗 OP・希望</span><span class="rc-fv">${esc(ops || "OPなし")}${afw ? `<br>希望：<b>${esc(afw)}</b>` : ""}${r.play_wish ? `<br>希望プレイ：${esc(String(r.play_wish).replace(/\s*[,，、・]\s*/g, "／"))}` : ""}${r.cast_note ? `<br>📝 ${esc(r.cast_note)}` : ""} ${ed ? `<button type="button" class="mini" onclick="openForm(${r.id})">OPを直す</button>` : ""}</span></div>
       </div>
       <div class="rc-cr">
         <div class="rc-f"><span class="rc-fl">💳 支払い</span><span class="rc-fv">${ed ? `<select onchange="qPay(${r.id},this.value)">${["cash", "card"].map(k=>`<option value="${k}" ${k === (r.payment === "card_paid" ? "card" : r.payment) ? "selected" : ""}>${PAY_LABEL[k]}</option>`).join("")}</select>` : esc(PAY_LABEL[r.payment] || "")}${r.payment === "cash" && Number(r.card_total) > 0 ? `<small>（現金＋カード ${yen(Number(r.card_total))}）</small>` : ""}</span></div>
