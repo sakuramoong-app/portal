@@ -73,7 +73,9 @@ function cgFoldWrap(){
   if(!fold){ fold = document.createElement("details"); fold.id = "cgFold"; fold.open = true; fold.innerHTML = `<summary></summary>`; }
   if(box.parentElement !== fold){ box.insertAdjacentElement("beforebegin", fold); fold.appendChild(box); }
   const c = M.casts.find(x => x.id === ($("f_cast") || {}).value);
-  fold.querySelector("summary").textContent = c ? `📸 キャスト一覧（今：${c.official_name || c.temp_name || ""}）・押すと開いて選びなおせます` : "📸 キャスト一覧（写真を押して選ぶ）";
+  // 11/28 店長：選んでいるキャストの写真も出す（たたんでいても見える）
+  const store = ($("f_store") || {}).value || "";
+  fold.querySelector("summary").innerHTML = c ? `<span class="cgsel">${typeof KBF !== "undefined" ? KBF.img(c, 56, store) : ""}<span><b>💃 ${esc(c.official_name || c.temp_name || "")}</b><small>を選んでいます・押すと一覧を開いて選びなおせます</small></span></span>` : "📸 キャスト一覧（写真を押して選ぶ）";
   return fold;
 }
 { const __pcgF = paintCastGrid; paintCastGrid = function(){ const r = __pcgF.apply(this, arguments); try{ const f = cgFoldWrap(); if(f && !($("f_cast") || {}).value) f.open = true; }catch(e){} return r; }; }
@@ -211,3 +213,61 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .rescard .rc-h{font-weight:900;color:#8a6b74;font-size:13px;margin-bottom:2px}
   .rescard .rc-fv .tel{margin-left:6px}
 </style>`);
+/* ---------- 📝 何行でも書ける入力の窓（備考を書く・直す）。長さの制限なし（2026/11/28 店長） ---------- */
+function kbTextPrompt(title, init){
+  return new Promise(res => {
+    const old = $("logBg"); if(old) old.remove();
+    const bg = document.createElement("div"); bg.id = "logBg";
+    bg.style.cssText = "position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;padding:40px 14px;overflow:auto";
+    bg.innerHTML = `<div style="background:#fff;border-radius:16px;padding:14px 16px;max-width:600px;width:100%">
+      <h3 style="margin:0 0 6px">${esc(title)}</h3>
+      <textarea id="logText" rows="7" style="width:100%;font-size:15px;line-height:1.55;border:1.5px solid #E5D9F2;border-radius:10px;padding:8px;box-sizing:border-box" placeholder="長くても大丈夫です（改行もできます）"></textarea>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+        <button type="button" class="btn btn-ghost" id="logCancel">やめる</button>
+        <button type="button" class="btn btn-primary" id="logSave">💾 決める</button></div></div>`;
+    document.body.appendChild(bg);
+    const ta = $("logText"); ta.value = init || ""; ta.focus();
+    const done = v => { bg.remove(); res(v); };
+    $("logCancel").onclick = () => done(null);
+    bg.addEventListener("click", e => { if(e.target === bg) done(null); });
+    $("logSave").onclick = () => done(ta.value);
+  });
+}
+addLogPrompt = async function(id){
+  if(!KB.CAN_EDIT) return;
+  const t = await kbTextPrompt("📝 備考を書く", "");
+  if(!t || !t.trim()) return;
+  if(await pushLog(id, t.trim())){ toast("📝 備考に書きました"); renderList(); if(typeof editing !== "undefined" && editing && editing.id === id && typeof renderFormLog === "function") renderFormLog(); }
+};
+
+/* ---------- 📝 予約カードの備考は、左の列（お客さん〜OP・希望）の高さまで。あふれたら「▼ 全部見る」で開く（2026/11/28 店長） ---------- */
+const rcMemoOpen = new Set();
+function rcFitMemos(){
+  document.querySelectorAll(".rescard .rc-call").forEach(call => {
+    const cl = call.querySelector(".rc-cl"), cb = call.querySelector(".rc-cb"), box = cb && cb.querySelector(".bikobox"); if(!cl || !box) return;
+    const id = (call.closest(".rescard") || {}).id || "";
+    const old = cb.querySelector(".rc-mmore"); if(old) old.remove();
+    box.classList.remove("rc-clip");
+    if(rcMemoOpen.has(id)){ box.style.maxHeight = "none"; cb.insertAdjacentHTML("beforeend", `<button type="button" class="rc-mmore" onclick="rcMemoOpen.delete('${id}');rcFitMemos()">▲ 備考をたたむ</button>`); return; }
+    const head = (cb.querySelector(".rc-h") || {}).offsetHeight || 0, add = (cb.querySelector(".addbiko") || {}).offsetHeight || 0;
+    const room = Math.max(90, cl.offsetHeight - head - add - 14);
+    box.style.maxHeight = room + "px";
+    if(box.scrollHeight > room + 4){
+      box.classList.add("rc-clip");
+      const n = box.querySelectorAll(".bk1").length;
+      cb.insertAdjacentHTML("beforeend", `<button type="button" class="rc-mmore" onclick="rcMemoOpen.add('${id}');rcFitMemos()">▼ 備考を全部見る（${n}件）</button>`);
+    }
+  });
+}
+{ const __rlFit = renderListTable; renderListTable = function(){ const r = __rlFit.apply(this, arguments); requestAnimationFrame(() => { try{ rcFitMemos(); }catch(e){} }); return r; }; }
+window.addEventListener("resize", () => { try{ rcFitMemos(); }catch(e){} });
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .rescard .rc-cb .bikobox{overflow:hidden;position:relative}
+  .rescard .rc-cb .bikobox.rc-clip{cursor:pointer;-webkit-mask-image:linear-gradient(#000 75%,transparent);mask-image:linear-gradient(#000 75%,transparent)}
+  .rescard .rc-cb .rc-mmore{display:block;width:100%;margin:4px 0;border:1.5px dashed #E5C97A;background:#FFFBEA;border-radius:10px;padding:3px 8px;font-family:inherit;font-weight:800;font-size:12.5px;color:#8A6100;cursor:pointer}
+</style>`);
+document.addEventListener("click", e => { const b = e.target.closest && e.target.closest(".rescard .bikobox.rc-clip"); if(!b || e.target.closest("a,button")) return; const id = (b.closest(".rescard") || {}).id; if(id){ rcMemoOpen.add(id); rcFitMemos(); } });
+{ const __fsFit = fsApply; fsApply = function(){ const r = __fsFit.apply(this, arguments); setTimeout(() => { try{ rcFitMemos(); }catch(e){} }, 50); return r; }; }
+document.head.insertAdjacentHTML("beforeend", `<style>details#cgFold > summary .cgsel{display:inline-flex;align-items:center;gap:10px;vertical-align:middle} details#cgFold > summary .cgsel b{font-size:16px;color:#5C4B4F} details#cgFold > summary .cgsel small{display:block;font-size:11.5px;color:#9C8B8F;font-weight:700}</style>`);
+// キャストを選びなおしたとき（プルダウン・写真）に、たたんだ見出しの写真も変える
+{ const __onCastSel = onCast; onCast = function(){ const r = __onCastSel.apply(this, arguments); try{ cgFoldWrap(); }catch(e){} return r; }; }

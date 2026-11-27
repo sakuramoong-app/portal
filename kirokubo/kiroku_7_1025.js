@@ -2482,7 +2482,7 @@ async function bikoEdit(id, i){
   const pending = id == null, r = pending ? null : rows.find(x => x.id === id) || (editing && editing.id === id ? editing : null);
   const list = pending ? formPending : logOf(r || {});
   const l = list[i]; if(!l) return;
-  const t = prompt("備考を直す（消すことはできません）", l.text || "");
+  const t = typeof kbTextPrompt === "function" ? await kbTextPrompt("✏️ 備考を直す（消すことはできません）", l.text || "") : prompt("備考を直す（消すことはできません）", l.text || "");   // 11/28：何行でも・長さの制限なし
   if(t == null) return;
   if(!t.trim()){ toast("備考は消せません。直す文を入れてください"); return; }
   if(t.trim() === l.text) return;
