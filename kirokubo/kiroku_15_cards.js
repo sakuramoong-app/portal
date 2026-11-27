@@ -385,16 +385,22 @@ function vbLayout(){
   vb.innerHTML = ""; vb.classList.add("vb4"); vb.append(r1, r2, r3);
   if(tel) vb.appendChild(tel);
   if(tr){ tr.classList.add("tr-out"); vb.appendChild(tr); }
-  // テンプレ・通知の履歴・通知の設定：上の固定の帯ではなく、お知らせの枠の下
-  const tools = document.createElement("div"); tools.className = "snsetonly vtools"; tools.id = "vTools"; tools.innerHTML = vbTools();
-  const nw = $("kbNews"), sa = $("shiftAlerts");
-  if(nw) nw.insertAdjacentElement("afterend", tools); else if(sa) sa.insertAdjacentElement("beforebegin", tools);
 }
 // 🔠 文字の大きさ：上の「📖 説明：出す（押すとかくす）」の右（そのボタンはページを読み終わってからできる）
+// 🔝 いちばん上：🔄 シフトを読みなおす・📖 説明・🔠 文字の大きさ・📝 テンプレ・🔊 通知の設定 を同じ大きさの枠で5つ均等に（2026/11/28 店長）
+//   通知の履歴のボタンはなくす（左下の 🔔 から見られる）。説明のボタンはページを読み終わってからできるので、できてから並べる
 function fsPlace(){
-  const b = $("fsBar"), h = $("hintToggle"); if(!b) return false;
-  if(h){ if(b.previousElementSibling !== h) h.insertAdjacentElement("afterend", b); b.classList.add("inbar", "fshdr"); return true; }
-  return false;
+  const b = $("fsBar"), h = $("hintToggle"), sr = $("shiftReloadBtn"), hd = document.querySelector("header.kbh"); if(!b || !h || !hd) return false;
+  let g = $("hdrBtns");
+  if(!g){
+    g = document.createElement("div"); g.id = "hdrBtns";
+    const tp = document.createElement("button"); tp.type = "button"; tp.className = "hbtn"; tp.textContent = "📝 テンプレ（送る文）"; tp.onclick = () => openTplBox();
+    const ns = document.createElement("button"); ns.type = "button"; ns.className = "hbtn"; ns.textContent = "🔊 通知の設定（文・音・声）"; ns.onclick = () => openSoundSet();
+    hd.appendChild(g);
+    [sr, h, b, tp, ns].forEach(x => { if(x){ x.classList.add("hbtn"); g.appendChild(x); } });
+  }
+  b.classList.add("inbar", "fshdr");
+  return true;
 }
 fsPlace() || document.addEventListener("DOMContentLoaded", () => { fsPlace() || setTimeout(fsPlace, 300); });
 setTimeout(fsPlace, 800);
@@ -420,7 +426,11 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .vfc small{display:block;font-size:11px;font-weight:800;color:#9C8B8F;margin-bottom:1px}
   .vfi{display:flex;gap:6px;align-items:center} .vfi #s_tel{max-width:220px}
   #vTools{text-align:right;margin:6px 0} #vTools button{margin-left:6px}
-  #fsBar.fshdr{margin-left:8px;display:inline-flex}
+  #hdrBtns{flex:1 1 600px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;align-items:stretch}
+  #hdrBtns .hbtn{box-sizing:border-box;width:100%;min-height:38px;margin:0 !important;display:flex !important;align-items:center;justify-content:center;gap:4px;text-align:center;font-family:inherit;font-size:12.5px !important;font-weight:900;white-space:normal;line-height:1.25;border:1.5px solid #E5D9F2 !important;background:#fff !important;color:#5C4B4F !important;border-radius:99px !important;padding:4px 10px !important;box-shadow:0 2px 0 #EDE3F7 !important;cursor:pointer;position:static !important}
+  #hdrBtns #hintToggle.off{background:#6b4f9a !important;color:#fff !important}
+  #hdrBtns #fsBar{cursor:default} #hdrBtns #fsBar span{font-size:12px}
+  header.kbh .navinhead:empty{display:none}
 </style>`);
 /* ---------- 予約カード：お店は背景なし（文字だけ）・項目の罫線を少し濃く（2026/11/28 店長） ---------- */
 document.head.insertAdjacentHTML("beforeend", `<style>
