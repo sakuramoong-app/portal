@@ -519,7 +519,7 @@
       <label>並び・絞り <select id="s_sort" onchange="setSort(this.value)">
         <option value="kana">あいうえお順</option><option value="start">出勤が早い順</option><option value="endEarly">退勤が早い順</option><option value="endLate">退勤が遅い順</option>
         <option value="booked">予約があるキャストのみ</option><option value="freeNow">今すぐ行けるキャスト</option><option value="onNow">今出勤しているキャスト</option></select></label>
-      <span style="font-size:13px;font-weight:700">📄 予約の「くわしく」：<button type="button" class="btn btn-ghost btn-sm" onclick="rcAllOpenToggle(true)">全部開く</button><button type="button" class="btn btn-ghost btn-sm" onclick="rcAllOpenToggle(false)">全部閉じる</button></span>
+      <!-- 11/27：予約の「くわしく」はなくした（いつも全部見せる） -->
       <div class="kanabar" id="kanaBar"></div>
       <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openForm(null)">＋ 受付を開く（キャスト未定）</button>
     </div>
@@ -893,7 +893,7 @@
 <script src="kb_taglv.js?v=2"></script><!-- 🏷 タグの大事さ（並び・色）2026/11/26 -->
 <script src="kb_castname.js?v=2"></script><!-- 🔎 名前からキャストをさがす（過去の名前・書き方のちがい）2026/11/26 -->
 <script src="kb_custrules.js?v=2"></script><!-- 📌 次回案内・確認してほしいこと（SQL 971） -->
-<script src="kiroku_6_1020.js?v=22"></script>
+<script src="kiroku_6_1020.js?v=23"></script>
 <script src="kiroku_7_1025.js?v=45"></script>
 <script src="kb_backtable.js?v=3"></script><!-- 💴 バック表（台帳と同じ。受付の ✏️ コース・料金 から） -->
 <script src="kiroku_8_layout.js?v=8"></script>

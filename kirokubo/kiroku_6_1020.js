@@ -57,20 +57,33 @@ function paintTel(d, hit, loading){
     + (loading ? `<div class="hint2">🔎 今日から1週間の予約も探しています…</div>` : `<div class="hint2">今日から1週間（${esc(dl(KB.realBizDateOf()))}〜${esc(dl(addDays(KB.realBizDateOf(), 7)))}）の予約から探しました</div>`);
 }
 { const __ldTel = loadDay; loadDay = async function(){ const r = await __ldTel.apply(this, arguments); telFind(); return r; }; }   // 日を変えたら探しなおす
+// 🧾 料金の内訳：筆算のように（名前は左・金額は右にそろえる・OPは1つずつ・総額の上に線）2026/11/27 店長（確認電話で読みあげやすく）
 function rcMoneyRows(r){
-  const Y = n => yen(Number(n) || 0), row = (k, v) => v ? `<div class="rm-r"><span>${k}</span><b>${v}</b></div>` : "";
-  const ops = (r.options || []).map(o => `${esc(o.label)}${o.qty > 1 ? "×" + o.qty : ""} ${Y(o.price * (o.qty || 1))}${o.back ? `<small>（バック ${Y(o.back * (o.qty || 1))}）</small>` : ""}`);
-  const back = r.back_override != null ? Number(r.back_override) : (Number(r.course_back) || 0) + (Number(r.option_back) || 0) + (Number(r.extra_back) || 0);
+  const n = v => Number(v) || 0, Y = v => yen(n(v));
+  const line = (k, v, cls) => `<div class="rm-l${cls ? " " + cls : ""}"><span>${k}</span><b>${v}</b></div>`;
+  const back = r.back_override != null ? n(r.back_override) : n(r.course_back) + n(r.option_back) + n(r.extra_back);
   const media = (r.media || []).map(m => ((M.media || []).find(x => x.code === m) || {}).label || m).join("・");
-  return `${row("基本（" + esc(r.course || "") + "）", Y(r.base_price))}${row("入会金", Number(r.admission) ? Y(r.admission) : "")}${row("指名料", Number(r.nomination_fee) ? Y(r.nomination_fee) : "")}
-    ${row("延長・デート", Number(r.extension_fee) ? Y(r.extension_fee) : "")}
-    ${ops.length ? `<div class="rm-r"><span>OP</span><b>${ops.join("<br>")}</b></div>` : ""}
-    ${row("交通費", Number(r.transport) ? Y(r.transport) : "")}${row("割引" + (r.discount_note ? "（" + esc(r.discount_note) + "）" : ""), Number(r.discount) ? "−" + Y(r.discount) : "")}
-    ${row("総額", Y(r.total))}${Number(r.card_total) ? row("うちカード", Y(r.card_total)) : ""}
-    ${row("キャストの報酬", Y(back) + (r.back_override != null ? "（手で直した）" : ""))}${row("媒体", esc(media))}
+  let h = line("基本（" + esc(r.course || "") + (/^\d+$/.test(String(r.course || "")) ? "分" : "") + "）", Y(r.base_price));
+  if(n(r.admission)) h += line("入会金", Y(r.admission));
+  if(n(r.nomination_fee)) h += line("指名料", Y(r.nomination_fee));
+  if(n(r.extension_fee)) h += line("延長・デート", Y(r.extension_fee));
+  (r.options || []).filter(o => n(o.price)).forEach(o => { h += line("OP " + esc(o.label) + (o.qty > 1 ? "×" + o.qty : ""), Y(n(o.price) * (o.qty || 1))); });
+  if(n(r.transport)) h += line("交通費", Y(r.transport));
+  if(n(r.discount)) h += line("割引" + (r.discount_note ? "（" + esc(r.discount_note) + "）" : ""), "−" + Y(r.discount), "rm-minus");
+  h += line("総額", Y(r.total), "rm-total");
+  if(n(r.card_total)) h += line("うちカード", Y(r.card_total), "rm-sub");
+  const free = (r.options || []).filter(o => !n(o.price)).map(o => esc(o.label)).join("・");
+  return `<div class="rm-calc">${h}</div>
+    ${free ? `<div class="rm-free">無料のOP：${free}</div>` : ""}
+    <div class="rm-other">${line("キャストの報酬", Y(back) + (r.back_override != null ? "（手で直した）" : ""), "rm-sub")}${media ? line("媒体", esc(media), "rm-sub") : ""}</div>
     <div class="rm-hint">OP・交通費・割引を変えるときは「✏️ 開く」から</div>`;
 }
-document.head.insertAdjacentHTML("beforeend", `<style>.rm-r{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dotted #EEE;padding:2px 0;font-size:13px} .rm-r span{color:var(--sub);white-space:nowrap} .rm-r b{text-align:right}
+document.head.insertAdjacentHTML("beforeend", `<style>.rm-calc{font-size:14px;max-width:300px}
+  .rm-l{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:1px 0}
+  .rm-l span{color:var(--ink);min-width:0} .rm-l b{font-variant-numeric:tabular-nums;font-family:"Roboto Mono",Consolas,monospace;text-align:right;white-space:nowrap;font-weight:800}
+  .rm-minus b{color:#C2410C} .rm-total{border-top:2px solid var(--ink);margin-top:3px;padding-top:3px;font-size:15.5px} .rm-total span{font-weight:900}
+  .rm-sub{font-size:12.5px;color:var(--sub)} .rm-sub span{color:var(--sub)} .rm-free{font-size:12px;color:var(--sub);margin-top:4px}
+  .rm-other{margin-top:6px;border-top:1px dashed #EEE;padding-top:4px;max-width:300px}
   .rm-hint{font-size:11.5px;color:var(--sub);margin-top:6px}</style>`);
 /* ---------- 🏨 予約のカードから小窓で：ホテル名・部屋番号・地図（エリア〜交通費も見られる）。新しいホテルはリストに足せる・Googleで調べる窓（2026/11/5） ---------- */
 // 📋 ホテル名と部屋番号をいっしょにコピー（2026/11/6）
@@ -712,7 +725,7 @@ function resCard(r, i){
     ${cardStep || payUrl ? `<div class="rc-2">${cardStep}${payUrl}</div>` : ""}
     ${trRow(r, ed)}
     ${r.dress && dressText(r.dress) ? `<div class="rc-dress">👗 ${esc(dressText(r.dress))}</div>` : ""}
-    <details class="rc-more" ${rcOpen.has(r.id) || rcAllOpen() ? "open" : ""} ontoggle="rcToggle(${r.id},this.open)"><summary>くわしく（お客さん・場所・OP・備考${nLog ? " " + nLog + "件" : ""}）</summary>
+    <div class="rc-more rc-always">   <!-- 11/27 店長：「くわしく」をなくして、いつも全部見せる（確認電話で時間・場所・OPをすぐ見るため） -->
     <div class="rc-grid">
       <div class="rc-box"><div class="rc-h">💴 コース・料金</div>
         <div class="rc-row">${ed ? `<select onchange="qCourse(${r.id},this.value)">${prices.map(p=>`<option value="${esc(p.course)}" ${p.course === r.course ? "selected" : ""}>${esc(p.course)}${/^\d+$/.test(p.course) ? "分" : ""}</option>`).join("")}${prices.some(p=>p.course === r.course) ? "" : `<option selected>${esc(r.course || "")}</option>`}</select>` : esc(r.course)}
@@ -733,7 +746,7 @@ function resCard(r, i){
       </div>
       <div class="rc-box"><div class="rc-h">🧾 料金の内訳・報酬</div>${rcMoneyRows(r)}</div>
       <div class="rc-box rc-biko"><div class="rc-h">📝 備考</div>${memoBoxes(r)}</div>
-    </div></details>
+    </div></div>
   </div>`;
 }
 const rcOpen = new Set();   // 「くわしく」を開いている予約（描きなおしても開いたまま）
