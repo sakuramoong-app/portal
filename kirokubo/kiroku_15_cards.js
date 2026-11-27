@@ -156,7 +156,7 @@ try{ boardFilter = ""; }catch(e){}
 }; }
 
 /* ---------- 🔠 文字の大きさ：小・中・大（この端末に覚える）2026/11/27 店長 修正3 ---------- */
-const FS_SIZES = { s: "90%", m: "100%", l: "115%" };
+const FS_SIZES = { s: "90%", m: "100%", l: "135%" };
 function fsGet(){ try{ return localStorage.getItem("kbFontSize") || "m"; }catch(e){ return "m"; } }
 function fsSet(k){ try{ localStorage.setItem("kbFontSize", k); }catch(e){} fsApply(); }
 function fsApply(){
@@ -356,4 +356,47 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .reqbar .rq-items{display:flex;flex-wrap:wrap;justify-content:center;gap:2px;padding:0 10px 4px}
   .reqbar.ng .rq-items button{background:#fff;border:2px solid #1b1b1b;color:#1b1b1b}
   .reqbar .rq-kari{text-align:center;font-size:12.5px;font-weight:800;padding:2px 10px 6px;color:#5a4300}
+</style>`);
+/* ---------- 🧭 上の帯の並び（2026/11/28 店長）
+   1行目：＋ 受付を開く（左から右まで全部）
+   2行目：日付・今日（営業日）・あかさたな…ジャンプ
+   3行目：📞 電話番号・クリア ／ 右に キャスト枠・予約カード のプルダウン
+   4行目：テンプレ・通知の履歴・通知の設定・文字の大きさ（「出勤・退勤の通知」ボタンはなくす。出勤・退勤のお知らせの ⚙️ から開ける） ---------- */
+function vbTools(){
+  return `<button type="button" onclick="openTplBox()">📝 テンプレ（送る文）</button><button type="button" onclick="ntfTab='';renderNtfBox(true)">🔔 通知の履歴</button><button type="button" onclick="openSoundSet()">🔊 通知の設定（文・音・声）</button>`;
+}
+function vbLayout(){
+  const vb = document.querySelector(".stickybar .viewbar"); if(!vb || vb.classList.contains("vb4")) return;
+  const open = $("openNoCast"), day = vb.querySelector(".daybar"), kana = $("kanaBar"), tel = $("nf_tel"), tr = $("telResult"),
+        s1 = $("s_sort") && $("s_sort").closest("label"), s2 = $("s_cardsort") && $("s_cardsort").closest("label"), fsb = $("fsBar");
+  if(!open || !day || !kana || !s1 || !s2) return;
+  const row = cls => { const d = document.createElement("div"); d.className = "vrow " + cls; return d; };
+  const r1 = row("vr1"), r2 = row("vr2"), r3 = row("vr3"), r4 = row("vr4");
+  r1.appendChild(open); r2.append(day, kana);
+  if(tel) r3.appendChild(tel);
+  const sp = document.createElement("span"); sp.className = "vsp"; r3.append(sp, s1, s2);
+  const tools = document.createElement("span"); tools.className = "snsetonly vtools"; tools.innerHTML = vbTools(); r4.appendChild(tools);
+  if(fsb) r4.appendChild(fsb);
+  vb.innerHTML = ""; vb.classList.add("vb4"); vb.append(r1, r2, r3);
+  if(tr){ tr.classList.add("tr-out"); vb.appendChild(tr); }
+  vb.appendChild(r4);
+}
+// 下の出勤・退勤のお知らせの上に毎回出していたボタンの行は、帯の4行目に移したので出さない
+{ const __rsnV = renderShiftNotices; renderShiftNotices = function(){ const r = __rsnV.apply(this, arguments); try{ const el = $("shiftAlerts"); if(el && document.querySelector(".viewbar.vb4")) el.querySelectorAll(":scope > .snsetonly").forEach(x => x.remove()); }catch(e){} return r; }; }
+try{ vbLayout(); }catch(e){ console.warn("vbLayout", e); }
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .viewbar.vb4{display:block !important}
+  .viewbar.vb4 .vrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:3px 0}
+  .viewbar.vb4 .vr1 #openNoCast{flex:1 1 100% !important;margin-left:0 !important;justify-content:center;text-align:center;font-size:15px;padding:7px 12px}
+  .viewbar.vb4 .vr3 #nf_tel.teltop{margin:0}
+  .viewbar.vb4 .vsp{flex:1}
+  .viewbar.vb4 .vr4{justify-content:flex-end}
+  .viewbar.vb4 .vtools{text-align:right;margin:0} .viewbar.vb4 .vtools button{margin-left:6px}
+  #telResult.tr-out{max-height:34vh;overflow:auto} #telResult.tr-out:empty{display:none}
+</style>`);
+/* ---------- 予約カード：お店は背景なし（文字だけ）・項目の罫線を少し濃く（2026/11/28 店長） ---------- */
+document.head.insertAdjacentHTML("beforeend", `<style>
+  .rescard .rc-call .kbstore{background:none !important;color:#5C4B4F !important;padding:0 !important;font-size:15.5px;font-weight:900;box-shadow:none !important;border:0 !important}
+  .rescard .rc-f{border-bottom-color:#D9C4CC !important}
+  .rescard .rc-cr,.rescard .rc-cb{border-left-color:#E2CBD3 !important}
 </style>`);
