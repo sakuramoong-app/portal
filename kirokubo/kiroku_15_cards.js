@@ -359,7 +359,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 </style>`);
 /* ---------- 🧭 上の帯の並び（2026/11/28 店長）
    1行目：＋ 受付を開く（左から右まで全部）
-   2行目：日付・今日（営業日）・あかさたな…ジャンプ
+   （11/28 3回目で変えた：受付を開く／日付／あかさたな／🔎 フィルター。テンプレ・通知はお知らせの下、文字の大きさは「説明」の右。下の vbLayout）
    3行目：📞 電話番号・クリア ／ 右に キャスト枠・予約カード のプルダウン
    4行目：テンプレ・通知の履歴・通知の設定・文字の大きさ（「出勤・退勤の通知」ボタンはなくす。出勤・退勤のお知らせの ⚙️ から開ける） ---------- */
 function vbTools(){
@@ -368,22 +368,39 @@ function vbTools(){
 function vbLayout(){
   const vb = document.querySelector(".stickybar .viewbar"); if(!vb || vb.classList.contains("vb4")) return;
   const open = $("openNoCast"), day = vb.querySelector(".daybar"), kana = $("kanaBar"), tel = $("nf_tel"), tr = $("telResult"),
-        s1 = $("s_sort") && $("s_sort").closest("label"), s2 = $("s_cardsort") && $("s_cardsort").closest("label"), fsb = $("fsBar");
+        s1 = $("s_sort"), s2 = $("s_cardsort"), stel = $("s_tel");
   if(!open || !day || !kana || !s1 || !s2) return;
   const row = cls => { const d = document.createElement("div"); d.className = "vrow " + cls; return d; };
   const r1 = row("vr1"), r2 = row("vr2"), r3 = row("vr3"), r4 = row("vr4");
-  // 11/28 店長（2回目）：受付を開く／日付（右にプルダウン）／あかさたな／電話番号 ← テンプレ・通知・文字の大きさ
-  const sp = () => { const s = document.createElement("span"); s.className = "vsp"; return s; };
-  r1.appendChild(open); r2.append(day, sp(), s1, s2); r3.appendChild(kana);
-  if(tel) r4.appendChild(tel);
-  const tools = document.createElement("span"); tools.className = "snsetonly vtools"; tools.innerHTML = vbTools(); r4.append(tools);   // 電話番号のすぐ右にテンプレ…（すき間なし）
-  if(fsb) r4.appendChild(fsb);
+  // 11/28 店長（3回目）：受付を開く／日付／あかさたな／🔎 フィルター（キャスト枠・予約カード・電話番号を1つの枠に。見出しは小さく上）
+  r1.appendChild(open); r2.appendChild(day); r3.appendChild(kana);
+  const f = document.createElement("div"); f.className = "vflt"; f.id = "vFilter";
+  f.innerHTML = `<div class="vflt-h">🔎 フィルター</div><div class="vflt-g"><div class="vfc"><small>キャスト枠</small><div class="vfi"></div></div><div class="vfc"><small>予約カード</small><div class="vfi"></div></div><div class="vfc"><small>📞 電話番号</small><div class="vfi"></div></div></div>`;
+  const vi = f.querySelectorAll(".vfi");
+  vi[0].appendChild(s1); vi[1].appendChild(s2);
+  if(stel){ const clr = tel && tel.querySelector("button"); vi[2].appendChild(stel); if(clr) vi[2].appendChild(clr); }
+  if(tel) tel.style.display = "none";
+  r4.appendChild(f);
+  const fsb = $("fsBar"); if(fsb && vb.contains(fsb)) document.body.appendChild(fsb);   // 文字の大きさは消さずに、あとで「説明」の右へ
   vb.innerHTML = ""; vb.classList.add("vb4"); vb.append(r1, r2, r3, r4);
+  if(tel) vb.appendChild(tel);
   if(tr){ tr.classList.add("tr-out"); vb.appendChild(tr); }
+  // テンプレ・通知の履歴・通知の設定：上の固定の帯ではなく、お知らせの枠の下
+  const tools = document.createElement("div"); tools.className = "snsetonly vtools"; tools.id = "vTools"; tools.innerHTML = vbTools();
+  const nw = $("kbNews"), sa = $("shiftAlerts");
+  if(nw) nw.insertAdjacentElement("afterend", tools); else if(sa) sa.insertAdjacentElement("beforebegin", tools);
 }
+// 🔠 文字の大きさ：上の「📖 説明：出す（押すとかくす）」の右（そのボタンはページを読み終わってからできる）
+function fsPlace(){
+  const b = $("fsBar"), h = $("hintToggle"); if(!b) return false;
+  if(h){ if(b.previousElementSibling !== h) h.insertAdjacentElement("afterend", b); b.classList.add("inbar", "fshdr"); return true; }
+  return false;
+}
+fsPlace() || document.addEventListener("DOMContentLoaded", () => { fsPlace() || setTimeout(fsPlace, 300); });
+setTimeout(fsPlace, 800);
 // 下の出勤・退勤のお知らせの上に毎回出していたボタンの行は、帯の4行目に移したので出さない
 { const __rsnV = renderShiftNotices; renderShiftNotices = function(){ const r = __rsnV.apply(this, arguments); try{ const el = $("shiftAlerts"); if(el && document.querySelector(".viewbar.vb4")) el.querySelectorAll(":scope > .snsetonly").forEach(x => x.remove()); }catch(e){} return r; }; }
-try{ vbLayout(); }catch(e){ console.warn("vbLayout", e); }
+try{ vbLayout(); fsPlace(); }catch(e){ console.warn("vbLayout", e); }
 document.head.insertAdjacentHTML("beforeend", `<style>
   .viewbar.vb4{display:block !important}
   .viewbar.vb4 .vrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:3px 0}
@@ -394,6 +411,13 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .viewbar.vb4 .vr4{justify-content:flex-start}
   .viewbar.vb4 .vtools{text-align:right;margin:0} .viewbar.vb4 .vtools button{margin-left:6px}
   #telResult.tr-out{max-height:34vh;overflow:auto} #telResult.tr-out:empty{display:none}
+  .vflt{display:inline-block;border:1.5px solid #E5D9F2;background:#fff;border-radius:14px;padding:4px 12px 6px}
+  .vflt-h{font-size:12px;font-weight:900;color:#6b5a5f;margin-bottom:2px}
+  .vflt-g{display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap}
+  .vfc small{display:block;font-size:11px;font-weight:800;color:#9C8B8F;margin-bottom:1px}
+  .vfi{display:flex;gap:6px;align-items:center} .vfi #s_tel{max-width:220px}
+  #vTools{text-align:right;margin:6px 0} #vTools button{margin-left:6px}
+  #fsBar.fshdr{margin-left:8px;display:inline-flex}
 </style>`);
 /* ---------- 予約カード：お店は背景なし（文字だけ）・項目の罫線を少し濃く（2026/11/28 店長） ---------- */
 document.head.insertAdjacentHTML("beforeend", `<style>
