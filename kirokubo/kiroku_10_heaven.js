@@ -108,8 +108,7 @@ function hvSkPaint(){
   bar.style.display = "";
   const on = hvSkOn();
   bar.innerHTML = `<span class="hvsk-t">🩷 ヘブン即ヒメ連動 <b class="${on ? "on" : "off"}">${on ? "ON" : "OFF"}</b></span>`
-    + (KB.CAN_EDIT ? `<button class="btn btn-sm" onclick="hvSkToggle()">${on ? "OFFにする" : "ONにする"}</button>
-       <button class="btn btn-sm" onclick="hvSkSync(true, true)">🔍 ためし（読むだけ）</button>`
+    + (KB.CAN_EDIT ? `<button class="btn btn-sm" onclick="hvSkToggle()">${on ? "OFFにする" : "ONにする"}</button>`   /* 🔍 ためし（読むだけ）は11/27になくした */
        + (on ? `<button class="btn btn-sm" onclick="hvSkSync(true, false)">🔁 今すぐ全員あわせる</button>` : "") : "")
     + (HV_SK_BUSY ? `<span class="hint2">ヘブンに送っています…</span>` : HV_SK_LAST ? `<span class="hint2">最後に見た ${esc(HV_SK_LAST)}</span>` : "")
     + (HV_SK_ERR ? `<span class="hvsk-err">⚠️ ${esc(HV_SK_ERR)}</span>` : "");

@@ -468,6 +468,7 @@
               <div class="f"><label>種類</label>
                 <select id="t_kind" onchange="termsKindFields()">
                   <option value="transport_back">交通費をバック</option>
+                  <option value="standby_bonus">🏠 待機場所ボーナス（待機場所に来たら、毎日決まった額を報酬に足す）</option>
                   <option value="back_add">バックの上乗せ</option>
                   <option value="nomination_fee">指名料</option>
                   <option value="op_price">オプションの料金・バック</option>
@@ -631,7 +632,7 @@ function ruleParamText(r){
   const p = (r && r.params) || {}, y = v => Number(v || 0).toLocaleString() + "円";
   try{
     if(r.kind === "nomination_fee") return y(p.amount);
-    if(r.kind === "transport_back") return p.daily ? `出勤日ごとに ${y(p.daily)}${p.standby ? "（" + p.standby + "に着いたら）" : ""}` : p.amount != null ? `交通費から ${y(p.amount)} まで` + (p.min_transport ? `（交通費 ${y(p.min_transport)} 以上のとき）` : "") : (Number(p.rate) === 1 ? "全額" : Number(p.rate) === 0.5 ? "半額" : Math.round(Number(p.rate || 0) * 100) + "%") + (p.min_transport ? `（交通費 ${y(p.min_transport)} 以上のとき）` : "");
+    if(r.kind === "transport_back") return p.daily ? `${p.standby ? p.standby + "待機" : "待機場所"}に来たら毎日 ${y(p.daily)} を報酬に足す（自動）` : p.amount != null ? `交通費から ${y(p.amount)} まで` + (p.min_transport ? `（交通費 ${y(p.min_transport)} 以上のとき）` : "") : (Number(p.rate) === 1 ? "全額" : Number(p.rate) === 0.5 ? "半額" : Math.round(Number(p.rate || 0) * 100) + "%") + (p.min_transport ? `（交通費 ${y(p.min_transport)} 以上のとき）` : "");
     if(r.kind === "back_add") return `＋${y(p.amount)}` + (p.min_minutes ? `（${p.min_minutes}分以上）` : "") + (p.store ? `（${p.store}）` : "");
     if(r.kind === "op_price") return `${p.op || ""}：料金 ${y(p.price)}・バック ${y(p.back)}`;
     if(r.kind === "zappi_exempt") return (p.days || []).map(d => "日月火水木金土"[d]).join("・") + "曜";
@@ -640,6 +641,8 @@ function ruleParamText(r){
 }
 const rpTag = r => { const t = ruleParamText(r); return t ? `<span class="rptag">${esc(t)}</span>` : ""; };
 const KIND_LABEL = { nomination_fee:"指名料", op_price:"オプション", back_add:"バック上乗せ", zappi_exempt:"雑費なし", transport_back:"交通費バック", memo:"そのほか" };
+// 🏠 出勤日ごと（params.daily）の交通費バックは「待機場所ボーナス」（2026/11/27 店長：交通費とは別の条件）
+function kindLabel(r){ return r && r.kind === "transport_back" && r.params && Number(r.params.daily) > 0 ? "待機場所ボーナス" : (KIND_LABEL[r && r.kind] || (r && r.kind) || ""); }
 const GRP_LABEL = { sakurana:"サクラナ通常", cutie:"CC（キューティ）", gokumon:"極門", event:"イベ（特別フリー）" };
 function todayYmd(){ const d = new Date(Date.now() + 9*3600*1000); return d.toISOString().slice(0, 10); }
 function md(ymd){ if(!ymd || ymd <= "2000-01-01") return ""; const p = String(ymd).slice(0, 10).split("-"); return Number(p[1]) + "/" + Number(p[2]); }
@@ -678,7 +681,7 @@ function termsHtml(c){
   });
   const rules = castRules.filter(r=>r.cast_id === c.id);
   const now = rules.filter(r=>ruleOn(r, day) || r.valid_from > day);
-  if(now.length) h += now.map(r=>`<div>🧮 <b>${KIND_LABEL[r.kind] || r.kind}</b>${rpTag(r)}：${esc(r.note)}　<span style="color:#9C8B8F;font-size:12px">${r.valid_from > day ? md(r.valid_from) + "から（予定）" : (md(r.valid_from) ? md(r.valid_from) + "から" : "")}${r.valid_to ? "・" + md(r.valid_to) + "で終わり" : ""}</span> ${hearLink(r.hearing_text, r.by_name, r.created_at)}</div>`).join("");
+  if(now.length) h += now.map(r=>`<div>🧮 <b>${kindLabel(r)}</b>${rpTag(r)}：${esc(r.note)}　<span style="color:#9C8B8F;font-size:12px">${r.valid_from > day ? md(r.valid_from) + "から（予定）" : (md(r.valid_from) ? md(r.valid_from) + "から" : "")}${r.valid_to ? "・" + md(r.valid_to) + "で終わり" : ""}</span> ${hearLink(r.hearing_text, r.by_name, r.created_at)}</div>`).join("");
   else h += `<div style="color:#9C8B8F">🧮 キャストごとの条件：なし</div>`;
   // 変更の履歴
   const ev = rankHist.filter(r=>r.cast_id === c.id).map(r=>({ at: r.at, by: r.by_name, text: `ランク（${GRP_LABEL[r.grp] || r.grp}）→ ${r.rank || "なし"}${md(r.valid_from) ? "（" + md(r.valid_from) + "から）" : ""}`, h: r.hearing_text }))
@@ -716,7 +719,7 @@ async function openTerms(){
       <option value="__new">＋ 新しいランク…</option></select></div>`;
   }).join("");
   const active = castRules.filter(r=>r.cast_id === c.id && (ruleOn(r, day) || r.valid_from > day));
-  $("t_rules").innerHTML = active.length ? active.map(r=>`<label style="display:block;font-size:13px;padding:3px 0"><input type="checkbox" class="t_end" value="${r.id}"> 終わらせる：<b>${KIND_LABEL[r.kind] || r.kind}</b> ${esc(r.note)}</label>`).join("")
+  $("t_rules").innerHTML = active.length ? active.map(r=>`<label style="display:block;font-size:13px;padding:3px 0"><input type="checkbox" class="t_end" value="${r.id}"> 終わらせる：<b>${kindLabel(r)}</b> ${esc(r.note)}</label>`).join("")
     : `<div class="hint">今の条件はありません</div>`;
   $("t_kind").value = "transport_back"; termsKindFields(); $("t_note").value = "";
   renderNewRules();
@@ -756,7 +759,7 @@ function termsAddOpen(){ const b = $("t_addBox"); if(!b) return; b.style.display
   $("t_cur").innerHTML = termsHtml(c);
   // 今の条件：1行ずつ（🗑 にチェック ＝ 終わらせる）
   const day = todayYmd(), active = castRules.filter(x => x.cast_id === c.id && (ruleOn(x, day) || x.valid_from > day));
-  $("t_rules").innerHTML = active.length ? active.map(x => `<label class="tmrule"><span class="tmrn"><b>${KIND_LABEL[x.kind] || x.kind}${rpTag(x)}</b><small>${esc(x.note)}</small></span>
+  $("t_rules").innerHTML = active.length ? active.map(x => `<label class="tmrule"><span class="tmrn"><b>${kindLabel(x)}${rpTag(x)}</b><small>${esc(x.note)}</small></span>
       <span class="tmend"><input type="checkbox" class="t_end" value="${x.id}" onchange="termsSync()"> 🗑 終わらせる</span></label>`).join("")
     : `<div class="hint">今の条件はありません</div>`;
   document.querySelectorAll('#t_ranks select[id^="t_r_"]').forEach(s => s.addEventListener("change", termsSync));
@@ -866,10 +869,13 @@ function termsKindFields(){
   const opts = [...new Map(kbOptions.map(o=>[o.code, o.label])).entries()];
   const F = {
     transport_back: `<div class="f"><label>どれだけバック？</label><select id="tk_rate" onchange="$('tk_tamt_wrap').style.display=['amount','daily'].includes(this.value)?'':'none';$('tk_sb_wrap').style.display=this.value==='daily'?'':'none'">
-                       <option value="1">全額</option><option value="0.5">半額</option><option value="amount">金額を決める</option><option value="daily">出勤日ごとに決まった額（待機場所に着いたら記録簿にボタン）</option></select></div>
+                       <option value="1">全額</option><option value="0.5">半額</option><option value="amount">金額を決める</option></select></div>
                      <div class="f" id="tk_sb_wrap" style="display:none"><label>どこの待機場所に着いたら？</label><select id="tk_sb"><option>鶯谷</option><option>池袋</option><option>五反田</option><option value="">どこでも</option></select></div>
                      <div class="f" id="tk_tamt_wrap" style="display:none"><label>バックする金額（円）</label><input id="tk_tamt" type="number" min="0" step="100"></div>
                      <div class="f"><label>交通費が何円以上のときだけ？（空ならいつでも）</label><input id="tk_tmin" type="number" min="0" step="500"></div>`,
+    standby_bonus: `<div class="hint" style="grid-column:1/-1">🏠 その待機場所で「待機中」か「仕事中」になったら、記録簿が自動で報酬に足します（1日1回・交通費を入れなくても）。</div>
+                    <div class="f"><label>どこの待機場所に来たら？</label><select id="tk_sb"><option>鶯谷</option><option>池袋</option><option>五反田</option><option value="">どこでも</option></select></div>
+                    <div class="f"><label>足す金額（円）</label><input id="tk_tamt" type="number" min="0" step="1000" value="10000"></div>`,
     back_add: `<div class="f"><label>上乗せの金額（円）</label><input id="tk_amount" type="number" min="0" step="500"></div>
                <div class="f"><label>何分以上のとき（空ならいつも）</label><input id="tk_min" type="number" min="0" step="30"></div>
                <div class="f"><label>どの店のとき（空ならどこでも）</label><select id="tk_store"><option value="">どこでも</option>${stores.map(s=>`<option value="${s.key}">${esc(s.label)}</option>`).join("")}</select></div>`,
@@ -894,6 +900,8 @@ function termsAddRule(){
     else params = { rate: Number($("tk_rate").value) };
     if(num("tk_tmin")) params.min_transport = num("tk_tmin");   // 交通費が○円以上のときだけ（受付・精算で見る）
   }
+  // 🏠 待機場所ボーナス（2026/11/27 店長：りぃ 鶯谷待機に来たら無条件で1万円）。保存は「交通費バックの出勤日ごと」と同じ形（kind transport_back・params.daily）
+  if(k === "standby_bonus"){ if(!num("tk_tamt")){ toast("足す金額を入れてください"); return; } termsNewRules.push({ kind: "transport_back", params: { daily: num("tk_tamt"), standby: $("tk_sb").value, bonus: true }, note }); $("t_note").value = ""; renderNewRules(); return; }
   if(k === "back_add"){ if(!num("tk_amount")){ toast("上乗せの金額を入れてください"); return; }
     params = { amount: num("tk_amount") }; if(num("tk_min")) params.min_minutes = num("tk_min"); if($("tk_store").value) params.store = $("tk_store").value; }
   if(k === "nomination_fee"){ if(!num("tk_amount")){ toast("指名料を入れてください"); return; } params = { amount: num("tk_amount") }; }
@@ -905,7 +913,7 @@ function termsAddRule(){
 }
 function renderNewRules(){
   $("t_newRules").innerHTML = termsNewRules.map((r, i)=>`<div style="font-size:13px;background:#F0FBF5;border-radius:10px;padding:6px 10px;margin-bottom:4px">
-    ＋ <b>${KIND_LABEL[r.kind]}</b>${rpTag(r)}：${esc(r.note)} <a href="javascript:void(0)" onclick="termsNewRules.splice(${i},1);renderNewRules()" style="color:#c9556a;font-size:12px">取り消す</a></div>`).join("");
+    ＋ <b>${kindLabel(r)}</b>${rpTag(r)}：${esc(r.note)} <a href="javascript:void(0)" onclick="termsNewRules.splice(${i},1);renderNewRules()" style="color:#c9556a;font-size:12px">取り消す</a></div>`).join("");
 }
 // 📒 初期設定中（2026/11/12 店長）：kb_settings の terms_setup_mode が true のあいだは、ヒアリングなしでもバック・条件を保存できる（SQL 239）
 let termsSetup = false;

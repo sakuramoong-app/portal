@@ -118,6 +118,8 @@ renderBoard = function(){
     const why = workingNow ? "接客中" : ["お茶", "欠勤", "不在"].find(v => cd0.status === v) || "";
     if(s && KB.CAN_EDIT && why && !autoLeft.has(s.id)){ autoLeft.add(s.id); autoLeaveSeat(s, x.c.id, why); }
   });
+  // 🙈 今いない の段も「並び・絞り（キャスト枠）」の順に（2026/11/27 店長 修正3）
+  try{ const kOf = x => (x.c && x.c.id) || x.name || "", ord = sortRows(tlRows()).map(kOf), ix = x => { const i = ord.indexOf(kOf(x)); return i < 0 ? 1e9 : i; }; gone.sort((a, b) => ix(a) - ix(b)); }catch(e){}
   const used = seatLogs.filter(l=>!l.end_at);
   const chip = (x, st, col)=>{
     const cid = x.c ? x.c.id : "";
@@ -154,8 +156,9 @@ renderBoard = function(){
       + (home ? badge("直帰", "home") : "") + (cd1.settled ? badge("精算済", "done") : "");
     let sub;
     if(st === "gone"){   // 今いない：いちばん最後の予約を1行で
-      const lastB = x.bks.filter(b => !["cancel", "tobi", "flowed"].includes(b.r.status)).sort((a, b) => b.s - a.s)[0];
-      sub = lastB ? `<div class="cc-sub">${esc(hm(lastB.r.start_at))} ${esc(lastB.r.area || "")} ${esc(lastB.r.course || "")}${/^\d+$/.test(lastB.r.course || "") ? "分" : ""} ${esc((lastB.r.kb_customers || {}).name || "")}　${esc(STATUS[lastB.r.status] || "")}</div>` : `<div class="cc-sub">予約なし</div>`;
+      // 今いない：その日の予約を全部（時間・場所・コース・名前・状態）2026/11/27 店長 修正3（前はいちばん最後の1件だけ）
+      const goneBs = x.bks.filter(b => !["cancel", "tobi", "flowed"].includes(b.r.status)).sort((a, b) => a.s - b.s);
+      sub = goneBs.length ? goneBs.map(b => `<div class="cc-sub">${esc(hm(b.r.start_at))} ${esc(b.r.area || "")} ${esc(b.r.course || "")}${/^\d+$/.test(b.r.course || "") ? "分" : ""} ${esc((b.r.kb_customers || {}).name || "")}　${esc(STATUS[b.r.status] || "")}</div>`).join("") : `<div class="cc-sub">予約なし</div>`;
       { const al = ((cd1.attend_log) || []).slice(-1)[0]; if(al && al.reason) sub += `<div class="cc-why">📝 ${esc(al.kind)}：${esc(al.reason)}${al.time ? "（" + esc(al.time) + "）" : ""}</div>`; }   // 📝 勤怠の理由（その他など）を今いないの札に 2026/11/12
     }else sub = `${trip}${pill}${st === "ended" ? (() => { const en = endedOf(x); return en ? `<br><span class="endnote">⏹ ${esc(hm(en.r.end_at))}に終わり${en.r.status === "working" ? "（まだ「仕事中」のまま）" : ""}・札を動かして場所を決めてね</span>` : ""; })() : ""}${bl ? `<ul class="bkl">${bl}</ul>` : ""}`;
     return `<div class="chipc ${cls}${cd1.status === "中抜け" ? " brkc" : ""}" data-cid="${cid}" data-st="${st}"><div class="cc-top">${cid && typeof KBF !== "undefined" ? KBF.img(cid, 34) : ""}<b class="cc-nm">【${esc(castLabel(x))}】${esc(sh)}</b>${badges}</div>${sub}${movingHtml(x)}${seat}<span class="cc-go">›</span></div>`;

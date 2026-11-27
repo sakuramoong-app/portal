@@ -796,7 +796,7 @@
         <div style="background:#F3F7FF;border:1.5px solid #B9CDF2;border-radius:12px;padding:8px 10px;margin:6px 0 10px">
           <div style="font-weight:800;font-size:13.5px;color:#2b5aa8;margin-bottom:6px">⏱ 延長・デート（追加の注文ごとに足す）</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-            <select id="x_kind" style="max-width:110px"><option value="ext">延長</option><option value="date">デート</option></select>
+            <select id="x_kind" style="max-width:110px"><option value="date" selected>デート</option><option value="ext">延長</option></select>
             <select id="x_min" style="max-width:150px"><option value="30">30分</option><option value="60">60分（1時間）</option><option value="90">90分</option><option value="120">120分（2時間）</option><option value="150">150分</option><option value="180">180分（3時間）</option><option value="210">210分</option><option value="240">240分（4時間）</option><option value="270">270分</option><option value="300">300分（5時間）</option><option value="330">330分</option><option value="360">360分（6時間）</option><option value="390">390分</option><option value="420">420分（7時間）</option><option value="450">450分</option><option value="480">480分（8時間）</option></select>
             <button type="button" class="btn btn-ghost btn-sm" onclick="addExtOrder()">＋ 足す</button>
           </div>
@@ -891,7 +891,7 @@
 <script src="kiroku_3_seisan.js?v=4"></script>
 <script src="cast_share.js?v=7"></script><!-- 📲 テストのキャストは精算をアプリに送る -->
 <script src="kiroku_4_ichiran.js?v=12"></script>
-<script src="kiroku_5_1019.js?v=21"></script>
+<script src="kiroku_5_1019.js?v=22"></script>
 <script src="kb_taglv.js?v=2"></script><!-- 🏷 タグの大事さ（並び・色）2026/11/26 -->
 <script src="kb_castname.js?v=2"></script><!-- 🔎 名前からキャストをさがす（過去の名前・書き方のちがい）2026/11/26 -->
 <script src="kb_custrules.js?v=2"></script><!-- 📌 次回案内・確認してほしいこと（SQL 971） -->
@@ -900,12 +900,12 @@
 <script src="kb_backtable.js?v=3"></script><!-- 💴 バック表（台帳と同じ。受付の ✏️ コース・料金 から） -->
 <script src="kiroku_8_layout.js?v=8"></script>
 <script src="kiroku_9_mail.js?v=5"></script>
-<script src="kiroku_10_heaven.js?v=6"></script>
+<script src="kiroku_10_heaven.js?v=7"></script>
 <script src="kiroku_11_match.js?v=2"></script>
 <script src="kiroku_12_notice.js?v=5"></script>
 <script src="kiroku_13_top.js?v=1"></script>
 <script src="kiroku_14_mobile.js?v=8"></script><!-- 📱 スマホの記録簿（せまい画面のときだけ） -->
-<script src="kiroku_15_cards.js?v=1"></script><script src="kiroku_v2.js?v=9"></script><!-- 受付の並び（v2・標準。前の並びは URL に v1） -->
+<script src="kiroku_15_cards.js?v=2"></script><script src="kiroku_v2.js?v=9"></script><!-- 受付の並び（v2・標準。前の並びは URL に v1） -->
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 <script src="kb_cal.js?v=1"></script>
 <script src="unsettled.js?v=85"></script>
