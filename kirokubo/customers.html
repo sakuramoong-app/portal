@@ -50,6 +50,8 @@
   .hc .hedit{float:right;padding:1px 8px;font-size:11.5px;margin-left:6px}
   .hc .hm{color:#5C4B4F;font-size:13px;margin-top:2px;}
   .hc .hmemo{white-space:pre-wrap;background:#FBF7F8;border-radius:8px;padding:6px 8px;margin-top:6px;font-size:14px;}
+  .hc .hnotes{margin-top:6px;display:flex;flex-direction:column;gap:4px} .hc .hnote{background:#FBF7F8;border-radius:8px;padding:6px 10px;font-size:14px} .hc .hnote .ht{white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;line-height:1.55} .hc .hnote .hsig{text-align:right;font-size:11.5px;color:var(--sub,#9C8B8F);font-weight:700;margin-top:2px}
+  .hc .hmoney{margin-top:6px;max-width:280px;font-size:13px} .hc .hmoney > div{display:flex;justify-content:space-between;gap:10px} .hc .hmoney b{font-variant-numeric:tabular-nums;font-family:Consolas,monospace;font-weight:800} .hc .hmoney b.minus{color:#C2410C} .hc .hmoney .tot{border-top:2px solid #333;margin-top:2px;padding-top:2px;font-weight:900}
   .hc .hmemo.red{color:#C62828;font-weight:700;}
   .hc .hmemo .hw{color:#fff;background:#E5484D;border-radius:4px;padding:0 3px;}
   .badge{font-size:12px;font-weight:800;border-radius:99px;padding:1px 9px;background:#eee;}
@@ -241,7 +243,7 @@ async function openCustomer(id){
   try{
     const [c, res, hist, ngs, places, cmemo] = await Promise.all([
       sb.from("kb_customers").select("*").eq("id", id).maybeSingle(),
-      sb.from("kb_reservations").select("id,biz_date,store_key,dummy_name,cast_id,course,extension_count,area,address,total,status,payment,memo_log,visit_kind").eq("customer_id", id).eq("deleted", false).order("biz_date", { ascending: false }).limit(500),
+      sb.from("kb_reservations").select("id,biz_date,store_key,dummy_name,cast_id,course,extension_count,area,address,total,status,payment,memo_log,visit_kind,base_price,admission,nomination_fee,extension_fee,options,transport,discount,discount_note").eq("customer_id", id).eq("deleted", false).order("biz_date", { ascending: false }).limit(500),
       sb.from("kb_cust_history").select("*").eq("customer_id", id).order("biz_date", { ascending: false }).limit(1000),
       sb.from("kb_cust_cast_ng").select("*").eq("customer_id", id).order("at"),
       sb.from("kb_customer_places").select("*").eq("customer_id", id).order("last_used", { ascending: false }),
@@ -258,7 +260,7 @@ function rowsOf(c){
   const a = c._res.map(r=>({ src: "new", date: r.biz_date, store: storeLabel(r.store_key) + (r.dummy_name ? " 🎭" + r.dummy_name : ""), cast: castLabel(r.cast_id), cast_id: r.cast_id,
     course: r.course + (/^\d+$/.test(r.course) ? "分" : "") + (r.extension_count ? " 延長" + r.extension_count : ""), place: [r.area, r.address].filter(Boolean).join(" "), total: r.total,
     status: ["cancel", "tobi", "flowed"].includes(r.status) ? r.status : r.status === "done" ? "done" : "yet", card: r.payment !== "cash",
-    memo: (r.memo_log || []).map(m=>kbClean(m.text)).filter(Boolean).join("\n"), castng: false, marks: null }));   // 取りこみの印は出さない（2026/11/26）
+    notes: histNotes(r.memo_log), money: r, memo: histNotes(r.memo_log).map(m => m.text).join("\n"), castng: false, marks: null }));   // 取りこみの印は出さない（2026/11/26）。自動の記録（状態→など）は出さず、人が書いた備考は だれが・いつ つき（11/27）
   const b = c._hist.map(h=>({ src: h.marks && h.marks.kind === "inquiry" ? "inquiry" : "excel", by: (h.marks && h.marks.by) || "", row: h.src_row, date: h.biz_date, store: h.store_key ? storeLabel(h.store_key) : h.store_raw, cast: h.cast_id && castOn(h.cast_id, h.biz_date) ? castLabel(h.cast_id) : (h.cast_raw || castLabel(h.cast_id)) + (h.cast_id && !castOn(h.cast_id, h.biz_date) ? "（前にいた同じ名前の子）" : ""), cast_id: h.cast_id && castOn(h.cast_id, h.biz_date) ? h.cast_id : null, cast_raw: h.cast_raw,
     course: h.course, place: [h.area, h.place].filter(Boolean).join(" "), total: h.total, status: h.status, card: h.card, memo: h.memo, castng: h.cast_ng, marks: h.marks, hid: h.id }));
   // 台帳エクセルの行が、記録簿の予約と キャスト・お店・総額・場所 まで同じなら、同じ利用を2回書いたもの（日付の打ちまちがいがあっても）
@@ -370,6 +372,28 @@ const TROUBLE_WORDS = /NG|ＮＧ|出禁|トビ|ﾄﾋﾞ|飛ん|飛ば|とんだ
 function hasColor(m){ return !!m && Object.keys(m).some(k => /^fill:#|^font:#(?!FF0000)/i.test(k) || k === "other_fill" || k === "red_cols"); }
 function isTrouble(r){ return ["cancel", "tobi", "flowed"].includes(r.status) || r.castng || hasColor(r.marks) || TROUBLE_WORDS.test(r.memo || "") || (r.memo || "").length >= 40; }
 function hl(s){ return esc(s).replace(/(NG|ＮＧ|出禁|トビ|飛んだ|飛ばれ|クレーム|盗撮|暴力|薬|警察|要注意)/g, '<b class="hw">$1</b>'); }
+/* ---------- 📒 来店履歴（記録簿の予約）2026/11/27 店長 修正2
+   ・自動の記録（登録時の状態・状態→・ホテル・部屋→・アウトコール・キャストに伝えた・振込・カード…）は出さない
+   ・人が書いた備考は、全部・だれが・いつ を必ずつけて出す（長くても切らない・ちょうどよく改行）
+   ・料金は内訳つき（基本・指名料・OP・交通費・割引 → 総額） ---------- */
+const HIST_AUTO = /^(🔁|状態 ?→|状態 .*→「|登録時の状態|🏨 ?ホテル・部屋|ホテル・部屋 ?→|アウトコール|キャストに伝えた|カード：|💳|🏦 ?振込|⏰|🗑|👥)/;
+function histNotes(log){
+  return (Array.isArray(log) ? log : []).map(m => ({ text: kbClean(String((m && m.text) || "")).trim(), by: (m && m.by) || "", at: (m && m.at) || "" }))
+    .filter(m => m.text && !HIST_AUTO.test(m.text));
+}
+function histWhen(t){ if(!t) return ""; const d = new Date(t); if(isNaN(d)) return ""; return (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+function histMoney(m){
+  const n = v => Number(v) || 0, L = [];
+  if(n(m.base_price)) L.push(["基本", n(m.base_price)]);
+  if(n(m.admission)) L.push(["入会金", n(m.admission)]);
+  if(n(m.nomination_fee)) L.push(["指名料", n(m.nomination_fee)]);
+  if(n(m.extension_fee)) L.push(["延長・デート", n(m.extension_fee)]);
+  (Array.isArray(m.options) ? m.options : []).filter(o => n(o.price)).forEach(o => L.push(["OP " + (o.label || "") + (o.qty > 1 ? "×" + o.qty : ""), n(o.price) * (o.qty || 1)]));
+  if(n(m.transport)) L.push(["交通費", n(m.transport)]);
+  if(n(m.discount)) L.push(["割引" + (m.discount_note ? "（" + m.discount_note + "）" : ""), -n(m.discount)]);
+  if(!L.length) return "";
+  return `<div class="hmoney">${L.map(([k, v]) => `<div><span>${esc(k)}</span><b class="${v < 0 ? "minus" : ""}">${v < 0 ? "−" + yen(-v) : yen(v)}</b></div>`).join("")}<div class="tot"><span>総額</span><b>${yen(n(m.total))}</b></div></div>`;
+}
 function histCard(r){
   const st = STATUS[r.status] || (r.status === "yet" ? "これから" : "");
   const memoRed = r.marks && Object.keys(r.marks).some(k => /^font:#FF0000/i.test(k) && (r.marks[k] || []).includes("AB"));
@@ -378,7 +402,9 @@ function histCard(r){
       ${st ? `<span class="badge ${r.status}">${esc(st)}</span>` : ""}${KB.CAN_EDIT && r.hid && r.src === "excel" && ["tobi", "cancel", "flowed"].includes(r.status) ? `<button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11.5px" onclick="histStatusFix(${r.hid},'${r.status}')">✏️ ${esc(st)}ではない</button>` : ""}${r.castng ?`<span class="badge tobi">🙅 キャストNG</span>${KB.CAN_EDIT && r.hid ? `<button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11.5px" onclick="histNgOff(${r.hid})">NGではない</button>` : ""}` : ""}${r.card ? '<span class="tag">💳 カード</span>' : ""}${colorDots(r.marks)}</div>
     ${KB.CAN_EDIT && r.hid && r.src === "excel" ? `<button class="btn btn-ghost btn-sm hedit" onclick="histEdit(${r.hid})" title="キャストの名前・内容を直す">✏️ 直す</button>` : ""}
     <div class="hm">${r.cast_id && typeof KBF !== "undefined" ? KBF.img(r.cast_id, 28) : ""}${[r.store, r.cast, r.course, r.place].filter(Boolean).map(esc).join("　・　")}${r.total ? "　・　" + yen(r.total) : ""}</div>
-    ${r.memo ? `<div class="hmemo ${memoRed ? "red" : ""}">${hl(r.memo)}</div>` : ""}</div>`;
+    ${r.money ? histMoney(r.money) : ""}
+    ${r.notes ? (r.notes.length ? `<div class="hnotes">${r.notes.map(m => `<div class="hnote"><div class="ht">${hl(m.text)}</div><div class="hsig">— ${esc(m.by || "（名前なし）")}${histWhen(m.at) ? "　" + esc(histWhen(m.at)) : ""}</div></div>`).join("")}</div>` : "")
+      : r.memo ? `<div class="hmemo ${memoRed ? "red" : ""}">${hl(r.memo)}</div>` : ""}</div>`;
 }
 // 台帳エクセルで色がついていたところ：色の小さい四角だけ（どの欄かは、押すと出る）
 function colorDots(m){

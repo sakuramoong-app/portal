@@ -583,8 +583,10 @@ function radioVal(name){ const el = document.querySelector('input[name="' + name
 function setRadio(name, v){ document.querySelectorAll('input[name="' + name + '"]').forEach(el=>{ el.checked = el.value === v; }); }
 // 希望ありなら、そのお店の AF／逆AF のオプションにチェックを入れる（サクラナは「AF・逆AF」1つ・極門は別々）
 // 🔸 4択（AF／逆AF／両方／アナルプレイなし）→ AF・逆AF の〇× に入れる。〇×から4択の表示ももどす
-const AF_SEL = { af: ["yes", "no"], raf: ["no", "yes"], both: ["yes", "yes"], none: ["no", "no"] };
-function setAfSel(v){ const p = AF_SEL[v]; if(!p) return; setRadio("f_afw", p[0]); setRadio("f_rafw", p[1]); onAfWish(); }
+const AF_SEL = { af: ["yes", "no"], raf: ["no", "yes"], both: ["yes", "yes"], none: ["no", "no"], ask: ["ask", "ask"] };   // ask＝キャストと相談（11/27・SQL 979）
+function setAfSel(v){ const p = AF_SEL[v]; if(!p) return; setRadio("f_afw", p[0]); setRadio("f_rafw", p[1]); onAfWish();
+  if(v === "ask" && typeof playAdd === "function") playAdd("AF・逆AFはキャストと相談");   // キャストへの連絡にも出るように、希望プレイにも書く（11/27）
+}
 function syncAfSel(){
   const a = radioVal("f_afw"), r = radioVal("f_rafw");
   const v = Object.keys(AF_SEL).find(k => AF_SEL[k][0] === a && AF_SEL[k][1] === r) || "";

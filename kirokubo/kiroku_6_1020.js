@@ -692,7 +692,7 @@ function resCard(r, i){
     ? `<button class="told on" onclick="toggleNotified(${r.id})" title="${esc(r.cast_notified_by || "")} ${whenShort(r.cast_notified_at)}に伝えた。押すと取り消し">✅ キャストOK</button>`
     : `<button class="told" onclick="toggleNotified(${r.id})" title="キャストに伝えたら押す">⚠️ キャストまだ</button>`;
   const ops = (r.options || []).filter(o=>!["af", "gyakuaf"].includes(o.code)).map(o=>(typeof KBF !== "undefined" && !/^[🎁👥]/.test(o.label) ? KBF.opIcon(o.label) : "") + o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・");
-  const afw = [r.af_wish === "yes" ? "AF" : "", r.rev_af_wish === "yes" ? "逆AF" : ""].filter(Boolean).join("・");
+  const afw = r.af_wish === "ask" || r.rev_af_wish === "ask" ? "AF・逆AFはキャストと相談" : [r.af_wish === "yes" ? "AF" : "", r.rev_af_wish === "yes" ? "逆AF" : ""].filter(Boolean).join("・");   // ask＝キャストと相談（11/27）
   const cardStep = r.payment !== "cash" || isSplitPay(r) ? cardSel(r).replace(/^<br>/, "") : "";
   const payUrl = (r.payment === "card" || isSplitPay(r)) && (r.card_step || "unsent") === "unsent" ? `<a class="payurl" href="${PAY_ADMIN_URL}" target="_blank" rel="noopener" title="${esc(PAY_ADMIN_URL)}">💳 決済URL</a>` : "";
   // 1〜2行に：時間・お店・状態・場所・コース・総額（支払い）・電話・カードの状態・伝えた。ほかは「くわしく」にたたむ

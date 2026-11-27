@@ -516,9 +516,10 @@
         <span class="bd" id="dayInfo" style="display:none"></span>
         <button class="btn btn-ghost btn-sm" onclick="goToday()">今日（営業日）</button>
       </div>
-      <label>並び・絞り <select id="s_sort" onchange="setSort(this.value)">
+      <label>並び・絞り　キャスト枠 <select id="s_sort" onchange="setSort(this.value)">
         <option value="kana">あいうえお順</option><option value="start">出勤が早い順</option><option value="endEarly">退勤が早い順</option><option value="endLate">退勤が遅い順</option>
         <option value="booked">予約があるキャストのみ</option><option value="freeNow">今すぐ行けるキャスト</option><option value="onNow">今出勤しているキャスト</option></select></label>
+      <label>予約カード <select id="s_cardsort" onchange="cardSortSet(this.value)"><option value="early">開始が早い順</option><option value="late">開始が遅い順</option></select></label>
       <!-- 11/27：予約の「くわしく」はなくした（いつも全部見せる） -->
       <div class="kanabar" id="kanaBar"></div>
       <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openForm(null)">＋ 受付を開く（キャスト未定）</button>
@@ -774,14 +775,15 @@
           <label class="ynb afsel"><input type="radio" name="f_afsel" value="raf" onchange="setAfSel(this.value)"><span>逆AF</span></label>
           <label class="ynb afsel"><input type="radio" name="f_afsel" value="both" onchange="setAfSel(this.value)"><span>AF・逆AF 両方</span></label>
           <label class="ynb afsel"><input type="radio" name="f_afsel" value="none" onchange="setAfSel(this.value)"><span>アナルプレイなし</span></label>
+          <label class="ynb afsel"><input type="radio" name="f_afsel" value="ask" onchange="setAfSel(this.value)"><span>🤝 キャストと相談</span></label>
         </div>
         <div style="font-size:12.5px;font-weight:700;color:#7a5a20;margin-top:4px">この子：AF<span id="afMark" class="cmark"></span>　逆AF<span id="rafMark" class="cmark"></span></div>
         <span style="display:none">
-          <input type="radio" name="f_afw" value="yes" onchange="onAfWish()"><input type="radio" name="f_afw" value="no" onchange="onAfWish()">
-          <input type="radio" name="f_rafw" value="yes" onchange="onAfWish()"><input type="radio" name="f_rafw" value="no" onchange="onAfWish()">
+          <input type="radio" name="f_afw" value="yes" onchange="onAfWish()"><input type="radio" name="f_afw" value="no" onchange="onAfWish()"><input type="radio" name="f_afw" value="ask" onchange="onAfWish()">
+          <input type="radio" name="f_rafw" value="yes" onchange="onAfWish()"><input type="radio" name="f_rafw" value="no" onchange="onAfWish()"><input type="radio" name="f_rafw" value="ask" onchange="onAfWish()">
         </span>
       </div>
-      <div class="row1"><div class="f"><label>希望プレイ（無料の範囲）</label><input id="f_play" maxlength="200" placeholder="例：潮吹き・言葉責め など" oninput="recalc()"><div style="margin-top:4px"><button type="button" class="chip" onclick="playAdd('キャストと相談')">🤝 キャストと相談</button></div></div></div>
+      <div class="row1"><div class="f"><label>希望プレイ（無料の範囲）</label><input id="f_play" maxlength="200" placeholder="例：潮吹き・言葉責め など" oninput="recalc()"></div></div>
       <details id="optDetails" style="margin-bottom:10px">
         <summary style="cursor:pointer;font-weight:800;font-size:16.5px;padding:4px 0">OP・延長・デート<span id="optCount"></span></summary>
         <!-- 👥 3P・4P：キャスト複数（保存すると、キャストごとの予約を自動で作る）／お客2名。ふだんはたたんでおく -->
@@ -884,17 +886,17 @@
   </div></div>
 </div>
 
-<script src="kiroku_1_uketsuke.js?v=33"></script>
+<script src="kiroku_1_uketsuke.js?v=34"></script>
 <script src="kiroku_2_gamen.js?v=7"></script>
 <script src="kiroku_3_seisan.js?v=4"></script>
 <script src="cast_share.js?v=7"></script><!-- 📲 テストのキャストは精算をアプリに送る -->
-<script src="kiroku_4_ichiran.js?v=11"></script>
+<script src="kiroku_4_ichiran.js?v=12"></script>
 <script src="kiroku_5_1019.js?v=21"></script>
 <script src="kb_taglv.js?v=2"></script><!-- 🏷 タグの大事さ（並び・色）2026/11/26 -->
 <script src="kb_castname.js?v=2"></script><!-- 🔎 名前からキャストをさがす（過去の名前・書き方のちがい）2026/11/26 -->
 <script src="kb_custrules.js?v=2"></script><!-- 📌 次回案内・確認してほしいこと（SQL 971） -->
-<script src="kiroku_6_1020.js?v=23"></script>
-<script src="kiroku_7_1025.js?v=45"></script>
+<script src="kiroku_6_1020.js?v=24"></script>
+<script src="kiroku_7_1025.js?v=46"></script>
 <script src="kb_backtable.js?v=3"></script><!-- 💴 バック表（台帳と同じ。受付の ✏️ コース・料金 から） -->
 <script src="kiroku_8_layout.js?v=8"></script>
 <script src="kiroku_9_mail.js?v=5"></script>
@@ -902,8 +904,8 @@
 <script src="kiroku_11_match.js?v=2"></script>
 <script src="kiroku_12_notice.js?v=5"></script>
 <script src="kiroku_13_top.js?v=1"></script>
-<script src="kiroku_14_mobile.js?v=7"></script><!-- 📱 スマホの記録簿（せまい画面のときだけ） -->
-<script src="kiroku_v2.js?v=9"></script><!-- 受付の並び（v2・標準。前の並びは URL に v1） -->
+<script src="kiroku_14_mobile.js?v=8"></script><!-- 📱 スマホの記録簿（せまい画面のときだけ） -->
+<script src="kiroku_15_cards.js?v=1"></script><script src="kiroku_v2.js?v=9"></script><!-- 受付の並び（v2・標準。前の並びは URL に v1） -->
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 <script src="kb_cal.js?v=1"></script>
 <script src="unsettled.js?v=85"></script>

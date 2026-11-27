@@ -380,7 +380,7 @@ function renderFormLog(){
   // 新しい予約：書いた備考は、保存したときにいっしょに入る
   const logs = editing ? logOf(rows.find(x=>x.id === editing.id) || editing) : formPending;
   el.innerHTML = `<div class="mlog full">${logs.length ? logs.map(l=>`<div><b>${esc(whenShort(l.at))} ${KBF.staffTag(l.by)}</b> ${esc(l.text)}</div>`).join("") : `<div class="none">まだありません</div>`}</div>
-    ${KB.CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:6px"><input id="formLogText" maxlength="200" placeholder="例：お客様に折り返し済み" style="flex:1"
+    ${KB.CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:6px"><input id="formLogText" placeholder="例：お客様に折り返し済み" style="flex:1"
       onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addFormLog();}"><button type="button" class="btn btn-ghost btn-sm" onclick="addFormLog()">＋ 書く</button></div>` : ""}`;
 }
 async function addFormLog(){

@@ -230,7 +230,7 @@ function mobResPop(id){
   const r = rows.find(x => x.id === id); if(!r) return;
   const c = r.kb_customers || {}, cx = ["cancel", "tobi", "flowed"].includes(r.status);
   const ops = (r.options || []).filter(o => !["af", "gyakuaf"].includes(o.code)).map(o => o.label + (o.qty > 1 ? "×" + o.qty : "")).join("・");
-  const afw = [r.af_wish === "yes" ? "AF" : "", r.rev_af_wish === "yes" ? "逆AF" : ""].filter(Boolean).join("・");
+  const afw = r.af_wish === "ask" || r.rev_af_wish === "ask" ? "AF・逆AFはキャストと相談" : [r.af_wish === "yes" ? "AF" : "", r.rev_af_wish === "yes" ? "逆AF" : ""].filter(Boolean).join("・");   // ask＝キャストと相談（11/27）
   const st = typeof STATUS !== "undefined" ? (STATUS[r.status] || r.status) : r.status;
   const pay = typeof PAY_LABEL !== "undefined" ? (PAY_LABEL[r.payment] || r.payment || "") : (r.payment || "");
   const vk = typeof VISIT !== "undefined" ? ((VISIT.find(v => v[0] === r.visit_kind) || [])[1] || "") : "";

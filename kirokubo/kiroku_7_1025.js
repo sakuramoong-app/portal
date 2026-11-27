@@ -2506,7 +2506,7 @@ renderFormLog = function(){
   const el = $("formLog"); if(!el) return;
   const logs = editing ? logOf(rows.find(x => x.id === editing.id) || editing) : formPending, rid = editing ? editing.id : null;
   el.innerHTML = `<div class="mlog full">${logs.length ? logs.map((l, i) => `<div><b>${esc(whenShort(l.at))} ${KBF.staffTag(l.by)}</b> ${esc(l.text)}${bikoEdited(l)}${bikoEditBtn(rid, i)}</div>`).join("") : `<div class="none">まだありません</div>`}</div>
-    ${KB.CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:6px"><input id="formLogText" maxlength="200" placeholder="例：お客様に折り返し済み" style="flex:1"
+    ${KB.CAN_EDIT ? `<div style="display:flex;gap:6px;margin-top:6px"><input id="formLogText" placeholder="例：お客様に折り返し済み" style="flex:1"
       onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();addFormLog();}"><button type="button" class="btn btn-ghost btn-sm" onclick="addFormLog()">＋ 書く</button></div>
       <div style="font-size:11px;color:var(--sub);margin-top:3px">備考は消せません。まちがえたら ✏️ で直してください（直した人・時刻と、最初の文が残ります）</div>` : ""}`;
 };
