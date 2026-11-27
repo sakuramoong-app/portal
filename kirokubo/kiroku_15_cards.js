@@ -372,14 +372,14 @@ function vbLayout(){
   if(!open || !day || !kana || !s1 || !s2) return;
   const row = cls => { const d = document.createElement("div"); d.className = "vrow " + cls; return d; };
   const r1 = row("vr1"), r2 = row("vr2"), r3 = row("vr3"), r4 = row("vr4");
-  r1.appendChild(open); r2.append(day, kana);
-  if(tel) r3.appendChild(tel);
-  const sp = document.createElement("span"); sp.className = "vsp"; r3.append(sp, s1, s2);
-  const tools = document.createElement("span"); tools.className = "snsetonly vtools"; tools.innerHTML = vbTools(); r4.appendChild(tools);
+  // 11/28 店長（2回目）：受付を開く／日付（右にプルダウン）／あかさたな／電話番号 ← テンプレ・通知・文字の大きさ
+  const sp = () => { const s = document.createElement("span"); s.className = "vsp"; return s; };
+  r1.appendChild(open); r2.append(day, sp(), s1, s2); r3.appendChild(kana);
+  if(tel) r4.appendChild(tel);
+  const tools = document.createElement("span"); tools.className = "snsetonly vtools"; tools.innerHTML = vbTools(); r4.append(tools);   // 電話番号のすぐ右にテンプレ…（すき間なし）
   if(fsb) r4.appendChild(fsb);
-  vb.innerHTML = ""; vb.classList.add("vb4"); vb.append(r1, r2, r3);
+  vb.innerHTML = ""; vb.classList.add("vb4"); vb.append(r1, r2, r3, r4);
   if(tr){ tr.classList.add("tr-out"); vb.appendChild(tr); }
-  vb.appendChild(r4);
 }
 // 下の出勤・退勤のお知らせの上に毎回出していたボタンの行は、帯の4行目に移したので出さない
 { const __rsnV = renderShiftNotices; renderShiftNotices = function(){ const r = __rsnV.apply(this, arguments); try{ const el = $("shiftAlerts"); if(el && document.querySelector(".viewbar.vb4")) el.querySelectorAll(":scope > .snsetonly").forEach(x => x.remove()); }catch(e){} return r; }; }
@@ -388,9 +388,10 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .viewbar.vb4{display:block !important}
   .viewbar.vb4 .vrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:3px 0}
   .viewbar.vb4 .vr1 #openNoCast{flex:1 1 100% !important;margin-left:0 !important;justify-content:center;text-align:center;font-size:15px;padding:7px 12px}
-  .viewbar.vb4 .vr3 #nf_tel.teltop{margin:0}
+  .viewbar.vb4 .vr4 #nf_tel.teltop{margin:0}
+  #shiftAlerts > .snsetonly{display:none !important}   /* 30秒ごとに出しなおされても、帯の4行目と2重にならないように */
   .viewbar.vb4 .vsp{flex:1}
-  .viewbar.vb4 .vr4{justify-content:flex-end}
+  .viewbar.vb4 .vr4{justify-content:flex-start}
   .viewbar.vb4 .vtools{text-align:right;margin:0} .viewbar.vb4 .vtools button{margin-left:6px}
   #telResult.tr-out{max-height:34vh;overflow:auto} #telResult.tr-out:empty{display:none}
 </style>`);
@@ -399,4 +400,11 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .rescard .rc-call .kbstore{background:none !important;color:#5C4B4F !important;padding:0 !important;font-size:15.5px;font-weight:900;box-shadow:none !important;border:0 !important}
   .rescard .rc-f{border-bottom-color:#D9C4CC !important}
   .rescard .rc-cr,.rescard .rc-cb{border-left-color:#E2CBD3 !important}
+</style>`);
+/* ---------- ✨ 受付の必須の欄：うすいピンクのピカピカ → 濃い赤の太い線がくるくる回る（2026/11/28 店長） ---------- */
+document.head.insertAdjacentHTML("beforeend", `<style>
+  @property --needa{syntax:'<angle>';inherits:false;initial-value:0deg}
+  @keyframes needspin{to{--needa:360deg}}
+  #formBg .need{animation:needspin 1.4s linear infinite !important;border:3px solid transparent !important;border-radius:10px;box-shadow:none !important;
+    background:linear-gradient(#fff,#fff) padding-box,conic-gradient(from var(--needa),#C8001E,#FF4D5E 25%,#FFE0E3 50%,#FF4D5E 75%,#C8001E) border-box !important}
 </style>`);
