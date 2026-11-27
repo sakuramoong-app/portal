@@ -126,7 +126,7 @@ async function sbAuto(){
 }
 { const __rbSb = renderBoard; renderBoard = function(){ const r = __rbSb.apply(this, arguments); setTimeout(sbAuto, 500); return r; }; }
 /* ---------- ⚠️ 必須でまだ：項目に絵文字・キャストが決まっていなければ「💃 キャスト」も出す（2026/11/27 店長 修正3） ---------- */
-const REQ_ICON = [[/^名前を聞いた/, "👤"], [/^種別/, "🏷️"], [/^指名する/, "⭐"], [/^売上店舗/, "🏪"], [/^キャスト/, "💃"], [/^開始時刻/, "🕒"], [/^コース/, "⏳"], [/^エリア/, "📍"],
+const REQ_ICON = [[/^名前を聞いた/, "👤"], [/^電話番号/, "📞"], [/^お客さんの名前/, "👤"], [/^種別/, "🏷️"], [/^指名する/, "⭐"], [/^売上店舗/, "🏪"], [/^キャスト/, "💃"], [/^開始時刻/, "🕒"], [/^コース/, "⏳"], [/^エリア/, "📍"],
   [/^ラブホ|^ホテル/, "🏨"], [/^AF/, "🍑"], [/^支払い/, "💳"], [/^媒体/, "📣"], [/^スマホの仮入力/, "📱"], [/^報酬を手で直した/, "💴"], [/^状態/, "🚦"]];
 { const __prb = paintReqBar; paintReqBar = function(){
   const r = __prb.apply(this, arguments);
@@ -351,7 +351,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 }; }
 document.head.insertAdjacentHTML("beforeend", `<style>
   .reqbar.ng{background:#FFFBE6;border:0;padding:0 0 0;color:#3a2a00;overflow:hidden}
-  .reqbar .rq-tape{height:14px;background:repeating-linear-gradient(-45deg,#1b1b1b 0 12px,#FFD400 12px 24px)}
+  .reqbar .rq-tape{height:7px;background:repeating-linear-gradient(-45deg,#1b1b1b 0 12px,#FFD400 12px 24px)}
   .reqbar .rq-title{text-align:center;margin:6px 0 4px} .reqbar .rq-title span{font-size:15px;font-weight:900;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;color:#1b1b1b}
   .reqbar .rq-items{display:flex;flex-wrap:wrap;justify-content:center;gap:2px;padding:0 10px 4px}
   .reqbar.ng .rq-items button{background:#fff;border:2px solid #1b1b1b;color:#1b1b1b}
