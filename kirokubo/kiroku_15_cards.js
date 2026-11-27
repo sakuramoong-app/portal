@@ -271,3 +271,37 @@ document.addEventListener("click", e => { const b = e.target.closest && e.target
 document.head.insertAdjacentHTML("beforeend", `<style>details#cgFold > summary .cgsel{display:inline-flex;align-items:center;gap:10px;vertical-align:middle} details#cgFold > summary .cgsel b{font-size:16px;color:#5C4B4F} details#cgFold > summary .cgsel small{display:block;font-size:11.5px;color:#9C8B8F;font-weight:700}</style>`);
 // キャストを選びなおしたとき（プルダウン・写真）に、たたんだ見出しの写真も変える
 { const __onCastSel = onCast; onCast = function(){ const r = __onCastSel.apply(this, arguments); try{ cgFoldWrap(); }catch(e){} return r; }; }
+/* ---------- 🙅 予約カードから「キャストNGにする」（このお客さん × この予約のキャスト）2026/11/28 店長
+   ・店NGのとなりにボタン。押すと理由を書いて、キャストNG（kb_cust_cast_ng）に入れる。もうNGなら「キャストNGを外す」
+   ・備考にも残す ---------- */
+{ const __custCellNg = custCell; custCell = function(r){
+  const h = __custCellNg(r);
+  if(!r || !r.customer_id || !r.cast_id || !KB.CAN_EDIT) return h;
+  const on = castNgPairs.has(r.customer_id + "|" + r.cast_id), nm = esc(typeof castName === "function" ? castName(r.cast_id) : "");
+  const b = `<button type="button" class="mini ${on ? "ng" : ""}" onclick="event.stopPropagation();castNgFromCard(${r.id})">${on ? "🙅 " + nm + "のNG（押すと外す）" : "🙅 " + nm + "のNGにする"}</button>`;
+  const i = h.lastIndexOf("</div>");
+  return i >= 0 ? h.slice(0, i) + b + h.slice(i) : h + b;
+}; }
+async function castNgFromCard(id){
+  const r = rows.find(x => x.id === id); if(!r || !r.customer_id || !r.cast_id || !KB.CAN_EDIT) return;
+  const cn = typeof castName === "function" ? castName(r.cast_id) : "", cu = (r.kb_customers || {}).name || "お客さん", by = KB.operatorName() || "（担当者なし）";
+  const key = r.customer_id + "|" + r.cast_id;
+  try{
+    if(castNgPairs.has(key)){
+      if(!confirm(`${cu} を ${cn} のキャストNGから外しますか？`)) return;
+      q(await sb.from("kb_cust_cast_ng").delete().eq("customer_id", r.customer_id).eq("cast_id", r.cast_id));
+      castNgPairs.delete(key);
+      await pushLog(id, `🙅 キャストNGを外した（${cn}）`);
+      toast(`🙅 ${cn} のキャストNGから外しました`);
+    } else {
+      const why = await kbTextPrompt(`🙅 ${cu} を ${cn} のキャストNGにする：理由`, "");
+      if(why == null) return;
+      const has = await sb.from("kb_cust_cast_ng").select("id").eq("customer_id", r.customer_id).eq("cast_id", r.cast_id).limit(1);
+      if(!(has.data || []).length) q(await sb.from("kb_cust_cast_ng").insert({ customer_id: r.customer_id, cast_id: r.cast_id, cast_name: cn, reason: why.trim(), source: "manual", by_name: by }));
+      castNgPairs.add(key);
+      await pushLog(id, `🙅 キャストNGにした（${cn}）${why.trim() ? "：" + why.trim() : ""}`);
+      toast(`🙅 ${cu} を ${cn} のキャストNGにしました`);
+    }
+    renderList();
+  }catch(e){ toast("キャストNGを保存できませんでした：" + (e.message || e)); }
+}
