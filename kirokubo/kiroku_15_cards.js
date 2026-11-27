@@ -371,18 +371,18 @@ function vbLayout(){
         s1 = $("s_sort"), s2 = $("s_cardsort"), stel = $("s_tel");
   if(!open || !day || !kana || !s1 || !s2) return;
   const row = cls => { const d = document.createElement("div"); d.className = "vrow " + cls; return d; };
-  const r1 = row("vr1"), r2 = row("vr2"), r3 = row("vr3"), r4 = row("vr4");
+  const r1 = row("vr1"), r2 = row("vr2"), r3 = row("vr3");   // 11/28（4回目）：受付を開く／日付・あかさたな／フィルター（横いっぱい3等分・見出しなし）
   // 11/28 店長（3回目）：受付を開く／日付／あかさたな／🔎 フィルター（キャスト枠・予約カード・電話番号を1つの枠に。見出しは小さく上）
-  r1.appendChild(open); r2.appendChild(day); r3.appendChild(kana);
+  r1.appendChild(open); r2.append(day, kana);
   const f = document.createElement("div"); f.className = "vflt"; f.id = "vFilter";
-  f.innerHTML = `<div class="vflt-h">🔎 フィルター</div><div class="vflt-g"><div class="vfc"><small>キャスト枠</small><div class="vfi"></div></div><div class="vfc"><small>予約カード</small><div class="vfi"></div></div><div class="vfc"><small>📞 電話番号</small><div class="vfi"></div></div></div>`;
+  f.innerHTML = `<div class="vflt-g"><div class="vfc"><small>キャスト枠</small><div class="vfi"></div></div><div class="vfc"><small>予約カード</small><div class="vfi"></div></div><div class="vfc"><small>📞 電話番号</small><div class="vfi"></div></div></div>`;
   const vi = f.querySelectorAll(".vfi");
   vi[0].appendChild(s1); vi[1].appendChild(s2);
   if(stel){ const clr = tel && tel.querySelector("button"); vi[2].appendChild(stel); if(clr) vi[2].appendChild(clr); }
   if(tel) tel.style.display = "none";
-  r4.appendChild(f);
+  r3.appendChild(f);
   const fsb = $("fsBar"); if(fsb && vb.contains(fsb)) document.body.appendChild(fsb);   // 文字の大きさは消さずに、あとで「説明」の右へ
-  vb.innerHTML = ""; vb.classList.add("vb4"); vb.append(r1, r2, r3, r4);
+  vb.innerHTML = ""; vb.classList.add("vb4"); vb.append(r1, r2, r3);
   if(tel) vb.appendChild(tel);
   if(tr){ tr.classList.add("tr-out"); vb.appendChild(tr); }
   // テンプレ・通知の履歴・通知の設定：上の固定の帯ではなく、お知らせの枠の下
@@ -411,7 +411,10 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .viewbar.vb4 .vr4{justify-content:flex-start}
   .viewbar.vb4 .vtools{text-align:right;margin:0} .viewbar.vb4 .vtools button{margin-left:6px}
   #telResult.tr-out{max-height:34vh;overflow:auto} #telResult.tr-out:empty{display:none}
-  .vflt{display:inline-block;border:1.5px solid #E5D9F2;background:#fff;border-radius:14px;padding:4px 12px 6px}
+  .vflt{display:block;flex:1 1 100%;border:1.5px solid #E5D9F2;background:#fff;border-radius:14px;padding:4px 12px 8px}
+  .vflt-g{display:grid !important;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+  .vfi > select,.vfi > #s_tel{flex:1 1 auto;min-width:0;width:100%;max-width:none !important;box-sizing:border-box;height:42px;border:1.5px solid var(--line,#F3D6E0) !important;border-radius:12px !important;padding:0 12px !important;font-family:inherit;font-size:14.5px !important;background-color:#fff;outline:none;box-shadow:none}
+  .vfi > #s_tel:focus{border-color:#E5638C !important} .vfi > button{white-space:nowrap;flex:0 0 auto}
   .vflt-h{font-size:12px;font-weight:900;color:#6b5a5f;margin-bottom:2px}
   .vflt-g{display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap}
   .vfc small{display:block;font-size:11px;font-weight:800;color:#9C8B8F;margin-bottom:1px}
