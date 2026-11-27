@@ -2473,6 +2473,7 @@ ${g("age")}歳 / ${g("size")} / Pサイズ：${g("psize")}
 性格：${g("personality")} / 趣味：${g("hobby")}
 チャームポイント：${g("charm")} / タバコ：${g("tabako")}
 性感帯：${g("erogenous")} / 得意技：${g("skill")}
+雰囲気：${pfVibesText(profGet(data, sk, "vibes"))} / キャストの種類：${g("castType")}
 
 ■ 本人から一言
 ${pfPlainText(g("comment"))}
@@ -2523,7 +2524,7 @@ function pfBulkOpen(){
     <div style="font-size:16px;font-weight:800;margin-bottom:4px">📋 ${esc(STORE_LABEL_OF(sk))} から一括反映</div>
     <div class="hint">写したあと「💾 保存だけ」か「💾 プロフを保存」で保存されます。バックは写しません。</div>
     <details open style="margin-top:8px"><summary style="cursor:pointer;font-weight:800;font-size:13px">📋 基本情報${all("bkB")}</summary>
-      <div style="padding-left:8px">${PF_BASIC.map(([f, l]) => chk("bkB", f, `${l}：<small style="color:#9C8B8F">${esc(String(profGet(data, sk, f) || "（空）")).slice(0, 30)}</small>`, true)).join("")}</div></details>
+      <div style="padding-left:8px">${PF_BASIC.map(([f, l]) => chk("bkB", f, `${l}：<small style="color:#9C8B8F">${esc(String(profGet(data, sk, f) || "（空）")).slice(0, 30)}</small>`, true)).join("") + chk("bkB", "vibes", `雰囲気：<small style="color:#9C8B8F">${esc(pfVibesText(profGet(data, sk, "vibes")) || "（空）").slice(0, 30)}</small>`, true) + chk("bkB", "castType", `キャストの種類：<small style="color:#9C8B8F">${esc(String(profGet(data, sk, "castType") || "（空）"))}</small>`, true)}</div></details>
     <details style="margin-top:6px"><summary style="cursor:pointer;font-weight:800;font-size:13px">✅ オプション可否${all("bkO")}</summary>
       <div style="padding-left:8px">${keys.map(k => chk("bkO", k, `${esc(PF_OPT_LABEL[k] || k)} <b>${esc(o[k] || "—")}</b>`, true)).join("")}</div></details>
     <div style="margin-top:8px;font-weight:800;font-size:13px">💬 本人から一言の写し方</div>
@@ -2548,7 +2549,7 @@ async function pfBulkRun(){
   const intro = introSrcOf(data, sk), tpls = ["tpl", "keepTpl", "keepSrc"].includes(cm) ? await introTplLoad(true) : {}, how = {};
   ts.forEach(t => {
     const sp = data.storeProfiles[t] = data.storeProfiles[t] || { active: true };
-    bf.forEach(f => { sp[f] = String(profGet(data, sk, f) || ""); });
+    bf.forEach(f => { const v = profGet(data, sk, f); sp[f] = f === "vibes" && Array.isArray(v) ? v.slice() : String(v || ""); });   // 13 雰囲気・14 キャストの種類も写す（11/27）
     cf.forEach(f => { sp[f] = String(profGet(data, sk, f) || ""); });
     if(cm === "raw") sp.comment = String(profGet(data, sk, "comment") || "");
     else if(cm === "plain" || cm === "tpl"){
@@ -5785,7 +5786,7 @@ async function removeCast(){
 
 load();
 </script>
-<script src="daicho_notify.js?v=1"></script><script src="daicho_room.js?v=1"></script><script src="daicho_terms_inline.js?v=4"></script><script src="daicho_layout.js?v=2"></script><script src="kb_backtable.js?v=3"></script><script src="daicho_dummy.js?v=6"></script><script src="daicho_retire.js?v=3"></script><script src="daicho_mediadel.js?v=1"></script><script src="daicho_mediabulk.js?v=1"></script><!-- 📝 台帳を更新したら内勤に通知（記録簿の 🔔） -->
+<script src="daicho_notify.js?v=1"></script><script src="daicho_room.js?v=2"></script><script src="daicho_terms_inline.js?v=4"></script><script src="daicho_layout.js?v=2"></script><script src="kb_backtable.js?v=3"></script><script src="daicho_dummy.js?v=6"></script><script src="daicho_retire.js?v=3"></script><script src="daicho_mediadel.js?v=1"></script><script src="daicho_mediabulk.js?v=1"></script><!-- 📝 台帳を更新したら内勤に通知（記録簿の 🔔） -->
 <!-- ポータルに戻るボタン（全アプリ共通） --><a href="https://sakuramoong-app.github.io/portal/" title="ポータルに戻る" style="position:fixed;left:12px;bottom:12px;z-index:950;background:#fff;color:#e5638c;border:1.5px solid #ffc2d1;border-radius:99px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;box-shadow:0 4px 14px rgba(229,99,140,.2);font-family:inherit;">🏠 ポータル</a>
 </body>
 </html>

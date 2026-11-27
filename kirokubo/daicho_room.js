@@ -70,3 +70,20 @@ async function drLinkRow(btn, cid, rid){ if(await drLink(cid, rid)){ const row =
   const tryOpen = n => { if(typeof casts !== "undefined" && casts.length){ if(rid) drOpenRoom(rid, p.get("name") || ""); return; } if(n < 40) setTimeout(() => tryOpen(n + 1), 300); };
   if(rid) tryOpen(0);
 })();
+/* 🚪→🏪 在籍ルームで選んだお店を、台帳の「在籍店舗」に自動でチェック（2026/11/27 店長 修正3）
+   ・編集画面を開いたとき、つながっている在籍ルームのお店（stores）で、まだチェックのないお店にチェックを入れる（外すことはしない）
+   ・入れたら知らせる。「💾 保存」で確定（勝手には保存しない） */
+const DR_STORE_KEY = { sakuramoon: "sakuramoon", lanauguisu: "lana_uguisu", lanakinshi: "lana_kinshi", peachmoon: "peachmoon", dressgarden: "dressgarden", cutie: "cutie", gyakuanal: "gyakuanal", gokumon: "gokumon", eighteen: "eighteen" };
+async function drRoomStoresCheck(cid){
+  const c = casts.find(x => x.id === cid); if(!c || !(c.room_ids || []).length || !CAN_EDIT) return;
+  let rows = [];
+  try{ rows = q(await sb.from("room_rooms").select("room_id,stores").in("room_id", c.room_ids)) || []; }catch(e){ return; }
+  if(editingId !== cid) return;
+  const added = [];
+  rows.forEach(r => Object.entries(r.stores || {}).forEach(([k, on]) => {
+    const mk = DR_STORE_KEY[k] || k, box = document.getElementById("es_" + mk);
+    if(on && box && !box.checked){ box.checked = true; box.dispatchEvent(new Event("change", { bubbles: true })); added.push((document.querySelector(`label[for="es_${mk}"]`) || {}).textContent || mk); }
+  }));
+  if(added.length){ toast(`🚪 在籍ルームで選んだお店にチェックを入れました：${added.join("・")}（💾 保存で確定）`); try{ if(typeof markDirty === "function") markDirty(); }catch(e){} }
+}
+{ const __oeDr = openEdit; openEdit = function(id){ const r = __oeDr.apply(this, arguments); setTimeout(() => drRoomStoresCheck(id), 200); return r; }; }
