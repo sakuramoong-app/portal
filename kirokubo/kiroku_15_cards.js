@@ -196,9 +196,11 @@ function fsApply(){
 })();
 /* ---------- 📞 予約カード：確認電話で読みあげる並び（2026/11/28 店長）。幅は決まった大きさ（画面の幅・文字の大きさで並びが変わらない） ---------- */
 document.head.insertAdjacentHTML("beforeend", `<style>
-  .rescard{width:780px;max-width:100%;box-sizing:border-box}
-  .rescard .rc-call{display:grid;grid-template-columns:450px 300px;grid-template-areas:"l r" "b b";column-gap:14px;padding:8px 10px;overflow-x:auto}
-  .rescard .rc-cl{grid-area:l;min-width:0} .rescard .rc-cr{grid-area:r;min-width:0} .rescard .rc-cb{grid-area:b;margin-top:6px;border-top:1.5px dashed #F1E3E7;padding-top:6px}
+  .rescard{width:1180px;max-width:none;box-sizing:border-box}   /* 11/28 店長：横長でよい・縦を短く（3列） */
+  .rescard .rc-call{display:grid;grid-template-columns:470px 290px 1fr;grid-template-areas:"l r b";column-gap:16px;padding:8px 10px;align-items:start}
+  .rescard .rc-cl{grid-area:l;min-width:0} .rescard .rc-cr{grid-area:r;min-width:0;border-left:1.5px dashed #F1E3E7;padding-left:12px} .rescard .rc-cb{grid-area:b;min-width:0;border-left:1.5px dashed #F1E3E7;padding-left:12px}
+  .rescard .rc-cr .rc-f{grid-template-columns:70px 1fr;margin-bottom:4px} .rescard .rc-cb .memos, .rescard .rc-cb > div{max-height:none}
+  #list .cblock{overflow-x:auto}
   .rescard .rc-f{display:grid;grid-template-columns:92px 1fr;align-items:start;gap:6px;padding:4px 0;border-bottom:1px dotted #EEE6E9;font-size:14.5px}
   .rescard .rc-f:last-child{border-bottom:0}
   .rescard .rc-fl{font-weight:900;color:#8a6b74;font-size:13px;white-space:nowrap;padding-top:2px}

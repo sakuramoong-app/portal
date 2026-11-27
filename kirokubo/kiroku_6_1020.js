@@ -75,8 +75,7 @@ function rcMoneyRows(r){
   const free = (r.options || []).filter(o => !n(o.price)).map(o => esc(o.label)).join("・");
   return `<div class="rm-calc">${h}</div>
     ${free ? `<div class="rm-free">無料のOP：${free}</div>` : ""}
-    <div class="rm-other">${line("キャストの報酬", Y(back) + (r.back_override != null ? "（手で直した）" : ""), "rm-sub")}${media ? line("媒体", esc(media), "rm-sub") : ""}</div>
-    <div class="rm-hint">OP・交通費・割引を変えるときは「✏️ 開く」から</div>`;
+    ${media ? `<div class="rm-other">${line("媒体", esc(media), "rm-sub")}</div>` : ""}`;   // 11/28 店長：キャストの報酬は出さない（確認電話でいらない）
 }
 document.head.insertAdjacentHTML("beforeend", `<style>.rm-calc{font-size:14px;max-width:300px}
   .rm-l{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:1px 0}
@@ -721,6 +720,8 @@ function resCard(r, i){
     <!-- 📞 確認電話で読みあげる順（2026/11/28 店長）：時間 → 場所 → コース → OP・希望 → お客さん → 支払い ／ 右に料金（筆算）／ 下に備考。幅は決まった大きさ（画面の幅で並びが変わらない） -->
     <div class="rc-call">
       <div class="rc-cl">
+        <div class="rc-f"><span class="rc-fl">👤 お客さん</span><span class="rc-fv"><b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${rcVisitChip(r)}${castNgPairs.has(r.customer_id + "|" + r.cast_id) && !cx ? `<span class="rc-castng" title="このお客さんは、このキャストのNGに入っています（キャストNG）">🚫 キャストNGのお客さん</span>` : ""}${custTagsHtml(c)}
+          ${digits(c.phone || "").length >= 6 ? `<span class="tel">📞${esc(c.phone)}</span>` : `<span class="rc-nophone">📞番号まだ</span>`}${custCell(r)}</span></div>
         <div class="rc-f"><span class="rc-fl">🕒 時間</span><span class="rc-fv">${ed ? `<input type="time" class="rc-time" value="${hmIn(r.start_at)}" step="300" onchange="qStart(${r.id},this.value)">` : `<b class="rc-time">${hm(r.start_at)}</b>`}<span class="rc-end">〜${hm(r.end_at)}</span>${rcEndWarn(r)}</span></div>
         <div class="rc-f rc-place"><span class="rc-fl">📍 場所</span><span class="rc-fv"><b>${esc(r.area || "エリアなし")}</b>
           ${ed ? `<button type="button" class="rc-hotel" onclick="openHotelBox(${r.id})" title="ホテル名・部屋番号・地図（開かずに入れられる）">🏨 ${esc(r.address || "ホテル・部屋を入れる")}</button>${cx ? "" : rcHotelWarn(r)}` : r.address ? `<span>🏨 ${esc(r.address)}</span>` : ""}${r.address ? `<button type="button" class="rc-hcopy" title="ホテル名と部屋番号をコピー" onclick="rcCopyAddr(${r.id})">📋</button>` : ""}
@@ -729,11 +730,10 @@ function resCard(r, i){
           延長 ${ed ? `<input type="number" min="0" class="rc-num" value="${r.extension_count || 0}" onchange="qExt(${r.id},this.value)">` : (r.extension_count || 0)}回
           ${r.free_kind ? `<small>${esc(FREE_SUFFIX[r.free_kind] || "")}</small>` : ""}</span></div>
         <div class="rc-f"><span class="rc-fl">💗 OP・希望</span><span class="rc-fv">${esc(ops || "OPなし")}${afw ? `<br>希望：<b>${esc(afw)}</b>` : ""}${r.play_wish ? `<br>希望プレイ：${esc(r.play_wish)}` : ""}${r.cast_note ? `<br>📝 ${esc(r.cast_note)}` : ""} ${ed ? `<button type="button" class="mini" onclick="openForm(${r.id})">OPを直す</button>` : ""}</span></div>
-        <div class="rc-f"><span class="rc-fl">👤 お客さん</span><span class="rc-fv"><b>${c.ng ? "⚠️" : ""}${esc(c.name || "名前なし")}</b>${rcVisitChip(r)}${castNgPairs.has(r.customer_id + "|" + r.cast_id) && !cx ? `<span class="rc-castng" title="このお客さんは、このキャストのNGに入っています（キャストNG）">🚫 キャストNGのお客さん</span>` : ""}${custTagsHtml(c)}
-          ${digits(c.phone || "").length >= 6 ? `<span class="tel">📞${esc(c.phone)}</span>` : `<span class="rc-nophone">📞番号まだ</span>`}${custCell(r)}</span></div>
-        <div class="rc-f"><span class="rc-fl">💳 支払い</span><span class="rc-fv">${ed ? `<select onchange="qPay(${r.id},this.value)">${["cash", "card"].map(k=>`<option value="${k}" ${k === (r.payment === "card_paid" ? "card" : r.payment) ? "selected" : ""}>${PAY_LABEL[k]}</option>`).join("")}</select>` : esc(PAY_LABEL[r.payment] || "")}${r.payment === "cash" && Number(r.card_total) > 0 ? `<small>（現金＋カード ${yen(Number(r.card_total))}）</small>` : ""}</span></div>
       </div>
-      <div class="rc-cr"><div class="rc-h">🧾 料金</div>${rcMoneyRows(r)}</div>
+      <div class="rc-cr">
+        <div class="rc-f"><span class="rc-fl">💳 支払い</span><span class="rc-fv">${ed ? `<select onchange="qPay(${r.id},this.value)">${["cash", "card"].map(k=>`<option value="${k}" ${k === (r.payment === "card_paid" ? "card" : r.payment) ? "selected" : ""}>${PAY_LABEL[k]}</option>`).join("")}</select>` : esc(PAY_LABEL[r.payment] || "")}${r.payment === "cash" && Number(r.card_total) > 0 ? `<small>（現金＋カード ${yen(Number(r.card_total))}）</small>` : ""}</span></div>
+        <div class="rc-h">🧾 料金</div>${rcMoneyRows(r)}</div>
       <div class="rc-cb"><div class="rc-h">📝 備考</div>${memoBoxes(r)}</div>
     </div>
   </div>`;
