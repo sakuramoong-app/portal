@@ -271,7 +271,8 @@ async function cycleGone(cid){
     }
     if(st && st.moved && ghost){
       e.preventDefault();
-      ghost.style.left = (e.clientX + 6) + "px"; ghost.style.top = (e.clientY + 6) + "px";
+      const z = parseFloat(document.body.style.zoom) / 100 || 1;   // 文字の大きさ（小・大）で body を拡大しているとき、札がマウスからずれないように（2026/11/28）
+      ghost.style.left = ((e.clientX + 6) / z) + "px"; ghost.style.top = ((e.clientY + 6) / z) + "px";
       ghost.style.display = "none"; const t = document.elementFromPoint(e.clientX, e.clientY); ghost.style.display = "";
       const td = t && t.closest && t.closest("#boardGrid td[data-drop]");
       if(td !== over){ clearOver(); if(td){ over = td; td.classList.add("dropon"); } }

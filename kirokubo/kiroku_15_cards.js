@@ -425,10 +425,10 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .rescard .rc-f{border-bottom-color:#D9C4CC !important}
   .rescard .rc-cr,.rescard .rc-cb{border-left-color:#E2CBD3 !important}
 </style>`);
-/* ---------- ✨ 受付の必須の欄：うすいピンクのピカピカ → 濃い赤の太い線がくるくる回る（2026/11/28 店長） ---------- */
+/* ---------- ✨ 受付の必須の欄：はっきりした赤の太い線で点滅（2026/11/28 店長：くるくるは目が痛い → 点滅。みんな同時に光る）
+   CSS のアニメーションだと光りはじめた時がばらばらになるので、受付の枠に 0.6秒ごとに印（needOn）をつけたり外したりして、全部いっしょに光らせる ---------- */
 document.head.insertAdjacentHTML("beforeend", `<style>
-  @property --needa{syntax:'<angle>';inherits:false;initial-value:0deg}
-  @keyframes needspin{to{--needa:360deg}}
-  #formBg .need{animation:needspin 1.4s linear infinite !important;border:3px solid transparent !important;border-radius:10px;box-shadow:none !important;
-    background:linear-gradient(#fff,#fff) padding-box,conic-gradient(from var(--needa),#C8001E,#FF4D5E 25%,#FFE0E3 50%,#FF4D5E 75%,#C8001E) border-box !important}
+  #formBg .need{animation:none !important;border-radius:10px;transition:box-shadow .25s ease}
+  #formBg.needOn .need{box-shadow:0 0 0 3px #E0314B !important}
 </style>`);
+setInterval(() => { const f = $("formBg"); if(f && f.classList.contains("show")) f.classList.toggle("needOn"); }, 600);
