@@ -36,11 +36,12 @@
   const notice = col.querySelector(".notice"), nev = document.getElementById("nEvents");
   if(notice){
     const box = document.createElement("div"); box.className = "kbnews"; box.id = "kbNews";
-    box.innerHTML = `<div class="kbnews-h">📢 お知らせ・今日の予定<small>予定を消す・直すのは内勤カレンダーで</small></div><div class="kbnews-g"></div>`;
+    // 11/28 店長：上の見出しはなくして、左「📢 お知らせ」・右「📅 内勤カレンダーの予定」の2列（それぞれ見出し＋中身）
+    box.innerHTML = `<div class="kbnews-g"><div class="kbnc"><div class="kbnc-h">📢 お知らせ</div></div><div class="kbnc"><div class="kbnc-h">📅 内勤カレンダーの予定</div></div></div>`;
     notice.parentNode.insertBefore(box, notice);
-    const g = box.querySelector(".kbnews-g");
-    g.appendChild(notice);
-    if(nev) g.appendChild(nev);
+    const cs = box.querySelectorAll(".kbnc");
+    cs[0].appendChild(notice);
+    if(nev) cs[1].appendChild(nev);
   }
 })();
 document.head.insertAdjacentHTML("beforeend", `<style>
@@ -59,7 +60,8 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   .kbnews-h{font-weight:900;font-size:16px;margin-bottom:6px;display:flex;flex-wrap:wrap;align-items:baseline;gap:8px} .kbnews-h small{font-size:11.5px;color:var(--sub,#7A6670);font-weight:700}
   .kbnews-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;align-items:start}
   .kbnews-g .notice{margin:0} .kbnews-g .nevents{margin:0;background:#EEF6FF;border-radius:12px;padding:6px 10px;min-height:40px}
-  .kbnews-g .nevents:empty::before{content:"📅 内勤カレンダーの今日の予定はありません";color:var(--sub,#7A6670);font-size:12.5px;font-weight:700}
+  .kbnc-h{font-weight:900;font-size:14px;color:#5C4B4F;margin:0 0 4px} .kbnews .nevhd{display:none}
+  .kbnews-g .nevents:empty::before{content:"今日の予定はありません";color:var(--sub,#7A6670);font-size:12.5px;font-weight:700}
 </style>`);
 /* 💴 内勤の日払い：左の列でも横にスクロールしないで見えるように、1人ずつカードの形に（2026/11/18 店長「すごく見づらい」）
    表の中身・入力・保存ボタンはそのまま（見た目だけ） */
